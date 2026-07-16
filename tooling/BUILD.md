@@ -27,7 +27,7 @@ npm run build:docs       # 构建文档站点
 ## Web 构建
 
 - **源码**：`module/webroot/`（保持可读，便于开发）
-- **产物**：`.build/webroot/`（HTML/CSS/JS 均压缩；JS 额外混淆）
+- **产物**：`.build/webroot/`（HTML/CSS/JS 压缩；保留全局名保证 WebUI 可运行）
 - **模块 zip 只打入产物**，不打入可读源码
 
 ## 工作流职责

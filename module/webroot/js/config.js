@@ -7,6 +7,16 @@ const QSC = {
   LOG_FILE: '/data/adb/modules/QuantitativeStopCharging_switch/data/log.log',
   FONT_KEY: 'qsc_font_scale',
   STATUS_INTERVAL: 5000,
+  DEFAULTS: {
+    power_stop: '100',
+    power_start: '95',
+    power_stop_time: '3',
+    charge_full: '0',
+    power_reset: '0',
+    temperature_switch: '1',
+    temperature_switch_stop: '60',
+    temperature_switch_start: '50'
+  },
   POWER_STOP_PRESETS: [
     { id: '80', l: '80%' }, { id: '85', l: '85%' }, { id: '90', l: '90%' },
     { id: '95', l: '95%' }, { id: '100', l: '100%' }, { id: '110', l: '关闭' }

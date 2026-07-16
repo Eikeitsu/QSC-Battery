@@ -16,7 +16,6 @@
   "devDependencies": {
     "clean-css": "^5.3.3",
     "html-minifier-terser": "^7.2.0",
-    "javascript-obfuscator": "^4.1.1",
     "serve": "^14.2.4",
     "terser": "^5.39.0",
     "vitepress": "^1.6.3"

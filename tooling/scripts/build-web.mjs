@@ -1,44 +1,42 @@
 #!/usr/bin/env node
+/**
+ * 构建 WebUI：压缩 HTML/CSS/JS。
+ * JS 只做 terser 压缩，保留全局名（QSC/QscApi/QscUi/QscApp），
+ * 避免混淆破坏跨文件引用导致手机端点击全失效。
+ */
 import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, cpSync } from 'node:fs';
 import { join, resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { minify as minifyHtml } from 'html-minifier-terser';
 import CleanCSS from 'clean-css';
 import { minify as minifyJs } from 'terser';
-import JavaScriptObfuscator from 'javascript-obfuscator';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const srcDir = join(repoRoot, 'module', 'webroot');
 const outDir = join(repoRoot, '.build', 'webroot');
 
-const OBFUSCATOR_OPTIONS = {
-  compact: true,
-  controlFlowFlattening: true,
-  controlFlowFlatteningThreshold: 0.6,
-  deadCodeInjection: false,
-  identifierNamesGenerator: 'hexadecimal',
-  renameGlobals: false,
-  selfDefending: false,
-  stringArray: true,
-  stringArrayEncoding: ['base64'],
-  stringArrayThreshold: 0.8,
-  transformObjectKeys: true,
-  unicodeEscapeSequence: false
-};
+const RESERVED = ['QSC', 'QscApi', 'QscUi', 'QscApp', 'QscTheme', 'ksu', 'exec', 'toast'];
 
 function log(msg) {
   console.log(`[build-web] ${msg}`);
 }
 
 async function minifyJavaScript(code, filename) {
-  const terserResult = await minifyJs(code, {
+  const result = await minifyJs(code, {
     module: false,
-    compress: { passes: 2, drop_console: true },
-    mangle: { toplevel: true },
+    compress: {
+      passes: 2,
+      drop_console: false,
+      pure_funcs: []
+    },
+    mangle: {
+      toplevel: false,
+      reserved: RESERVED
+    },
     format: { comments: false }
   });
-  if (!terserResult.code) throw new Error(`terser failed: ${filename}`);
-  return JavaScriptObfuscator.obfuscate(terserResult.code, OBFUSCATOR_OPTIONS).getObfuscatedCode();
+  if (!result.code) throw new Error(`terser failed: ${filename}`);
+  return result.code;
 }
 
 async function buildFile(relPath) {
@@ -55,7 +53,7 @@ async function buildFile(relPath) {
       removeRedundantAttributes: true,
       removeScriptTypeAttributes: true,
       minifyCSS: true,
-      minifyJS: true,
+      minifyJS: false,
       keepClosingSlash: true
     });
     writeFileSync(dest, html, 'utf8');
@@ -76,7 +74,6 @@ async function buildFile(relPath) {
     return;
   }
 
-  // 图片等二进制资源原样复制
   cpSync(src, dest);
 }
 

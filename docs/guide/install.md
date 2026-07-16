@@ -10,7 +10,9 @@
 1. 从 [GitHub Releases](https://github.com/Eikeitsu/QuantitativeStopCharging_switch_magisk/releases) 下载最新 zip
 2. 在模块管理器中刷入
 3. 重启手机
-4. 进入模块页，打开 WebUI 按需调整阈值
+4. 进入模块页，打开 WebUI 按需调整阈值（「显示」里可切换浅色 / 深色 / 跟随系统）
+
+支持 Magisk / KernelSU 的模块在线更新：`module.prop` 已配置 `updateJson`，管理器会拉取仓库根目录的 `update.json`。
 
 ## 模块目录（设备上）
 

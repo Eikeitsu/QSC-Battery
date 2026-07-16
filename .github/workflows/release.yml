@@ -54,13 +54,28 @@ jobs:
             echo "draft=${{ inputs.draft }}" >> "$GITHUB_OUTPUT"
           else
             TAG="${GITHUB_REF_NAME}"
+            RAW="${TAG#v}"
             NAME="$TAG"
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
             echo "draft=false" >> "$GITHUB_OUTPUT"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "raw=$RAW" >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "Resolved release: $NAME ($TAG)"
+
+      - name: Sync module.prop version
+        shell: bash
+        run: |
+          RAW="${{ steps.meta.outputs.raw }}"
+          PROP="module/module.prop"
+          sed -i "s/^version=.*/version=${RAW}/" "$PROP"
+          sed -i "s/^versionCode=.*/versionCode=${RAW}/" "$PROP"
+          if ! grep -q '^updateJson=' "$PROP"; then
+            echo "updateJson=https://raw.githubusercontent.com/${{ github.repository }}/main/update.json" >> "$PROP"
+          fi
+          echo "---- module.prop ----"
+          cat "$PROP"
 
       - uses: actions/setup-node@v4
         with:
@@ -89,3 +104,51 @@ jobs:
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update update.json on default branch
+        if: ${{ steps.meta.outputs.draft != 'true' && steps.meta.outputs.prerelease != 'true' }}
+        shell: bash
+        run: |
+          RAW="${{ steps.meta.outputs.raw }}"
+          TAG="${{ steps.meta.outputs.tag }}"
+          REPO="${{ github.repository }}"
+          ZIP="QuantitativeStopCharging_switch_v${RAW}.zip"
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$DEFAULT_BRANCH"
+          git checkout -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"
+
+          python3 - <<PY
+          import json, pathlib
+          data = {
+            "version": "${RAW}",
+            "versionCode": int("${RAW}"),
+            "zipUrl": f"https://github.com/${REPO}/releases/download/${TAG}/${ZIP}",
+            "changelog": f"https://raw.githubusercontent.com/${REPO}/main/changelog.md",
+          }
+          pathlib.Path("update.json").write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+          )
+          print(json.dumps(data, ensure_ascii=False, indent=2))
+          PY
+
+          PROP="module/module.prop"
+          sed -i "s/^version=.*/version=${RAW}/" "$PROP"
+          sed -i "s/^versionCode=.*/versionCode=${RAW}/" "$PROP"
+          if ! grep -q '^updateJson=' "$PROP"; then
+            echo "updateJson=https://raw.githubusercontent.com/${REPO}/main/update.json" >> "$PROP"
+          else
+            sed -i "s|^updateJson=.*|updateJson=https://raw.githubusercontent.com/${REPO}/main/update.json|" "$PROP"
+          fi
+
+          git add update.json module/module.prop
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "chore: bump update.json to ${TAG}"
+          git push origin "HEAD:$DEFAULT_BRANCH"
+
