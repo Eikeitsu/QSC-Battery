@@ -32,6 +32,8 @@ npm run build:module
 
 构建说明见 [`tooling/BUILD.md`](tooling/BUILD.md)。
 
+发版：Actions → **Release Module** → Run workflow（填写版本号），或推送 `v*` 标签。
+
 ## 致谢
 
 感谢 **top大佬** 开源 [QSC 定量停充](https://github.com/410154425/QuantitativeStopCharging_switch_magisk)。
