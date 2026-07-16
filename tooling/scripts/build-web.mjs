@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, cpSync } from 'node:fs';
 import { join, resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { minify as minifyHtml } from 'html-minifier-terser';
@@ -45,9 +45,10 @@ async function buildFile(relPath) {
   const src = join(srcDir, relPath);
   const dest = join(outDir, relPath);
   mkdirSync(dirname(dest), { recursive: true });
-  const raw = readFileSync(src, 'utf8');
+  const lower = relPath.toLowerCase();
 
-  if (relPath.endsWith('.html')) {
+  if (lower.endsWith('.html')) {
+    const raw = readFileSync(src, 'utf8');
     const html = await minifyHtml(raw, {
       collapseWhitespace: true,
       removeComments: true,
@@ -61,19 +62,22 @@ async function buildFile(relPath) {
     return;
   }
 
-  if (relPath.endsWith('.css')) {
+  if (lower.endsWith('.css')) {
+    const raw = readFileSync(src, 'utf8');
     const css = new CleanCSS({ level: 2 }).minify(raw);
     if (css.errors.length) throw new Error(css.errors.join('\n'));
     writeFileSync(dest, css.styles, 'utf8');
     return;
   }
 
-  if (relPath.endsWith('.js')) {
+  if (lower.endsWith('.js')) {
+    const raw = readFileSync(src, 'utf8');
     writeFileSync(dest, await minifyJavaScript(raw, relPath), 'utf8');
     return;
   }
 
-  writeFileSync(dest, raw);
+  // 图片等二进制资源原样复制
+  cpSync(src, dest);
 }
 
 function walk(dir) {

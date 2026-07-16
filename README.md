@@ -4,6 +4,9 @@
 
 到达指定电量 / 温度自动停充与恢复，支持 Magisk / KernelSU WebUI 配置。
 
+- **本仓库**：[Eikeitsu/QuantitativeStopCharging_switch_magisk](https://github.com/Eikeitsu/QuantitativeStopCharging_switch_magisk)
+- **原作**：[410154425/QuantitativeStopCharging_switch_magisk](https://github.com/410154425/QuantitativeStopCharging_switch_magisk)
+
 ## 仓库结构
 
 ```text
@@ -16,7 +19,7 @@ tooling/         # 构建脚本与维护者说明（见 tooling/BUILD.md）
 
 ## 快速开始（用户）
 
-1. 从 [Releases](https://github.com/410154425/QuantitativeStopCharging_switch_magisk/releases) 下载 zip
+1. 从 [Releases](https://github.com/Eikeitsu/QuantitativeStopCharging_switch_magisk/releases) 下载 zip
 2. 刷入模块并重启
 3. 打开 WebUI 调整阈值
 

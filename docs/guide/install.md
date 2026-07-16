@@ -7,7 +7,7 @@
 
 ## 安装步骤
 
-1. 从 [GitHub Releases](https://github.com/410154425/QuantitativeStopCharging_switch_magisk/releases) 下载最新 zip
+1. 从 [GitHub Releases](https://github.com/Eikeitsu/QuantitativeStopCharging_switch_magisk/releases) 下载最新 zip
 2. 在模块管理器中刷入
 3. 重启手机
 4. 进入模块页，打开 WebUI 按需调整阈值

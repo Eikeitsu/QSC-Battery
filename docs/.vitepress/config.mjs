@@ -31,7 +31,7 @@ export default defineConfig({
     socialLinks: [
       {
         icon: 'github',
-        link: 'https://github.com/410154425/QuantitativeStopCharging_switch_magisk'
+        link: 'https://github.com/Eikeitsu/QuantitativeStopCharging_switch_magisk'
       }
     ],
     footer: {

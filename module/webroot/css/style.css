@@ -480,3 +480,16 @@ input:focus {
 }
 
 .about-note b { color: var(--text-primary); }
+
+.tip-box {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+
+.tip-qr {
+  width: min(100%, 240px);
+  height: auto;
+  border-radius: 14px;
+  background: #fff;
+}
