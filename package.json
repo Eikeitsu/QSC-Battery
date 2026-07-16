@@ -1,0 +1,24 @@
+{
+  "name": "qsc-quantitative-stop-charging",
+  "private": true,
+  "version": "20260716.15",
+  "type": "module",
+  "scripts": {
+    "dev:web": "serve module/webroot -l 5173",
+    "build:web": "node tooling/scripts/build-web.mjs",
+    "package:module": "node tooling/scripts/package-module.mjs",
+    "package:module:debug": "node tooling/scripts/package-module.mjs --debug",
+    "build:module": "npm run build:web && npm run package:module",
+    "dev:docs": "vitepress dev docs",
+    "build:docs": "vitepress build docs",
+    "preview:docs": "vitepress preview docs"
+  },
+  "devDependencies": {
+    "clean-css": "^5.3.3",
+    "html-minifier-terser": "^7.2.0",
+    "javascript-obfuscator": "^4.1.1",
+    "serve": "^14.2.4",
+    "terser": "^5.39.0",
+    "vitepress": "^1.6.3"
+  }
+}

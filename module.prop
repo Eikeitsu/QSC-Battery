@@ -1,7 +1,0 @@
-id=QuantitativeStopCharging_switch
-name=QSC定量停充_独立开关版
-version=20231204
-versionCode=2023120400
-author=top大佬(酷安)
-description=[ 未知状态 ] 到达指定电量、指定温度自动停止充电、自动恢复充电，配置路径：/data/adb/modules/QuantitativeStopCharging_switch/config.conf，日志log.log。 
-# ##

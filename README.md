@@ -1,10 +1,37 @@
-# QuantitativeStopCharging_switch_magisk
-这是一个运行在安卓设备上的QSC定量停充_独立开关版_magisk模块。
+# QSC 定量停充（WebUI 版）
 
-[下载页面](https://github.com/410154425/QuantitativeStopCharging_switch_magisk/releases)点击Assets选择压缩包QuantitativeStopCharging_switch_magisk_***.zip，使用Magisk从本地安装。
+基于 **top大佬** 原作，由 **许小墨** 维护 WebUI。
 
-到达指定电量、指定温度自动停止充电、自动恢复充电。
+到达指定电量 / 温度自动停充与恢复，支持 Magisk / KernelSU WebUI 配置。
 
-配置路径：/data/adb/modules/QuantitativeStopCharging_switch/config.conf，日志log.log。
+## 仓库结构
 
-数值范围要填写正确，否则无效。
+```text
+module/          # Magisk 模块本体（与工具、文档分离）
+  webroot/       # WebUI 可读源码
+docs/            # 用户文档（VitePress → GitHub Pages）
+tooling/         # 构建脚本与维护者说明（见 tooling/BUILD.md）
+.github/         # CI 工作流
+```
+
+## 快速开始（用户）
+
+1. 从 [Releases](https://github.com/410154425/QuantitativeStopCharging_switch_magisk/releases) 下载 zip
+2. 刷入模块并重启
+3. 打开 WebUI 调整阈值
+
+详细说明见在线文档（GitHub Pages）或 `docs/`。
+
+## 本地开发（维护者）
+
+```bash
+npm install
+npm run dev:web
+npm run build:module
+```
+
+构建说明见 [`tooling/BUILD.md`](tooling/BUILD.md)。
+
+## 致谢
+
+感谢 **top大佬** 开源 [QSC 定量停充](https://github.com/410154425/QuantitativeStopCharging_switch_magisk)。

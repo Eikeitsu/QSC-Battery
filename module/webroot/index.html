@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>QSC 定量停充</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div id="bgImage"></div>
+
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1>定量停充</h1>
+        <div class="subtitle" id="deviceName">加载中...</div>
+      </div>
+    </header>
+
+    <section class="card" style="animation-delay: 0.1s">
+      <div class="status-grid">
+        <div class="status-item">
+          <div class="status-value" id="statLevel">--</div>
+          <div class="status-label">电量 %</div>
+        </div>
+        <div class="status-item">
+          <div class="status-value" id="statTemp">--</div>
+          <div class="status-label">温度 °C</div>
+        </div>
+      </div>
+      <div class="status-badge" id="statusBadge">状态加载中...</div>
+    </section>
+
+    <div class="small-title">控制</div>
+    <section class="card">
+      <div class="pref" data-toggle="module">
+        <div class="pref-body">
+          <div class="pref-title">模块总开关</div>
+          <div class="pref-desc" id="moduleSub">关闭后不再自动停充/恢复</div>
+        </div>
+        <div class="pref-right">
+          <label class="hyper-switch" onclick="event.stopPropagation()">
+            <input type="checkbox" id="moduleEnabled" />
+            <span class="track"></span>
+            <span class="thumb"></span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <div class="small-title">电量停充</div>
+    <section class="card">
+      <div class="pref" data-expand="power">
+        <div class="pref-body">
+          <div class="pref-title">电量阈值</div>
+          <div class="pref-desc" id="powerSub">停止 100% · 恢复 95%</div>
+        </div>
+        <div class="pref-right">
+          <span class="expand-arrow open" id="arrow-power">▾</span>
+        </div>
+      </div>
+      <div class="expand-body open" id="expand-power">
+        <div class="expand-inner">
+          <div class="info-box">
+            📖 电量 <b>≥ 停止值</b> 时停充，<b>≤ 恢复值</b> 时恢复充电。<br />
+            停止值填 <b>110</b> 可关闭电量停充功能。
+          </div>
+
+          <div class="field-label">停止充电电量 (%)</div>
+          <div class="chips" id="stopChips"></div>
+          <input
+            type="number"
+            id="power_stop"
+            min="1"
+            max="110"
+            placeholder="如 100"
+          />
+
+          <div class="field-label">恢复充电电量 (%)</div>
+          <div class="chips" id="startChips"></div>
+          <input
+            type="number"
+            id="power_start"
+            min="1"
+            max="109"
+            placeholder="如 95，建议间隔 5-10"
+          />
+          <div class="field-hint warn">
+            ⚠️ 澎湃 OS 3.0 建议停止与恢复间隔至少 10%
+          </div>
+
+          <div class="field-label">停充前延时 (秒)</div>
+          <input
+            type="number"
+            id="power_stop_time"
+            min="1"
+            placeholder="默认 3 秒"
+          />
+          <div class="field-hint">
+            触发停充前继续充电的倒计时，开启「充满再停」后此功能失效
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="pref">
+        <div class="pref-body">
+          <div class="pref-title">充满再停</div>
+          <div class="pref-desc">100% 时等涓流结束再停充</div>
+        </div>
+        <div class="pref-right">
+          <label class="hyper-switch">
+            <input type="checkbox" id="charge_full" />
+            <span class="track"></span>
+            <span class="thumb"></span>
+          </label>
+        </div>
+      </div>
+      <div class="pref">
+        <div class="pref-body">
+          <div class="pref-title">自动拔插</div>
+          <div class="pref-desc">每次充电时自动拔插一次激活快充</div>
+        </div>
+        <div class="pref-right">
+          <label class="hyper-switch">
+            <input type="checkbox" id="power_reset" />
+            <span class="track"></span>
+            <span class="thumb"></span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <div class="small-title">温控停充</div>
+    <section class="card">
+      <div class="pref" data-expand="temp">
+        <div class="pref-body">
+          <div class="pref-title">温度阈值</div>
+          <div class="pref-desc" id="tempSub">已关闭</div>
+        </div>
+        <div class="pref-right">
+          <label class="hyper-switch" onclick="event.stopPropagation()">
+            <input type="checkbox" id="temperature_switch" />
+            <span class="track"></span>
+            <span class="thumb"></span>
+          </label>
+          <span class="expand-arrow" id="arrow-temp">▾</span>
+        </div>
+      </div>
+      <div class="expand-body" id="expand-temp">
+        <div class="expand-inner">
+          <div class="field-label">停止充电温度 (°C)</div>
+          <div class="chips" id="tempStopChips"></div>
+          <input
+            type="number"
+            id="temperature_switch_stop"
+            min="1"
+            max="80"
+            placeholder="如 60"
+          />
+
+          <div class="field-label">恢复充电温度 (°C)</div>
+          <div class="chips" id="tempStartChips"></div>
+          <input
+            type="number"
+            id="temperature_switch_start"
+            min="1"
+            max="79"
+            placeholder="如 50，建议间隔 3°C 以上"
+          />
+        </div>
+      </div>
+    </section>
+
+    <div class="small-title">显示</div>
+    <section class="card">
+      <div class="pref" data-expand="fontSize">
+        <div class="pref-body">
+          <div class="pref-title">字体大小</div>
+          <div class="pref-desc" id="fontSizeDesc">标准 (1.0x)</div>
+        </div>
+        <div class="pref-right">
+          <span class="expand-arrow" id="arrow-fontSize">▾</span>
+        </div>
+      </div>
+      <div class="expand-body" id="expand-fontSize">
+        <div class="expand-inner">
+          <div class="font-slider-row">
+            <span class="font-label" style="font-size: calc(0.7rem * var(--font-scale))">A</span>
+            <input
+              type="range"
+              class="font-slider"
+              id="fontSlider"
+              min="0.8"
+              max="1.5"
+              step="0.02"
+              value="1"
+            />
+            <span class="font-label" style="font-size: calc(1.1rem * var(--font-scale))">A</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="small-title">日志</div>
+    <section class="card">
+      <div class="pref" data-expand="log">
+        <div class="pref-body">
+          <div class="pref-title">最近日志</div>
+          <div class="pref-desc">点击展开查看</div>
+        </div>
+        <div class="pref-right">
+          <span class="expand-arrow" id="arrow-log">▾</span>
+          <button type="button" class="chip chip-btn" id="refreshLogBtn">刷新</button>
+        </div>
+      </div>
+      <div class="expand-body" id="expand-log">
+        <div class="expand-inner">
+          <div class="log-box" id="logBox">暂无日志</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="small-title">关于</div>
+    <div class="about-note">
+      本模块基于 <b>top大佬</b> 的 QSC 定量停充，补充了 WebUI 与目录结构整理，感谢原作者开源贡献。
+    </div>
+    <section class="card">
+      <div class="pref" data-url="https://www.coolapk.com/u/7602666">
+        <div class="pref-body">
+          <div class="pref-title">酷安主页</div>
+          <div class="pref-desc">许小墨</div>
+        </div>
+        <div class="pref-right"><span class="link-arrow">›</span></div>
+      </div>
+      <div class="pref" data-url="https://github.com/410154425/QuantitativeStopCharging_switch_magisk">
+        <div class="pref-body">
+          <div class="pref-title">原作项目</div>
+          <div class="pref-desc">GitHub Releases</div>
+        </div>
+        <div class="pref-right"><span class="link-arrow">›</span></div>
+      </div>
+      <div class="pref" data-url="https://payapp.weixin.qq.com/qrpay/order/home2?key=idc_CHNDVI_dHFNbTNZIWMMKIEdzUZtCA--">
+        <div class="pref-body">
+          <div class="pref-title">投币捐赠</div>
+          <div class="pref-desc">支持原作者 top大佬</div>
+        </div>
+        <div class="pref-right"><span class="link-arrow">›</span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="pref" data-expand="thanks">
+        <div class="pref-body">
+          <div class="pref-title">致谢名单</div>
+          <div class="pref-desc">感谢原作者与贡献者</div>
+        </div>
+        <div class="pref-right">
+          <span class="expand-arrow" id="arrow-thanks">▾</span>
+        </div>
+      </div>
+      <div class="expand-body" id="expand-thanks">
+        <div class="expand-inner">
+          <div class="thanks-list">
+            <div class="thanks-item" data-url="https://www.coolapk.com/u/1373784">
+              <div class="thanks-avatar green">Top</div>
+              <div>
+                <div class="thanks-name">top大佬</div>
+                <div class="thanks-id">原作者</div>
+              </div>
+            </div>
+            <div class="thanks-item" data-url="https://www.coolapk.com/u/7602666">
+              <div class="thanks-avatar">墨</div>
+              <div>
+                <div class="thanks-name">许小墨</div>
+                <div class="thanks-id">WebUI 维护</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="snackbar" id="snackbar">
+      <span class="snackbar-icon">✓</span>
+      <span id="snackbarText"></span>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

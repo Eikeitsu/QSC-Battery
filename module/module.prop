@@ -1,0 +1,7 @@
+id=QuantitativeStopCharging_switch
+name=QSC定量停充（WebUI版）
+version=20260716
+versionCode=20260716
+author=top大佬, 许小墨
+description=[ 未知状态 ] 到达指定电量、指定温度自动停止充电、自动恢复充电。支持 WebUI 配置，配置路径：config/config.conf，日志：data/log.log。 
+# ##

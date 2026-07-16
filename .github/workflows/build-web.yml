@@ -1,0 +1,45 @@
+name: Build Web
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'module/webroot/**'
+      - 'tooling/scripts/build-web.mjs'
+      - 'tooling/scripts/publish-web-branch.mjs'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'module/webroot/**'
+      - 'tooling/scripts/build-web.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build:web
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: .build/webroot/
+          if-no-files-found: error
+
+      - name: Publish dist-web branch
+        if: github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node tooling/scripts/publish-web-branch.mjs
