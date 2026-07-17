@@ -243,22 +243,6 @@ const QscApp = {
     else QscUi.toast('日志已刷新');
   },
 
-  async loadBackground() {
-    const paths = [
-      `'${QSC.ASSETDIR}/donate.jpg'`,
-      `'${QSC.ASSETDIR}/pay.jpg'`,
-      `'${QSC.MODDIR}/pay.jpg'`
-    ];
-    for (const path of paths) {
-      const result = await QscApi.exec(`base64 -w0 ${path} 2>/dev/null`);
-      if (result.stdout.trim()) {
-        document.getElementById('bgImage').style.backgroundImage = `url('data:image/jpeg;base64,${result.stdout.trim()}')`;
-        return;
-      }
-    }
-    document.getElementById('bgImage').style.background = '';
-  },
-
   async loadDeviceInfo() {
     const model = await QscApi.exec(`getprop ro.product.marketname 2>/dev/null || getprop ro.product.model 2>/dev/null`);
     const os = await QscApi.exec(`getprop ro.mi.os.version.incremental 2>/dev/null | sed 's/^OS//'`);
@@ -304,7 +288,6 @@ const QscApp = {
     }
 
     await Promise.allSettled([
-      this.loadBackground(),
       this.loadDeviceInfo(),
       this.loadConfig(),
       this.refreshStatus(),

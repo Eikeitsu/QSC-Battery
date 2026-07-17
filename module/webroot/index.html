@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#f2f4f7" />
+    <meta name="theme-color" content="#fef7ff" />
     <meta name="color-scheme" content="light dark" />
     <title>QSC 定量停充</title>
     <script>
@@ -15,21 +15,14 @@
           var mode = localStorage.getItem('qsc_theme_mode') || 'system';
           var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
           var resolved = mode === 'light' || mode === 'dark' ? mode : dark ? 'dark' : 'light';
-          var color = resolved === 'dark' ? '#0f1115' : '#f2f4f7';
           document.documentElement.setAttribute('data-theme', resolved);
-          document.documentElement.style.colorScheme = resolved;
-          var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute('content', color);
-          var scheme = document.querySelector('meta[name="color-scheme"]');
-          if (scheme) scheme.setAttribute('content', mode === 'system' ? 'light dark' : resolved);
+          document.documentElement.style.colorScheme = mode === 'system' ? 'light dark' : resolved;
         } catch (e) {}
       })();
     </script>
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
-    <div id="bgImage"></div>
-
     <header class="topbar">
       <div class="topbar-left">
         <h1>定量停充</h1>
@@ -219,7 +212,7 @@
       <div class="expand-body" id="expand-theme">
         <div class="expand-inner">
           <div class="chips" id="themeChips"></div>
-          <div class="field-hint">跟随系统时与手机深浅色同步，状态栏颜色会一并切换</div>
+          <div class="field-hint">推荐「跟随系统」。在 WebUI X 下使用莫奈动态取色，状态栏与页面背景一致；浅色/深色在无莫奈环境生效</div>
         </div>
       </div>
       <div class="pref" data-expand="fontSize">

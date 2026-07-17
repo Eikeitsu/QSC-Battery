@@ -62,7 +62,11 @@ async function buildFile(relPath) {
 
   if (lower.endsWith('.css')) {
     const raw = readFileSync(src, 'utf8');
-    const css = new CleanCSS({ level: 2 }).minify(raw);
+    const css = new CleanCSS({
+      level: 2,
+      // 保留 WebUI X 的远程 @import（由管理器拦截注入莫奈色，不可在构建期内联）
+      inline: false
+    }).minify(raw);
     if (css.errors.length) throw new Error(css.errors.join('\n'));
     writeFileSync(dest, css.styles, 'utf8');
     return;
