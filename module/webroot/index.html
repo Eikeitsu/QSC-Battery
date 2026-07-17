@@ -29,12 +29,13 @@
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
-    <header class="topbar">
+    <header class="topbar" id="topbar">
       <div class="topbar-left">
         <h1>定量停充</h1>
         <div class="subtitle" id="deviceName">加载中...</div>
       </div>
     </header>
+    <div class="topbar-spacer" id="topbarSpacer" aria-hidden="true"></div>
 
     <div class="page-gap"></div>
 
@@ -79,6 +80,56 @@
         <div class="pref-right">
           <button type="button" class="chip chip-btn" id="resetConfigBtn">恢复</button>
         </div>
+      </div>
+    </section>
+
+    <div class="small-title dock-only" data-page="home">当前策略</div>
+    <section class="card dock-only" data-page="home">
+      <div class="kv-list">
+        <div class="kv-row"><span class="k">电量停充</span><span class="v" id="homePowerPlan">--</span></div>
+        <div class="kv-row"><span class="k">温控停充</span><span class="v" id="homeTempPlan">--</span></div>
+        <div class="kv-row"><span class="k">充满再停</span><span class="v" id="homeFullPlan">--</span></div>
+        <div class="kv-row"><span class="k">自动拔插</span><span class="v" id="homeResetPlan">--</span></div>
+      </div>
+    </section>
+
+    <div class="small-title dock-only" data-page="home">运行详情</div>
+    <section class="card dock-only" data-page="home">
+      <div class="mini-grid">
+        <div class="mini-item">
+          <div class="mv" id="homeChargeStatus">--</div>
+          <div class="ml">充电状态</div>
+        </div>
+        <div class="mini-item">
+          <div class="mv" id="homeVoltage">--</div>
+          <div class="ml">电压 V</div>
+        </div>
+        <div class="mini-item">
+          <div class="mv" id="homeCurrent">--</div>
+          <div class="ml">电流 mA</div>
+        </div>
+        <div class="mini-item">
+          <div class="mv" id="homeVersion">--</div>
+          <div class="ml">模块版本</div>
+        </div>
+      </div>
+      <div class="kv-list">
+        <div class="kv-row"><span class="k">最近刷新</span><span class="v" id="homeUpdatedAt">--</span></div>
+      </div>
+    </section>
+
+    <div class="small-title dock-only" data-page="home">概览提示</div>
+    <section class="card dock-only" data-page="home">
+      <div class="expand-inner" style="padding: var(--space-expand-pad)">
+        <div class="info-box">
+          <b>过夜建议</b><br />
+          停止 80–90%，恢复间隔 5–10%，减少整夜满电。
+        </div>
+        <div class="info-box">
+          <b>游戏 / 导航</b><br />
+          打开温控停充，高温自动停、降温自动恢复。
+        </div>
+        <div class="field-hint">改配置后即时生效；停充无效时可在管理器里点 Action 刷新权限。</div>
       </div>
     </section>
 
@@ -255,6 +306,20 @@
         </div>
       </div>
 
+      <div class="pref">
+        <div class="pref-body">
+          <div class="pref-title">卡片紧凑</div>
+          <div class="pref-desc" id="compactDesc">舒展间距，便于阅读</div>
+        </div>
+        <div class="pref-right">
+          <label class="hyper-switch" onclick="event.stopPropagation()">
+            <input type="checkbox" id="compactEnabled" />
+            <span class="track"></span>
+            <span class="thumb"></span>
+          </label>
+        </div>
+      </div>
+
       <div class="pref" data-expand="fontSize">
         <div class="pref-body">
           <div class="pref-title">字体大小</div>
@@ -280,17 +345,32 @@
       <div class="pref" data-expand="log">
         <div class="pref-body">
           <div class="pref-title">最近日志</div>
-          <div class="pref-desc">点击展开查看</div>
+          <div class="pref-desc" id="logSub">点击展开查看</div>
         </div>
         <div class="pref-right">
-          <span class="expand-arrow" id="arrow-log">▾</span>
+          <span class="expand-arrow open" id="arrow-log">▾</span>
           <button type="button" class="chip chip-btn" id="refreshLogBtn">刷新</button>
         </div>
       </div>
-      <div class="expand-body" id="expand-log">
+      <div class="expand-body open" id="expand-log">
+        <div class="log-toolbar">
+          <button type="button" class="chip chip-btn" id="clearLogBtn">清空</button>
+        </div>
         <div class="expand-inner">
           <div class="log-box" id="logBox">暂无日志</div>
         </div>
+      </div>
+    </section>
+
+    <div class="small-title dock-only" data-page="log">日志摘要</div>
+    <section class="card dock-only" data-page="log">
+      <div class="kv-list">
+        <div class="kv-row"><span class="k">展示行数</span><span class="v" id="logLineCount">0</span></div>
+        <div class="kv-row"><span class="k">文件大小</span><span class="v" id="logFileSize">--</span></div>
+        <div class="kv-row"><span class="k">路径</span><span class="v">data/log.log</span></div>
+      </div>
+      <div class="expand-inner" style="padding: var(--space-expand-pad)">
+        <div class="field-hint">触发停充 / 恢复后才会追加日志。悬浮分页下默认展开，并显示最近 40 行。</div>
       </div>
     </section>
 

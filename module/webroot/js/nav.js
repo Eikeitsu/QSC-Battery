@@ -50,6 +50,11 @@ const QscNav = {
     document.querySelectorAll('.dock-item').forEach((el) => {
       el.classList.toggle('active', el.dataset.nav === page);
     });
+    if (page === 'log') {
+      document.getElementById('expand-log')?.classList.add('open');
+      document.getElementById('arrow-log')?.classList.add('open');
+      if (typeof QscApp !== 'undefined') QscApp.refreshLog(false);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   },
 

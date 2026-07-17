@@ -39,6 +39,7 @@ const QscUi = {
     try {
       localStorage.setItem(QSC.FONT_KEY, value);
     } catch (_) {}
+    this.syncTopbarSpacer();
   },
 
   onFontSliderChange() {
@@ -52,24 +53,34 @@ const QscUi = {
     const powerSub = document.getElementById('powerSub');
     const tempSub = document.getElementById('tempSub');
 
-    if (powerSub) {
-      if (stop === 110) {
-        powerSub.textContent = '电量停充已关闭';
-      } else if (stop > start) {
-        powerSub.textContent = `停止 ${stop}% · 恢复 ${start}%`;
-      } else {
-        powerSub.textContent = '阈值无效，停止值需大于恢复值';
-      }
-    }
+    let powerText = '阈值无效';
+    if (stop === 110) powerText = '电量停充已关闭';
+    else if (stop > start) powerText = `停止 ${stop}% · 恢复 ${start}%`;
 
-    if (tempSub) {
-      if (tempOn) {
-        const stopTemp = document.getElementById('temperature_switch_stop').value;
-        const startTemp = document.getElementById('temperature_switch_start').value;
-        tempSub.textContent = `停充 ≥${stopTemp}°C · 恢复 ≤${startTemp}°C`;
-      } else {
-        tempSub.textContent = '已关闭';
-      }
+    if (powerSub) powerSub.textContent = powerText;
+
+    let tempText = '已关闭';
+    if (tempOn) {
+      const stopTemp = document.getElementById('temperature_switch_stop').value;
+      const startTemp = document.getElementById('temperature_switch_start').value;
+      tempText = `停充 ≥${stopTemp}°C · 恢复 ≤${startTemp}°C`;
     }
+    if (tempSub) tempSub.textContent = tempText;
+
+    const homePower = document.getElementById('homePowerPlan');
+    const homeTemp = document.getElementById('homeTempPlan');
+    const homeFull = document.getElementById('homeFullPlan');
+    const homeReset = document.getElementById('homeResetPlan');
+    if (homePower) homePower.textContent = powerText;
+    if (homeTemp) homeTemp.textContent = tempText;
+    if (homeFull) homeFull.textContent = document.getElementById('charge_full')?.checked ? '已开启' : '已关闭';
+    if (homeReset) homeReset.textContent = document.getElementById('power_reset')?.checked ? '已开启' : '已关闭';
+  },
+
+  syncTopbarSpacer() {
+    const bar = document.getElementById('topbar');
+    const spacer = document.getElementById('topbarSpacer');
+    if (!bar || !spacer) return;
+    spacer.style.height = `${Math.ceil(bar.getBoundingClientRect().height)}px`;
   }
 };

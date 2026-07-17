@@ -2,6 +2,7 @@ const QscTheme = {
   KEY: 'qsc_theme_mode',
   MONET_KEY: 'qsc_monet',
   LAYOUT_KEY: 'qsc_layout',
+  COMPACT_KEY: 'qsc_compact',
   LABELS: {
     light: '浅色模式',
     dark: '深色模式',
@@ -35,6 +36,14 @@ const QscTheme = {
       return localStorage.getItem(this.LAYOUT_KEY) || 'classic';
     } catch (_) {
       return 'classic';
+    }
+  },
+
+  getCompact() {
+    try {
+      return localStorage.getItem(this.COMPACT_KEY) === '1';
+    } catch (_) {
+      return false;
     }
   },
 
@@ -109,6 +118,26 @@ const QscTheme = {
     }
   },
 
+  applyCompact(enabled) {
+    const on = enabled === true || enabled === '1';
+    document.documentElement.classList.toggle('compact-on', on);
+    document.documentElement.classList.toggle('compact-off', !on);
+    const sw = document.getElementById('compactEnabled');
+    if (sw) sw.checked = on;
+    const desc = document.getElementById('compactDesc');
+    if (desc) desc.textContent = on ? '卡片与列表间距更紧凑' : '舒展间距，便于阅读';
+  },
+
+  setCompact(on) {
+    try {
+      localStorage.setItem(this.COMPACT_KEY, on ? '1' : '0');
+    } catch (_) {}
+    this.applyCompact(on);
+    if (typeof QscUi !== 'undefined') {
+      QscUi.toast(on ? '已开启卡片紧凑' : '已关闭卡片紧凑');
+    }
+  },
+
   apply(mode) {
     const selected = mode || this.getMode();
     const resolved = this.resolve(selected);
@@ -117,7 +146,9 @@ const QscTheme = {
 
     this.applyMonet(this.getMonet());
     this.applyLayout(this.getLayout());
+    this.applyCompact(this.getCompact());
     this.syncStatusBar();
+    if (typeof QscUi !== 'undefined') QscUi.syncTopbarSpacer();
 
     const schemeMeta = document.querySelector('meta[name="color-scheme"]');
     if (schemeMeta) {
@@ -158,6 +189,9 @@ const QscTheme = {
     });
     document.getElementById('dockEnabled')?.addEventListener('change', (e) => {
       this.setLayout(e.target.checked ? 'dock' : 'classic');
+    });
+    document.getElementById('compactEnabled')?.addEventListener('change', (e) => {
+      this.setCompact(e.target.checked);
     });
 
     const media = window.matchMedia('(prefers-color-scheme: dark)');

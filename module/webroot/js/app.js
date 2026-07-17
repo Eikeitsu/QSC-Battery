@@ -52,7 +52,15 @@ const QscApp = {
       this.refreshLog(true);
     });
 
+    document.getElementById('clearLogBtn')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      this.clearLog();
+    });
+
     document.getElementById('fontSlider')?.addEventListener('input', () => QscUi.onFontSliderChange());
+
+    window.addEventListener('resize', () => QscUi.syncTopbarSpacer());
+    window.visualViewport?.addEventListener('resize', () => QscUi.syncTopbarSpacer());
 
     document.getElementById('resetConfigBtn')?.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -194,13 +202,16 @@ const QscApp = {
       return;
     }
 
-    const [capR, tempR, offR, switchR, descR, statusR] = await Promise.all([
+    const [capR, tempR, offR, switchR, descR, statusR, voltR, currR, verR] = await Promise.all([
       QscApi.exec(`cat /sys/class/power_supply/battery/capacity 2>/dev/null || cat /sys/class/power_supply/bms/capacity 2>/dev/null`),
       QscApi.exec(`cat /sys/class/power_supply/battery/temp 2>/dev/null || cat /sys/class/power_supply/bms/temp 2>/dev/null`),
       QscApi.exec(`[ -f '${QSC.OFF_FLAG}' ] || [ -f '${QSC.MODDIR}/disable' ] && echo 1 || echo 0`),
       QscApi.exec(`[ -f '${QSC.DATADIR}/power_switch' ] && echo 1 || echo 0`),
       QscApi.exec(`grep '^description=' '${QSC.MODDIR}/module.prop' 2>/dev/null | cut -d= -f2-`),
-      QscApi.exec(`cat /sys/class/power_supply/battery/status 2>/dev/null`)
+      QscApi.exec(`cat /sys/class/power_supply/battery/status 2>/dev/null`),
+      QscApi.exec(`cat /sys/class/power_supply/battery/voltage_now 2>/dev/null`),
+      QscApi.exec(`cat /sys/class/power_supply/battery/current_now 2>/dev/null`),
+      QscApi.exec(`grep '^version=' '${QSC.MODDIR}/module.prop' 2>/dev/null | cut -d= -f2-`)
     ]);
 
     if (capR.errno === -2 || tempR.errno === -2) {
@@ -245,16 +256,88 @@ const QscApp = {
       badge.textContent = shortDesc || '未充电';
     }
 
+    const statusMap = {
+      Charging: '充电中',
+      Full: '已充满',
+      Discharging: '未充电',
+      'Not charging': '未充电',
+      Unknown: '未知'
+    };
+    const chargeEl = document.getElementById('homeChargeStatus');
+    if (chargeEl) {
+      if (moduleOff) chargeEl.textContent = '模块关';
+      else if (chargingStopped) chargeEl.textContent = '已停充';
+      else chargeEl.textContent = statusMap[chargeStatus] || (chargeStatus || '--');
+    }
+
+    const voltRaw = parseInt(voltR.stdout.trim(), 10);
+    const voltEl = document.getElementById('homeVoltage');
+    if (voltEl) {
+      voltEl.textContent = Number.isNaN(voltRaw)
+        ? '--'
+        : (voltRaw > 100000 ? (voltRaw / 1000000).toFixed(2) : (voltRaw / 1000).toFixed(2));
+    }
+
+    const currRaw = parseInt(currR.stdout.trim(), 10);
+    const currEl = document.getElementById('homeCurrent');
+    if (currEl) {
+      currEl.textContent = Number.isNaN(currRaw)
+        ? '--'
+        : String(Math.round(Math.abs(currRaw) > 10000 ? currRaw / 1000 : currRaw));
+    }
+
+    const verEl = document.getElementById('homeVersion');
+    if (verEl) verEl.textContent = verR.stdout.trim() || '--';
+
+    const updatedEl = document.getElementById('homeUpdatedAt');
+    if (updatedEl) {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const ss = String(now.getSeconds()).padStart(2, '0');
+      updatedEl.textContent = `${hh}:${mm}:${ss}`;
+    }
+
+    QscUi.updateSubs();
     if (showToast) QscUi.toast('状态已刷新');
   },
 
   async refreshLog(showToast) {
-    const result = await QscApi.exec(`tail -n 12 '${QSC.LOG_FILE}' 2>/dev/null`);
-    const text = result.stdout.trim();
-    document.getElementById('logBox').textContent = text || '暂无日志（触发功能后才会写入）';
+    const lines = document.documentElement.getAttribute('data-layout') === 'dock' ? 40 : 12;
+    const [logR, sizeR] = await Promise.all([
+      QscApi.exec(`tail -n ${lines} '${QSC.LOG_FILE}' 2>/dev/null`),
+      QscApi.exec(`wc -c < '${QSC.LOG_FILE}' 2>/dev/null`)
+    ]);
+    const text = logR.stdout.trim();
+    const box = document.getElementById('logBox');
+    if (box) box.textContent = text || '暂无日志（触发功能后才会写入）';
+
+    const lineCount = text ? text.split('\n').filter(Boolean).length : 0;
+    const lineEl = document.getElementById('logLineCount');
+    if (lineEl) lineEl.textContent = String(lineCount);
+
+    const sizeRaw = parseInt(sizeR.stdout.trim(), 10);
+    const sizeEl = document.getElementById('logFileSize');
+    if (sizeEl) {
+      if (Number.isNaN(sizeRaw)) sizeEl.textContent = '--';
+      else if (sizeRaw < 1024) sizeEl.textContent = `${sizeRaw} B`;
+      else if (sizeRaw < 1024 * 1024) sizeEl.textContent = `${(sizeRaw / 1024).toFixed(1)} KB`;
+      else sizeEl.textContent = `${(sizeRaw / 1024 / 1024).toFixed(2)} MB`;
+    }
+
+    const logSub = document.getElementById('logSub');
+    if (logSub) logSub.textContent = lineCount ? `最近 ${lineCount} 行` : '暂无记录';
+
     if (!showToast) return;
-    if (result.errno === -2) QscUi.toast('日志读取超时');
+    if (logR.errno === -2) QscUi.toast('日志读取超时');
     else QscUi.toast('日志已刷新');
+  },
+
+  async clearLog() {
+    if (!window.confirm('确认清空日志？')) return;
+    await QscApi.exec(`: > '${QSC.LOG_FILE}'`);
+    await this.refreshLog(false);
+    QscUi.toast('日志已清空');
   },
 
   async loadDeviceInfo() {
@@ -297,6 +380,8 @@ const QscApp = {
       document.getElementById('deviceName').textContent = '未检测到 WebUI 桥接';
       document.getElementById('statusBadge').textContent = '请使用 KernelSU 等支持 WebUI 的管理器打开';
       document.getElementById('statusBadge').classList.add('disabled');
+      QscUi.updateSubs();
+      QscUi.syncTopbarSpacer();
       QscUi.toast('当前环境无法执行 shell');
       return;
     }
@@ -307,6 +392,10 @@ const QscApp = {
       this.refreshStatus(),
       this.refreshLog()
     ]);
+
+    QscUi.syncTopbarSpacer();
+    requestAnimationFrame(() => QscUi.syncTopbarSpacer());
+    setTimeout(() => QscUi.syncTopbarSpacer(), 180);
 
     if (this.statusTimer) clearInterval(this.statusTimer);
     this.statusTimer = setInterval(() => this.refreshStatus(), QSC.STATUS_INTERVAL);
