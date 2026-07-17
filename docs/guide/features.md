@@ -25,11 +25,11 @@ QSC（Quantitative Stop Charging）定量停充，是一款运行在 Magisk / Ke
 配置文件：
 
 ```text
-/data/adb/modules/QuantitativeStopCharging_switch/config/config.conf
+/data/adb/modules/QSC_Battery/config/config.conf
 ```
 
 运行日志：
 
 ```text
-/data/adb/modules/QuantitativeStopCharging_switch/data/log.log
+/data/adb/modules/QSC_Battery/data/log.log
 ```

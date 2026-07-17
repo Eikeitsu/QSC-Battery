@@ -8,7 +8,7 @@
 4. 若机型较新，可执行诊断脚本：
 
 ```bash
-sh /data/adb/modules/QuantitativeStopCharging_switch/bin/diagnose.sh
+sh /data/adb/modules/QSC_Battery/bin/diagnose.sh
 ```
 
 报告在 `/sdcard/qsc_diagnose.txt`，可反馈给维护者适配。

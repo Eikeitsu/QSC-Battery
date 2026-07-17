@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # QSC 诊断脚本 - 扫描充电控制节点，用于适配新机型
-# 在终端执行: sh /data/adb/modules/QuantitativeStopCharging_switch/bin/diagnose.sh
+# 在终端执行: sh /data/adb/modules/QSC_Battery/bin/diagnose.sh
 # 结果保存到 /sdcard/qsc_diagnose.txt
 
 OUT="/sdcard/qsc_diagnose.txt"

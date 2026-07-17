@@ -22,8 +22,3 @@ qsc_init_paths() {
 }
 
 qsc_init_paths "$0"
-
-if [ -f "$BINDIR/migrate.sh" ]; then
-	. "$BINDIR/migrate.sh"
-	qsc_run_migration boot
-fi

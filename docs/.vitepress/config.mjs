@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress';
 
 const repoName =
   process.env.VITEPRESS_BASE?.replace(/^\//, '').replace(/\/$/, '') ||
-  'QuantitativeStopCharging_switch_magisk';
+  'QSC-Battery';
 
 export default defineConfig({
   title: 'QSC 定量停充',
@@ -31,7 +31,7 @@ export default defineConfig({
     socialLinks: [
       {
         icon: 'github',
-        link: 'https://github.com/Eikeitsu/QuantitativeStopCharging_switch_magisk'
+        link: 'https://github.com/Eikeitsu/QSC-Battery'
       }
     ],
     footer: {

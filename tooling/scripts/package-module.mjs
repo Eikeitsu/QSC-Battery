@@ -19,7 +19,7 @@ const releaseDir = join(repoRoot, 'release');
 const builtWebDir = join(repoRoot, '.build', 'webroot');
 
 const ROOT_FILES = ['module.prop', 'service.sh', 'customize.sh', 'action.sh', 'uninstall.sh'];
-const BIN_FILES = ['common.sh', 'migrate.sh', 'qsc_switch.sh', 'list_switch.sh'];
+const BIN_FILES = ['common.sh', 'qsc_switch.sh', 'list_switch.sh'];
 const BIN_DEBUG_FILES = ['testing.sh', 'diagnose.sh', 'diag2.sh'];
 
 const includeDebug = process.argv.includes('--debug');
@@ -82,7 +82,7 @@ function createZip(zipPath) {
 }
 
 const version = readVersion();
-const zipName = `QuantitativeStopCharging_switch_v${version}.zip`;
+const zipName = `QSC-Battery_v${version}.zip`;
 const zipPath = join(releaseDir, zipName);
 
 rmSync(staging, { recursive: true, force: true });
