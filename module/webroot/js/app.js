@@ -36,6 +36,13 @@ const QscApp = {
       node.addEventListener('click', () => QscApi.openUrl(node.dataset.url));
     });
 
+    document.querySelectorAll('.pref[data-wxpay]').forEach((node) => {
+      node.addEventListener('click', async () => {
+        QscUi.toast('正在打开原作者投币页…');
+        await QscApi.openWxPay(node.dataset.wxpay);
+      });
+    });
+
     document.querySelectorAll('.thanks-item[data-url]').forEach((node) => {
       node.addEventListener('click', () => QscApi.openUrl(node.dataset.url));
     });
@@ -219,16 +226,23 @@ const QscApp = {
 
     if (!badge) return;
     badge.className = 'status-badge';
+    const descRaw = descR.stdout.trim();
+    const bracket = descRaw.match(/\[([^\]]+)\]/);
+    const shortDesc = bracket ? bracket[1].trim() : '';
+    const restDesc = descRaw.replace(/\[[^\]]*\]\s*/, '').trim();
+    const descEl = document.getElementById('statusDesc');
+    if (descEl && restDesc) descEl.textContent = restDesc;
+
     if (moduleOff) {
       badge.textContent = '模块已关闭';
       badge.classList.add('disabled');
     } else if (chargingStopped) {
-      badge.textContent = '已触发停充，等待恢复条件';
+      badge.textContent = '已停充，等待恢复';
       badge.classList.add('stopped');
     } else if (chargeStatus === 'Charging' || chargeStatus === 'Full') {
-      badge.textContent = descR.stdout.trim() || '[ 充电中 ]';
+      badge.textContent = shortDesc || '充电中';
     } else {
-      badge.textContent = descR.stdout.trim() || '[ 未充电 ]';
+      badge.textContent = shortDesc || '未充电';
     }
 
     if (showToast) QscUi.toast('状态已刷新');

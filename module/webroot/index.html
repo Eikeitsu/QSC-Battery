@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-layout="classic" class="monet-on">
   <head>
     <meta charset="UTF-8" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#fef7ff" />
+    <meta name="theme-color" content="#f2f4f7" />
     <meta name="color-scheme" content="light dark" />
     <title>QSC 定量停充</title>
     <script>
@@ -17,6 +17,12 @@
           var resolved = mode === 'light' || mode === 'dark' ? mode : dark ? 'dark' : 'light';
           document.documentElement.setAttribute('data-theme', resolved);
           document.documentElement.style.colorScheme = mode === 'system' ? 'light dark' : resolved;
+          var monet = localStorage.getItem('qsc_monet');
+          var monetOn = monet === null ? true : monet === '1';
+          document.documentElement.classList.toggle('monet-on', monetOn);
+          document.documentElement.classList.toggle('monet-off', !monetOn);
+          var layout = localStorage.getItem('qsc_layout') || 'classic';
+          document.documentElement.setAttribute('data-layout', layout === 'dock' ? 'dock' : 'classic');
         } catch (e) {}
       })();
     </script>
@@ -30,7 +36,9 @@
       </div>
     </header>
 
-    <section class="card" style="animation-delay: 0.1s">
+    <div class="page-gap"></div>
+
+    <section class="card" id="statusCard" data-page="home">
       <div class="status-grid">
         <div class="status-item">
           <div class="status-value" id="statLevel">--</div>
@@ -42,13 +50,14 @@
         </div>
       </div>
       <div class="status-badge" id="statusBadge">状态加载中...</div>
+      <div class="status-desc" id="statusDesc">到达指定电量、指定温度自动停止充电、自动恢复充电。</div>
       <div class="status-actions">
         <button type="button" class="text-btn" id="refreshStatusBtn">刷新状态</button>
       </div>
     </section>
 
-    <div class="small-title">控制</div>
-    <section class="card">
+    <div class="small-title" data-page="home">控制</div>
+    <section class="card" data-page="home">
       <div class="pref" data-toggle="module">
         <div class="pref-body">
           <div class="pref-title">模块总开关</div>
@@ -73,8 +82,8 @@
       </div>
     </section>
 
-    <div class="small-title">电量停充</div>
-    <section class="card">
+    <div class="small-title" data-page="config">电量停充</div>
+    <section class="card" data-page="config">
       <div class="pref" data-expand="power">
         <div class="pref-body">
           <div class="pref-title">电量阈值</div>
@@ -93,42 +102,21 @@
 
           <div class="field-label">停止充电电量 (%)</div>
           <div class="chips" id="stopChips"></div>
-          <input
-            type="number"
-            id="power_stop"
-            min="1"
-            max="110"
-            placeholder="如 100"
-          />
+          <input type="number" id="power_stop" min="1" max="110" placeholder="如 100" />
 
           <div class="field-label">恢复充电电量 (%)</div>
           <div class="chips" id="startChips"></div>
-          <input
-            type="number"
-            id="power_start"
-            min="1"
-            max="109"
-            placeholder="如 95，建议间隔 5-10"
-          />
-          <div class="field-hint warn">
-            ⚠️ 澎湃 OS 3.0 建议停止与恢复间隔至少 10%
-          </div>
+          <input type="number" id="power_start" min="1" max="109" placeholder="如 95，建议间隔 5-10" />
+          <div class="field-hint warn">⚠️ 澎湃 OS 3.0 建议停止与恢复间隔至少 10%</div>
 
           <div class="field-label">停充前延时 (秒)</div>
-          <input
-            type="number"
-            id="power_stop_time"
-            min="1"
-            placeholder="默认 3 秒"
-          />
-          <div class="field-hint">
-            触发停充前继续充电的倒计时，开启「充满再停」后此功能失效
-          </div>
+          <input type="number" id="power_stop_time" min="1" placeholder="默认 3 秒" />
+          <div class="field-hint">触发停充前继续充电的倒计时，开启「充满再停」后此功能失效</div>
         </div>
       </div>
     </section>
 
-    <section class="card">
+    <section class="card" data-page="config">
       <div class="pref">
         <div class="pref-body">
           <div class="pref-title">充满再停</div>
@@ -157,8 +145,8 @@
       </div>
     </section>
 
-    <div class="small-title">温控停充</div>
-    <section class="card">
+    <div class="small-title" data-page="config">温控停充</div>
+    <section class="card" data-page="config">
       <div class="pref" data-expand="temp">
         <div class="pref-body">
           <div class="pref-title">温度阈值</div>
@@ -177,29 +165,52 @@
         <div class="expand-inner">
           <div class="field-label">停止充电温度 (°C)</div>
           <div class="chips" id="tempStopChips"></div>
-          <input
-            type="number"
-            id="temperature_switch_stop"
-            min="1"
-            max="80"
-            placeholder="如 60"
-          />
+          <input type="number" id="temperature_switch_stop" min="1" max="80" placeholder="如 60" />
 
           <div class="field-label">恢复充电温度 (°C)</div>
           <div class="chips" id="tempStartChips"></div>
-          <input
-            type="number"
-            id="temperature_switch_start"
-            min="1"
-            max="79"
-            placeholder="如 50，建议间隔 3°C 以上"
-          />
+          <input type="number" id="temperature_switch_start" min="1" max="79" placeholder="如 50，建议间隔 3°C 以上" />
         </div>
       </div>
     </section>
 
-    <div class="small-title">显示</div>
-    <section class="card">
+    <!-- 悬浮分页专用：指南页（经典单页不展示） -->
+    <div class="small-title dock-only" data-page="more">使用指南</div>
+    <section class="card dock-only" data-page="more">
+      <div class="expand-inner" style="padding: 14px 16px 16px">
+        <div class="info-box">
+          <b>推荐用法</b><br />
+          · 过夜：停止 80–90%，恢复间隔 5–10%<br />
+          · 游戏导航：打开温控，高温自动停充<br />
+          · 临时满电：停止值设 100，或填 110 关闭电量停充
+        </div>
+        <div class="info-box">
+          <b>路径</b><br />
+          配置：<code>config/config.conf</code><br />
+          日志：<code>data/log.log</code><br />
+          模块：<code>/data/adb/modules/QSC_Battery</code>
+        </div>
+        <div class="info-box">
+          <b>投币说明</b><br />
+          「投币捐赠」走微信内置页面，支持原作者 <b>top大佬</b>。<br />
+          也可执行模块目录脚本：<b>给原作者top大佬投币.sh</b>
+        </div>
+        <div class="field-hint">HyperOS / 澎湃用户：停止与恢复电量建议至少间隔 10%。</div>
+      </div>
+    </section>
+
+    <div class="small-title dock-only" data-page="more">运行提示</div>
+    <section class="card dock-only" data-page="more">
+      <div class="expand-inner" style="padding: 14px 16px 16px">
+        <div class="field-hint">· 改配置即时生效，一般无需重启</div>
+        <div class="field-hint">· 若停充无效，可在管理器 Action 刷新权限后重试</div>
+        <div class="field-hint">· 勿与其它充电控制模块同时开启，以免互相覆盖</div>
+        <div class="field-hint">· 卸载后请重启，充电节点会随系统复位</div>
+      </div>
+    </section>
+
+    <div class="small-title" data-page="more">显示</div>
+    <section class="card" data-page="more">
       <div class="pref" data-expand="theme">
         <div class="pref-body">
           <div class="pref-title">外观主题</div>
@@ -212,9 +223,38 @@
       <div class="expand-body" id="expand-theme">
         <div class="expand-inner">
           <div class="chips" id="themeChips"></div>
-          <div class="field-hint">推荐「跟随系统」。在 WebUI X 下使用莫奈动态取色，状态栏与页面背景一致；浅色/深色在无莫奈环境生效</div>
+          <div class="field-hint">浅色 / 深色 / 跟随系统（深浅色）</div>
         </div>
       </div>
+
+      <div class="pref">
+        <div class="pref-body">
+          <div class="pref-title">莫奈取色</div>
+          <div class="pref-desc" id="monetDesc">背景跟随系统莫奈取色</div>
+        </div>
+        <div class="pref-right">
+          <label class="hyper-switch" onclick="event.stopPropagation()">
+            <input type="checkbox" id="monetEnabled" checked />
+            <span class="track"></span>
+            <span class="thumb"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="pref">
+        <div class="pref-body">
+          <div class="pref-title">悬浮分页</div>
+          <div class="pref-desc" id="dockDesc">单页长列表</div>
+        </div>
+        <div class="pref-right">
+          <label class="hyper-switch" onclick="event.stopPropagation()">
+            <input type="checkbox" id="dockEnabled" />
+            <span class="track"></span>
+            <span class="thumb"></span>
+          </label>
+        </div>
+      </div>
+
       <div class="pref" data-expand="fontSize">
         <div class="pref-body">
           <div class="pref-title">字体大小</div>
@@ -228,23 +268,15 @@
         <div class="expand-inner">
           <div class="font-slider-row">
             <span class="font-label" style="font-size: calc(0.7rem * var(--font-scale))">A</span>
-            <input
-              type="range"
-              class="font-slider"
-              id="fontSlider"
-              min="0.8"
-              max="1.5"
-              step="0.02"
-              value="1"
-            />
+            <input type="range" class="font-slider" id="fontSlider" min="0.8" max="1.5" step="0.02" value="1" />
             <span class="font-label" style="font-size: calc(1.1rem * var(--font-scale))">A</span>
           </div>
         </div>
       </div>
     </section>
 
-    <div class="small-title">日志</div>
-    <section class="card">
+    <div class="small-title" data-page="log">日志</div>
+    <section class="card" data-page="log">
       <div class="pref" data-expand="log">
         <div class="pref-body">
           <div class="pref-title">最近日志</div>
@@ -262,11 +294,11 @@
       </div>
     </section>
 
-    <div class="small-title">关于</div>
-    <div class="about-note">
+    <div class="small-title" data-page="more">关于</div>
+    <div class="about-note" data-page="more">
       本模块基于 <b>top大佬</b> 的 QSC 定量停充，补充了 WebUI 与目录结构整理，感谢原作者开源贡献。
     </div>
-    <section class="card">
+    <section class="card" data-page="more">
       <div class="pref" data-url="https://www.coolapk.com/u/7602666">
         <div class="pref-body">
           <div class="pref-title">酷安主页</div>
@@ -288,10 +320,10 @@
         </div>
         <div class="pref-right"><span class="link-arrow">›</span></div>
       </div>
-      <div class="pref" data-url="https://payapp.weixin.qq.com/qrpay/order/home2?key=idc_CHNDVI_dHFNbTNZIWMMKIEdzUZtCA--">
+      <div class="pref" data-wxpay="https://payapp.weixin.qq.com/qrpay/order/home2?key=idc_CHNDVI_dHFNbTNZIWMMKIEdzUZtCA--">
         <div class="pref-body">
           <div class="pref-title">投币捐赠</div>
-          <div class="pref-desc">支持原作者 top大佬</div>
+          <div class="pref-desc">支持原作者 top大佬（微信）</div>
         </div>
         <div class="pref-right"><span class="link-arrow">›</span></div>
       </div>
@@ -313,7 +345,7 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card" data-page="more">
       <div class="pref" data-expand="thanks">
         <div class="pref-body">
           <div class="pref-title">致谢名单</div>
@@ -345,6 +377,8 @@
       </div>
     </section>
 
+    <nav class="dock-nav" id="dockNav" hidden></nav>
+
     <div class="snackbar" id="snackbar">
       <span class="snackbar-icon">✓</span>
       <span id="snackbarText"></span>
@@ -353,6 +387,7 @@
     <script src="js/config.js"></script>
     <script src="js/api.js"></script>
     <script src="js/ui.js"></script>
+    <script src="js/nav.js"></script>
     <script src="js/theme.js"></script>
     <script src="js/app.js"></script>
   </body>

@@ -26,11 +26,13 @@ if [ -f "$ASSETDIR/pay.jpg" ] && [ ! -f "$ASSETDIR/donate.jpg" ]; then
 	cp "$ASSETDIR/pay.jpg" "$ASSETDIR/donate.jpg"
 fi
 
-echo "#执行该脚本，跳转微信网页给作者投币捐赠" > "$MODDIR/.投币捐赠.sh"
-echo "am start -n com.tencent.mm/.plugin.webview.ui.tools.WebViewUI -d https://payapp.weixin.qq.com/qrpay/order/home2?key=idc_CHNDVI_dHFNbTNZIWMMKIEdzUZtCA-- >/dev/null 2>&1" >> "$MODDIR/.投币捐赠.sh"
-echo "echo \"\"" >> "$MODDIR/.投币捐赠.sh"
-echo "echo \"正在跳转QSC定量停充捐赠页面，请稍等。。。\"" >> "$MODDIR/.投币捐赠.sh"
-chmod 0755 "$MODDIR/.投币捐赠.sh"
+echo "# 给原作者 top大佬 投币（微信网页收款）" > "$MODDIR/给原作者top大佬投币.sh"
+echo "am start -n com.tencent.mm/.plugin.webview.ui.tools.WebViewUI -d https://payapp.weixin.qq.com/qrpay/order/home2?key=idc_CHNDVI_dHFNbTNZIWMMKIEdzUZtCA-- >/dev/null 2>&1" >> "$MODDIR/给原作者top大佬投币.sh"
+echo "echo \"\"" >> "$MODDIR/给原作者top大佬投币.sh"
+echo "echo \"正在跳转原作者 top大佬 的投币页面，请稍等…\"" >> "$MODDIR/给原作者top大佬投币.sh"
+chmod 0755 "$MODDIR/给原作者top大佬投币.sh"
+# 清理旧文件名，避免与维护者打赏混淆
+rm -f "$MODDIR/.投币捐赠.sh" "$MODDIR/投币捐赠.sh"
 
 if [ -f "$MODDIR/t_module" -a "$(cat "$MODDIR/module.prop" | egrep '^# ##' | sed -n '$p')" != '# ##' ]; then
 	cp "$MODDIR/t_module" "$MODDIR/module.prop"

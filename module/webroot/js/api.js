@@ -66,5 +66,13 @@ const QscApi = {
 
   openUrl(url) {
     return this.exec(`am start -a android.intent.action.VIEW -d '${url}' >/dev/null 2>&1`);
+  },
+
+  /** 微信收款页需走微信内置 WebView，系统浏览器会报「不支持该种支付方式」 */
+  openWxPay(url) {
+    const safe = String(url || '').replace(/'/g, '');
+    return this.exec(
+      `am start -n com.tencent.mm/.plugin.webview.ui.tools.WebViewUI -d '${safe}' >/dev/null 2>&1`
+    );
   }
 };

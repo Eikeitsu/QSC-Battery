@@ -1,5 +1,7 @@
 const QscTheme = {
   KEY: 'qsc_theme_mode',
+  MONET_KEY: 'qsc_monet',
+  LAYOUT_KEY: 'qsc_layout',
   LABELS: {
     light: '浅色模式',
     dark: '深色模式',
@@ -19,29 +21,35 @@ const QscTheme = {
     }
   },
 
+  getMonet() {
+    try {
+      const v = localStorage.getItem(this.MONET_KEY);
+      return v === null ? true : v === '1';
+    } catch (_) {
+      return true;
+    }
+  },
+
+  getLayout() {
+    try {
+      return localStorage.getItem(this.LAYOUT_KEY) || 'classic';
+    } catch (_) {
+      return 'classic';
+    }
+  },
+
   resolve(mode) {
     const value = mode || this.getMode();
     if (value === 'light' || value === 'dark') return value;
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   },
 
-  detectMonet() {
-    const styles = getComputedStyle(document.documentElement);
-    const bg = (styles.getPropertyValue('--background') || '').trim();
-    // WebUI X 注入后 --background 一般有值；回退色与我们 :root 默认接近时也可能存在
-    const hasMonet = Boolean(bg) && bg !== '';
-    document.documentElement.classList.toggle('webuix-monet', hasMonet);
-    return hasMonet;
-  },
-
   readCssColor(name, fallback) {
     const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     if (!raw) return fallback;
-    // 可能是 #rgb / #rrggbb / rgb() / 空格分隔的 Monet 组件色
     if (raw.startsWith('#') || raw.startsWith('rgb') || raw.startsWith('hsl')) return raw;
     const parts = raw.split(/\s+/).filter(Boolean);
-    if (parts.length >= 3 && parts.every((p) => /^\d+(\.\d+)?%?$/.test(p) || /^\d+(\.\d+)?$/.test(p))) {
-      // "R G B" 或带 % 的相对色 → 尽量拼成 rgb
+    if (parts.length >= 3) {
       if (parts[0].includes('%')) return `rgb(${parts[0]} ${parts[1]} ${parts[2]})`;
       return `rgb(${parts[0]}, ${parts[1]}, ${parts[2]})`;
     }
@@ -51,9 +59,54 @@ const QscTheme = {
   syncStatusBar() {
     const themeMeta = document.querySelector('meta[name="theme-color"]');
     if (!themeMeta) return;
-    // 与页面实色背景一致，避免状态栏色差
-    const color = this.readCssColor('--bg', this.readCssColor('--background', '#fef7ff'));
+    const monet = this.getMonet();
+    const color = monet
+      ? this.readCssColor('--background', this.readCssColor('--bg', '#f2f4f7'))
+      : this.readCssColor('--bg', '#f2f4f7');
     themeMeta.setAttribute('content', color);
+    document.documentElement.style.backgroundColor = color;
+    if (document.body) document.body.style.backgroundColor = color;
+  },
+
+  applyMonet(enabled) {
+    const on = enabled !== false && enabled !== '0';
+    document.documentElement.classList.toggle('monet-on', on);
+    document.documentElement.classList.toggle('monet-off', !on);
+    const sw = document.getElementById('monetEnabled');
+    if (sw) sw.checked = on;
+    const desc = document.getElementById('monetDesc');
+    if (desc) desc.textContent = on ? '全局跟随系统莫奈取色' : '使用固定暖橙配色';
+
+  },
+
+  setMonet(on) {
+    try {
+      localStorage.setItem(this.MONET_KEY, on ? '1' : '0');
+    } catch (_) {}
+    this.applyMonet(on);
+    this.syncStatusBar();
+    if (typeof QscUi !== 'undefined') QscUi.toast(on ? '已开启莫奈取色' : '已关闭莫奈取色');
+  },
+
+  applyLayout(layout) {
+    const mode = layout === 'dock' ? 'dock' : 'classic';
+    document.documentElement.setAttribute('data-layout', mode);
+    const sw = document.getElementById('dockEnabled');
+    if (sw) sw.checked = mode === 'dock';
+    const desc = document.getElementById('dockDesc');
+    if (desc) desc.textContent = mode === 'dock' ? '底部悬浮分页导航' : '单页长列表';
+    if (typeof QscNav !== 'undefined') QscNav.apply(mode);
+  },
+
+  setLayout(layout) {
+    const mode = layout === 'dock' ? 'dock' : 'classic';
+    try {
+      localStorage.setItem(this.LAYOUT_KEY, mode);
+    } catch (_) {}
+    this.applyLayout(mode);
+    if (typeof QscUi !== 'undefined') {
+      QscUi.toast(mode === 'dock' ? '已开启悬浮分页' : '已切换为经典单页');
+    }
   },
 
   apply(mode) {
@@ -62,7 +115,8 @@ const QscTheme = {
     document.documentElement.setAttribute('data-theme', resolved);
     document.documentElement.style.colorScheme = selected === 'system' ? 'light dark' : resolved;
 
-    this.detectMonet();
+    this.applyMonet(this.getMonet());
+    this.applyLayout(this.getLayout());
     this.syncStatusBar();
 
     const schemeMeta = document.querySelector('meta[name="color-scheme"]');
@@ -73,14 +127,9 @@ const QscTheme = {
     const desc = document.getElementById('themeDesc');
     if (desc) {
       const label = this.LABELS[selected] || this.LABELS.system;
-      const monet = document.documentElement.classList.contains('webuix-monet');
-      if (selected === 'system') {
-        desc.textContent = monet
-          ? `${label} · 莫奈动态取色`
-          : `${label}（当前${resolved === 'dark' ? '深色' : '浅色'}）`;
-      } else {
-        desc.textContent = monet ? `${label}（莫奈仍随系统）` : label;
-      }
+      desc.textContent = selected === 'system'
+        ? `${label}（当前${resolved === 'dark' ? '深色' : '浅色'}）`
+        : label;
     }
 
     const chips = document.getElementById('themeChips');
@@ -100,20 +149,23 @@ const QscTheme = {
 
   init() {
     this.apply(this.getMode());
-    // colors.css 可能稍晚注入，再同步一次状态栏
-    requestAnimationFrame(() => this.apply(this.getMode()));
+    requestAnimationFrame(() => this.syncStatusBar());
     setTimeout(() => this.syncStatusBar(), 120);
     setTimeout(() => this.syncStatusBar(), 500);
+
+    document.getElementById('monetEnabled')?.addEventListener('change', (e) => {
+      this.setMonet(e.target.checked);
+    });
+    document.getElementById('dockEnabled')?.addEventListener('change', (e) => {
+      this.setLayout(e.target.checked ? 'dock' : 'classic');
+    });
 
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const onChange = () => {
       if (this.getMode() === 'system') this.apply('system');
       else this.syncStatusBar();
     };
-    if (typeof media.addEventListener === 'function') {
-      media.addEventListener('change', onChange);
-    } else if (typeof media.addListener === 'function') {
-      media.addListener(onChange);
-    }
+    if (typeof media.addEventListener === 'function') media.addEventListener('change', onChange);
+    else if (typeof media.addListener === 'function') media.addListener(onChange);
   }
 };

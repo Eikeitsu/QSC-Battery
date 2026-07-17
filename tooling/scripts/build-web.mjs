@@ -15,7 +15,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const srcDir = join(repoRoot, 'module', 'webroot');
 const outDir = join(repoRoot, '.build', 'webroot');
 
-const RESERVED = ['QSC', 'QscApi', 'QscUi', 'QscApp', 'QscTheme', 'ksu', 'exec', 'toast'];
+const RESERVED = ['QSC', 'QscApi', 'QscUi', 'QscApp', 'QscTheme', 'QscNav', 'ksu', 'exec', 'toast'];
 
 function log(msg) {
   console.log(`[build-web] ${msg}`);
