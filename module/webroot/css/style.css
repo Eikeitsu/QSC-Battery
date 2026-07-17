@@ -639,6 +639,16 @@ html[data-layout="dock"] [data-page] {
   display: none !important;
 }
 
+/* 底部导航本身不要被 data-page 显隐规则误伤 */
+html[data-layout="dock"] .dock-nav,
+html[data-layout="dock"] .dock-nav * {
+  display: revert;
+}
+
+html[data-layout="dock"] .dock-nav {
+  display: flex !important;
+}
+
 html[data-layout="dock"][data-page="home"] [data-page~="home"],
 html[data-layout="dock"][data-page="config"] [data-page~="config"],
 html[data-layout="dock"][data-page="log"] [data-page~="log"],

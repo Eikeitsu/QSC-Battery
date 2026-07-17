@@ -48,7 +48,7 @@ const QscNav = {
     } catch (_) {}
     document.documentElement.setAttribute('data-page', page);
     document.querySelectorAll('.dock-item').forEach((el) => {
-      el.classList.toggle('active', el.dataset.page === page);
+      el.classList.toggle('active', el.dataset.nav === page);
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   },
@@ -58,13 +58,13 @@ const QscNav = {
     if (!nav) return;
     const current = this.getPage();
     nav.innerHTML = this.PAGES.map((p) => `
-      <button type="button" class="dock-item${p.id === current ? ' active' : ''}" data-page="${p.id}" aria-label="${p.label}">
+      <button type="button" class="dock-item${p.id === current ? ' active' : ''}" data-nav="${p.id}" aria-label="${p.label}">
         <span class="dock-icon">${p.icon}</span>
         <span class="dock-label">${p.label}</span>
       </button>
     `).join('');
     nav.querySelectorAll('.dock-item').forEach((btn) => {
-      btn.addEventListener('click', () => this.setPage(btn.dataset.page));
+      btn.addEventListener('click', () => this.setPage(btn.dataset.nav));
     });
   },
 
