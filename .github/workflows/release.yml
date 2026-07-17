@@ -140,7 +140,9 @@ jobs:
           sed -i "s/^version=.*/version=${RAW}/" "$PROP"
           sed -i "s/^versionCode=.*/versionCode=${CODE}/" "$PROP"
           if ! grep -q '^updateJson=' "$PROP"; then
-            echo "updateJson=https://raw.githubusercontent.com/${{ github.repository }}/main/update.json" >> "$PROP"
+            echo "updateJson=https://eikeitsu.github.io/QSC-Battery/update.json" >> "$PROP"
+          else
+            sed -i "s|^updateJson=.*|updateJson=https://eikeitsu.github.io/QSC-Battery/update.json|" "$PROP"
           fi
           echo "---- module.prop ----"
           cat "$PROP"
@@ -208,9 +210,9 @@ jobs:
           sed -i "s/^version=.*/version=${RAW}/" "$PROP"
           sed -i "s/^versionCode=.*/versionCode=${CODE}/" "$PROP"
           if ! grep -q '^updateJson=' "$PROP"; then
-            echo "updateJson=https://raw.githubusercontent.com/${REPO}/main/update.json" >> "$PROP"
+            echo "updateJson=https://eikeitsu.github.io/QSC-Battery/update.json" >> "$PROP"
           else
-            sed -i "s|^updateJson=.*|updateJson=https://raw.githubusercontent.com/${REPO}/main/update.json|" "$PROP"
+            sed -i "s|^updateJson=.*|updateJson=https://eikeitsu.github.io/QSC-Battery/update.json|" "$PROP"
           fi
 
           git add update.json docs/public/update.json module/module.prop

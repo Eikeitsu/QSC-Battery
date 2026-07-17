@@ -41,6 +41,14 @@ https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/main/update.json
 
 确认其中 `versionCode` 为普通整数，且大于手机里已安装模块的 `versionCode`。
 
+手机上也可在浏览器打开（国内更稳）：
+
+```text
+https://eikeitsu.github.io/QSC-Battery/update.json
+```
+
+若本机模块 `module.prop` 里没有 `updateJson=` 这一行，管理器**根本不会去检查更新**，只改 `versionCode` 没用。
+
 ## 与其它充电类模块冲突？
 
 尽量不要同时安装多个控制充电开关的模块，以免互相覆盖节点状态。
