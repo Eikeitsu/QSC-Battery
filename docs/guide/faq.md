@@ -29,6 +29,18 @@ sh /data/adb/modules/QSC_Battery/bin/diagnose.sh
 
 配置即时写入 `config.conf`。若仍无效，看日志是否报错节点权限或机型未适配。
 
+## 检查更新没反应？
+
+`versionCode` 必须是不超过 `2147483647` 的整数。若发布时把 `versionCode` 写成了 12 位日期时间（如 `202607171330`），Magisk / KernelSU 会解析失败，从而不提示更新。
+
+本仓库发版会自动规范为：`version=2026.07.17`、`versionCode=2026071701`；同日第二版输入 `20260717.2` → `2026.07.17.2` / `2026071702`。也可在浏览器打开：
+
+```text
+https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/main/update.json
+```
+
+确认其中 `versionCode` 为普通整数，且大于手机里已安装模块的 `versionCode`。
+
 ## 与其它充电类模块冲突？
 
 尽量不要同时安装多个控制充电开关的模块，以免互相覆盖节点状态。
