@@ -10,4 +10,6 @@
 | 原作者 | top大佬 | [酷安](https://www.coolapk.com/u/1373784) · [原作仓库](https://github.com/410154425/QuantitativeStopCharging_switch_magisk) |
 | WebUI 维护 | 许小墨 | [酷安](https://www.coolapk.com/u/7602666) · [本仓库](https://github.com/Eikeitsu/QSC-Battery) |
 
-可通过模块内「投币捐赠」「打赏」分别支持原作者与维护者。
+可通过模块 WebUI「更多」里的「投币捐赠」「打赏」分别支持原作者与维护者。
+
+![更多页](/screenshots/webui-more.png)

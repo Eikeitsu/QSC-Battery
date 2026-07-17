@@ -15,7 +15,11 @@ sh /data/adb/modules/QSC_Battery/bin/diagnose.sh
 
 ## WebUI 打不开？
 
-确认模块管理器支持 WebUI，并检查 `webroot/index.html` 是否存在。
+确认模块管理器支持 WebUI（如 KernelSU / SukiSU 等），并检查模块目录下 `webroot/index.html` 是否存在。
+
+## 主题 / 莫奈 / 分页设置丢了？
+
+这些选项保存在 WebView 的 `localStorage`，清应用数据或换管理器打开后可能重置，与 `config.conf` 无关。
 
 ## 停充后无法恢复充电？
 
