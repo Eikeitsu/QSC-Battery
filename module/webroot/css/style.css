@@ -128,34 +128,62 @@ html.monet-off[data-theme="light"] {
   --switch-on: #34c759;
 }
 
+/* 关闭莫奈的深色：固定高对比配色 */
 html[data-theme="dark"].monet-off,
 html[data-theme="dark"]:not(.monet-on) {
-  color-scheme: dark;
+  color-scheme: only dark;
   --bg: #0f1115;
-  --fg: #f2f2f7;
-  --card: rgba(28, 31, 38, 0.82);
+  --fg: #f5f5f7;
+  --card: rgba(32, 35, 42, 0.92);
   --card-solid: #1c1f26;
-  --muted: rgba(255, 255, 255, 0.08);
-  --text: #f2f2f7;
-  --text-2: #a1a1aa;
-  --text-3: #71717a;
-  --line: rgba(255, 255, 255, 0.1);
+  --muted: rgba(255, 255, 255, 0.1);
+  --text: #f5f5f7;
+  --text-2: #c4c4cc;
+  --text-3: #9a9aa3;
+  --line: rgba(255, 255, 255, 0.14);
   --accent: #ff9f0a;
   --accent-strong: #ffb340;
-  --accent-soft: rgba(255, 159, 10, 0.16);
+  --accent-soft: rgba(255, 159, 10, 0.18);
+  --accent-on: #1c1200;
   --ok: #30d158;
   --danger: #ff453a;
-  --danger-soft: rgba(255, 69, 58, 0.16);
-  --inverse: rgba(44, 44, 46, 0.94);
+  --danger-soft: rgba(255, 69, 58, 0.18);
+  --inverse: rgba(55, 55, 58, 0.96);
   --inverse-fg: #f5f5f7;
-  --shadow-col: rgba(0, 0, 0, 0.35);
-  --input-bg: rgba(255, 255, 255, 0.06);
+  --shadow-col: rgba(0, 0, 0, 0.45);
+  --input-bg: rgba(255, 255, 255, 0.08);
   --switch-off: #3a3a3c;
   --switch-on: #30d158;
 }
 
+/*
+ * 开启莫奈 + 深色：系统莫奈 token 在「强制深色 / 系统仍浅色」时仍是浅色，
+ * 不能用 var(--background, 深色回退)——变量存在就不会走回退。表面色写死深色。
+ */
 html[data-theme="dark"].monet-on {
-  color-scheme: dark;
+  color-scheme: only dark;
+  --bg: #141218;
+  --fg: #e6e1e9;
+  --card: rgba(33, 31, 38, 0.92);
+  --card-solid: #211f26;
+  --muted: rgba(255, 255, 255, 0.1);
+  --text: #e6e1e9;
+  --text-2: #cac4d0;
+  --text-3: #a39eac;
+  --line: rgba(147, 143, 153, 0.38);
+  --accent: #d0bcff;
+  --accent-strong: #e8ddff;
+  --accent-soft: rgba(208, 188, 255, 0.18);
+  --accent-on: #381e72;
+  --ok: #d0bcff;
+  --danger: #f2b8b5;
+  --danger-soft: rgba(242, 184, 181, 0.18);
+  --inverse: rgba(230, 225, 233, 0.94);
+  --inverse-fg: #322f35;
+  --shadow-col: rgba(0, 0, 0, 0.45);
+  --input-bg: rgba(255, 255, 255, 0.08);
+  --switch-off: #49454f;
+  --switch-on: #d0bcff;
 }
 
 html, body {
@@ -184,6 +212,19 @@ html, body {
   background-color: var(--bg);
   border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
   box-shadow: 0 8px 20px color-mix(in srgb, var(--shadow-col) 35%, transparent);
+}
+
+/*
+ * 部分管理器在深色 WebUI 下仍使用浅色状态栏（深色图标）。
+ * 在安全区铺浅色底，避免时间/电量看不清。
+ */
+html[data-theme="dark"] .topbar {
+  background-image: linear-gradient(
+    to bottom,
+    #e8eaed 0,
+    #e8eaed var(--inset-top),
+    var(--bg) var(--inset-top)
+  );
 }
 
 .topbar-spacer {

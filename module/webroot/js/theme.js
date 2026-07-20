@@ -65,13 +65,53 @@ const QscTheme = {
     return raw;
   },
 
+  relativeLuminance(color) {
+    const m = String(color || '')
+      .trim()
+      .match(/rgba?\(\s*([\d.]+)\s*,?\s*([\d.]+)\s*,?\s*([\d.]+)/i);
+    let r;
+    let g;
+    let b;
+    if (m) {
+      r = Number(m[1]);
+      g = Number(m[2]);
+      b = Number(m[3]);
+      if (r <= 1 && g <= 1 && b <= 1) {
+        r *= 255;
+        g *= 255;
+        b *= 255;
+      }
+    } else if (color.startsWith('#')) {
+      let hex = color.slice(1);
+      if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
+      if (hex.length !== 6) return 1;
+      r = parseInt(hex.slice(0, 2), 16);
+      g = parseInt(hex.slice(2, 4), 16);
+      b = parseInt(hex.slice(4, 6), 16);
+    } else {
+      return 1;
+    }
+    const toLin = (v) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * toLin(r) + 0.7152 * toLin(g) + 0.0722 * toLin(b);
+  },
+
   syncStatusBar() {
     const themeMeta = document.querySelector('meta[name="theme-color"]');
     if (!themeMeta) return;
-    const monet = this.getMonet();
-    const color = monet
-      ? this.readCssColor('--background', this.readCssColor('--bg', '#f2f4f7'))
-      : this.readCssColor('--bg', '#f2f4f7');
+    const resolved = this.resolve(this.getMode());
+    // 一律用我们映射后的 --bg，避免莫奈系统浅色 --background 污染深色模式
+    const fallback = resolved === 'dark' ? '#141218' : '#f2f4f7';
+    let color = this.readCssColor('--bg', fallback);
+    // 若读到的仍是过亮的底（token 未跟上），强制用深色回退
+    if (resolved === 'dark' && this.relativeLuminance(color) > 0.45) {
+      color = fallback;
+    }
+    if (resolved === 'light' && this.relativeLuminance(color) < 0.2) {
+      color = fallback;
+    }
     themeMeta.setAttribute('content', color);
     document.documentElement.style.backgroundColor = color;
     if (document.body) document.body.style.backgroundColor = color;
@@ -93,7 +133,8 @@ const QscTheme = {
       localStorage.setItem(this.MONET_KEY, on ? '1' : '0');
     } catch (_) {}
     this.applyMonet(on);
-    this.syncStatusBar();
+    // 莫奈开关后需按当前深浅色重新套用，避免停在浅色表面
+    this.apply(this.getMode());
     if (typeof QscUi !== 'undefined') QscUi.toast(on ? '已开启莫奈取色' : '已关闭莫奈取色');
   },
 
@@ -142,7 +183,8 @@ const QscTheme = {
     const selected = mode || this.getMode();
     const resolved = this.resolve(selected);
     document.documentElement.setAttribute('data-theme', resolved);
-    document.documentElement.style.colorScheme = selected === 'system' ? 'light dark' : resolved;
+    // 必须落到具体 light/dark，莫奈 colors.css / 状态栏才会跟着反色
+    document.documentElement.style.colorScheme = resolved;
 
     this.applyMonet(this.getMonet());
     this.applyLayout(this.getLayout());
@@ -152,7 +194,7 @@ const QscTheme = {
 
     const schemeMeta = document.querySelector('meta[name="color-scheme"]');
     if (schemeMeta) {
-      schemeMeta.setAttribute('content', selected === 'system' ? 'light dark' : resolved);
+      schemeMeta.setAttribute('content', resolved);
     }
 
     const desc = document.getElementById('themeDesc');

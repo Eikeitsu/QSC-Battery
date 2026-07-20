@@ -16,7 +16,11 @@
           var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
           var resolved = mode === 'light' || mode === 'dark' ? mode : dark ? 'dark' : 'light';
           document.documentElement.setAttribute('data-theme', resolved);
-          document.documentElement.style.colorScheme = mode === 'system' ? 'light dark' : resolved;
+          document.documentElement.style.colorScheme = resolved;
+          var themeMeta = document.querySelector('meta[name="theme-color"]');
+          if (themeMeta) themeMeta.setAttribute('content', resolved === 'dark' ? '#141218' : '#f2f4f7');
+          var schemeMeta = document.querySelector('meta[name="color-scheme"]');
+          if (schemeMeta) schemeMeta.setAttribute('content', resolved);
           var monet = localStorage.getItem('qsc_monet');
           var monetOn = monet === null ? true : monet === '1';
           document.documentElement.classList.toggle('monet-on', monetOn);
