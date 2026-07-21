@@ -31,16 +31,16 @@ if [ -d "$MODDIR/webroot" ]; then
 	find "$MODDIR/webroot" -type d -exec chmod 0755 {} \; 2>/dev/null
 	echo "  webroot 已处理"
 else
-	echo "  警告: 未找到 webroot"
+	echo "  webroot 未安装（核心停充功能不受影响）"
 fi
 
 echo "[4/4] 检查关键文件..."
 [ -f "$BINDIR/qsc_switch.sh" ] && echo "  qsc_switch.sh: OK" || echo "  qsc_switch.sh: 缺失"
 [ -f "$CONF" ] && echo "  config.conf: OK" || echo "  config.conf: 缺失"
-[ -f "$MODDIR/webroot/index.html" ] && echo "  webroot/index.html: OK" || echo "  webroot/index.html: 缺失"
+[ -f "$MODDIR/webroot/index.html" ] && echo "  webroot/index.html: OK" || echo "  webroot/index.html: 未安装"
 [ -f "$OFF_FLAG" ] && echo "  模块状态: 已关闭 (存在 off_qsc)" || echo "  模块状态: 开启"
 
 echo "========================================"
 echo " Action 完成：权限已刷新"
-echo " 可重新打开 WebUI 查看状态"
+[ -f "$MODDIR/webroot/index.html" ] && echo " 可重新打开 WebUI 查看状态"
 echo "========================================"
