@@ -4,11 +4,11 @@ on:
   push:
     branches: [main, master]
     paths:
-      - 'docs/**'
+      - "docs/**"
   pull_request:
     branches: [main, master]
     paths:
-      - 'docs/**'
+      - "docs/**"
   workflow_dispatch:
 
 permissions:
@@ -28,7 +28,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
 
       - run: npm ci

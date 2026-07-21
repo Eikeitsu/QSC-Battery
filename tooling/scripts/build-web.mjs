@@ -4,18 +4,35 @@
  * JS 只做 terser 压缩，保留全局名（QSC/QscApi/QscUi/QscApp），
  * 避免混淆破坏跨文件引用导致手机端点击全失效。
  */
-import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, cpSync } from 'node:fs';
-import { join, resolve, dirname, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { minify as minifyHtml } from 'html-minifier-terser';
-import CleanCSS from 'clean-css';
-import { minify as minifyJs } from 'terser';
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  rmSync,
+  readdirSync,
+  cpSync,
+} from "node:fs";
+import { join, resolve, dirname, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import { minify as minifyHtml } from "html-minifier-terser";
+import CleanCSS from "clean-css";
+import { minify as minifyJs } from "terser";
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const srcDir = join(repoRoot, 'module', 'webroot');
-const outDir = join(repoRoot, '.build', 'webroot');
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const srcDir = join(repoRoot, "module", "webroot");
+const outDir = join(repoRoot, ".build", "webroot");
 
-const RESERVED = ['QSC', 'QscApi', 'QscUi', 'QscApp', 'QscTheme', 'QscNav', 'ksu', 'exec', 'toast'];
+const RESERVED = [
+  "QSC",
+  "QscApi",
+  "QscUi",
+  "QscApp",
+  "QscTheme",
+  "QscNav",
+  "ksu",
+  "exec",
+  "toast",
+];
 
 function log(msg) {
   console.log(`[build-web] ${msg}`);
@@ -27,13 +44,13 @@ async function minifyJavaScript(code, filename) {
     compress: {
       passes: 2,
       drop_console: false,
-      pure_funcs: []
+      pure_funcs: [],
     },
     mangle: {
       toplevel: false,
-      reserved: RESERVED
+      reserved: RESERVED,
     },
-    format: { comments: false }
+    format: { comments: false },
   });
   if (!result.code) throw new Error(`terser failed: ${filename}`);
   return result.code;
@@ -45,8 +62,8 @@ async function buildFile(relPath) {
   mkdirSync(dirname(dest), { recursive: true });
   const lower = relPath.toLowerCase();
 
-  if (lower.endsWith('.html')) {
-    const raw = readFileSync(src, 'utf8');
+  if (lower.endsWith(".html")) {
+    const raw = readFileSync(src, "utf8");
     const html = await minifyHtml(raw, {
       collapseWhitespace: true,
       removeComments: true,
@@ -54,27 +71,27 @@ async function buildFile(relPath) {
       removeScriptTypeAttributes: true,
       minifyCSS: true,
       minifyJS: false,
-      keepClosingSlash: true
+      keepClosingSlash: true,
     });
-    writeFileSync(dest, html, 'utf8');
+    writeFileSync(dest, html, "utf8");
     return;
   }
 
-  if (lower.endsWith('.css')) {
-    const raw = readFileSync(src, 'utf8');
+  if (lower.endsWith(".css")) {
+    const raw = readFileSync(src, "utf8");
     const css = new CleanCSS({
       level: 2,
       // 保留 WebUI X 的远程 @import（由管理器拦截注入莫奈色，不可在构建期内联）
-      inline: false
+      inline: false,
     }).minify(raw);
-    if (css.errors.length) throw new Error(css.errors.join('\n'));
-    writeFileSync(dest, css.styles, 'utf8');
+    if (css.errors.length) throw new Error(css.errors.join("\n"));
+    writeFileSync(dest, css.styles, "utf8");
     return;
   }
 
-  if (lower.endsWith('.js')) {
-    const raw = readFileSync(src, 'utf8');
-    writeFileSync(dest, await minifyJavaScript(raw, relPath), 'utf8');
+  if (lower.endsWith(".js")) {
+    const raw = readFileSync(src, "utf8");
+    writeFileSync(dest, await minifyJavaScript(raw, relPath), "utf8");
     return;
   }
 
@@ -86,7 +103,7 @@ function walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) files.push(...walk(full));
-    else files.push(relative(srcDir, full).replace(/\\/g, '/'));
+    else files.push(relative(srcDir, full).replace(/\\/g, "/"));
   }
   return files;
 }

@@ -4,14 +4,14 @@ on:
   push:
     branches: [main, master]
     paths:
-      - 'module/webroot/**'
-      - 'tooling/scripts/build-web.mjs'
-      - 'tooling/scripts/publish-web-branch.mjs'
+      - "module/webroot/**"
+      - "tooling/scripts/build-web.mjs"
+      - "tooling/scripts/publish-web-branch.mjs"
   pull_request:
     branches: [main, master]
     paths:
-      - 'module/webroot/**'
-      - 'tooling/scripts/build-web.mjs'
+      - "module/webroot/**"
+      - "tooling/scripts/build-web.mjs"
   workflow_dispatch:
 
 permissions:
@@ -25,7 +25,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
 
       - run: npm ci

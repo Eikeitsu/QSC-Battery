@@ -11,7 +11,8 @@
 
 :root {
   color-scheme: light dark;
-  --font: "MiSans", "Google Sans", "Roboto", system-ui, -apple-system, sans-serif;
+  --font:
+    "MiSans", "Google Sans", "Roboto", system-ui, -apple-system, sans-serif;
   --radius-card: 18px;
   --radius-inner: 12px;
   --glass-blur: blur(18px) saturate(1.25);
@@ -74,7 +75,9 @@ html.compact-on {
   --space-note-pad: 10px 12px;
 }
 
-html[data-theme="light"] { color-scheme: light; }
+html[data-theme="light"] {
+  color-scheme: light;
+}
 
 /* 开启莫奈：背景 + 卡片 + 强调色全部跟系统取色 */
 html.monet-on {
@@ -89,15 +92,27 @@ html.monet-on {
   --line: var(--outlineVariant, #cac4d0);
   --accent: var(--primary, #6750a4);
   --accent-strong: var(--primary, #6750a4);
-  --accent-soft: color-mix(in srgb, var(--primaryContainer, #eaddff) 88%, transparent);
+  --accent-soft: color-mix(
+    in srgb,
+    var(--primaryContainer, #eaddff) 88%,
+    transparent
+  );
   --accent-on: var(--onPrimary, #ffffff);
   --ok: var(--primary, #6750a4);
   --danger: var(--error, #b3261e);
-  --danger-soft: color-mix(in srgb, var(--errorContainer, #f9dedc) 88%, transparent);
+  --danger-soft: color-mix(
+    in srgb,
+    var(--errorContainer, #f9dedc) 88%,
+    transparent
+  );
   --inverse: var(--inverseSurface, #322f35);
   --inverse-fg: var(--inverseOnSurface, #f5eff7);
   --shadow-col: color-mix(in srgb, var(--shadow, #000000) 14%, transparent);
-  --input-bg: color-mix(in srgb, var(--surfaceContainerHigh, #ece6f0) 88%, transparent);
+  --input-bg: color-mix(
+    in srgb,
+    var(--surfaceContainerHigh, #ece6f0) 88%,
+    transparent
+  );
   --switch-off: var(--surfaceVariant, #e7e0ec);
   --switch-on: var(--primary, #6750a4);
 }
@@ -186,7 +201,8 @@ html[data-theme="dark"].monet-on {
   --switch-on: #d0bcff;
 }
 
-html, body {
+html,
+body {
   width: 100%;
   min-height: 100%;
   min-height: 100dvh;
@@ -195,7 +211,9 @@ html, body {
   color: var(--fg);
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
-  padding-bottom: calc(20px + var(--window-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  padding-bottom: calc(
+    20px + var(--window-inset-bottom, env(safe-area-inset-bottom, 0px))
+  );
   scroll-behavior: smooth;
   font-size: calc(16px * var(--font-scale));
   overflow-x: hidden;
@@ -346,8 +364,12 @@ html[data-theme="dark"] .topbar {
   z-index: 1;
 }
 
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .card { background: var(--card-solid); }
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  .card {
+    background: var(--card-solid);
+  }
 }
 
 .small-title {
@@ -370,9 +392,14 @@ html[data-theme="dark"] .topbar {
   user-select: none;
 }
 
-.pref + .pref { border-top: 1px solid var(--line); }
+.pref + .pref {
+  border-top: 1px solid var(--line);
+}
 
-.pref-body { flex: 1; min-width: 0; }
+.pref-body {
+  flex: 1;
+  min-width: 0;
+}
 
 .pref-title {
   font-size: calc(0.95rem * var(--font-scale));
@@ -404,7 +431,9 @@ html[data-theme="dark"] .topbar {
   flex-shrink: 0;
 }
 
-.hyper-switch input { display: none; }
+.hyper-switch input {
+  display: none;
+}
 
 .hyper-switch .track {
   position: absolute;
@@ -439,7 +468,9 @@ html[data-theme="dark"] .topbar {
 .expand-body {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 0.4s var(--transition-smooth), opacity 0.25s;
+  transition:
+    max-height 0.4s var(--transition-smooth),
+    opacity 0.25s;
   opacity: 0;
 }
 
@@ -448,7 +479,9 @@ html[data-theme="dark"] .topbar {
   opacity: 1;
 }
 
-.expand-inner { padding: var(--space-expand-pad); }
+.expand-inner {
+  padding: var(--space-expand-pad);
+}
 
 .expand-arrow {
   color: var(--text-3);
@@ -457,7 +490,9 @@ html[data-theme="dark"] .topbar {
   display: inline-block;
 }
 
-.expand-arrow.open { transform: rotate(180deg); }
+.expand-arrow.open {
+  transform: rotate(180deg);
+}
 
 .field-label {
   font-size: calc(0.7rem * var(--font-scale));
@@ -475,7 +510,9 @@ html[data-theme="dark"] .topbar {
   line-height: 1.5;
 }
 
-.field-hint.warn { color: var(--accent-strong); }
+.field-hint.warn {
+  color: var(--accent-strong);
+}
 
 .chips {
   display: flex;
@@ -537,7 +574,9 @@ input:focus {
   line-height: 1.55;
 }
 
-.info-box b { color: var(--text); }
+.info-box b {
+  color: var(--text);
+}
 
 .log-box {
   background: var(--muted);
@@ -583,11 +622,15 @@ html[data-layout="dock"] .log-box {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
-.font-label { color: var(--text-2); }
+.font-label {
+  color: var(--text-2);
+}
 
 .snackbar {
   position: fixed;
-  bottom: calc(20px + var(--window-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  bottom: calc(
+    20px + var(--window-inset-bottom, env(safe-area-inset-bottom, 0px))
+  );
   left: 50%;
   transform: translateX(-50%) translateY(12px);
   background: var(--inverse);
@@ -598,7 +641,9 @@ html[data-layout="dock"] .log-box {
   border-radius: 28px;
   font-size: calc(0.84rem * var(--font-scale));
   opacity: 0;
-  transition: opacity 0.3s, transform 0.35s var(--transition-spring);
+  transition:
+    opacity 0.3s,
+    transform 0.35s var(--transition-spring);
   pointer-events: none;
   z-index: 999;
   display: flex;
@@ -694,7 +739,9 @@ html[data-layout="dock"] .log-box {
   z-index: 1;
 }
 
-.about-note b { color: var(--text); }
+.about-note b {
+  color: var(--text);
+}
 
 .tip-box {
   display: flex;
@@ -718,7 +765,9 @@ html[data-layout="classic"] .dock-only {
 
 /* —— 悬浮分页：按 data-page 显隐 —— */
 html[data-layout="dock"] body {
-  padding-bottom: calc(96px + var(--window-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  padding-bottom: calc(
+    96px + var(--window-inset-bottom, env(safe-area-inset-bottom, 0px))
+  );
 }
 
 html[data-layout="dock"] [data-page] {
@@ -736,7 +785,9 @@ html[data-layout="dock"][data-page="more"] [data-page~="more"] {
   position: fixed;
   left: 12px;
   right: 12px;
-  bottom: calc(10px + var(--window-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  bottom: calc(
+    10px + var(--window-inset-bottom, env(safe-area-inset-bottom, 0px))
+  );
   z-index: 80;
   display: flex;
   align-items: stretch;

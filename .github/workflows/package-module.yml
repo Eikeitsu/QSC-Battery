@@ -4,15 +4,15 @@ on:
   push:
     branches: [main, master]
     paths:
-      - 'module/**'
-      - 'tooling/scripts/build-web.mjs'
-      - 'tooling/scripts/package-module.mjs'
+      - "module/**"
+      - "tooling/scripts/build-web.mjs"
+      - "tooling/scripts/package-module.mjs"
   pull_request:
     branches: [main, master]
     paths:
-      - 'module/**'
-      - 'tooling/scripts/build-web.mjs'
-      - 'tooling/scripts/package-module.mjs'
+      - "module/**"
+      - "tooling/scripts/build-web.mjs"
+      - "tooling/scripts/package-module.mjs"
   workflow_dispatch:
 
 permissions:
@@ -26,7 +26,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
 
       - run: npm ci

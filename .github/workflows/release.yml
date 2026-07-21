@@ -5,27 +5,27 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '日期（首发填 20260717；同日第2版填 20260717.2）'
+        description: "日期（首发填 20260717；同日第2版填 20260717.2）"
         required: true
         type: string
       release_name:
-        description: 'Release 标题（可空，默认用 Tag）'
+        description: "Release 标题（可空，默认用 Tag）"
         required: false
         type: string
-        default: ''
+        default: ""
       prerelease:
-        description: '标记为预发布'
+        description: "标记为预发布"
         required: false
         type: boolean
         default: false
       draft:
-        description: '保存为草稿（不正式发布）'
+        description: "保存为草稿（不正式发布）"
         required: false
         type: boolean
         default: false
   # 推送 v* 标签时自动发 Release
   push:
-    tags: ['v*']
+    tags: ["v*"]
 
 permissions:
   actions: write
@@ -150,7 +150,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
 
       - run: npm ci
@@ -264,4 +264,3 @@ jobs:
           git commit -m "chore: bump update.json to ${TAG} (versionCode ${CODE})"
           git push origin "HEAD:$DEFAULT_BRANCH"
           gh workflow run build-docs.yml --ref "$DEFAULT_BRANCH"
-
