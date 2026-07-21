@@ -1,7 +1,7 @@
 {
   "name": "qsc-battery",
   "private": true,
-  "version": "20260716.15",
+  "version": "20260722.1.0",
   "type": "module",
   "scripts": {
     "dev:web": "serve module/webroot -l 5173",
