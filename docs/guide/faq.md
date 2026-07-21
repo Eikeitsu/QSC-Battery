@@ -15,7 +15,11 @@ sh /data/adb/modules/QSC_Battery/bin/diagnose.sh
 
 ## WebUI 打不开？
 
-确认模块管理器支持 WebUI（如 KernelSU / SukiSU 等），并检查模块目录下 `webroot/index.html` 是否存在。
+确认安装时选择了 WebUI、模块管理器支持 WebUI（如 KernelSU / SukiSU 等），并检查模块目录下 `webroot/index.html` 是否存在。若曾选择不安装 WebUI，可重新刷入同版本并按音量上选择安装；配置处理仍会单独询问。
+
+## 更新后配置会恢复默认吗？
+
+更新同 ID 的 `QSC_Battery` 时，安装脚本会询问是否保留原有 `config.conf`：音量上保留，音量下使用新版默认值；20 秒未选择时默认保留。旧 ID `QuantitativeStopCharging_switch` 仍按旧版清理流程处理，不迁移其配置。
 
 ## 主题 / 莫奈 / 分页设置丢了？
 

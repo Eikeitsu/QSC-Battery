@@ -9,14 +9,26 @@
 
 1. 从 [GitHub Releases](https://github.com/Eikeitsu/QSC-Battery/releases) 下载最新 zip
 2. 在模块管理器中刷入
-3. 重启手机
-4. 进入模块页，打开 WebUI 按需调整阈值（「更多 → 显示」可切换主题、莫奈取色、悬浮分页等）
+3. 按安装日志提示，在 20 秒内按音量上确认安装；音量下或确认超时会取消安装
+4. 按音量键选择是否安装 WebUI；20 秒未选择时默认安装
+5. 重启手机
+6. 若已安装 WebUI，可进入模块页按需调整阈值（「更多 → 显示」可切换主题、莫奈取色、悬浮分页等）
 
 支持 Magisk / KernelSU 的模块在线更新：`module.prop` 已配置 `updateJson`，管理器会拉取仓库根目录的 `update.json`。
 
 WebUI 概览页示意：
 
 ![概览](/screenshots/webui-overview.png)
+
+## 更新当前版本
+
+检测到 `/data/adb/modules/QSC_Battery/config/config.conf` 时，安装脚本会询问如何处理配置：
+
+- **音量上**：保留原有 `config.conf`
+- **音量下**：使用安装包中的新版默认配置
+- **20 秒未选择**：默认保留原有配置，避免静默覆盖
+
+WebUI 是否安装会在每次刷入时单独询问。选择不安装后不会保留 `webroot/`，模块核心停充脚本仍可正常运行，可直接编辑 `config/config.conf`。
 
 ## 从旧版升级
 
@@ -37,7 +49,7 @@ WebUI 概览页示意：
 ├── bin/                 # 核心逻辑
 ├── config/config.conf   # 用户配置
 ├── data/                # 日志与运行状态
-└── webroot/             # WebUI（发布包内为压缩产物）
+└── webroot/             # 可选 WebUI（发布包内为压缩产物）
 ```
 
 ## 卸载
