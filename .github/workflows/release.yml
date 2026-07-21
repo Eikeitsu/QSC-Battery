@@ -28,6 +28,7 @@ on:
     tags: ['v*']
 
 permissions:
+  actions: write
   contents: write
 
 jobs:
@@ -178,6 +179,8 @@ jobs:
       - name: Update update.json on default branch
         if: ${{ steps.meta.outputs.draft != 'true' && steps.meta.outputs.prerelease != 'true' }}
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           RAW="${{ steps.meta.outputs.raw }}"
           CODE="${{ steps.meta.outputs.version_code }}"
@@ -185,26 +188,57 @@ jobs:
           REPO="${{ github.repository }}"
           ZIP="QSC-Battery_v${RAW}.zip"
           DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          PAGES_BASE="https://eikeitsu.github.io/QSC-Battery"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git reset --hard
           git fetch origin "$DEFAULT_BRANCH"
           git checkout -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"
+          git fetch --tags --force
+
+          if grep -Fxq "## ${RAW}" changelog.md 2>/dev/null; then
+            echo "changelog.md 已存在 ${RAW}，保留手写内容"
+            : > .release-notes.md
+          else
+            PREV_TAG="$(git tag --sort=-v:refname | grep -Fxv "$TAG" | head -n 1 || true)"
+            if [ -n "$PREV_TAG" ]; then
+              RANGE="${PREV_TAG}..${TAG}"
+            else
+              RANGE="${TAG}"
+            fi
+            git log --pretty=format:'- %s' --no-merges "$RANGE" > .release-notes.md
+            if [ ! -s .release-notes.md ]; then
+              echo "- 发布 ${TAG}" > .release-notes.md
+            fi
+          fi
 
           python3 - <<PY
           import json, pathlib
+          notes = pathlib.Path(".release-notes.md").read_text(encoding="utf-8").strip()
           data = {
             "version": "${RAW}",
             "versionCode": int("${CODE}"),
-            "zipUrl": f"https://github.com/${REPO}/releases/download/${TAG}/${ZIP}",
-            "changelog": f"https://raw.githubusercontent.com/${REPO}/main/changelog.md",
+            "zipUrl": f"${PAGES_BASE}/releases/${ZIP}",
+            "changelog": f"${PAGES_BASE}/changelog.md",
           }
           text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
           pathlib.Path("update.json").write_text(text, encoding="utf-8")
           pathlib.Path("docs/public").mkdir(parents=True, exist_ok=True)
           pathlib.Path("docs/public/update.json").write_text(text, encoding="utf-8")
+          if notes:
+              changelog_path = pathlib.Path("changelog.md")
+              changelog = changelog_path.read_text(encoding="utf-8").strip() if changelog_path.exists() else ""
+              section = f"## ${RAW}\n\n{notes}"
+              if changelog.startswith("# Changelog"):
+                  header, _, rest = changelog.partition("\n")
+                  changelog = header + "\n\n" + section + ("\n\n" + rest.strip() if rest.strip() else "")
+              else:
+                  changelog = section + ("\n\n" + changelog if changelog else "")
+              changelog_path.write_text(changelog.rstrip() + "\n", encoding="utf-8")
           print(text)
           PY
+          rm -f .release-notes.md
 
           PROP="module/module.prop"
           sed -i "s/^version=.*/version=${RAW}/" "$PROP"
@@ -215,11 +249,19 @@ jobs:
             sed -i "s|^updateJson=.*|updateJson=https://eikeitsu.github.io/QSC-Battery/update.json|" "$PROP"
           fi
 
-          git add update.json docs/public/update.json module/module.prop
+          mkdir -p docs/public/releases docs/guide
+          cp "release/${ZIP}" "docs/public/releases/${ZIP}"
+          cp changelog.md docs/public/changelog.md
+          cp changelog.md docs/guide/changelog.md
+
+          git add update.json docs/public/update.json docs/public/changelog.md \
+            "docs/public/releases/${ZIP}" docs/guide/changelog.md \
+            module/module.prop changelog.md
           if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 0
           fi
           git commit -m "chore: bump update.json to ${TAG} (versionCode ${CODE})"
           git push origin "HEAD:$DEFAULT_BRANCH"
+          gh workflow run build-docs.yml --ref "$DEFAULT_BRANCH"
 
