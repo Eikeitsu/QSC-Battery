@@ -119,6 +119,7 @@ log_log2=0
 cpu_log2=0
 full_log=0
 reset_log=0
+battery_stop_reason=0
 if [ ! -f "$LIST_SWITCH" ]; then
 	if [ -f "$BINDIR/list_switch.sh" ]; then
 		chmod 0755 "$BINDIR/list_switch.sh"
@@ -271,6 +272,7 @@ if [ -n "$battery_powered" ]; then
 		qsc_charge_full
 		if [ "$full_log" = "0" ]; then
 			switch_stop_mode=1
+			battery_stop_reason=1
 		fi
 	fi
 	if [ "$switch_stop_mode" = "1" -o "$cpu_log" = "1" ]; then
@@ -288,6 +290,9 @@ if [ -n "$battery_powered" ]; then
 			qsc_power_stop
 			if [ "$stop_ok" = "1" ]; then
 				touch "$DATADIR/power_switch"
+				if [ "$battery_stop_reason" = "1" ]; then
+					touch "$DATADIR/battery_switch"
+				fi
 				if [ "$log_log" = "1" ]; then
 					if [ "$cpu_log" = "1" ]; then
 						echo "$(date +%F_%T) 电量$battery_level 触发开关温控：停止充电 温度$temperature [$stop_nodes]" >> "$LOG_FILE"
@@ -301,6 +306,9 @@ if [ -n "$battery_powered" ]; then
 					touch "$DATADIR/no_node_logged"
 				fi
 			fi
+		fi
+		if [ -f "$DATADIR/power_switch" -a "$battery_stop_reason" = "1" ]; then
+			touch "$DATADIR/battery_switch"
 		fi
 	else
 		reset_log=1
@@ -323,19 +331,30 @@ else
 	fi
 fi
 if [ -f "$DATADIR/power_switch" ]; then
-	if [ "$battery_level" -le "$power_start" -o -f "$DATADIR/temp_switch" ]; then
-		if [ "$temperature_switch" = "1" -a -f "$DATADIR/temp_switch" ]; then
-			if [ -n "$temperature_switch_start" -a "$temperature" -gt "$temperature_switch_start" ]; then
-				exit 0
-			else
-				cpu_log2=1
-			fi
+	temp_ready=1
+	battery_ready=1
+	if [ -f "$DATADIR/temp_switch" ]; then
+		if [ "$temperature_switch" = "1" -a -n "$temperature_switch_start" -a "$temperature" -gt "$temperature_switch_start" ]; then
+			temp_ready=0
+		else
+			cpu_log2=1
 		fi
+	fi
+	if [ -f "$DATADIR/battery_switch" ]; then
+		if [ "$power_stop" -le "100" -a "$power_stop" -gt "$power_start" -a "$battery_level" -gt "$power_start" ]; then
+			battery_ready=0
+		fi
+	elif [ "$power_stop" -le "100" -a "$power_stop" -gt "$power_start" -a "$battery_level" -gt "$power_start" ]; then
+		# 无原因标记的旧状态保守按电量停充处理，避免升级后在高电量误恢复。
+		battery_ready=0
+	fi
+	if [ "$temp_ready" = "1" -a "$battery_ready" = "1" ]; then
 		sleep 3
 		qsc_power_start
-		rm -f "$DATADIR/temp_switch"
 		if [ "$start_ok" = "1" ]; then
 			rm -f "$DATADIR/power_switch"
+			rm -f "$DATADIR/temp_switch"
+			rm -f "$DATADIR/battery_switch"
 		fi
 		if [ "$log_log2" = "1" ]; then
 			if [ "$cpu_log2" = "1" ]; then
@@ -347,5 +366,5 @@ if [ -f "$DATADIR/power_switch" ]; then
 	fi
 fi
 _debug_step 9
-#version=20260716.15
+#version=20260722.1
 # ##
