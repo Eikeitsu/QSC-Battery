@@ -163,6 +163,16 @@ jobs:
           path: release/*.zip
           if-no-files-found: error
 
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          python3 tooling/scripts/prepare-release-notes.py \
+            "${{ steps.meta.outputs.raw }}" \
+            changelog.md \
+            .release-body.md
+          echo "---- release body preview ----"
+          cat .release-body.md || true
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -170,6 +180,8 @@ jobs:
           name: ${{ steps.meta.outputs.name }}
           draft: ${{ steps.meta.outputs.draft }}
           prerelease: ${{ steps.meta.outputs.prerelease }}
+          # 有手写版本日志时前置「更新说明」；始终保留 GitHub 自动 Full Changelog
+          body_path: .release-body.md
           generate_release_notes: true
           files: release/*.zip
           fail_on_unmatched_files: true

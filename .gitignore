@@ -5,3 +5,5 @@ release/
 *.log
 docs/.vitepress/dist
 docs/.vitepress/cache
+.release-body.md
+.release-notes.md
