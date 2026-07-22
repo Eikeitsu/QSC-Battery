@@ -70,23 +70,8 @@ cat >> "$LIST_SWITCH" << 'EOF'
 /proc/driver/charger_limit,start=100,stop=1
 /proc/mtk_battery_cmd/current_cmd,start=0_0,stop=0_1
 /proc/mtk_battery_cmd/en_power_path,start=1,stop=0
-/sys/devices/platform/soc/soc:mca_business_charger/handle_state,start=0,stop=1
-/sys/devices/platform/soc/soc:mca_charger/handle_state,start=0,stop=1
-/sys/devices/platform/soc/soc@0:mca_business_charger/handle_state,start=0,stop=1
-/sys/devices/platform/soc/soc@0:mca_charger/handle_state,start=0,stop=1
-/sys/devices/platform/soc/mca_business_charger/handle_state,start=0,stop=1
-/sys/devices/platform/soc/mca_charger/handle_state,start=0,stop=1
-/sys/class/power_supply/mca-charger/handle_state,start=0,stop=1
-/sys/class/power_supply/mca_charger/handle_state,start=0,stop=1
-/sys/class/power_supply/mca-battery/handle_state,start=0,stop=1
-/sys/class/power_supply/mca_battery/handle_state,start=0,stop=1
-/sys/devices/platform/soc/soc:mca_business_charger/stop_handle_charge,start=0,stop=1
-/sys/devices/platform/soc/soc:mca_charger/stop_handle_charge,start=0,stop=1
-/sys/devices/platform/soc/soc@0:mca_business_charger/stop_handle_charge,start=0,stop=1
-/sys/devices/platform/soc/soc@0:mca_charger/stop_handle_charge,start=0,stop=1
-/sys/devices/platform/soc/mca_business_charger/stop_handle_charge,start=0,stop=1
-/sys/devices/platform/soc/mca_charger/stop_handle_charge,start=0,stop=1
 EOF
+# MCA 路径由 detect_device / device.profile 按本机动态写入，不再统一硬编码
 
 echo "[QSC] list_switch.sh 执行完毕，已生成节点列表: $LIST_SWITCH" >&2
 # ##

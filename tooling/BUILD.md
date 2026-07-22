@@ -80,8 +80,26 @@ git push origin v2026.07.17.2
 
 ## 发布包内容
 
-仅运行时必要文件：`module.prop`、入口脚本、`META-INF`、`bin` 核心脚本、`config`、空 `data`、压缩后的 `webroot`。
+**正式包** `QSC-Battery_v<version>.zip`：入口脚本 + `bin/lib/*`（util/keys/profile/charge）+ 只读 `diagnose.sh`。
+
+**调试包** `QSC-Battery_v<version>-debug.zip`：另含 `testing.sh`、`diag2.sh`，并带 `bin/.qsc_debug`。
 
 ```bash
-npm run package:module:debug   # 额外带上 diagnose/testing/diag2
+npm run package:module         # 正式包
+npm run package:module:debug   # 调试包（文件名带 -debug）
 ```
+
+### bin 脚本职责
+
+| 路径 | 职责 |
+| --- | --- |
+| `common.sh` | 路径初始化并加载 `lib/*` |
+| `lib/util.sh` | 安全读节点、温度换算 |
+| `lib/keys.sh` | 音量键选择 |
+| `lib/profile.sh` | 本机 MCA 探测与 `device.profile` |
+| `lib/charge.sh` | 停充/恢复写入与节点列表 |
+| `qsc_switch.sh` | 停充策略主循环 |
+| `list_switch.sh` | 扫描本机节点生成列表 |
+| `detect_device.sh` | 触发 profile 探测 |
+| `diagnose.sh` | 只读诊断（正式包） |
+| `testing.sh` / `diag2.sh` | 调试工具（仅 debug 包） |

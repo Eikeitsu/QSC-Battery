@@ -8,6 +8,7 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,8 +26,18 @@ const ROOT_FILES = [
   "action.sh",
   "uninstall.sh",
 ];
-const BIN_FILES = ["common.sh", "qsc_switch.sh", "list_switch.sh"];
-const BIN_DEBUG_FILES = ["testing.sh", "diagnose.sh", "diag2.sh"];
+/** 正式包：核心 + lib + 只读诊断 */
+const BIN_RELEASE = [
+  "common.sh",
+  "qsc_switch.sh",
+  "list_switch.sh",
+  "detect_device.sh",
+  "diagnose.sh",
+];
+/** 调试包额外：含副作用 / 写入测试 */
+const BIN_DEBUG_EXTRA = ["testing.sh", "diag2.sh"];
+/** 按功能拆分的库（正式/调试均需要） */
+const BIN_LIB_FILES = ["util.sh", "keys.sh", "profile.sh", "charge.sh"];
 
 const includeDebug = process.argv.includes("--debug");
 
@@ -88,21 +99,32 @@ function createZip(zipPath) {
 }
 
 const version = readVersion();
-const zipName = `QSC-Battery_v${version}.zip`;
+const zipName = includeDebug
+  ? `QSC-Battery_v${version}-debug.zip`
+  : `QSC-Battery_v${version}.zip`;
 const zipPath = join(releaseDir, zipName);
 
 rmSync(staging, { recursive: true, force: true });
 mkdirSync(staging, { recursive: true });
 mkdirSync(releaseDir, { recursive: true });
 mkdirSync(join(staging, "data"), { recursive: true });
+mkdirSync(join(staging, "bin"), { recursive: true });
 
 for (const file of ROOT_FILES) copyFromModule(file);
 copyDirFromModule("META-INF");
 copyDirFromModule("config");
-for (const file of BIN_FILES) copyFromModule(join("bin", file));
+for (const file of BIN_RELEASE) copyFromModule(join("bin", file));
+for (const file of BIN_LIB_FILES) copyFromModule(join("bin", "lib", file));
 if (includeDebug) {
-  for (const file of BIN_DEBUG_FILES) copyFromModule(join("bin", file));
-  log("included debug scripts");
+  for (const file of BIN_DEBUG_EXTRA) copyFromModule(join("bin", file));
+  writeFileSync(
+    join(staging, "bin", ".qsc_debug"),
+    "debug tools: testing.sh diag2.sh\n",
+    "utf8",
+  );
+  log("debug package: included testing.sh, diag2.sh");
+} else {
+  log("release package: diagnose only (no testing/diag2)");
 }
 copyBuiltWebroot();
 

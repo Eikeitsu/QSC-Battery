@@ -14,39 +14,14 @@ qsc_abort() {
 	exit 1
 }
 
-# 返回：0=音量上，1=音量下，2=超时或当前环境无法读取按键。
-qsc_volume_choice() {
-	local event_file event_pid second
-	event_file="${TMPDIR:-/data/local/tmp}/qsc-key-events.$$"
-	rm -f "$event_file"
-
-	if ! command -v getevent >/dev/null 2>&1; then
-		return 2
-	fi
-
-	getevent -ql >"$event_file" 2>/dev/null &
-	event_pid=$!
-	for second in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-		sleep 1
-		if grep -q 'KEY_VOLUMEUP.*DOWN' "$event_file" 2>/dev/null; then
-			kill "$event_pid" 2>/dev/null
-			wait "$event_pid" 2>/dev/null
-			rm -f "$event_file"
-			return 0
-		fi
-		if grep -q 'KEY_VOLUMEDOWN.*DOWN' "$event_file" 2>/dev/null; then
-			kill "$event_pid" 2>/dev/null
-			wait "$event_pid" 2>/dev/null
-			rm -f "$event_file"
-			return 1
-		fi
-	done
-
-	kill "$event_pid" 2>/dev/null
-	wait "$event_pid" 2>/dev/null
-	rm -f "$event_file"
-	return 2
-}
+# 音量键：复用 bin/lib/keys.sh（Magisk 已解压到 MODPATH）
+MODDIR="$MODPATH"
+if [ -f "$MODPATH/bin/common.sh" ]; then
+	# shellcheck disable=SC1090
+	. "$MODPATH/bin/common.sh"
+else
+	qsc_abort "缺少 bin/common.sh，安装包不完整"
+fi
 
 qsc_conf_value() {
 	local file="$1"
@@ -243,6 +218,12 @@ if [ "$INSTALL_WEBUI" != "1" ]; then
 fi
 
 ui_print "--------------------------------"
+ui_print " 探测本机充电控制节点..."
+detect_summary="$(qsc_detect_and_write_profile)"
+ui_print " $detect_summary"
+ui_print " 已写入 data/device.profile"
+
+ui_print "--------------------------------"
 ui_print " 目录结构: "
 ui_print "  bin/     核心脚本 "
 ui_print "  config/  用户配置 "
@@ -256,6 +237,7 @@ else
 fi
 ui_print " 配置: config/config.conf "
 ui_print " 日志: data/log.log "
+ui_print " Action: 上=刷新 / 下=诊断菜单 "
 ui_print "--------------------------------"
 ui_print " 安装完成，请重启设备 "
 ui_print "********************************"

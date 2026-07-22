@@ -41,6 +41,12 @@ fi
 
 rm -f "$LIST_SWITCH"
 "$BINDIR/list_switch.sh" > /dev/null 2>&1
+# 按本机节点生成/刷新 device.profile（MCA 等能力动态启用）
+if [ -f "$BINDIR/detect_device.sh" ]; then
+	"$BINDIR/detect_device.sh" > /dev/null 2>&1
+else
+	qsc_detect_and_write_profile > /dev/null 2>&1 || true
+fi
 rm -f "$DATADIR/now_c"
 rm -f "$DATADIR/off_d"
 rm -f "$DATADIR/power_on"

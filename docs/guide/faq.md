@@ -5,14 +5,14 @@
 1. 确认已重启
 2. WebUI 中确认模块总开关已打开
 3. 查看 `data/log.log` 是否有「未找到有效充电控制节点」
-4. 红米 K90U（骁龙8至尊版）应看到日志含 `MCA` / `handle_state`；建议 `power_stop` 与 `power_start` 间隔至少 10
-5. 若机型较新，可执行诊断脚本：
+4. 红米 K90U（骁龙8至尊版）等 MCA 机型：安装/启动后查看 `data/device.profile` 应为 `mca=1` 且含 `handle_state` 路径；日志停充条目含 `MCA`。建议 `power_stop` 与 `power_start` 间隔至少 10
+5. 若机型较新或停充无效，可在模块管理器打开 **Action**：音量上刷新权限，音量下进入诊断菜单（逐项上=执行 / 下=跳过），运行 `diagnose`；也可手动执行：
 
 ```bash
 sh /data/adb/modules/QSC_Battery/bin/diagnose.sh
 ```
 
-报告在 `/sdcard/qsc_diagnose.txt`，可反馈给维护者适配。
+报告在 `/sdcard/qsc_diagnose.txt`，可反馈给维护者适配。诊断菜单还可「重新探测设备配置」。含写入测试的 `testing` / `diag2` 仅在调试包 `QSC-Battery_v*-debug.zip` 中提供。
 
 ## WebUI 打不开？
 
