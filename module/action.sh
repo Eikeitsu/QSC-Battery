@@ -102,12 +102,13 @@ qsc_action_ask() {
 	echo "----------------------------------------"
 	echo " $title"
 	echo " 音量上：执行　　音量下：跳过"
-	echo " 20 秒未选择则跳过"
+	echo " 本轮 20 秒未选择则跳过"
 	echo "----------------------------------------"
 	qsc_volume_choice 20
 	case "$?" in
 		0) return 0 ;;
-		*) return 1 ;;
+		1) echo " 已跳过"; return 1 ;;
+		*) echo " 本轮选择超时，已跳过"; return 1 ;;
 	esac
 }
 
@@ -156,13 +157,17 @@ echo "========================================"
 echo " 请选择"
 echo " 音量上：刷新权限与状态（默认）"
 echo " 音量下：进入诊断菜单"
-echo " 20 秒未选择将执行刷新"
+echo " 本轮 20 秒未选择将执行刷新"
 echo "========================================"
 qsc_volume_choice 20
 case "$?" in
 	1)
 		echo "已选择：诊断菜单"
 		qsc_action_diag_menu
+		;;
+	2)
+		echo "本轮选择超时，执行刷新"
+		qsc_action_refresh
 		;;
 	*)
 		echo "已选择：刷新权限"
