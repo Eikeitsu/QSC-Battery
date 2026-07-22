@@ -153,41 +153,47 @@ if [ ! -f "$LIST_SWITCH" ]; then
 fi
 switch_list="$(cat "$LIST_SWITCH")"
 switch_list="$switch_list /sys/class/power_supply/battery/batt_slate_mode,start=0,stop=1 /sys/class/power_supply/battery/store_mode,start=0,stop=1 /sys/class/power_supply/battery/input_suspend,start=0,stop=1 /sys/class/power_supply/battery/charging_enabled,start=1,stop=0 /sys/class/power_supply/battery/charge_disable,start=0,stop=1 /sys/class/power_supply/battery/disable_charging,start=0,stop=1 /sys/class/power_supply/battery/stop_charging,start=0,stop=1 /sys/class/power_supply/battery/charge_enabled,start=1,stop=0 /sys/class/power_supply/charger/charge_disable,start=0,stop=1 /sys/class/power_supply/bms/charge_disable,start=0,stop=1 /sys/class/power_supply/bms/charging_enabled,start=1,stop=0 /sys/class/power_supply/bms/charge_enabled,start=1,stop=0 /sys/class/power_supply/mi_chg/charge_disable,start=0,stop=1 /sys/class/power_supply/mi_chg/charging_enabled,start=1,stop=0 /sys/class/qcom-battery/charging_enabled,start=1,stop=0 /sys/class/qcom-battery/charge_disable,start=0,stop=1 /sys/class/qcom-battery/input_suspend,start=0,stop=1 /sys/class/qcom-battery/battery_charging_enabled,start=1,stop=0 /sys/class/power_supply/idt/pin_enabled,start=1,stop=0 /sys/kernel/debug/google_charger/chg_suspend,start=0,stop=1 /sys/kernel/debug/google_charger/chg_mode,start=1,stop=0 /proc/driver/charger_limit_enable,start=0,stop=1 /proc/driver/charger_limit,start=100,stop=1 /proc/mtk_battery_cmd/current_cmd,start=0_0,stop=0_1 /proc/mtk_battery_cmd/en_power_path,start=1,stop=0 /sys/class/power_supply/battery/constant_charge_current_max,start=3000000,stop=0 /sys/class/power_supply/battery/current_max,start=3000000,stop=0 /sys/class/power_supply/battery/input_current_max,start=3000000,stop=0 /sys/class/power_supply/battery/charge_current,start=3000000,stop=0 /sys/class/power_supply/battery/fast_charge_current_max,start=3000000,stop=0 /sys/class/power_supply/usb/input_suspend,start=0,stop=1 /sys/class/power_supply/qc_usb/input_suspend,start=0,stop=1 /sys/class/power_supply/dc/input_suspend,start=0,stop=1 /sys/class/power_supply/battery/charge_control_end_threshold,start=100,stop=0 /sys/class/power_supply/battery/charge_type,start=Fast,stop=None /sys/class/power_supply/battery/batt_charging_enabled,start=1,stop=0 /sys/class/power_supply/battery/force_disable_charging,start=0,stop=1 /sys/class/power_supply/battery/charge_control_enabled,start=1,stop=0 /sys/class/power_supply/battery/mi_charge_enable,start=1,stop=0 /sys/class/power_supply/pc_port/input_suspend,start=0,stop=1 /sys/class/power_supply/wireless/input_suspend,start=0,stop=1 /sys/devices/platform/soc/soc:mca_business_charger/handle_state,start=0,stop=1 /sys/devices/platform/soc/soc:mca_charger/handle_state,start=0,stop=1 /sys/devices/platform/soc/soc@0:mca_business_charger/handle_state,start=0,stop=1 /sys/devices/platform/soc/soc@0:mca_charger/handle_state,start=0,stop=1 /sys/devices/platform/soc/mca_business_charger/handle_state,start=0,stop=1 /sys/devices/platform/soc/mca_charger/handle_state,start=0,stop=1 /sys/class/power_supply/mca-charger/handle_state,start=0,stop=1 /sys/class/power_supply/mca_charger/handle_state,start=0,stop=1 /sys/class/power_supply/mca-battery/handle_state,start=0,stop=1 /sys/class/power_supply/mca_battery/handle_state,start=0,stop=1 /sys/devices/platform/soc/soc:mca_business_charger/stop_handle_charge,start=0,stop=1"
+# K90U / 骁龙8至尊版 MCA：系统可能周期性改回 handle_state，需 chmod 后写入并在停充期间持续重申。
+_MCA_HANDLE_PATHS="/sys/devices/platform/soc/soc:mca_business_charger/handle_state /sys/devices/platform/soc/soc:mca_charger/handle_state /sys/devices/platform/soc/soc@0:mca_business_charger/handle_state /sys/devices/platform/soc/soc@0:mca_charger/handle_state /sys/devices/platform/soc/mca_business_charger/handle_state /sys/devices/platform/soc/mca_charger/handle_state /sys/class/power_supply/mca-charger/handle_state /sys/class/power_supply/mca_charger/handle_state /sys/class/power_supply/mca-battery/handle_state /sys/class/power_supply/mca_battery/handle_state"
+_qsc_write_node() {
+	local node="$1"
+	local val="$2"
+	chmod 0644 "$node" 2>/dev/null
+	echo "$val" > "$node" 2>/dev/null
+}
+_qsc_mca_write() {
+	local val="$1"
+	local label="$2"
+	local mca_path
+	for mca_path in $_MCA_HANDLE_PATHS; do
+		if [ -f "$mca_path" ]; then
+			_qsc_write_node "$mca_path" "$val"
+			if [ "$label" = "stop" ]; then
+				stop_nodes="$mca_path=$val (MCA)"
+				log_log=1
+				stop_ok=1
+			else
+				start_node="$mca_path"
+				start_val="$val"
+				log_log2=1
+				start_ok=1
+			fi
+			return 0
+		fi
+	done
+	return 1
+}
 qsc_power_stop() {
 	stop_ok=0
 	stop_nodes=""
-	if [ -f "/sys/devices/platform/soc/soc:mca_business_charger/handle_state" ]; then
-		echo "1" > "/sys/devices/platform/soc/soc:mca_business_charger/handle_state"
-		stop_nodes="handle_state=1 (MCA business)"
-		log_log=1
-		stop_ok=1
+	if _qsc_mca_write 1 stop; then
 		return
 	fi
-	if [ -f "/sys/devices/platform/soc/soc:mca_charger/handle_state" ]; then
-		echo "1" > "/sys/devices/platform/soc/soc:mca_charger/handle_state"
-		stop_nodes="handle_state=1 (MCA)"
-		log_log=1
-		stop_ok=1
-		return
-	fi
-	for mca_path in "/sys/devices/platform/soc/soc@0:mca_business_charger/handle_state" \
-	                "/sys/devices/platform/soc/soc@0:mca_charger/handle_state" \
-	                "/sys/devices/platform/soc/mca_business_charger/handle_state" \
-	                "/sys/devices/platform/soc/mca_charger/handle_state"; do
-		if [ -f "$mca_path" ]; then
-			echo "1" > "$mca_path"
-			stop_nodes="$mca_path=1 (MCA)"
-			log_log=1
-			stop_ok=1
-			return
-		fi
-	done
 	for i in $switch_list ; do
 		power_switch_route="$(echo "$i" | sed -n 's/,start=.*//g;$p')"
 		if [ -f "$power_switch_route" ]; then
-			chmod 0644 "$power_switch_route"
 			power_switch_stop="$(echo "$i" | sed -n 's/.*,stop=//g;s/_/ /g;$p')"
-			echo "$power_switch_stop" > "$power_switch_route"
+			_qsc_write_node "$power_switch_route" "$power_switch_stop"
 			stop_nodes="$stop_nodes $power_switch_route=$power_switch_stop"
 			log_log=1
 			stop_ok=1
@@ -198,41 +204,14 @@ qsc_power_start() {
 	start_ok=0
 	start_node=""
 	start_val=""
-	if [ -f "/sys/devices/platform/soc/soc:mca_business_charger/handle_state" ]; then
-		echo "0" > "/sys/devices/platform/soc/soc:mca_business_charger/handle_state"
-		start_node="/sys/devices/platform/soc/soc:mca_business_charger/handle_state"
-		start_val="0"
-		log_log2=1
-		start_ok=1
+	if _qsc_mca_write 0 start; then
 		return
 	fi
-	if [ -f "/sys/devices/platform/soc/soc:mca_charger/handle_state" ]; then
-		echo "0" > "/sys/devices/platform/soc/soc:mca_charger/handle_state"
-		start_node="/sys/devices/platform/soc/soc:mca_charger/handle_state"
-		start_val="0"
-		log_log2=1
-		start_ok=1
-		return
-	fi
-	for mca_path in "/sys/devices/platform/soc/soc@0:mca_business_charger/handle_state" \
-	                "/sys/devices/platform/soc/soc@0:mca_charger/handle_state" \
-	                "/sys/devices/platform/soc/mca_business_charger/handle_state" \
-	                "/sys/devices/platform/soc/mca_charger/handle_state"; do
-		if [ -f "$mca_path" ]; then
-			echo "0" > "$mca_path"
-			start_node="$mca_path"
-			start_val="0"
-			log_log2=1
-			start_ok=1
-			return
-		fi
-	done
 	for i in $switch_list ; do
 		power_switch_route="$(echo "$i" | sed -n 's/,start=.*//g;$p')"
 		if [ -f "$power_switch_route" ]; then
-			chmod 0644 "$power_switch_route"
 			power_switch_start="$(echo "$i" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
-			echo "$power_switch_start" > "$power_switch_route"
+			_qsc_write_node "$power_switch_route" "$power_switch_start"
 			start_node="$power_switch_route"
 			start_val="$power_switch_start"
 			log_log2=1
@@ -296,35 +275,36 @@ if [ -n "$battery_powered" ]; then
 		fi
 	fi
 	if [ "$switch_stop_mode" = "1" -o "$cpu_log" = "1" ]; then
-		if [ "$cpu_log" = "0" -a "$charge_full" != "1" ]; then
-			if [ ! -f "$DATADIR/power_switch" ]; then
-				power_stop_time="$(echo "$config_conf" | egrep '^power_stop_time=' | sed -n 's/power_stop_time=//g;$p')"
-				if [ "$power_stop_time" -gt "0" ]; then
-					echo "$(date +%F_%T) 电量$battery_level 延时功能 继续充电$power_stop_time秒 倒计时中" >> "$LOG_FILE"
-					sleep "$power_stop_time"
-				fi
+		first_stop=0
+		if [ ! -f "$DATADIR/power_switch" ]; then
+			first_stop=1
+		fi
+		if [ "$cpu_log" = "0" -a "$charge_full" != "1" -a "$first_stop" = "1" ]; then
+			power_stop_time="$(echo "$config_conf" | egrep '^power_stop_time=' | sed -n 's/power_stop_time=//g;$p')"
+			if [ "$power_stop_time" -gt "0" ]; then
+				echo "$(date +%F_%T) 电量$battery_level 延时功能 继续充电$power_stop_time秒 倒计时中" >> "$LOG_FILE"
+				sleep "$power_stop_time"
 			fi
 		fi
 		sleep 3
-		if [ ! -f "$DATADIR/power_switch" ]; then
-			qsc_power_stop
-			if [ "$stop_ok" = "1" ]; then
-				touch "$DATADIR/power_switch"
-				if [ "$battery_stop_reason" = "1" ]; then
-					touch "$DATADIR/battery_switch"
+		# K90U/MCA 等机型会改回停充节点，条件仍满足时每轮重申
+		qsc_power_stop
+		if [ "$stop_ok" = "1" ]; then
+			touch "$DATADIR/power_switch"
+			if [ "$battery_stop_reason" = "1" ]; then
+				touch "$DATADIR/battery_switch"
+			fi
+			if [ "$first_stop" = "1" -a "$log_log" = "1" ]; then
+				if [ "$cpu_log" = "1" ]; then
+					echo "$(date +%F_%T) 电量$battery_level 触发开关温控：停止充电 温度$temperature [$stop_nodes]" >> "$LOG_FILE"
+				else
+					echo "$(date +%F_%T) 电量$battery_level 停止充电 [$stop_nodes]" >> "$LOG_FILE"
 				fi
-				if [ "$log_log" = "1" ]; then
-					if [ "$cpu_log" = "1" ]; then
-						echo "$(date +%F_%T) 电量$battery_level 触发开关温控：停止充电 温度$temperature [$stop_nodes]" >> "$LOG_FILE"
-					else
-						echo "$(date +%F_%T) 电量$battery_level 停止充电 [$stop_nodes]" >> "$LOG_FILE"
-					fi
-				fi
-			else
-				if [ ! -f "$DATADIR/no_node_logged" ]; then
-					echo "$(date +%F_%T) 电量$battery_level 未找到有效充电控制节点！请运行 bin/diagnose.sh 生成诊断报告发给开发者" >> "$LOG_FILE"
-					touch "$DATADIR/no_node_logged"
-				fi
+			fi
+		elif [ "$first_stop" = "1" ]; then
+			if [ ! -f "$DATADIR/no_node_logged" ]; then
+				echo "$(date +%F_%T) 电量$battery_level 未找到有效充电控制节点！请运行 bin/diagnose.sh 生成诊断报告发给开发者" >> "$LOG_FILE"
+				touch "$DATADIR/no_node_logged"
 			fi
 		fi
 		if [ -f "$DATADIR/power_switch" -a "$battery_stop_reason" = "1" ]; then
@@ -386,5 +366,5 @@ if [ -f "$DATADIR/power_switch" ]; then
 	fi
 fi
 _debug_step 9
-#version=20260722.1
+#version=20260722.2
 # ##

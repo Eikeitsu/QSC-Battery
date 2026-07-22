@@ -16,8 +16,19 @@ if [ -f "$MODDIR/data/power_switch" ] && [ -f "$MODDIR/bin/qsc_switch.sh" ]; the
 		done
 	fi
 	for mca in /sys/devices/platform/soc/soc:mca_business_charger/handle_state \
-	           /sys/devices/platform/soc/soc:mca_charger/handle_state; do
-		[ -f "$mca" ] && echo "0" > "$mca" 2>/dev/null
+	           /sys/devices/platform/soc/soc:mca_charger/handle_state \
+	           /sys/devices/platform/soc/soc@0:mca_business_charger/handle_state \
+	           /sys/devices/platform/soc/soc@0:mca_charger/handle_state \
+	           /sys/devices/platform/soc/mca_business_charger/handle_state \
+	           /sys/devices/platform/soc/mca_charger/handle_state \
+	           /sys/class/power_supply/mca-charger/handle_state \
+	           /sys/class/power_supply/mca_charger/handle_state \
+	           /sys/class/power_supply/mca-battery/handle_state \
+	           /sys/class/power_supply/mca_battery/handle_state; do
+		if [ -f "$mca" ]; then
+			chmod 0644 "$mca" 2>/dev/null
+			echo "0" > "$mca" 2>/dev/null
+		fi
 	done
 fi
 

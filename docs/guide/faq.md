@@ -5,7 +5,8 @@
 1. 确认已重启
 2. WebUI 中确认模块总开关已打开
 3. 查看 `data/log.log` 是否有「未找到有效充电控制节点」
-4. 若机型较新，可执行诊断脚本：
+4. 红米 K90U（骁龙8至尊版）应看到日志含 `MCA` / `handle_state`；建议 `power_stop` 与 `power_start` 间隔至少 10
+5. 若机型较新，可执行诊断脚本：
 
 ```bash
 sh /data/adb/modules/QSC_Battery/bin/diagnose.sh
