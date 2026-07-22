@@ -14,6 +14,24 @@ _safe_cat() {
 	kill $_pid 2>/dev/null
 	cat "$DATADIR/.safe_tmp" 2>/dev/null
 }
+_normalize_temperature() {
+	local raw digits normalized
+	raw="$(echo "$1" | tr -d ' \r\n')"
+	case "$raw" in ""|"-"|*[!0-9-]*) return 1 ;; esac
+	digits="${raw#-}"
+	case "$digits" in ""|*[!0-9]*) return 1 ;; esac
+	if [ "$digits" -ge 10000 ]; then
+		normalized=$((raw / 1000))
+	elif [ "$digits" -ge 1000 ]; then
+		normalized=$((raw / 100))
+	elif [ "$digits" -ge 100 ]; then
+		normalized=$((raw / 10))
+	else
+		normalized="$raw"
+	fi
+	[ "$normalized" -ge -20 -a "$normalized" -le 100 ] || return 1
+	echo "$normalized"
+}
 _debug_step 1
 config_conf="$(cat "$CONF" | egrep -v '^#')"
 _debug_step 2
@@ -54,7 +72,8 @@ fi
 charge_full="$(echo "$config_conf" | egrep '^charge_full=' | sed -n 's/charge_full=//g;$p')"
 power_reset="$(echo "$config_conf" | egrep '^power_reset=' | sed -n 's/power_reset=//g;$p')"
 Shut_down="$(echo "$config_conf" | egrep '^Shut_down=' | sed -n 's/Shut_down=//g;$p')"
-temperature="$(echo "$dumpsys_battery" | egrep 'temperature: ' | sed -n 's/.*temperature: //g;s/.$//g;$p')"
+temperature_raw="$(echo "$dumpsys_battery" | egrep 'temperature: ' | sed -n 's/.*temperature: //g;$p')"
+temperature="$(_normalize_temperature "$temperature_raw")"
 power_stop="$(echo "$config_conf" | egrep '^power_stop=' | sed -n 's/power_stop=//g;$p')"
 power_start="$(echo "$config_conf" | egrep '^power_start=' | sed -n 's/power_start=//g;$p')"
 temperature_switch="$(echo "$config_conf" | egrep '^temperature_switch=' | sed -n 's/temperature_switch=//g;$p')"
@@ -81,7 +100,8 @@ fi
 if [ ! -n "$temperature" ]; then
 	for sysfs_temp in /sys/class/power_supply/battery/temp /sys/class/power_supply/bms/temp /sys/class/power_supply/battery/batt_temp; do
 		if [ -f "$sysfs_temp" ] && [ -r "$sysfs_temp" ]; then
-			temperature="$(_safe_cat "$sysfs_temp")"
+			temperature_raw="$(_safe_cat "$sysfs_temp")"
+			temperature="$(_normalize_temperature "$temperature_raw")"
 			if [ -n "$temperature" ]; then break; fi
 		fi
 	done

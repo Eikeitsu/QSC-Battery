@@ -48,6 +48,82 @@ qsc_volume_choice() {
 	return 2
 }
 
+qsc_conf_value() {
+	local file="$1"
+	local key="$2"
+	local count value
+	count="$(grep -c "^${key}=" "$file" 2>/dev/null)"
+	[ "$count" = "1" ] || return 1
+	value="$(sed -n "s/^${key}=//p" "$file" | tr -d ' \r\n')"
+	case "$value" in ""|*[!0-9]*) return 1 ;; esac
+	echo "$value"
+}
+
+qsc_merge_config() {
+	local source="$1"
+	local target="$2"
+	local merged="${target}.merge.$$"
+	local default_power_stop default_power_start default_power_stop_time
+	local default_charge_full default_power_reset default_temperature_switch
+	local default_temperature_stop default_temperature_start
+	local power_stop power_start power_stop_time charge_full power_reset
+	local temperature_switch temperature_stop temperature_start value
+
+	default_power_stop="$(qsc_conf_value "$target" power_stop)" || return 1
+	default_power_start="$(qsc_conf_value "$target" power_start)" || return 1
+	default_power_stop_time="$(qsc_conf_value "$target" power_stop_time)" || return 1
+	default_charge_full="$(qsc_conf_value "$target" charge_full)" || return 1
+	default_power_reset="$(qsc_conf_value "$target" power_reset)" || return 1
+	default_temperature_switch="$(qsc_conf_value "$target" temperature_switch)" || return 1
+	default_temperature_stop="$(qsc_conf_value "$target" temperature_switch_stop)" || return 1
+	default_temperature_start="$(qsc_conf_value "$target" temperature_switch_start)" || return 1
+
+	power_stop="$default_power_stop"
+	power_start="$default_power_start"
+	power_stop_time="$default_power_stop_time"
+	charge_full="$default_charge_full"
+	power_reset="$default_power_reset"
+	temperature_switch="$default_temperature_switch"
+	temperature_stop="$default_temperature_stop"
+	temperature_start="$default_temperature_start"
+
+	value="$(qsc_conf_value "$source" power_stop)" && [ "$value" -ge 1 -a "$value" -le 110 ] && power_stop="$value"
+	value="$(qsc_conf_value "$source" power_start)" && [ "$value" -ge 0 -a "$value" -le 109 ] && power_start="$value"
+	value="$(qsc_conf_value "$source" power_stop_time)" && [ "$value" -ge 1 -a "$value" -le 3600 ] && power_stop_time="$value"
+	value="$(qsc_conf_value "$source" charge_full)" && [ "$value" -le 1 ] && charge_full="$value"
+	value="$(qsc_conf_value "$source" power_reset)" && [ "$value" -le 1 ] && power_reset="$value"
+	value="$(qsc_conf_value "$source" temperature_switch)" && [ "$value" -le 1 ] && temperature_switch="$value"
+	value="$(qsc_conf_value "$source" temperature_switch_stop)" && [ "$value" -le 100 ] && temperature_stop="$value"
+	value="$(qsc_conf_value "$source" temperature_switch_start)" && [ "$value" -le 100 ] && temperature_start="$value"
+
+	if [ "$power_stop" != "110" ] && [ "$power_stop" -le "$power_start" ]; then
+		power_stop="$default_power_stop"
+		power_start="$default_power_start"
+		ui_print "- 旧版电量阈值关系无效，已保留新版默认值"
+	fi
+	if [ "$temperature_stop" -le "$temperature_start" ]; then
+		temperature_stop="$default_temperature_stop"
+		temperature_start="$default_temperature_start"
+		ui_print "- 旧版温控阈值关系无效，已保留新版默认值"
+	fi
+
+	cp -f "$target" "$merged" 2>/dev/null || return 1
+	sed -i \
+		-e "s/^power_stop=.*/power_stop=$power_stop/" \
+		-e "s/^power_start=.*/power_start=$power_start/" \
+		-e "s/^power_stop_time=.*/power_stop_time=$power_stop_time/" \
+		-e "s/^charge_full=.*/charge_full=$charge_full/" \
+		-e "s/^power_reset=.*/power_reset=$power_reset/" \
+		-e "s/^temperature_switch=.*/temperature_switch=$temperature_switch/" \
+		-e "s/^temperature_switch_stop=.*/temperature_switch_stop=$temperature_stop/" \
+		-e "s/^temperature_switch_start=.*/temperature_switch_start=$temperature_start/" \
+		"$merged" || {
+		rm -f "$merged"
+		return 1
+	}
+	mv -f "$merged" "$target"
+}
+
 ui_print "--------------------------------"
 ui_print " 是否确认安装 QSC 定量停充？"
 ui_print " 音量上：确认安装"
@@ -65,8 +141,16 @@ CURRENT_MODULE="/data/adb/modules/QSC_Battery"
 CURRENT_CONF="$CURRENT_MODULE/config/config.conf"
 CONFIG_BACKUP="${TMPDIR:-/data/local/tmp}/qsc-config-backup.$$"
 rm -f "$CONFIG_BACKUP"
-if [ -f "$CURRENT_CONF" ]; then
-	cp -f "$CURRENT_CONF" "$CONFIG_BACKUP" 2>/dev/null || qsc_abort "无法备份当前配置，已取消更新"
+if [ -f "$CURRENT_CONF" ] && [ ! -L "$CURRENT_CONF" ]; then
+	CONFIG_SIZE="$(wc -c <"$CURRENT_CONF" 2>/dev/null | tr -d ' ')"
+	case "$CONFIG_SIZE" in ""|*[!0-9]*) CONFIG_SIZE=0 ;; esac
+	if [ "$CONFIG_SIZE" -gt 0 -a "$CONFIG_SIZE" -le 65536 ]; then
+		cp -f "$CURRENT_CONF" "$CONFIG_BACKUP" 2>/dev/null || qsc_abort "无法备份当前配置，已取消更新"
+	else
+		ui_print "- 旧配置大小异常，将使用新版默认配置"
+	fi
+fi
+if [ -f "$CONFIG_BACKUP" ]; then
 	ui_print "--------------------------------"
 	ui_print " 检测到已安装的 QSC-Battery"
 	ui_print " 音量上：保留原有配置"
@@ -150,8 +234,8 @@ fi
 cp "$MODPATH/module.prop" "$MODPATH/t_module"
 mkdir -p "$MODPATH/bin" "$MODPATH/config" "$MODPATH/data" "$MODPATH/webroot"
 if [ "$KEEP_CONFIG" = "1" ]; then
-	cp -f "$CONFIG_BACKUP" "$MODPATH/config/config.conf" 2>/dev/null || qsc_abort "恢复原有配置失败，已取消更新"
-	ui_print "- 原有 config/config.conf 已恢复"
+	qsc_merge_config "$CONFIG_BACKUP" "$MODPATH/config/config.conf" || qsc_abort "安全迁移原有配置失败，已取消更新"
+	ui_print "- 原有有效配置已安全迁移到新版模板"
 fi
 rm -f "$CONFIG_BACKUP"
 if [ "$INSTALL_WEBUI" != "1" ]; then
