@@ -112,11 +112,19 @@ const QscTheme = {
     const themeMeta = document.querySelector('meta[name="theme-color"]');
     if (!themeMeta) return;
     const resolved = this.resolve(this.getMode());
-    // 一律用我们映射后的 --bg，避免莫奈系统浅色 --background 污染深色模式
-    const fallback = resolved === "dark" ? "#141218" : "#f2f4f7";
+    const monet = this.getMonet();
+    // 普通深色与莫奈深色底色不同，勿共用同一回退
+    const fallback =
+      resolved === "dark"
+        ? monet
+          ? "#16141c"
+          : "#111317"
+        : monet
+          ? "#fef7ff"
+          : "#f2f4f7";
     let color = this.readCssColor("--bg", fallback);
-    // 若读到的仍是过亮的底（token 未跟上），强制用深色回退
-    if (resolved === "dark" && this.relativeLuminance(color) > 0.45) {
+    // 深色下若仍读到过亮底（token 未跟上），强制回退
+    if (resolved === "dark" && this.relativeLuminance(color) > 0.42) {
       color = fallback;
     }
     if (resolved === "light" && this.relativeLuminance(color) < 0.2) {
@@ -135,7 +143,9 @@ const QscTheme = {
     if (sw) sw.checked = on;
     const desc = document.getElementById("monetDesc");
     if (desc)
-      desc.textContent = on ? "全局跟随系统莫奈取色" : "使用固定暖橙配色";
+      desc.textContent = on
+        ? "浅色/深色均跟随系统莫奈色相"
+        : "使用固定暖橙配色";
   },
 
   setMonet(on) {
@@ -195,9 +205,9 @@ const QscTheme = {
   apply(mode) {
     const selected = mode || this.getMode();
     const resolved = this.resolve(selected);
-    document.documentElement.setAttribute("data-theme", resolved);
-    // 必须落到具体 light/dark，莫奈 colors.css / 状态栏才会跟着反色
+    // 先切 color-scheme，便于管理器 colors.css 注入对应深浅 token
     document.documentElement.style.colorScheme = resolved;
+    document.documentElement.setAttribute("data-theme", resolved);
 
     this.applyMonet(this.getMonet());
     this.applyLayout(this.getLayout());
@@ -225,6 +235,9 @@ const QscTheme = {
         this.setMode(id),
       );
     }
+
+    // colors.css 异步生效时再校准一次状态栏
+    requestAnimationFrame(() => this.syncStatusBar());
   },
 
   setMode(mode) {

@@ -79,8 +79,8 @@ html[data-theme="light"] {
   color-scheme: light;
 }
 
-/* 开启莫奈：背景 + 卡片 + 强调色全部跟系统取色 */
-html.monet-on {
+/* 开启莫奈 + 浅色：完整跟随系统 MD3 表面与强调色 */
+html.monet-on[data-theme="light"] {
   --bg: var(--background, #fef7ff);
   --fg: var(--onBackground, #1d1b20);
   --card: color-mix(in srgb, var(--surfaceContainer, #f3edf7) 86%, transparent);
@@ -143,62 +143,126 @@ html.monet-off[data-theme="light"] {
   --switch-on: #34c759;
 }
 
-/* 关闭莫奈的深色：固定高对比配色 */
+/*
+ * 普通深色：镜像浅色层次——柔和底、抬升卡片、清晰三级字阶。
+ * 与莫奈深色刻意区分：固定暖橙品牌色，无壁纸色偏。
+ */
 html[data-theme="dark"].monet-off,
 html[data-theme="dark"]:not(.monet-on) {
   color-scheme: only dark;
-  --bg: #0f1115;
-  --fg: #f5f5f7;
-  --card: rgba(32, 35, 42, 0.92);
-  --card-solid: #1c1f26;
-  --muted: rgba(255, 255, 255, 0.1);
-  --text: #f5f5f7;
-  --text-2: #c4c4cc;
-  --text-3: #9a9aa3;
-  --line: rgba(255, 255, 255, 0.14);
+  --bg: #111317;
+  --fg: #f2f3f5;
+  --card: rgba(255, 255, 255, 0.06);
+  --card-solid: #1a1d24;
+  --muted: rgba(255, 255, 255, 0.06);
+  --text: #f2f3f5;
+  --text-2: #9a9aa2;
+  --text-3: #6e6e76;
+  --line: rgba(255, 255, 255, 0.08);
   --accent: #ff9f0a;
   --accent-strong: #ffb340;
-  --accent-soft: rgba(255, 159, 10, 0.18);
-  --accent-on: #1c1200;
-  --ok: #30d158;
+  --accent-soft: rgba(255, 159, 10, 0.16);
+  --accent-on: #1a1000;
+  --ok: #32d74b;
   --danger: #ff453a;
-  --danger-soft: rgba(255, 69, 58, 0.18);
-  --inverse: rgba(55, 55, 58, 0.96);
-  --inverse-fg: #f5f5f7;
-  --shadow-col: rgba(0, 0, 0, 0.45);
-  --input-bg: rgba(255, 255, 255, 0.08);
+  --danger-soft: rgba(255, 69, 58, 0.16);
+  --inverse: rgba(44, 44, 46, 0.96);
+  --inverse-fg: #f2f3f5;
+  --shadow-col: rgba(0, 0, 0, 0.5);
+  --input-bg: rgba(255, 255, 255, 0.06);
   --switch-off: #3a3a3c;
-  --switch-on: #30d158;
+  --switch-on: #32d74b;
 }
 
 /*
- * 开启莫奈 + 深色：系统莫奈 token 在「强制深色 / 系统仍浅色」时仍是浅色，
- * 不能用 var(--background, 深色回退)——变量存在就不会走回退。表面色写死深色。
+ * 莫奈深色（强制深色 / 系统仍浅色时）：
+ * 不能直接用 var(--background)——浅色 token 仍在，会盖住回退值。
+ * 以系统 --primary 等莫奈色相混入深色中性面，遵循莫奈色相规则。
  */
 html[data-theme="dark"].monet-on {
   color-scheme: only dark;
-  --bg: #141218;
-  --fg: #e6e1e9;
-  --card: rgba(33, 31, 38, 0.92);
-  --card-solid: #211f26;
-  --muted: rgba(255, 255, 255, 0.1);
-  --text: #e6e1e9;
-  --text-2: #cac4d0;
-  --text-3: #a39eac;
-  --line: rgba(147, 143, 153, 0.38);
-  --accent: #d0bcff;
-  --accent-strong: #e8ddff;
-  --accent-soft: rgba(208, 188, 255, 0.18);
-  --accent-on: #381e72;
-  --ok: #d0bcff;
-  --danger: #f2b8b5;
-  --danger-soft: rgba(242, 184, 181, 0.18);
-  --inverse: rgba(230, 225, 233, 0.94);
-  --inverse-fg: #322f35;
-  --shadow-col: rgba(0, 0, 0, 0.45);
-  --input-bg: rgba(255, 255, 255, 0.08);
-  --switch-off: #49454f;
-  --switch-on: #d0bcff;
+  --bg: color-mix(in srgb, var(--primary, #d0bcff) 12%, #12131a);
+  --fg: #e8e6ef;
+  --card: color-mix(in srgb, var(--primary, #d0bcff) 8%, rgba(28, 27, 34, 0.92));
+  --card-solid: color-mix(in srgb, var(--primary, #d0bcff) 10%, #1c1b22);
+  --muted: color-mix(
+    in srgb,
+    var(--primaryContainer, #4f378b) 28%,
+    rgba(255, 255, 255, 0.06)
+  );
+  --text: #e8e6ef;
+  --text-2: color-mix(in srgb, var(--onSurfaceVariant, #cac4d0) 70%, #a39eb0);
+  --text-3: #958f9e;
+  --line: color-mix(in srgb, var(--primary, #d0bcff) 16%, rgba(255, 255, 255, 0.08));
+  --accent: var(--primary, #d0bcff);
+  --accent-strong: color-mix(in srgb, var(--primary, #d0bcff) 78%, #ffffff);
+  --accent-soft: color-mix(in srgb, var(--primary, #d0bcff) 22%, transparent);
+  --accent-on: var(--onPrimary, #381e72);
+  --ok: var(--tertiary, var(--primary, #d0bcff));
+  --danger: var(--error, #f2b8b5);
+  --danger-soft: color-mix(in srgb, var(--error, #f2b8b5) 20%, transparent);
+  --inverse: var(--inverseSurface, #e5e1e9);
+  --inverse-fg: var(--inverseOnSurface, #313033);
+  --shadow-col: color-mix(in srgb, var(--shadow, #000000) 55%, transparent);
+  --input-bg: color-mix(
+    in srgb,
+    var(--primary, #d0bcff) 7%,
+    rgba(255, 255, 255, 0.06)
+  );
+  --switch-off: color-mix(in srgb, var(--surfaceVariant, #49454f) 75%, #2c2c30);
+  --switch-on: var(--primary, #d0bcff);
+}
+
+/* 系统本身已是深色：直接使用管理器注入的 MD3 深色 token */
+@media (prefers-color-scheme: dark) {
+  html[data-theme="dark"].monet-on {
+    --bg: var(--background, color-mix(in srgb, var(--primary, #d0bcff) 12%, #12131a));
+    --fg: var(--onBackground, #e8e6ef);
+    --card: color-mix(
+      in srgb,
+      var(--surfaceContainer, #211f26) 90%,
+      transparent
+    );
+    --card-solid: var(--surfaceContainer, #211f26);
+    --muted: color-mix(
+      in srgb,
+      var(--surfaceVariant, #49454f) 42%,
+      transparent
+    );
+    --text: var(--onSurface, #e6e1e9);
+    --text-2: var(--onSurfaceVariant, #cac4d0);
+    --text-3: var(--outline, #938f99);
+    --line: color-mix(
+      in srgb,
+      var(--outlineVariant, #49454f) 75%,
+      transparent
+    );
+    --accent: var(--primary, #d0bcff);
+    --accent-strong: var(--primary, #d0bcff);
+    --accent-soft: color-mix(
+      in srgb,
+      var(--primaryContainer, #4f378b) 55%,
+      transparent
+    );
+    --accent-on: var(--onPrimary, #381e72);
+    --ok: var(--tertiary, var(--primary, #d0bcff));
+    --danger: var(--error, #f2b8b5);
+    --danger-soft: color-mix(
+      in srgb,
+      var(--errorContainer, #8c1d18) 45%,
+      transparent
+    );
+    --inverse: var(--inverseSurface, #e6e1e9);
+    --inverse-fg: var(--inverseOnSurface, #313033);
+    --shadow-col: color-mix(in srgb, var(--shadow, #000000) 55%, transparent);
+    --input-bg: color-mix(
+      in srgb,
+      var(--surfaceContainerHigh, #2b2930) 88%,
+      transparent
+    );
+    --switch-off: var(--surfaceVariant, #49454f);
+    --switch-on: var(--primary, #d0bcff);
+  }
 }
 
 html,
@@ -232,18 +296,7 @@ body {
   box-shadow: 0 8px 20px color-mix(in srgb, var(--shadow-col) 35%, transparent);
 }
 
-/*
- * 部分管理器在深色 WebUI 下仍使用浅色状态栏（深色图标）。
- * 在安全区铺浅色底，避免时间/电量看不清。
- */
-html[data-theme="dark"] .topbar {
-  background-image: linear-gradient(
-    to bottom,
-    #e8eaed 0,
-    #e8eaed var(--inset-top),
-    var(--bg) var(--inset-top)
-  );
-}
+/* 深色顶栏与页面底色一致；状态栏图标依赖 color-scheme: only dark */
 
 .topbar-spacer {
   height: calc(var(--inset-top) + 64px);
@@ -362,6 +415,12 @@ html[data-theme="dark"] .topbar {
     0 6px 18px var(--shadow-col);
   position: relative;
   z-index: 1;
+}
+
+html[data-theme="dark"] .card {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 8px 22px var(--shadow-col);
 }
 
 @supports not (
