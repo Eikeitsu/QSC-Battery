@@ -3,10 +3,8 @@
 # 返回：0=音量上，1=音量下，2=超时或无法读取
 # 可选参数：超时秒数（默认 20）
 #
-# 要点：
-# - 不用「每秒开一次 getevent -c 1」的短窗轮询（容易漏掉 DOWN，连按才偶发命中）
-# - 每次用「本轮剩余秒数」阻塞等待下一条事件；非音量事件立刻再等
-# - DOWN / UP 都算有效，避免只收到抬起时被当成没按
+# 「连按才有反应」常见原因：短窗轮询在两次 getevent 间隙漏掉 DOWN。
+# 这里改为用剩余整段时间阻塞等下一条事件；DOWN/UP 都算有效。
 
 qsc_volume_getevent_bin() {
 	if [ -x /system/bin/getevent ]; then
@@ -21,16 +19,13 @@ qsc_volume_getevent_bin() {
 }
 
 qsc_volume_match_up() {
-	# 标签 DOWN/UP，或原始码 KEY_VOLUMEUP(0x73) value 1/0
 	grep -qE 'KEY_VOLUMEUP[[:space:]]+(DOWN|UP)|[[:space:]]0073[[:space:]]+0000000[01]' "$1" 2>/dev/null
 }
 
 qsc_volume_match_down() {
-	# KEY_VOLUMEDOWN(0x72)
 	grep -qE 'KEY_VOLUMEDOWN[[:space:]]+(DOWN|UP)|[[:space:]]0072[[:space:]]+0000000[01]' "$1" 2>/dev/null
 }
 
-# 阻塞至多 max_sec 秒，抓取 1 条输入事件
 qsc_volume_read_one() {
 	local out="$1"
 	local ge="$2"
@@ -39,7 +34,7 @@ qsc_volume_read_one() {
 
 	[ "$max_sec" -ge 1 ] || max_sec=1
 	rm -f "$out"
-	touch "$out" 2>/dev/null
+	: >"$out"
 
 	if command -v timeout >/dev/null 2>&1; then
 		timeout "$max_sec" "$ge" -lqc 1 >"$out" 2>/dev/null
@@ -60,7 +55,6 @@ qsc_volume_read_one() {
 	return 0
 }
 
-# 最多约 1 秒清空队列残留，避免上一轮抬起键被当成本轮输入
 qsc_volume_drain() {
 	local ge="$1"
 	local event_file="$2"
@@ -108,7 +102,6 @@ qsc_volume_choice() {
 				rm -f "$event_file"
 				return 1
 			fi
-			# 触摸等杂讯：立刻继续等下一条，不空等 1 秒
 		fi
 
 		if [ "$start_ts" -gt 0 ]; then
