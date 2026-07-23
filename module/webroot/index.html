@@ -21,7 +21,8 @@
                 ? "dark"
                 : "light";
           document.documentElement.setAttribute("data-theme", resolved);
-          document.documentElement.style.colorScheme = resolved;
+          document.documentElement.style.colorScheme =
+            resolved === "dark" ? "only dark" : "only light";
           var themeMeta = document.querySelector('meta[name="theme-color"]');
           if (themeMeta)
             themeMeta.setAttribute(
@@ -29,7 +30,11 @@
               resolved === "dark" ? "#141218" : "#f2f4f7",
             );
           var schemeMeta = document.querySelector('meta[name="color-scheme"]');
-          if (schemeMeta) schemeMeta.setAttribute("content", resolved);
+          if (schemeMeta)
+            schemeMeta.setAttribute(
+              "content",
+              resolved === "dark" ? "only dark" : "only light",
+            );
           var monet = localStorage.getItem("qsc_monet");
           var monetOn = monet === null ? true : monet === "1";
           document.documentElement.classList.toggle("monet-on", monetOn);
