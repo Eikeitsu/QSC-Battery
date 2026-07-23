@@ -76,7 +76,7 @@ html.compact-on {
 }
 
 html[data-theme="light"] {
-  color-scheme: light;
+  color-scheme: only light;
 }
 
 /* 开启莫奈 + 浅色：完整跟随系统 MD3 表面与强调色 */
@@ -191,7 +191,7 @@ html[data-theme="dark"].monet-on {
     rgba(255, 255, 255, 0.06)
   );
   --text: #e8e6ef;
-  --text-2: color-mix(in srgb, var(--onSurfaceVariant, #cac4d0) 70%, #a39eb0);
+  --text-2: #b4aec0;
   --text-3: #958f9e;
   --line: color-mix(in srgb, var(--primary, #d0bcff) 16%, rgba(255, 255, 255, 0.08));
   --accent: var(--primary, #d0bcff);
@@ -213,11 +213,14 @@ html[data-theme="dark"].monet-on {
   --switch-on: var(--primary, #d0bcff);
 }
 
-/* 系统本身已是深色：直接使用管理器注入的 MD3 深色 token */
+/*
+ * 系统深色：强调色可跟 MD3；字色必须固定浅色阶。
+ * 勿直接绑 --onSurface / --onBackground——管理器 token 极性错乱时会黑字黑底。
+ */
 @media (prefers-color-scheme: dark) {
   html[data-theme="dark"].monet-on {
     --bg: var(--background, color-mix(in srgb, var(--primary, #d0bcff) 12%, #12131a));
-    --fg: var(--onBackground, #e8e6ef);
+    --fg: #e8e6ef;
     --card: color-mix(
       in srgb,
       var(--surfaceContainer, #211f26) 90%,
@@ -229,9 +232,9 @@ html[data-theme="dark"].monet-on {
       var(--surfaceVariant, #49454f) 42%,
       transparent
     );
-    --text: var(--onSurface, #e6e1e9);
-    --text-2: var(--onSurfaceVariant, #cac4d0);
-    --text-3: var(--outline, #938f99);
+    --text: #e8e6ef;
+    --text-2: #b4aec0;
+    --text-3: #958f9e;
     --line: color-mix(
       in srgb,
       var(--outlineVariant, #49454f) 75%,

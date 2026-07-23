@@ -133,6 +133,59 @@ const QscTheme = {
     themeMeta.setAttribute("content", color);
     document.documentElement.style.backgroundColor = color;
     if (document.body) document.body.style.backgroundColor = color;
+
+    // 时钟/电量等系统图标反色：跟最终状态栏底色亮度走，而不是只改页面背景
+    // 深底 → only dark（浅色图标）；浅底 → only light（深色图标）
+    const barDark = this.relativeLuminance(color) < 0.45;
+    const scheme = barDark ? "only dark" : "only light";
+    document.documentElement.style.colorScheme = scheme;
+    const schemeMeta = document.querySelector('meta[name="color-scheme"]');
+    if (schemeMeta) schemeMeta.setAttribute("content", scheme);
+
+    this.ensureTextContrast(resolved);
+  },
+
+  // 深色底必须配浅色字；管理器 MD3 token 极性错乱时仅改背景会黑字黑底
+  ensureTextContrast(resolved) {
+    const root = document.documentElement;
+    const props = ["--fg", "--text", "--text-2", "--text-3"];
+    const clear = () => props.forEach((p) => root.style.removeProperty(p));
+    const mode = resolved || this.resolve(this.getMode());
+
+    if (mode === "dark") {
+      const text = this.readCssColor("--text", "#f2f3f5");
+      const fg = this.readCssColor("--fg", text);
+      if (
+        this.relativeLuminance(text) < 0.42 ||
+        this.relativeLuminance(fg) < 0.42
+      ) {
+        root.style.setProperty("--fg", "#f2f3f5");
+        root.style.setProperty("--text", "#f2f3f5");
+        root.style.setProperty("--text-2", "#a8a8b0");
+        root.style.setProperty("--text-3", "#8e8e96");
+        if (document.body) document.body.style.color = "#f2f3f5";
+      } else {
+        clear();
+        if (document.body) document.body.style.removeProperty("color");
+      }
+      return;
+    }
+
+    const text = this.readCssColor("--text", "#1c1c1e");
+    const fg = this.readCssColor("--fg", text);
+    if (
+      this.relativeLuminance(text) > 0.55 ||
+      this.relativeLuminance(fg) > 0.55
+    ) {
+      root.style.setProperty("--fg", "#1c1c1e");
+      root.style.setProperty("--text", "#1c1c1e");
+      root.style.setProperty("--text-2", "#6c6c70");
+      root.style.setProperty("--text-3", "#8e8e93");
+      if (document.body) document.body.style.color = "#1c1c1e";
+    } else {
+      clear();
+      if (document.body) document.body.style.removeProperty("color");
+    }
   },
 
   applyMonet(enabled) {
@@ -206,19 +259,16 @@ const QscTheme = {
     const selected = mode || this.getMode();
     const resolved = this.resolve(selected);
     // 先切 color-scheme，便于管理器 colors.css 注入对应深浅 token
-    document.documentElement.style.colorScheme = resolved;
+    document.documentElement.style.colorScheme =
+      resolved === "dark" ? "only dark" : "only light";
     document.documentElement.setAttribute("data-theme", resolved);
 
     this.applyMonet(this.getMonet());
     this.applyLayout(this.getLayout());
     this.applyCompact(this.getCompact());
+    // syncStatusBar 会按最终底色亮度再校准 theme-color 与 only dark/light（状态栏图标反色）
     this.syncStatusBar();
     if (typeof QscUi !== "undefined") QscUi.syncTopbarSpacer();
-
-    const schemeMeta = document.querySelector('meta[name="color-scheme"]');
-    if (schemeMeta) {
-      schemeMeta.setAttribute("content", resolved);
-    }
 
     const desc = document.getElementById("themeDesc");
     if (desc) {
