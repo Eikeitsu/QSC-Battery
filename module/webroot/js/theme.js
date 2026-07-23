@@ -108,6 +108,38 @@ const QscTheme = {
     return 0.2126 * toLin(r) + 0.7152 * toLin(g) + 0.0722 * toLin(b);
   },
 
+  /**
+   * MMRL / WebUI-X：setLightStatusBars(true)=深色图标；false=浅色（白）图标。
+   * 仅改 color-scheme / theme-color 对原生状态栏不够。
+   */
+  applySystemBarIcons(barDark) {
+    const lightBars = !barDark;
+    const trySet = (api) => {
+      if (!api || typeof api !== "object") return false;
+      let ok = false;
+      try {
+        if (typeof api.setLightStatusBars === "function") {
+          api.setLightStatusBars(lightBars);
+          ok = true;
+        }
+        if (typeof api.setLightNavigationBars === "function") {
+          api.setLightNavigationBars(lightBars);
+          ok = true;
+        }
+      } catch (_) {}
+      return ok;
+    };
+    if (trySet(window.$QSC_Battery)) return;
+    if (trySet(window.mmrl)) return;
+    if (trySet(window.ksu)) return;
+    try {
+      Object.keys(window).forEach((k) => {
+        if (!k || k.charAt(0) !== "$") return;
+        trySet(window[k]);
+      });
+    } catch (_) {}
+  },
+
   syncStatusBar() {
     const themeMeta = document.querySelector('meta[name="theme-color"]');
     if (!themeMeta) return;
@@ -141,6 +173,7 @@ const QscTheme = {
     document.documentElement.style.colorScheme = scheme;
     const schemeMeta = document.querySelector('meta[name="color-scheme"]');
     if (schemeMeta) schemeMeta.setAttribute("content", scheme);
+    this.applySystemBarIcons(barDark);
 
     this.ensureTextContrast(resolved);
   },

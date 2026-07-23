@@ -299,7 +299,7 @@ body {
   box-shadow: 0 8px 20px color-mix(in srgb, var(--shadow-col) 35%, transparent);
 }
 
-/* 深色顶栏与页面底色一致；状态栏图标依赖 color-scheme: only dark */
+/* 深色顶栏与页面底色一致；原生状态栏图标由 theme.js → setLightStatusBars 控制 */
 
 .topbar-spacer {
   height: calc(var(--inset-top) + 64px);

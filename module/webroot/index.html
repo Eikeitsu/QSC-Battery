@@ -35,6 +35,30 @@
               "content",
               resolved === "dark" ? "only dark" : "only light",
             );
+          // 深底 → 浅色（白）状态栏图标；仅 color-scheme 对 MMRL/WebUI-X 不够
+          var lightBars = resolved !== "dark";
+          var applyBars = function (api) {
+            if (!api || typeof api.setLightStatusBars !== "function") return false;
+            try {
+              api.setLightStatusBars(lightBars);
+              if (typeof api.setLightNavigationBars === "function")
+                api.setLightNavigationBars(lightBars);
+              return true;
+            } catch (e) {
+              return false;
+            }
+          };
+          if (
+            !applyBars(window.$QSC_Battery) &&
+            !applyBars(window.mmrl) &&
+            !applyBars(window.ksu)
+          ) {
+            try {
+              Object.keys(window).forEach(function (k) {
+                if (k && k.charAt(0) === "$") applyBars(window[k]);
+              });
+            } catch (e) {}
+          }
           var monet = localStorage.getItem("qsc_monet");
           var monetOn = monet === null ? true : monet === "1";
           document.documentElement.classList.toggle("monet-on", monetOn);
