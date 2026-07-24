@@ -76,8 +76,18 @@
   <body>
     <header class="topbar" id="topbar">
       <div class="topbar-left">
-        <h1>定量停充</h1>
-        <div class="subtitle" id="deviceName">加载中...</div>
+        <img
+          class="topbar-logo"
+          src="img/icon.png"
+          width="40"
+          height="40"
+          alt=""
+          decoding="async"
+        />
+        <div class="topbar-titles">
+          <h1>定量停充</h1>
+          <div class="subtitle" id="deviceName">加载中...</div>
+        </div>
       </div>
     </header>
     <div class="topbar-spacer" id="topbarSpacer" aria-hidden="true"></div>
@@ -512,6 +522,22 @@
     </section>
 
     <div class="small-title" data-page="more">关于</div>
+    <div class="about-brand" data-page="more">
+      <img
+        class="about-brand-mark"
+        src="img/icon-mark-light.png"
+        data-mark-light="img/icon-mark-light.png"
+        data-mark-dark="img/icon-mark.png"
+        width="72"
+        height="72"
+        alt=""
+        decoding="async"
+      />
+      <div class="about-brand-text">
+        <div class="about-brand-title">定量停充</div>
+        <div class="about-brand-sub">QSC-Battery</div>
+      </div>
+    </div>
     <div class="about-note" data-page="more">
       本模块基于 <b>top大佬</b> 的 QSC 定量停充，补充了 WebUI
       与目录结构整理，感谢原作者开源贡献。

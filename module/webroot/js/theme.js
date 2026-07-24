@@ -288,6 +288,16 @@ const QscTheme = {
     }
   },
 
+  syncBrandMarks(resolved) {
+    const dark = (resolved || this.resolve(this.getMode())) === "dark";
+    document.querySelectorAll(".about-brand-mark").forEach((img) => {
+      const next = dark
+        ? img.getAttribute("data-mark-dark")
+        : img.getAttribute("data-mark-light");
+      if (next && img.getAttribute("src") !== next) img.setAttribute("src", next);
+    });
+  },
+
   apply(mode) {
     const selected = mode || this.getMode();
     const resolved = this.resolve(selected);
@@ -299,6 +309,7 @@ const QscTheme = {
     this.applyMonet(this.getMonet());
     this.applyLayout(this.getLayout());
     this.applyCompact(this.getCompact());
+    this.syncBrandMarks(resolved);
     // syncStatusBar 会按最终底色亮度再校准 theme-color 与 only dark/light（状态栏图标反色）
     this.syncStatusBar();
     if (typeof QscUi !== "undefined") QscUi.syncTopbarSpacer();

@@ -4,6 +4,9 @@ hero:
   name: QSC 定量停充
   text: 智能守护电池健康
   tagline: 到达指定电量或温度时自动停止充电，条件恢复后再继续充电。支持 Magisk / KernelSU，内置 WebUI 可视化配置。
+  image:
+    src: /icon-mark-light.png
+    alt: QSC 定量停充
   actions:
     - theme: brand
       text: 了解功能

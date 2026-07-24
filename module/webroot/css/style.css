@@ -310,6 +310,27 @@ body {
   height: var(--space-page-gap);
 }
 
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.topbar-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  flex-shrink: 0;
+  object-fit: cover;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--shadow-col) 50%, transparent);
+}
+
+.topbar-titles {
+  min-width: 0;
+  flex: 1;
+}
+
 .topbar-left h1 {
   font-size: calc(1.55rem * var(--font-scale));
   font-weight: 700;
@@ -786,6 +807,40 @@ html[data-layout="dock"] .log-box {
   font-size: calc(0.68rem * var(--font-scale));
   color: var(--text-3);
   margin-top: 1px;
+}
+
+.about-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 var(--space-card-x) 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-inner);
+  background: var(--card-solid);
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--shadow-col) 28%, transparent);
+  position: relative;
+  z-index: 1;
+}
+
+.about-brand-mark {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.about-brand-title {
+  font-size: calc(1.05rem * var(--font-scale));
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.2px;
+}
+
+.about-brand-sub {
+  margin-top: 2px;
+  font-size: calc(0.72rem * var(--font-scale));
+  color: var(--text-3);
 }
 
 .about-note {

@@ -25,6 +25,7 @@ const ROOT_FILES = [
   "customize.sh",
   "action.sh",
   "uninstall.sh",
+  "icon.png",
 ];
 /** 正式包：核心 + lib + 只读诊断 */
 const BIN_RELEASE = [

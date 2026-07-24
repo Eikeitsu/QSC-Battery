@@ -9,7 +9,19 @@ export default defineConfig({
   description: "到达指定电量 / 温度自动停充与恢复的 Magisk 模块",
   base: `/${repoName}/`,
   lang: "zh-CN",
+  head: [
+    ["link", { rel: "icon", type: "image/png", href: `/${repoName}/icon.png` }],
+    [
+      "link",
+      {
+        rel: "apple-touch-icon",
+        href: `/${repoName}/icon.png`,
+      },
+    ],
+  ],
   themeConfig: {
+    logo: "/icon.png",
+    siteTitle: "QSC 定量停充",
     nav: [
       { text: "首页", link: "/" },
       { text: "功能介绍", link: "/guide/features" },
