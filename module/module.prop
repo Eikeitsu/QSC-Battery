@@ -1,7 +1,7 @@
 id=QSC_Battery
 name=QSC 定量停充
-version=2026.07.23
-versionCode=2026072301
+version=2026.07.24
+versionCode=2026072401
 author=top大佬, 许小墨
 description=[ 未知状态 ] 到达指定电量、指定温度自动停止充电、自动恢复充电。支持 WebUI 配置，配置路径：config/config.conf，日志：data/log.log。
 updateJson=https://eikeitsu.github.io/QSC-Battery/update.json
