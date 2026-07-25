@@ -209,8 +209,11 @@ jobs:
           git checkout -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"
           git fetch --tags --force
 
+          # 将 ## Unreleased 提升为当前版本号，并保留空的 Unreleased 供下个周期
+          python3 tooling/scripts/promote-changelog.py "$RAW" changelog.md
+
           if grep -Fxq "## ${RAW}" changelog.md 2>/dev/null; then
-            echo "changelog.md 已存在 ${RAW}，保留手写内容"
+            echo "changelog.md 已有 ${RAW}（含手写 Unreleased 提升），不再用 git log 覆盖"
             : > .release-notes.md
           else
             PREV_TAG="$(git tag --sort=-v:refname | grep -Fxv "$TAG" | head -n 1 || true)"
@@ -263,8 +266,9 @@ jobs:
 
           mkdir -p docs/public/releases docs/guide
           cp "release/${ZIP}" "docs/public/releases/${ZIP}"
-          cp changelog.md docs/public/changelog.md
-          cp changelog.md docs/guide/changelog.md
+          # 文档站两份 changelog：不含 Unreleased（仓库根 changelog.md 仍保留 stub）
+          python3 tooling/scripts/promote-changelog.py --export-docs changelog.md \
+            docs/public/changelog.md docs/guide/changelog.md
 
           git add update.json docs/public/update.json docs/public/changelog.md \
             "docs/public/releases/${ZIP}" docs/guide/changelog.md \

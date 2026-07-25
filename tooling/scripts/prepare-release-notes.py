@@ -4,6 +4,8 @@
 Writes a GitHub Release body that will be prepended to
 `generate_release_notes` output (which still includes Full Changelog).
 
+Looks up ## <version> first, then falls back to ## Unreleased.
+
 Usage:
   prepare-release-notes.py <version> [changelog.md] [out.md]
 """
@@ -32,23 +34,27 @@ def extract_section(changelog: str, version: str) -> str | None:
         return None
 
     lines = changelog.splitlines()
+    unreleased_body: str | None = None
+
     for index, line in enumerate(lines):
         match = re.match(r"^##\s+(.+?)\s*$", line)
         if not match:
             continue
         heading = match.group(1).strip()
-        heading_keys = version_keys(heading)
-        if keys.isdisjoint(heading_keys):
-            continue
-
-        body: list[str] = []
+        body_lines: list[str] = []
         for follow in lines[index + 1 :]:
             if re.match(r"^##\s+", follow):
                 break
-            body.append(follow)
-        text = "\n".join(body).strip()
-        return text or None
-    return None
+            body_lines.append(follow)
+        text = "\n".join(body_lines).strip()
+        if not text:
+            continue
+        if heading.lower() == "unreleased":
+            unreleased_body = text
+            continue
+        if version_keys(heading) & keys:
+            return text
+    return unreleased_body
 
 
 def build_body(section: str | None) -> str:

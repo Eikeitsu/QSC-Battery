@@ -56,7 +56,8 @@ npm run dev:web
 npm run build:module
 ```
 
-构建说明见 [`tooling/BUILD.md`](tooling/BUILD.md)。
+构建说明见 [`tooling/BUILD.md`](tooling/BUILD.md)。  
+发版与更新日志约定见 [`tooling/RELEASE.md`](tooling/RELEASE.md)（开发请写 `changelog.md` → `## Unreleased`）。
 
 发版：Actions → **Release Module** → Run workflow（填写版本号），或推送 `v*` 标签。
 
