@@ -898,6 +898,11 @@ html[data-layout="dock"][data-page="more"] [data-page~="more"] {
   display: block !important;
 }
 
+/* 悬浮分页强制 block 会打断关于页品牌行的左右 flex，需单独还原 */
+html[data-layout="dock"][data-page="more"] .about-brand[data-page~="more"] {
+  display: flex !important;
+}
+
 .dock-nav {
   position: fixed;
   left: 12px;
