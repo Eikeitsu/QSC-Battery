@@ -3,7 +3,7 @@
 MODDIR=${0%/*}
 
 echo "========================================"
-echo " QSC 定量停充 · Action"
+echo " 充电控制 · Action"
 echo "========================================"
 
 if [ ! -f "$MODDIR/bin/common.sh" ]; then
@@ -18,7 +18,7 @@ chmod 0755 "$BINDIR"/*.sh 2>/dev/null
 if [ -f "$BINDIR/.qsc_debug" ] || [ -f "$BINDIR/testing.sh" ] || [ -f "$BINDIR/diag2.sh" ]; then
 	echo " 当前为调试包（含写入类工具）"
 else
-	echo " 当前为正式包（仅只读诊断；testing/diag2 需刷 debug zip）"
+	echo " 当前为正式包（含只读诊断与受控停充开关实测；testing/diag2 需刷 debug zip）"
 fi
 
 qsc_action_refresh() {
@@ -53,10 +53,17 @@ qsc_action_refresh() {
 	[ -f "$OFF_FLAG" ] && echo "  模块状态: 已关闭 (存在 off_qsc)" || echo "  模块状态: 开启"
 	if [ -f "$DEVICE_PROFILE" ]; then
 		echo "  device.profile: mca=$(qsc_profile_get mca) path=$(qsc_profile_get mca_path)"
+		pref="$(qsc_profile_get preferred_switch)"
+		if [ -n "$pref" ]; then
+			echo "  preferred_switch: $pref"
+		else
+			echo "  preferred_switch: 未实测（可在诊断菜单运行停充开关实测）"
+		fi
 	else
 		echo "  device.profile: 尚未生成"
 	fi
 	[ -f "$BINDIR/diagnose.sh" ] && echo "  diagnose.sh: OK" || echo "  diagnose.sh: 缺失"
+	[ -f "$BINDIR/test_switch.sh" ] && echo "  test_switch.sh: OK" || echo "  test_switch.sh: 缺失"
 	[ -f "$BINDIR/testing.sh" ] && echo "  testing.sh: 已安装（调试）" || echo "  testing.sh: 未打包（正式包正常）"
 	[ -f "$BINDIR/diag2.sh" ] && echo "  diag2.sh: 已安装（调试）" || echo "  diag2.sh: 未打包（正式包正常）"
 	echo "----------------------------------------"
@@ -71,7 +78,7 @@ qsc_action_run_script() {
 	echo "----------------------------------------"
 	if [ ! -f "$script" ]; then
 		echo "[错误] 缺少 $name"
-		echo " 正式包不含写入类工具；请安装同版本 debug zip："
+		echo " 正式包不含写入类调试工具；请安装同版本 debug zip："
 		echo "  QSC-Battery_v<version>-debug.zip"
 		return 1
 	fi
@@ -124,6 +131,15 @@ qsc_action_diag_menu() {
 			qsc_action_run_script diagnose.sh
 		else
 			echo " 已跳过 diagnose"
+		fi
+	fi
+
+	if [ -f "$BINDIR/test_switch.sh" ]; then
+		if qsc_action_ask "是否实测停充开关（需插电；测完自动恢复）？"; then
+			echo "注意: 将逐条写入候选停充节点并验证，结束后恢复充电"
+			qsc_action_run_script test_switch.sh
+		else
+			echo " 已跳过停充开关实测"
 		fi
 	fi
 

@@ -1,7 +1,7 @@
 #!/system/bin/sh
 
 ui_print "********************************"
-ui_print " QSC 定量停充 (QSC-Battery) "
+ui_print " 充电控制 (QSC-Battery) "
 ui_print " 原作者: top大佬 @酷安 "
 ui_print " 维护: 许小墨 @酷安"
 ui_print "********************************"
@@ -39,9 +39,11 @@ qsc_merge_config() {
 	local target="$2"
 	local merged="${target}.merge.$$"
 	local default_power_stop default_power_start default_power_stop_time
-	local default_charge_full default_power_reset default_temperature_switch
+	local default_charge_full default_power_reset default_compatibility_mode
+	local default_temperature_switch
 	local default_temperature_stop default_temperature_start
 	local power_stop power_start power_stop_time charge_full power_reset
+	local Compatibility_mode
 	local temperature_switch temperature_stop temperature_start value
 
 	default_power_stop="$(qsc_conf_value "$target" power_stop)" || return 1
@@ -49,6 +51,7 @@ qsc_merge_config() {
 	default_power_stop_time="$(qsc_conf_value "$target" power_stop_time)" || return 1
 	default_charge_full="$(qsc_conf_value "$target" charge_full)" || return 1
 	default_power_reset="$(qsc_conf_value "$target" power_reset)" || return 1
+	default_compatibility_mode="$(qsc_conf_value "$target" Compatibility_mode)" || default_compatibility_mode=0
 	default_temperature_switch="$(qsc_conf_value "$target" temperature_switch)" || return 1
 	default_temperature_stop="$(qsc_conf_value "$target" temperature_switch_stop)" || return 1
 	default_temperature_start="$(qsc_conf_value "$target" temperature_switch_start)" || return 1
@@ -58,6 +61,7 @@ qsc_merge_config() {
 	power_stop_time="$default_power_stop_time"
 	charge_full="$default_charge_full"
 	power_reset="$default_power_reset"
+	Compatibility_mode="$default_compatibility_mode"
 	temperature_switch="$default_temperature_switch"
 	temperature_stop="$default_temperature_stop"
 	temperature_start="$default_temperature_start"
@@ -67,6 +71,7 @@ qsc_merge_config() {
 	value="$(qsc_conf_value "$source" power_stop_time)" && [ "$value" -ge 1 -a "$value" -le 3600 ] && power_stop_time="$value"
 	value="$(qsc_conf_value "$source" charge_full)" && [ "$value" -le 1 ] && charge_full="$value"
 	value="$(qsc_conf_value "$source" power_reset)" && [ "$value" -le 1 ] && power_reset="$value"
+	value="$(qsc_conf_value "$source" Compatibility_mode)" && [ "$value" -le 1 ] && Compatibility_mode="$value"
 	value="$(qsc_conf_value "$source" temperature_switch)" && [ "$value" -le 1 ] && temperature_switch="$value"
 	value="$(qsc_conf_value "$source" temperature_switch_stop)" && [ "$value" -le 100 ] && temperature_stop="$value"
 	value="$(qsc_conf_value "$source" temperature_switch_start)" && [ "$value" -le 100 ] && temperature_start="$value"
@@ -89,6 +94,7 @@ qsc_merge_config() {
 		-e "s/^power_stop_time=.*/power_stop_time=$power_stop_time/" \
 		-e "s/^charge_full=.*/charge_full=$charge_full/" \
 		-e "s/^power_reset=.*/power_reset=$power_reset/" \
+		-e "s/^Compatibility_mode=.*/Compatibility_mode=$Compatibility_mode/" \
 		-e "s/^temperature_switch=.*/temperature_switch=$temperature_switch/" \
 		-e "s/^temperature_switch_stop=.*/temperature_switch_stop=$temperature_stop/" \
 		-e "s/^temperature_switch_start=.*/temperature_switch_start=$temperature_start/" \
@@ -100,7 +106,7 @@ qsc_merge_config() {
 }
 
 ui_print "--------------------------------"
-ui_print " 是否确认安装 QSC 定量停充？"
+ui_print " 是否确认安装 充电控制？"
 ui_print " 音量上：确认安装"
 ui_print " 音量下：取消安装"
 ui_print " 请在 20 秒内选择"
@@ -114,8 +120,10 @@ esac
 KEEP_CONFIG=0
 CURRENT_MODULE="/data/adb/modules/QSC_Battery"
 CURRENT_CONF="$CURRENT_MODULE/config/config.conf"
+CURRENT_JSONC="$CURRENT_MODULE/config/current.jsonc"
 CONFIG_BACKUP="${TMPDIR:-/data/local/tmp}/qsc-config-backup.$$"
-rm -f "$CONFIG_BACKUP"
+CURRENT_JSONC_BACKUP="${TMPDIR:-/data/local/tmp}/qsc-current-jsonc-backup.$$"
+rm -f "$CONFIG_BACKUP" "$CURRENT_JSONC_BACKUP"
 if [ -f "$CURRENT_CONF" ] && [ ! -L "$CURRENT_CONF" ]; then
 	CONFIG_SIZE="$(wc -c <"$CURRENT_CONF" 2>/dev/null | tr -d ' ')"
 	case "$CONFIG_SIZE" in ""|*[!0-9]*) CONFIG_SIZE=0 ;; esac
@@ -124,6 +132,9 @@ if [ -f "$CURRENT_CONF" ] && [ ! -L "$CURRENT_CONF" ]; then
 	else
 		ui_print "- 旧配置大小异常，将使用新版默认配置"
 	fi
+fi
+if [ -f "$CURRENT_JSONC" ] && [ ! -L "$CURRENT_JSONC" ]; then
+	cp -f "$CURRENT_JSONC" "$CURRENT_JSONC_BACKUP" 2>/dev/null || true
 fi
 if [ -f "$CONFIG_BACKUP" ]; then
 	ui_print "--------------------------------"
@@ -152,15 +163,42 @@ case "$?" in
 	*) ui_print "- 选择超时，默认安装 WebUI" ;;
 esac
 
-# 旧版模块 id（更名前）；检测到则自动卸载，不再做文件迁移
+INSTALL_CURRENT=1
+ui_print "--------------------------------"
+ui_print " 是否安装「电流控制」组件？"
+ui_print " （模拟旁路 / 慢充 / 限流 / 游戏限流）"
+ui_print " 配置文件：config/current.jsonc"
+ui_print " 音量上：安装（默认关闭，需手动开启）"
+ui_print " 音量下：不安装（不写入相关文件）"
+ui_print " 20 秒未选择时默认安装"
+qsc_volume_choice
+case "$?" in
+	0) ui_print "- 将安装电流控制组件" ;;
+	1) INSTALL_CURRENT=0; ui_print "- 将不安装电流控制组件" ;;
+	*) ui_print "- 选择超时，默认安装电流控制组件" ;;
+esac
+
+# 旧版模块 id；检测到则自动卸载，不再做文件迁移
+# 完整版 QuantitativeStopCharging（QSC定量停充）
+# 独立开关版 QuantitativeStopCharging_switch（QSC定量停充_独立开关版）
 # 原作无 uninstall.sh，也不做充电节点兜底：安装后需重启，内核会复位 sysfs
-OLD_MODULE_IDS="QuantitativeStopCharging_switch"
+OLD_MODULE_IDS="QuantitativeStopCharging QuantitativeStopCharging_switch"
 OLD_FOUND=0
+OLD_REMOVED_NAMES=""
+
+qsc_old_module_name() {
+	case "$1" in
+		QuantitativeStopCharging) echo "QSC定量停充" ;;
+		QuantitativeStopCharging_switch) echo "QSC定量停充_独立开关版" ;;
+		*) echo "$1" ;;
+	esac
+}
 
 qsc_uninstall_old_module() {
 	local old_id="$1"
-	local base path
+	local old_name base path
 
+	old_name="$(qsc_old_module_name "$old_id")"
 	for base in /data/adb/modules /data/adb/modules_update; do
 		path="$base/$old_id"
 		[ -d "$path" ] || continue
@@ -168,8 +206,12 @@ qsc_uninstall_old_module() {
 		[ "$path" = "$MODPATH" ] && continue
 
 		OLD_FOUND=1
+		case " $OLD_REMOVED_NAMES " in
+			*" $old_name "*) ;;
+			*) OLD_REMOVED_NAMES="$OLD_REMOVED_NAMES $old_name" ;;
+		esac
 		ui_print "--------------------------------"
-		ui_print " 检测到旧版模块: $old_id"
+		ui_print " 检测到旧版模块: $old_name"
 		ui_print " 位置: $path"
 		ui_print " 兼容策略: 自动卸载旧版（不迁移配置、不写充电节点）"
 		ui_print " 请安装后重启，并在 WebUI 重新设置阈值"
@@ -184,15 +226,16 @@ qsc_uninstall_old_module() {
 		rm -rf "$path"
 		if [ -d "$path" ]; then
 			touch "$path/remove" 2>/dev/null || true
-			ui_print " 旧版目录未能立即删除，已标记重启后移除"
+			ui_print " 未能立即删除，已标记重启后移除: $old_name"
 		else
-			ui_print " 已卸载旧版模块: $old_id"
+			ui_print " 已卸载旧版模块: $old_name"
 		fi
 	done
 }
 
 ui_print "--------------------------------"
 ui_print " 检查是否已安装旧版模块..."
+ui_print " （QSC定量停充 / QSC定量停充_独立开关版）"
 for old_id in $OLD_MODULE_IDS; do
 	qsc_uninstall_old_module "$old_id"
 done
@@ -202,8 +245,8 @@ if [ "$OLD_FOUND" = "0" ]; then
 else
 	ui_print "--------------------------------"
 	ui_print " 说明: 模块 id 已变更为 QSC_Battery"
-	ui_print " 旧版 QuantitativeStopCharging_switch"
-	ui_print " 已被自动卸载，配置不会自动带入"
+	ui_print " 已自动卸载旧版:$OLD_REMOVED_NAMES"
+	ui_print " 配置不会自动带入，请重启后重新设置"
 fi
 
 cp "$MODPATH/module.prop" "$MODPATH/t_module"
@@ -216,6 +259,18 @@ rm -f "$CONFIG_BACKUP"
 if [ "$INSTALL_WEBUI" != "1" ]; then
 	rm -rf "$MODPATH/webroot"
 fi
+
+if [ "$INSTALL_CURRENT" = "1" ]; then
+	if [ "$KEEP_CONFIG" = "1" ] && [ -f "$CURRENT_JSONC_BACKUP" ]; then
+		cp -f "$CURRENT_JSONC_BACKUP" "$MODPATH/config/current.jsonc" 2>/dev/null && ui_print "- 已保留电流控制配置 current.jsonc"
+	fi
+	ui_print "- 已安装电流控制：config/current.jsonc（默认关闭）"
+else
+	rm -f "$MODPATH/bin/lib/current.sh"
+	rm -f "$MODPATH/config/current.jsonc"
+	ui_print "- 未安装电流控制：已移除相关脚本与配置"
+fi
+rm -f "$CURRENT_JSONC_BACKUP"
 
 ui_print "--------------------------------"
 ui_print " 探测本机充电控制节点..."
@@ -236,6 +291,7 @@ else
 	ui_print " 本次未安装 WebUI，可直接编辑配置文件 "
 fi
 ui_print " 配置: config/config.conf "
+[ "$INSTALL_CURRENT" = "1" ] && ui_print " 电流控制: config/current.jsonc "
 ui_print " 日志: data/log.log "
 ui_print " Action: 上=刷新 / 下=诊断菜单 "
 ui_print "--------------------------------"

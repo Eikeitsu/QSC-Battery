@@ -3,7 +3,7 @@
 本仓库由 **许小墨** 维护：  
 [Eikeitsu/QSC-Battery](https://github.com/Eikeitsu/QSC-Battery)
 
-模块基于 **top大佬** 开源的 [QSC 定量停充](https://github.com/410154425/QuantitativeStopCharging_switch_magisk)。
+模块基于 **top大佬** 开源的 [QSC 定量停充](https://github.com/410154425/QuantitativeStopCharging_switch_magisk)。当前模块显示名为 **充电控制**（id：`QSC_Battery`）。
 
 | 角色       | 作者    | 链接                                                                                                                        |
 | ---------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |

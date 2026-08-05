@@ -27,6 +27,7 @@ const RESERVED = [
   "QscApi",
   "QscUi",
   "QscApp",
+  "QscApps",
   "QscTheme",
   "QscNav",
   "ksu",

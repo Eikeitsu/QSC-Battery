@@ -34,11 +34,20 @@ const BIN_RELEASE = [
   "list_switch.sh",
   "detect_device.sh",
   "diagnose.sh",
+  "test_switch.sh",
 ];
 /** 调试包额外：含副作用 / 写入测试 */
 const BIN_DEBUG_EXTRA = ["testing.sh", "diag2.sh"];
 /** 按功能拆分的库（正式/调试均需要） */
-const BIN_LIB_FILES = ["util.sh", "keys.sh", "profile.sh", "charge.sh"];
+const BIN_LIB_FILES = [
+  "util.sh",
+  "keys.sh",
+  "profile.sh",
+  "charge.sh",
+  "status.sh",
+  "jsonc.sh",
+  "current.sh",
+];
 
 const includeDebug = process.argv.includes("--debug");
 

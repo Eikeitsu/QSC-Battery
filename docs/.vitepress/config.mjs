@@ -5,8 +5,8 @@ const repoName =
   "QSC-Battery";
 
 export default defineConfig({
-  title: "QSC 定量停充",
-  description: "到达指定电量 / 温度自动停充与恢复的 Magisk 模块",
+  title: "充电控制",
+  description: "电量/温度停充与可选电流控制的 Magisk 模块（原 QSC 定量停充 WebUI 版）",
   base: `/${repoName}/`,
   lang: "zh-CN",
   head: [
@@ -21,7 +21,7 @@ export default defineConfig({
   ],
   themeConfig: {
     logo: "/icon.png",
-    siteTitle: "QSC 定量停充",
+    siteTitle: "充电控制",
     nav: [
       { text: "首页", link: "/" },
       { text: "功能介绍", link: "/guide/features" },
@@ -49,7 +49,7 @@ export default defineConfig({
       },
     ],
     footer: {
-      message: "基于 top大佬 原作 QSC 定量停充",
+      message: "基于 top大佬 原作 QSC 定量停充 · 模块显示名：充电控制",
       copyright: "WebUI 版由许小墨维护",
     },
   },

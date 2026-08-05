@@ -81,11 +81,39 @@ qsc_mca_write() {
 	return 0
 }
 
+# 有 preferred_switch 时优先写该节点；MCA 机型仍优先 MCA
+qsc_pref_write() {
+	local mode="$1"
+	local val
+	qsc_load_device_profile
+	[ -n "$QSC_PREF_PATH" ] && [ -f "$QSC_PREF_PATH" ] || return 1
+	if [ "$mode" = "stop" ]; then
+		val="$QSC_PREF_STOP"
+		[ -n "$val" ] || return 1
+		qsc_write_node "$QSC_PREF_PATH" "$val"
+		stop_nodes="$QSC_PREF_PATH=$val (preferred)"
+		log_log=1
+		stop_ok=1
+	else
+		val="$QSC_PREF_START"
+		[ -n "$val" ] || return 1
+		qsc_write_node "$QSC_PREF_PATH" "$val"
+		start_node="$QSC_PREF_PATH"
+		start_val="$val"
+		log_log2=1
+		start_ok=1
+	fi
+	return 0
+}
+
 qsc_power_stop() {
 	local i power_switch_route power_switch_stop
 	stop_ok=0
 	stop_nodes=""
 	if qsc_mca_write "$QSC_MCA_STOP" stop; then
+		return
+	fi
+	if qsc_pref_write stop; then
 		return
 	fi
 	for i in $switch_list; do
@@ -106,6 +134,9 @@ qsc_power_start() {
 	start_node=""
 	start_val=""
 	if qsc_mca_write "$QSC_MCA_START" start; then
+		return
+	fi
+	if qsc_pref_write start; then
 		return
 	fi
 	for i in $switch_list; do

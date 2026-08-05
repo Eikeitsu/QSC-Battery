@@ -1,0 +1,44 @@
+{
+  // 电流控制总开关：0 关闭，1 开启。默认关闭。
+  "current_control": 0,
+
+  // 模拟旁路：电量 >= 该值时进入旁路策略。填 110 关闭。
+  "battery_stop": 110,
+
+  // 旁路方式：sim=仅写电流（默认，最稳妥）；auto=若本机存在已知旁路节点则优先用节点，否则回退 sim。
+  // 不会改温控文件，也不会做内核补丁。
+  "bypass_mode": "sim",
+
+  // 旁路安全温度上限 (°C)：达到后不写 0 / 不开节点旁路，改为二限小电流。
+  "safety_temp_max": 48,
+
+  // 慢充：电量 >= 该值且未进模拟旁路时，使用二限小电流。填 110 关闭。
+  "slow_charge": 110,
+
+  // 默认充电电流上限（微安），例如 5000000 = 5A。
+  "default_current_max": 5000000,
+
+  // 电流温控：0 关，1 开。
+  "temperature_current": 0,
+
+  // 一限温度 (°C) / 一限电流（微安）
+  "default_current_limit": 40,
+  "default_current_max_limit": 1500000,
+
+  // 二限温度 (°C) / 二限电流（微安，慢充与旁路回补共用；建议 ≥50000）
+  "temperature_current_limit": 45,
+  "constant_current_max": 100000,
+
+  // 游戏限流：0 关，1 开；仅匹配前台窗口；电流单位微安；包名为字符串数组
+  "app_limit": 0,
+  "app_current_max": 200000,
+  "app_list": [
+    "com.tencent.tmgp.sgame",
+    "com.tencent.tmgp.pubgmhd",
+    "com.miHoYo.Yuanshen",
+    "com.tencent.lolm"
+  ],
+
+  // 自定义电流节点（可选）。空数组则自动探测常见节点。
+  "battery_current": []
+}

@@ -1,5 +1,7 @@
 const QscApp = {
   settings: {},
+  currentSettings: { ...QSC.CURRENT_DEFAULTS },
+  currentFeature: false,
   statusTimer: null,
   bridgeReady: false,
 
@@ -13,10 +15,20 @@ const QscApp = {
         this.save();
         QscUi.updateSubs();
       });
-    ["charge_full", "power_reset"].forEach((id) => {
+    ["charge_full", "power_reset", "Compatibility_mode"].forEach((id) => {
       document
         .getElementById(id)
         ?.addEventListener("change", () => this.save());
+    });
+    [
+      "current_control",
+      "temperature_current",
+      "app_limit",
+    ].forEach((id) => {
+      document.getElementById(id)?.addEventListener("change", () => {
+        this.saveCurrent();
+        QscUi.updateSubs();
+      });
     });
     [
       "power_stop",
@@ -28,6 +40,25 @@ const QscApp = {
       document.getElementById(id)?.addEventListener("change", () => {
         if (id.startsWith("power_")) this.onPowerChange();
         this.save();
+      });
+    });
+    [
+      "battery_stop",
+      "slow_charge",
+      "default_current_max",
+      "default_current_limit",
+      "default_current_max_limit",
+      "temperature_current_limit",
+      "constant_current_max",
+      "app_current_max",
+      "app_list",
+      "bypass_mode",
+      "safety_temp_max",
+    ].forEach((id) => {
+      document.getElementById(id)?.addEventListener("change", () => {
+        if (id === "app_list") QscApps.syncFromTextarea();
+        this.saveCurrent();
+        QscUi.updateSubs();
       });
     });
 
@@ -177,6 +208,9 @@ const QscApp = {
     );
     const chargeFull = document.getElementById("charge_full").checked ? 1 : 0;
     const powerReset = document.getElementById("power_reset").checked ? 1 : 0;
+    const compatMode = document.getElementById("Compatibility_mode")?.checked
+      ? 1
+      : 0;
     const tempSwitch = document.getElementById("temperature_switch").checked
       ? 1
       : 0;
@@ -217,6 +251,7 @@ const QscApp = {
       ],
       ["charge_full", chargeFull],
       ["power_reset", powerReset],
+      ["Compatibility_mode", compatMode],
       ["temperature_switch", tempSwitch],
       ["temperature_switch_stop", Number.isNaN(tempStop) ? 60 : tempStop],
       ["temperature_switch_start", Number.isNaN(tempStart) ? 50 : tempStart],
@@ -230,6 +265,71 @@ const QscApp = {
     QscUi.toast("配置已保存");
   },
 
+  collectCurrentFromForm() {
+    return {
+      current_control: document.getElementById("current_control")?.checked
+        ? 1
+        : 0,
+      battery_stop:
+        parseInt(document.getElementById("battery_stop")?.value, 10) || 110,
+      slow_charge:
+        parseInt(document.getElementById("slow_charge")?.value, 10) || 110,
+      default_current_max:
+        parseInt(document.getElementById("default_current_max")?.value, 10) ||
+        5000000,
+      temperature_current: document.getElementById("temperature_current")
+        ?.checked
+        ? 1
+        : 0,
+      default_current_limit:
+        parseInt(document.getElementById("default_current_limit")?.value, 10) ||
+        40,
+      default_current_max_limit:
+        parseInt(
+          document.getElementById("default_current_max_limit")?.value,
+          10,
+        ) || 1500000,
+      temperature_current_limit:
+        parseInt(
+          document.getElementById("temperature_current_limit")?.value,
+          10,
+        ) || 45,
+      constant_current_max:
+        parseInt(document.getElementById("constant_current_max")?.value, 10) ||
+        100000,
+      app_limit: document.getElementById("app_limit")?.checked ? 1 : 0,
+      app_current_max:
+        parseInt(document.getElementById("app_current_max")?.value, 10) ||
+        200000,
+      app_list: QscApi.normalizeAppList(
+        document.getElementById("app_list")?.value || "",
+      ),
+      bypass_mode:
+        document.getElementById("bypass_mode")?.value === "auto"
+          ? "auto"
+          : "sim",
+      safety_temp_max:
+        parseInt(document.getElementById("safety_temp_max")?.value, 10) || 48,
+      battery_current: this.currentSettings.battery_current || [],
+    };
+  },
+
+  async saveCurrent() {
+    if (!this.currentFeature) return;
+    const obj = this.collectCurrentFromForm();
+    this.currentSettings = obj;
+    await QscApi.saveCurrentJsonc(obj);
+    QscUi.updateSubs();
+    QscUi.toast("电流控制配置已保存");
+  },
+
+  setCurrentFeatureVisible(visible) {
+    document.documentElement.setAttribute(
+      "data-current-feature",
+      visible ? "1" : "0",
+    );
+  },
+
   async resetDefaults() {
     if (!window.confirm("确认恢复默认配置？")) return;
 
@@ -237,8 +337,14 @@ const QscApp = {
       await QscApi.setConf(key, value);
       this.settings[key] = value;
     }
-
     this.applySettingsToForm();
+
+    if (this.currentFeature) {
+      this.currentSettings = { ...QSC.CURRENT_DEFAULTS };
+      await QscApi.saveCurrentJsonc(this.currentSettings);
+      this.applyCurrentToForm();
+    }
+
     QscUi.toast("已恢复默认配置");
     await this.refreshStatus();
   },
@@ -253,6 +359,8 @@ const QscApp = {
       s.power_stop_time || QSC.DEFAULTS.power_stop_time;
     document.getElementById("charge_full").checked = s.charge_full === "1";
     document.getElementById("power_reset").checked = s.power_reset === "1";
+    const compatEl = document.getElementById("Compatibility_mode");
+    if (compatEl) compatEl.checked = s.Compatibility_mode === "1";
     document.getElementById("temperature_switch").checked =
       s.temperature_switch !== "0";
     document.getElementById("temperature_switch_stop").value =
@@ -283,6 +391,62 @@ const QscApp = {
       QSC.TEMP_START_PRESETS,
       s.temperature_switch_start || QSC.DEFAULTS.temperature_switch_start,
       (id) => this.selectTempStart(id),
+    );
+    QscUi.updateSubs();
+  },
+
+  applyCurrentToForm() {
+    if (!this.currentFeature) return;
+    const c = this.currentSettings || QSC.CURRENT_DEFAULTS;
+    const setVal = (id, key) => {
+      const el = document.getElementById(id);
+      if (el) el.value = c[key] ?? QSC.CURRENT_DEFAULTS[key];
+    };
+    const setChk = (id, key) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = Number(c[key]) === 1;
+    };
+    setChk("current_control", "current_control");
+    setVal("battery_stop", "battery_stop");
+    setVal("slow_charge", "slow_charge");
+    setVal("default_current_max", "default_current_max");
+    setChk("temperature_current", "temperature_current");
+    setVal("default_current_limit", "default_current_limit");
+    setVal("default_current_max_limit", "default_current_max_limit");
+    setVal("temperature_current_limit", "temperature_current_limit");
+    setVal("constant_current_max", "constant_current_max");
+    setChk("app_limit", "app_limit");
+    setVal("app_current_max", "app_current_max");
+    const appListEl = document.getElementById("app_list");
+    if (appListEl) {
+      appListEl.value = QscApi.normalizeAppList(
+        c.app_list ?? QSC.CURRENT_DEFAULTS.app_list,
+      ).join("\n");
+    }
+    const bypassMode = document.getElementById("bypass_mode");
+    if (bypassMode) {
+      bypassMode.value = c.bypass_mode === "auto" ? "auto" : "sim";
+    }
+    setVal("safety_temp_max", "safety_temp_max");
+    if (typeof QscApps !== "undefined") QscApps.syncFromTextarea();
+
+    QscUi.renderChips(
+      "bypassChips",
+      QSC.LEVEL_PRESETS,
+      String(c.battery_stop ?? QSC.CURRENT_DEFAULTS.battery_stop),
+      (id) => {
+        document.getElementById("battery_stop").value = id;
+        this.saveCurrent();
+      },
+    );
+    QscUi.renderChips(
+      "slowChips",
+      QSC.LEVEL_PRESETS,
+      String(c.slow_charge ?? QSC.CURRENT_DEFAULTS.slow_charge),
+      (id) => {
+        document.getElementById("slow_charge").value = id;
+        this.saveCurrent();
+      },
     );
     QscUi.updateSubs();
   },
@@ -357,21 +521,29 @@ const QscApp = {
     badge.className = "status-badge";
     const descRaw = descR.stdout.trim();
     const bracket = descRaw.match(/\[([^\]]+)\]/);
-    const shortDesc = bracket ? bracket[1].trim() : "";
+    const bracketBody = bracket ? bracket[1].trim() : "";
+    const [majorPart, ...innerParts] = bracketBody
+      ? bracketBody.split("|")
+      : [""];
+    const majorDesc = (majorPart || "").trim();
+    const innerDesc = innerParts.join("|").trim();
     const restDesc = descRaw.replace(/\[[^\]]*\]\s*/, "").trim();
     const descEl = document.getElementById("statusDesc");
-    if (descEl && restDesc) descEl.textContent = restDesc;
+    if (descEl) {
+      const bits = [innerDesc, restDesc].filter(Boolean);
+      if (bits.length) descEl.textContent = bits.join(" · ");
+    }
 
     if (moduleOff) {
-      badge.textContent = "模块已关闭";
+      badge.textContent = majorDesc || "模块已关闭";
       badge.classList.add("disabled");
     } else if (chargingStopped) {
-      badge.textContent = "已停充，等待恢复";
+      badge.textContent = majorDesc || "已停充，等待恢复";
       badge.classList.add("stopped");
     } else if (chargeStatus === "Charging" || chargeStatus === "Full") {
-      badge.textContent = shortDesc || "充电中";
+      badge.textContent = majorDesc || "充电中";
     } else {
-      badge.textContent = shortDesc || "未充电";
+      badge.textContent = majorDesc || "未充电";
     }
 
     const statusMap = {
@@ -492,6 +664,18 @@ const QscApp = {
     this.applySettingsToForm();
   },
 
+  async loadCurrentConfig() {
+    this.currentFeature = await QscApi.hasCurrentFeature();
+    this.setCurrentFeatureVisible(this.currentFeature);
+    if (!this.currentFeature) {
+      this.currentSettings = { ...QSC.CURRENT_DEFAULTS };
+      QscUi.updateSubs();
+      return;
+    }
+    this.currentSettings = await QscApi.loadCurrentJsonc();
+    this.applyCurrentToForm();
+  },
+
   async init() {
     try {
       const savedScale = localStorage.getItem(QSC.FONT_KEY);
@@ -501,10 +685,13 @@ const QscApp = {
     if (typeof QscTheme !== "undefined") QscTheme.init();
 
     this.bindEvents();
+    if (typeof QscApps !== "undefined") QscApps.bind();
 
     // 先渲染默认值，避免一直空白；后台再拉真实数据
     this.settings = { ...QSC.DEFAULTS };
+    this.currentSettings = { ...QSC.CURRENT_DEFAULTS };
     this.applySettingsToForm();
+    this.setCurrentFeatureVisible(false);
 
     if (!QscApi.hasBridge()) {
       document.getElementById("deviceName").textContent = "未检测到 WebUI 桥接";
@@ -520,6 +707,7 @@ const QscApp = {
     await Promise.allSettled([
       this.loadDeviceInfo(),
       this.loadConfig(),
+      this.loadCurrentConfig(),
       this.refreshStatus(),
       this.refreshLog(),
     ]);

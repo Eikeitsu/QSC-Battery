@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-layout="classic" class="monet-on">
+<html lang="zh-CN" data-layout="classic" class="monet-on" data-current-feature="0">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -8,7 +8,7 @@
     />
     <meta name="theme-color" content="#f2f4f7" />
     <meta name="color-scheme" content="light dark" />
-    <title>QSC 定量停充</title>
+    <title>充电控制</title>
     <script>
       (function () {
         try {
@@ -85,7 +85,7 @@
           decoding="async"
         />
         <div class="topbar-titles">
-          <h1>定量停充</h1>
+          <h1>充电控制</h1>
           <div class="subtitle" id="deviceName">加载中...</div>
         </div>
       </div>
@@ -107,7 +107,7 @@
       </div>
       <div class="status-badge" id="statusBadge">状态加载中...</div>
       <div class="status-desc" id="statusDesc">
-        到达指定电量、指定温度自动停止充电、自动恢复充电。
+        电量/温度停充；若安装时选择了电流控制，可在配置页调节。
       </div>
       <div class="status-actions">
         <button type="button" class="text-btn" id="refreshStatusBtn">
@@ -162,6 +162,10 @@
         <div class="kv-row">
           <span class="k">自动拔插</span
           ><span class="v" id="homeResetPlan">--</span>
+        </div>
+        <div class="kv-row" data-current-feature>
+          <span class="k">电流控制</span
+          ><span class="v" id="homeCurrentPlan">--</span>
         </div>
       </div>
     </section>
@@ -293,6 +297,19 @@
           </label>
         </div>
       </div>
+      <div class="pref">
+        <div class="pref-body">
+          <div class="pref-title">兼容模式</div>
+          <div class="pref-desc">与其它快充/限流模块同装时建议开启；开启后跳过本模块电流控制，仅保留电量/温度停充</div>
+        </div>
+        <div class="pref-right">
+          <label class="hyper-switch">
+            <input type="checkbox" id="Compatibility_mode" />
+            <span class="track"></span>
+            <span class="thumb"></span>
+          </label>
+        </div>
+      </div>
     </section>
 
     <div class="small-title" data-page="config">温控停充</div>
@@ -336,6 +353,134 @@
       </div>
     </section>
 
+    <div class="small-title" data-page="config" data-current-feature>电流控制</div>
+    <section class="card" data-page="config" data-current-feature>
+      <div class="pref" data-expand="current">
+        <div class="pref-body">
+          <div class="pref-title">电流控制总开关</div>
+          <div class="pref-desc" id="currentSub">已关闭（兼容快充）</div>
+        </div>
+        <div class="pref-right">
+          <label class="hyper-switch" onclick="event.stopPropagation()">
+            <input type="checkbox" id="current_control" />
+            <span class="track"></span>
+            <span class="thumb"></span>
+          </label>
+          <span class="expand-arrow" id="arrow-current">▾</span>
+        </div>
+      </div>
+      <div class="expand-body" id="expand-current">
+        <div class="expand-inner">
+          <div class="info-box">
+            📖 通过通用 sysfs 调节充电电流；不修改温控文件、不做内核补丁。<br />
+            默认关闭。旁路默认「模拟」（写电流）；「自动」仅在本机已有旁路节点时才尝试，失败则回退。<br />
+            电池过热时会自动改用小电流，避免强行压流。可能与其它快充/限流模块冲突，请自测。
+          </div>
+
+          <div class="field-label">模拟旁路电量（≥ 时进入旁路，110=关）</div>
+          <div class="chips" id="bypassChips"></div>
+          <input type="number" id="battery_stop" min="1" max="110" />
+
+          <div class="field-label">旁路方式</div>
+          <select id="bypass_mode" class="field-select">
+            <option value="sim">模拟（写电流，推荐）</option>
+            <option value="auto">自动（有节点才用，否则回退模拟）</option>
+          </select>
+          <div class="field-hint">自动模式不会改温控；无节点时与模拟相同</div>
+
+          <div class="field-label">旁路安全温度上限 (°C)</div>
+          <input type="number" id="safety_temp_max" min="40" max="55" />
+          <div class="field-hint">达到后不压到 0、不开节点旁路，改用二限小电流</div>
+
+          <div class="field-label">慢充电量（≥ 时用二限小电流，110=关）</div>
+          <div class="chips" id="slowChips"></div>
+          <input type="number" id="slow_charge" min="1" max="110" />
+
+          <div class="field-label">默认电流上限（微安）</div>
+          <input type="number" id="default_current_max" min="100000" step="100000" />
+          <div class="field-hint">例如 5000000 = 5A，不能突破系统温控墙</div>
+
+          <div class="pref" style="padding-left: 0; padding-right: 0">
+            <div class="pref-body">
+              <div class="pref-title">电流温控</div>
+              <div class="pref-desc">按温度一限 / 二限调节电流</div>
+            </div>
+            <div class="pref-right">
+              <label class="hyper-switch">
+                <input type="checkbox" id="temperature_current" />
+                <span class="track"></span>
+                <span class="thumb"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="field-label">一限温度 (°C) / 一限电流（微安）</div>
+          <div class="chip-row" style="display: flex; gap: 8px">
+            <input type="number" id="default_current_limit" min="1" max="80" style="flex: 1" />
+            <input type="number" id="default_current_max_limit" min="100000" step="100000" style="flex: 1" />
+          </div>
+
+          <div class="field-label">二限温度 (°C) / 二限电流（微安）</div>
+          <div class="chip-row" style="display: flex; gap: 8px">
+            <input type="number" id="temperature_current_limit" min="1" max="80" style="flex: 1" />
+            <input type="number" id="constant_current_max" min="50000" step="50000" style="flex: 1" />
+          </div>
+          <div class="field-hint">二限电流同时用于慢充与旁路回补；建议 ≥ 50000（50mA）</div>
+
+          <div class="pref" style="padding-left: 0; padding-right: 0">
+            <div class="pref-body">
+              <div class="pref-title">游戏限流</div>
+              <div class="pref-desc">前台命中列表时限制电流</div>
+            </div>
+            <div class="pref-right">
+              <label class="hyper-switch">
+                <input type="checkbox" id="app_limit" />
+                <span class="track"></span>
+                <span class="thumb"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="field-label">游戏电流（微安）</div>
+          <input type="number" id="app_current_max" min="50000" step="50000" />
+
+          <div class="field-label">
+            游戏列表
+            <span class="field-hint-inline">已选 <span id="appSelectedCount">0</span></span>
+          </div>
+          <div class="app-selected" id="appSelectedChips"></div>
+          <div class="app-picker">
+            <div class="app-picker-toolbar">
+              <input
+                type="search"
+                id="appSearch"
+                placeholder="搜索应用名或包名"
+                autocomplete="off"
+              />
+              <button type="button" class="text-btn" id="appLoadBtn">
+                加载应用列表
+              </button>
+            </div>
+            <div class="field-hint" id="appPickerStatus">
+              点击加载后勾选；也可下方手动编辑包名
+            </div>
+            <div class="app-picker-list" id="appPickerList"></div>
+            <div class="app-picker-empty" id="appPickerEmpty">
+              点击「加载应用列表」后勾选游戏
+            </div>
+          </div>
+
+          <div class="field-label">包名（一行一个，可选手动编辑）</div>
+          <textarea
+            id="app_list"
+            rows="4"
+            class="app-list-textarea"
+            placeholder="com.example.game"
+          ></textarea>
+        </div>
+      </div>
+    </section>
+
     <!-- 悬浮分页专用：指南页（经典单页不展示） -->
     <div class="small-title dock-only" data-page="more">使用指南</div>
     <section class="card dock-only" data-page="more">
@@ -348,7 +493,8 @@
         </div>
         <div class="info-box">
           <b>路径</b><br />
-          配置：<code>config/config.conf</code><br />
+          停充配置：<code>config/config.conf</code><br />
+          电流控制配置：<code>config/current.jsonc</code>（安装时可选）<br />
           日志：<code>data/log.log</code><br />
           模块：<code>/data/adb/modules/QSC_Battery</code>
         </div>
@@ -534,13 +680,13 @@
         decoding="async"
       />
       <div class="about-brand-text">
-        <div class="about-brand-title">定量停充</div>
+        <div class="about-brand-title">充电控制</div>
         <div class="about-brand-sub">QSC-Battery</div>
       </div>
     </div>
     <div class="about-note" data-page="more">
       本模块基于 <b>top大佬</b> 的 QSC 定量停充，补充了 WebUI
-      与目录结构整理，感谢原作者开源贡献。
+      与可选电流控制组件，感谢原作者开源贡献。
     </div>
     <section class="card" data-page="more">
       <div class="pref" data-url="https://www.coolapk.com/u/7602666">
@@ -649,6 +795,7 @@
 
     <script src="js/config.js"></script>
     <script src="js/api.js"></script>
+    <script src="js/apps.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/nav.js"></script>
     <script src="js/theme.js"></script>

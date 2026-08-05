@@ -661,6 +661,132 @@ input:focus {
   color: var(--text);
 }
 
+.field-select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  background: var(--muted);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  margin-bottom: 4px;
+}
+
+.field-hint-inline {
+  margin-left: 8px;
+  font-weight: 400;
+  color: var(--text-2);
+  font-size: 0.85em;
+}
+
+.app-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px;
+  min-height: 8px;
+}
+
+.app-chip {
+  border: 1px solid var(--line);
+  background: var(--muted);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: calc(0.72rem * var(--font-scale));
+  cursor: pointer;
+}
+
+.app-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.app-picker {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--muted);
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.app-picker-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.app-picker-toolbar input[type="search"] {
+  flex: 1;
+  margin: 0;
+}
+
+.app-picker-list {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-picker-empty {
+  padding: 12px 4px;
+  color: var(--text-2);
+  font-size: calc(0.72rem * var(--font-scale));
+}
+
+.app-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.app-row:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.app-row input {
+  margin-top: 3px;
+  width: auto;
+  accent-color: var(--accent);
+}
+
+.app-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-row-name {
+  color: var(--text);
+  font-size: calc(0.82rem * var(--font-scale));
+  word-break: break-word;
+}
+
+.app-row-pkg {
+  color: var(--text-2);
+  font-size: calc(0.68rem * var(--font-scale));
+  word-break: break-all;
+}
+
+.app-list-textarea {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  padding: 10px;
+  background: var(--muted);
+  color: var(--text);
+  font: inherit;
+  box-sizing: border-box;
+}
+
 .log-box {
   background: var(--muted);
   border: 1px solid var(--line);
@@ -901,6 +1027,11 @@ html[data-layout="dock"][data-page="more"] [data-page~="more"] {
 /* 悬浮分页强制 block 会打断关于页品牌行的左右 flex，需单独还原 */
 html[data-layout="dock"][data-page="more"] .about-brand[data-page~="more"] {
   display: flex !important;
+}
+
+/* 未安装电流控制时强制隐藏（覆盖 dock 的 data-page display） */
+html[data-current-feature="0"] [data-current-feature] {
+  display: none !important;
 }
 
 .dock-nav {

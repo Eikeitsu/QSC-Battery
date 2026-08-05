@@ -140,10 +140,66 @@ for node in \
   fi
 done
 
+# 8. 模块运行态摘要（首选开关 / 兼容模式 / 电流节点）
+MODDIR_FALLBACK="/data/adb/modules/QSC_Battery"
+if [ -f "${0%/*}/common.sh" ]; then
+  . "${0%/*}/common.sh"
+elif [ -f "$MODDIR_FALLBACK/bin/common.sh" ]; then
+  . "$MODDIR_FALLBACK/bin/common.sh"
+fi
+
+echo "" >> "$OUT"
+echo "[8] 模块运行态摘要:" >> "$OUT"
+if [ -n "$DEVICE_PROFILE" ] && [ -f "$DEVICE_PROFILE" ]; then
+  echo "  device.profile:" >> "$OUT"
+  echo "    mca=$(qsc_profile_get mca 2>/dev/null)" >> "$OUT"
+  echo "    mca_path=$(qsc_profile_get mca_path 2>/dev/null)" >> "$OUT"
+  echo "    preferred_switch=$(qsc_profile_get preferred_switch 2>/dev/null)" >> "$OUT"
+  echo "    preferred_start=$(qsc_profile_get preferred_start 2>/dev/null)" >> "$OUT"
+  echo "    preferred_stop=$(qsc_profile_get preferred_stop 2>/dev/null)" >> "$OUT"
+  echo "    preferred_tested_at=$(qsc_profile_get preferred_tested_at 2>/dev/null)" >> "$OUT"
+  echo "    reassert=$(qsc_profile_get reassert 2>/dev/null)" >> "$OUT"
+else
+  echo "  device.profile: 不存在" >> "$OUT"
+fi
+if [ -n "$DATADIR" ] && [ -f "$DATADIR/switch_test_result" ]; then
+  echo "  最近开关实测: $(cat "$DATADIR/switch_test_result" 2>/dev/null)" >> "$OUT"
+else
+  echo "  最近开关实测: 无（可在 Action 诊断菜单运行 test_switch）" >> "$OUT"
+fi
+if [ -n "$CONF" ] && [ -f "$CONF" ]; then
+  echo "  Compatibility_mode=$(grep '^Compatibility_mode=' "$CONF" 2>/dev/null | sed 's/.*=//' | tr -d '\r')" >> "$OUT"
+fi
+echo "  电流控制组件: $([ -f "$BINDIR/lib/current.sh" ] && echo 已安装 || echo 未安装)" >> "$OUT"
+echo "  电流节点可写性:" >> "$OUT"
+for node in \
+  "/sys/class/power_supply/battery/constant_charge_current_max" \
+  "/sys/class/power_supply/battery/current_max" \
+  "/sys/class/power_supply/battery/input_current_max" \
+  "/sys/class/power_supply/battery/charge_current" \
+  "/sys/class/qcom-battery/constant_charge_current_max" \
+; do
+  if [ -f "$node" ]; then
+    if [ -w "$node" ] || chmod 0644 "$node" 2>/dev/null; then
+      # 只读探测：chmod 后仍可能写不进；不实际写入
+      perm=$(stat -c '%a' "$node" 2>/dev/null)
+      echo "    $node [$perm] 存在" >> "$OUT"
+    else
+      echo "    $node 存在但权限受限" >> "$OUT"
+    fi
+  fi
+done
+if [ -n "$LIST_SWITCH" ] && [ -s "$LIST_SWITCH" ]; then
+  echo "  list_switch 行数: $(wc -l <"$LIST_SWITCH" | tr -d ' ')" >> "$OUT"
+else
+  echo "  list_switch: 空或不存在（无可用扫描结果时请跑 Action 开关实测 / list_switch）" >> "$OUT"
+fi
+
 echo "" >> "$OUT"
 echo "========================================" >> "$OUT"
 echo "报告完成。请将此文件内容发给开发者。" >> "$OUT"
 echo "文件位置: $OUT" >> "$OUT"
+echo "若停充不稳，请插电后于模块 Action 运行「停充开关实测」。" >> "$OUT"
 echo "========================================" >> "$OUT"
 
 echo "诊断完成！报告保存到: $OUT"

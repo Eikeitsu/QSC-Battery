@@ -20,6 +20,7 @@ qsc_init_paths() {
 	DATADIR="$MODDIR/data"
 	ASSETDIR="$MODDIR/assets"
 	CONF="$CONFDIR/config.conf"
+	CURRENT_CONF="$CONFDIR/current.jsonc"
 	LIST_SWITCH="$DATADIR/list_switch"
 	LOG_FILE="$DATADIR/log.log"
 	OFF_FLAG="$DATADIR/off_qsc"
@@ -43,3 +44,7 @@ fi
 . "$LIBDIR/keys.sh"
 . "$LIBDIR/profile.sh"
 . "$LIBDIR/charge.sh"
+. "$LIBDIR/status.sh"
+. "$LIBDIR/jsonc.sh"
+# 电流控制为可选组件，安装时未选择则无此文件
+[ -f "$LIBDIR/current.sh" ] && . "$LIBDIR/current.sh"

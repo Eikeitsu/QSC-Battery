@@ -67,11 +67,15 @@ if [ ! -n "$battery_level" ]; then
 	done
 fi
 qsc_debug_step 6
+if [ -n "$battery_level" ]; then
+	rm -f "$DATADIR/no_battery_logged"
+fi
 if [ ! -n "$battery_level" ]; then
 	if [ ! -f "$DATADIR/no_battery_logged" ]; then
 		echo "$(date +%F_%T) 无法获取电池电量！dumpsys 超时且 sysfs 也读取失败" >> "$LOG_FILE"
 		touch "$DATADIR/no_battery_logged"
 	fi
+	qsc_refresh_module_description
 	exit 0
 fi
 
@@ -85,11 +89,15 @@ if [ ! -n "$temperature" ]; then
 	done
 fi
 qsc_debug_step 7
+if [ -n "$temperature" ]; then
+	rm -f "$DATADIR/no_temp_logged"
+fi
 if [ ! -n "$temperature" ]; then
 	if [ ! -f "$DATADIR/no_temp_logged" ]; then
 		echo "$(date +%F_%T) 无法获取电池温度！dumpsys 超时且 sysfs 也读取失败" >> "$LOG_FILE"
 		touch "$DATADIR/no_temp_logged"
 	fi
+	qsc_refresh_module_description
 	exit 0
 fi
 
@@ -99,9 +107,8 @@ if [ -f "$OFF_FLAG" -o -f "$MODDIR/disable" ]; then
 	power_start="105"
 	temperature_switch="0"
 	if [ ! -f "$DATADIR/off_d" ]; then
-		sed -i 's/\[.*\]/\[ 模块已关闭 \]/g' "$MODDIR/module.prop"
 		touch "$DATADIR/off_d"
-		rm -f "$DATADIR/now_c" "$DATADIR/power_on" "$DATADIR/power_off"
+		rm -f "$DATADIR/now_c" "$DATADIR/power_on" "$DATADIR/power_off" "$DATADIR/current_mode_tag"
 	fi
 else
 	rm -f "$DATADIR/off_d"
@@ -122,9 +129,11 @@ if [ ! -f "$LIST_SWITCH" ]; then
 		chmod 0755 "$BINDIR/list_switch.sh"
 		"$BINDIR/list_switch.sh" > /dev/null 2>&1
 		echo "$(date +%F_%T) 缺少列表文件，正在创建，请稍等" > "$LOG_FILE"
+		qsc_write_module_description "🔎启动中" "生成开关列表" "$DESC_INTRO"
 		exit 0
 	fi
 	echo "$(date +%F_%T) list_switch.sh文件不存在，请重新安装模块重启" > "$LOG_FILE"
+	qsc_write_module_description "⚠️异常" "缺少开关列表" "请重新安装模块并重启"
 	exit 0
 fi
 
@@ -210,7 +219,7 @@ if [ -n "$battery_powered" ]; then
 			fi
 		elif [ "$first_stop" = "1" ]; then
 			if [ ! -f "$DATADIR/no_node_logged" ]; then
-				echo "$(date +%F_%T) 电量$battery_level 未找到有效充电控制节点！请在模块 Action 运行 diagnose 或执行 bin/diagnose.sh" >> "$LOG_FILE"
+				echo "$(date +%F_%T) 电量$battery_level 未找到有效充电控制节点！请插电后在模块 Action 运行停充开关实测，或执行 bin/diagnose.sh" >> "$LOG_FILE"
 				touch "$DATADIR/no_node_logged"
 			fi
 		fi
@@ -221,7 +230,6 @@ if [ -n "$battery_powered" ]; then
 		reset_log=1
 	fi
 	if [ ! -f "$DATADIR/power_on" -a "$off_qsc" != "1" ]; then
-		sed -i 's/\[.*\]/\[ 充电中 \]/g' "$MODDIR/module.prop"
 		rm -f "$DATADIR/power_off"
 		touch "$DATADIR/power_on"
 		if [ "$power_reset" = "1" -a "$reset_log" = "1" ]; then
@@ -231,7 +239,6 @@ if [ -n "$battery_powered" ]; then
 	fi
 else
 	if [ ! -f "$DATADIR/power_off" -a "$off_qsc" != "1" ]; then
-		sed -i 's/\[.*\]/\[ 未充电 \]/g' "$MODDIR/module.prop"
 		rm -f "$DATADIR/now_c" "$DATADIR/power_on"
 		touch "$DATADIR/power_off"
 	fi
@@ -271,6 +278,27 @@ if [ -f "$DATADIR/power_switch" ]; then
 	fi
 fi
 
+# 供电开关未停充时，若已安装电流控制组件则应用策略（兼容模式跳过，避免与其它限流模块抢写）
+Compatibility_mode="$(echo "$config_conf" | egrep '^Compatibility_mode=' | sed -n 's/Compatibility_mode=//g;$p')"
+[ -n "$Compatibility_mode" ] || Compatibility_mode=0
+if [ -n "$battery_powered" ] && [ ! -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
+	if [ "$Compatibility_mode" = "1" ]; then
+		rm -f "$DATADIR/current_mode_tag"
+		if type qsc_bypass_hw_off >/dev/null 2>&1; then
+			qsc_bypass_hw_off
+		fi
+	elif type qsc_apply_current_control >/dev/null 2>&1; then
+		qsc_apply_current_control
+	fi
+elif [ ! -n "$battery_powered" ]; then
+	rm -f "$DATADIR/current_mode_tag"
+	if type qsc_bypass_hw_off >/dev/null 2>&1; then
+		qsc_bypass_hw_off
+	fi
+fi
+
+qsc_refresh_module_description
+
 qsc_debug_step 9
-#version=20260723
+#version=20260805
 # ##
