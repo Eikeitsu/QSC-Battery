@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { showConfirmDialog, showToast } from "vant";
 import ChipGroup from "../ui/ChipGroup.vue";
+import ThemeSwitch from "../ui/ThemeSwitch.vue";
 import { DOCS_URL, ORIGIN_URL, PATHS, REPO_URL, WX_PAY_URL } from "../shared";
 import { openUrl, openWxPay } from "../bridge";
 import { useAppStore, useTheme } from "../stores";
 
 const store = useAppStore();
 const theme = useTheme();
+const tipOpen = ref(false);
+const base = import.meta.env.BASE_URL;
 
 const themePresets = [
   { id: "light", l: "浅色" },
@@ -31,13 +34,15 @@ const md3Presets = [
 ];
 
 const brandMark = computed(() =>
-  theme.resolved === "dark" ? "/img/icon-mark.png" : "/img/icon-mark-light.png",
+  theme.resolved === "dark"
+    ? `${base}img/icon-mark.png`
+    : `${base}img/icon-mark-light.png`,
 );
 
 const packLabel = computed(() => {
-  if (theme.themePack === "md3") return "Material You 风格";
-  if (theme.themePack === "miuix") return "MIUI / HyperOS 风格";
-  return "充电控制默认";
+  if (theme.themePack === "md3") return "Material You：开关 / 底栏 / 芯片形态";
+  if (theme.themePack === "miuix") return "HyperOS：粗开关、悬浮底栏与玻璃";
+  return "充电控制默认控件";
 });
 
 function onSeedInput(e: Event) {
@@ -71,7 +76,7 @@ async function tipAuthor() {
   <div class="page">
     <div class="section-head">
       <p class="title">显示</p>
-      <p class="hint">主题包、颜色与阅读舒适度</p>
+      <p class="hint">主题包会切换控件形态与布局，不只是换色</p>
     </div>
     <section class="card">
       <van-cell title="主题包" :label="packLabel" />
@@ -130,54 +135,44 @@ async function tipAuthor() {
       </template>
 
       <template v-if="theme.themePack === 'miuix'">
-        <van-cell center title="莫奈取色" label="跟随系统 Material You / 壁纸色">
+        <van-cell center title="莫奈取色" label="跟随系统壁纸色">
           <template #right-icon>
-            <van-switch
+            <ThemeSwitch
               :model-value="theme.monetOn"
-              size="22px"
               @update:model-value="(v) => theme.setMonet(v)"
             />
           </template>
         </van-cell>
-        <van-cell center title="悬浮底栏" label="底栏悬浮于内容之上">
+        <van-cell center title="悬浮底栏" label="底栏浮于内容之上">
           <template #right-icon>
-            <van-switch
+            <ThemeSwitch
               :model-value="theme.floatDock"
-              size="22px"
               @update:model-value="(v) => theme.setFloatDock(v)"
             />
           </template>
         </van-cell>
-        <van-cell
-          v-if="theme.floatDock"
-          center
-          title="液态玻璃"
-          label="悬浮底栏毛玻璃高亮"
-        >
+        <van-cell v-if="theme.floatDock" center title="液态玻璃" label="底栏毛玻璃高亮">
           <template #right-icon>
-            <van-switch
+            <ThemeSwitch
               :model-value="theme.dockGlass"
-              size="22px"
               @update:model-value="(v) => theme.setDockGlass(v)"
             />
           </template>
         </van-cell>
-        <van-cell center title="顶栏 / 底栏模糊" label="滚动时更像原生磨砂栏">
+        <van-cell center title="栏位模糊" label="顶栏与底栏磨砂">
           <template #right-icon>
-            <van-switch
+            <ThemeSwitch
               :model-value="theme.barBlur"
-              size="22px"
               @update:model-value="(v) => theme.setBarBlur(v)"
             />
           </template>
         </van-cell>
       </template>
 
-      <van-cell center title="紧凑显示" label="卡片与列表间距更紧凑">
+      <van-cell center title="紧凑显示" label="卡片间距更紧">
         <template #right-icon>
-          <van-switch
+          <ThemeSwitch
             :model-value="theme.compactOn"
-            size="22px"
             @update:model-value="(v) => theme.setCompact(v)"
           />
         </template>
@@ -185,12 +180,12 @@ async function tipAuthor() {
       <van-cell title="字体大小" :value="`${Math.round(theme.fontScale * 100)}%`" />
       <div class="pad slider">
         <van-slider
-          :model-value="theme.fontScale"
+          :model-value="Number(theme.fontScale)"
           :min="0.85"
           :max="1.3"
           :step="0.05"
           @update:model-value="(v) => theme.setFontScale(v)"
-          @change="() => theme.setFontScale(theme.fontScale, true)"
+          @change="(v) => theme.setFontScale(v, true)"
         />
       </div>
     </section>
@@ -227,13 +222,18 @@ async function tipAuthor() {
     <div class="section-head">
       <p class="title">关于</p>
     </div>
-    <section class="card about">
-      <img class="logo mark" :src="brandMark" alt="" width="120" height="40" />
-      <img class="logo" src="/img/icon.png" alt="" width="56" height="56" />
-      <div class="name">充电控制</div>
-      <div class="ver">{{ store.status.version }}</div>
-      <p class="about-note">基于 top大佬 QSC 定量停充，由许小墨维护 WebUI 与扩展能力。</p>
+    <section class="card about-brand">
+      <img class="about-mark" :src="brandMark" alt="" width="72" height="72" />
+      <div class="about-text">
+        <div class="name">充电控制</div>
+        <div class="sub">QSC-Battery</div>
+        <div class="ver">{{ store.status.version }}</div>
+      </div>
     </section>
+    <p class="about-note">
+      本模块基于 <b>top大佬</b> 的 QSC 定量停充，补充了 WebUI
+      与可选电流控制，感谢原作者开源贡献。
+    </p>
     <section class="card">
       <van-cell
         title="本仓库"
@@ -259,13 +259,16 @@ async function tipAuthor() {
         is-link
         @click="tipAuthor"
       />
-      <van-collapse>
-        <van-collapse-item title="打赏" label="许小墨" name="tip">
-          <div class="tip-box">
-            <img class="tip-qr" src="/assets/tip.png" alt="打赏码" />
-          </div>
-        </van-collapse-item>
-      </van-collapse>
+      <van-cell
+        title="打赏"
+        label="许小墨"
+        is-link
+        :arrow-direction="tipOpen ? 'up' : 'down'"
+        @click="tipOpen = !tipOpen"
+      />
+      <div v-show="tipOpen" class="tip-box">
+        <img class="tip-qr" :src="`${base}assets/tip.png`" alt="打赏码" />
+      </div>
     </section>
 
     <div class="section-head">
@@ -339,56 +342,75 @@ async function tipAuthor() {
   color: var(--qsc-text);
 }
 
-.about {
-  padding: 22px 16px;
-  text-align: center;
+.about-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
   margin-bottom: 10px;
 }
 
-.about .mark {
-  display: block;
-  margin: 0 auto 12px;
-  height: 40px;
-  width: auto;
+.about-mark {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
   object-fit: contain;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
-.about .logo:not(.mark) {
-  border-radius: 14px;
+.about-text {
+  min-width: 0;
+  text-align: left;
+}
+
+.name {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--qsc-text-3);
+}
+
+.ver {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--qsc-text-3);
 }
 
 .about-note {
-  margin: 10px 0 0;
+  margin: 0 6px 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--qsc-primary) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--qsc-primary) 18%, transparent);
   font-size: 12px;
-  color: var(--qsc-text-3);
-  line-height: 1.45;
+  color: var(--qsc-text-2);
+  line-height: 1.55;
+}
+
+.about-note b {
+  color: var(--qsc-text);
+  font-weight: 650;
 }
 
 .tip-box {
   display: flex;
   justify-content: center;
-  padding: 8px 0 4px;
+  padding: 4px 16px 16px;
 }
 
 .tip-qr {
   width: min(220px, 70vw);
   height: auto;
   border-radius: 12px;
-}
-
-.logo {
-  border-radius: 14px;
-}
-
-.name {
-  margin-top: 10px;
-  font-size: 18px;
-  font-weight: 750;
-}
-
-.ver {
-  margin-top: 4px;
-  font-size: 13px;
-  color: var(--qsc-text-3);
+  background: var(--qsc-surface);
+  box-shadow: 0 6px 18px rgba(15, 18, 22, 0.12);
+  padding: 8px;
 }
 </style>

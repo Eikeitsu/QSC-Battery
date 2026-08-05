@@ -1,4 +1,7 @@
 {
   "title": "充电控制",
-  "autoStatusBarsStyle": false
+  "autoStatusBarsStyle": false,
+  "windowResize": true,
+  "backHandler": true,
+  "pullToRefresh": false
 }

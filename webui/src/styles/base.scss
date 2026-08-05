@@ -27,8 +27,10 @@ body {
     "PingFang SC",
     "Noto Sans SC",
     sans-serif;
-  font-size: calc(16px * var(--font-scale));
+  font-size: 16px;
 }
+
+/* 字体大小由 theme 对 #app 设置 zoom，写死 px 也会一起缩放 */
 
 body {
   overscroll-behavior-y: none;
@@ -67,7 +69,7 @@ body {
 
 .card {
   background: var(--qsc-surface);
-  border-radius: $radius-card;
+  border-radius: var(--qsc-card-radius, #{$radius-card});
   overflow: hidden;
   border: 1px solid var(--qsc-hairline);
   box-shadow: 0 1px 0 rgba(15, 18, 22, 0.03);
@@ -118,8 +120,22 @@ html.compact-on {
   color: var(--qsc-text);
 }
 
+/* Toast：固定反色对，避免用 --qsc-text 做底却不锁字色导致浅色深字看不清 */
+:root {
+  --van-toast-background: rgba(50, 50, 51, 0.88);
+  --van-toast-text-color: #fff;
+  --van-toast-loading-icon-color: #fff;
+}
+
+html[data-theme="dark"] {
+  --van-toast-background: rgba(245, 245, 245, 0.92);
+  --van-toast-text-color: #1a1a1a;
+  --van-toast-loading-icon-color: #1a1a1a;
+}
+
 .van-toast {
-  background: color-mix(in srgb, var(--qsc-text) 88%, transparent) !important;
+  background: var(--van-toast-background) !important;
+  color: var(--van-toast-text-color) !important;
 }
 
 .van-empty__description {
@@ -129,10 +145,35 @@ html.compact-on {
 .van-cell {
   background: transparent;
   color: var(--qsc-text);
+  align-items: center;
+}
+
+/* 避免标题/说明被右侧开关挤得过窄而频繁换行 */
+.van-cell__title {
+  flex: 1 1 auto;
+  min-width: 9em;
+  max-width: none;
+}
+
+.van-cell__value,
+.van-cell__right-icon {
+  flex-shrink: 0;
 }
 
 .van-cell__label {
   color: var(--qsc-text-3);
+  margin-top: 2px;
+  line-height: 1.4;
+  word-break: keep-all;
+}
+
+.van-field__label {
+  width: 9.5em;
+  margin-right: 10px;
+  flex: none;
+  color: var(--qsc-text-2);
+  white-space: normal;
+  line-height: 1.35;
 }
 
 .van-field__control {

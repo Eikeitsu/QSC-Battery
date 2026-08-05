@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import ChipGroup from "../ui/ChipGroup.vue";
+import ThemeSwitch from "../ui/ThemeSwitch.vue";
 import AppPicker from "../features/app-picker/AppPicker.vue";
 import {
   LEVEL_PRESETS,
@@ -97,11 +98,27 @@ async function saveSchedule() {
           :model-value="store.settings.power_stop"
           @update:model-value="(id) => setPower('power_stop', id)"
         />
+        <van-field
+          v-model="store.settings.power_stop"
+          type="digit"
+          label="自定义停止电量"
+          placeholder="1–100，110=关闭"
+          input-align="right"
+          @change="store.saveSettings()"
+        />
         <div class="block-label">恢复电量</div>
         <ChipGroup
           :options="POWER_START_PRESETS"
           :model-value="store.settings.power_start"
           @update:model-value="(id) => setPower('power_start', id)"
+        />
+        <van-field
+          v-model="store.settings.power_start"
+          type="digit"
+          label="自定义恢复电量"
+          placeholder="须小于停止电量"
+          input-align="right"
+          @change="store.saveSettings()"
         />
         <van-field
           v-model="store.settings.power_stop_time"
@@ -113,27 +130,24 @@ async function saveSchedule() {
       </div>
       <van-cell center title="充满再停" label="100% 时等涓流结束再停充">
         <template #right-icon>
-          <van-switch
+          <ThemeSwitch
             :model-value="store.settings.charge_full === '1'"
-            size="22px"
             @update:model-value="(v) => onSwitch('charge_full', v)"
           />
         </template>
       </van-cell>
       <van-cell center title="自动拔插" label="插电时模拟拔插以激活快充">
         <template #right-icon>
-          <van-switch
+          <ThemeSwitch
             :model-value="store.settings.power_reset === '1'"
-            size="22px"
             @update:model-value="(v) => onSwitch('power_reset', v)"
           />
         </template>
       </van-cell>
       <van-cell center title="兼容模式" label="与其它快充 / 限流模块同装时建议开启">
         <template #right-icon>
-          <van-switch
+          <ThemeSwitch
             :model-value="store.settings.Compatibility_mode === '1'"
-            size="22px"
             @update:model-value="(v) => onSwitch('Compatibility_mode', v)"
           />
         </template>
@@ -147,9 +161,8 @@ async function saveSchedule() {
     <section class="card">
       <van-cell center title="温控开关" :label="store.tempPlan">
         <template #right-icon>
-          <van-switch
+          <ThemeSwitch
             :model-value="store.settings.temperature_switch !== '0'"
-            size="22px"
             @update:model-value="(v) => onSwitch('temperature_switch', v)"
           />
         </template>
@@ -161,11 +174,25 @@ async function saveSchedule() {
           :model-value="store.settings.temperature_switch_stop"
           @update:model-value="(id) => setTemp('temperature_switch_stop', id)"
         />
+        <van-field
+          v-model="store.settings.temperature_switch_stop"
+          type="digit"
+          label="自定义停止温度 °C"
+          input-align="right"
+          @change="store.saveSettings()"
+        />
         <div class="block-label">恢复温度</div>
         <ChipGroup
           :options="TEMP_START_PRESETS"
           :model-value="store.settings.temperature_switch_start"
           @update:model-value="(id) => setTemp('temperature_switch_start', id)"
+        />
+        <van-field
+          v-model="store.settings.temperature_switch_start"
+          type="digit"
+          label="自定义恢复温度 °C"
+          input-align="right"
+          @change="store.saveSettings()"
         />
       </div>
     </section>
@@ -178,9 +205,8 @@ async function saveSchedule() {
       <section class="card">
         <van-cell center title="电流控制总开关" :label="store.currentPlan">
           <template #right-icon>
-            <van-switch
+            <ThemeSwitch
               :model-value="!!Number(store.current.current_control)"
-              size="22px"
               @update:model-value="(v) => onCurrentSwitch('current_control', v)"
             />
           </template>
@@ -247,9 +273,17 @@ async function saveSchedule() {
                 @update:model-value="(id) => setCurrentLevel('slow_charge', id)"
               />
               <van-field
+                v-model.number="store.current.slow_charge"
+                type="digit"
+                label="自定义慢充电量"
+                placeholder="110=关闭"
+                input-align="right"
+                @change="store.saveCurrent()"
+              />
+              <van-field
                 v-model.number="store.current.safety_temp_max"
                 type="digit"
-                label="旁路安全温度"
+                label="旁路安全温度 °C"
                 placeholder="过热改二限小电流"
                 input-align="right"
                 @change="store.saveCurrent()"
@@ -263,9 +297,8 @@ async function saveSchedule() {
               />
               <van-cell center title="电流温控">
                 <template #right-icon>
-                  <van-switch
+                  <ThemeSwitch
                     :model-value="!!Number(store.current.temperature_current)"
-                    size="22px"
                     @update:model-value="(v) => onCurrentSwitch('temperature_current', v)"
                   />
                 </template>
@@ -300,9 +333,8 @@ async function saveSchedule() {
               />
               <van-cell center title="游戏限流" label="仅匹配前台窗口">
                 <template #right-icon>
-                  <van-switch
+                  <ThemeSwitch
                     :model-value="!!Number(store.current.app_limit)"
-                    size="22px"
                     @update:model-value="(v) => onCurrentSwitch('app_limit', v)"
                   />
                 </template>

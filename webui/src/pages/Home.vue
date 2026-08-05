@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { inject } from "vue";
+import ThemeSwitch from "../ui/ThemeSwitch.vue";
 import { useAppStore } from "../stores";
 import type { TabName } from "../shared/types";
 
@@ -57,9 +58,8 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
       <section class="card switch-card">
         <van-cell center title="模块总开关" label="关闭后不再自动停充 / 恢复">
           <template #right-icon>
-            <van-switch
+            <ThemeSwitch
               :model-value="store.status.moduleOn"
-              size="22px"
               @update:model-value="store.toggleModule"
             />
           </template>
@@ -182,6 +182,19 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
   margin-top: 6px;
   font-size: 12px;
   color: var(--qsc-text-3);
+}
+
+:global(html.pack-md3) .hero {
+  border: none;
+}
+
+:global(html.pack-miuix) .hero {
+  padding: 16px 16px 14px;
+}
+
+:global(html.pack-miuix) .metric .value {
+  font-size: 36px;
+  font-weight: 700;
 }
 
 .divider {

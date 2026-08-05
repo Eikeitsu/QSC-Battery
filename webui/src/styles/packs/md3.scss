@@ -1,0 +1,164 @@
+/* Material You / MD3 — 对照 LSPosed / SukiSU Material：tonal 表面 + 指示条底栏 */
+
+html.pack-md3 {
+  --qsc-card-radius: 24px;
+  --qsc-cell-pad-x: 18px;
+  --qsc-cell-pad-y: 14px;
+  --qsc-chip-radius: 10px;
+  --qsc-dock-h: 64px;
+
+  .card {
+    border-radius: var(--qsc-card-radius);
+    border: none;
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.04),
+      0 4px 16px rgba(0, 0, 0, 0.05);
+  }
+
+  &[data-theme="dark"] .card {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.28),
+      0 6px 20px rgba(0, 0, 0, 0.32);
+  }
+
+  .section-head .title {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+
+  .section-head .hint {
+    font-size: 12px;
+  }
+
+  .van-cell {
+    padding: var(--qsc-cell-pad-y) var(--qsc-cell-pad-x);
+  }
+
+  .van-cell::after {
+    border-color: var(--qsc-hairline);
+    left: var(--qsc-cell-pad-x);
+    right: var(--qsc-cell-pad-x);
+  }
+
+  .van-cell__label {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  /* MD3 Switch：细轨道 + 未选描边感 */
+  .van-switch,
+  .theme-switch.ts-md3 .van-switch {
+    width: 52px !important;
+    height: 32px !important;
+    border-radius: 16px;
+    background: transparent !important;
+    border: 2px solid color-mix(in srgb, var(--qsc-text-2) 55%, transparent);
+    box-sizing: border-box;
+  }
+
+  .van-switch__node,
+  .theme-switch.ts-md3 .van-switch__node {
+    width: 24px;
+    height: 24px;
+    top: 2px;
+    left: 2px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .van-switch--on,
+  .theme-switch.ts-md3 .van-switch--on {
+    background: var(--qsc-primary) !important;
+    border-color: var(--qsc-primary);
+  }
+
+  .van-switch--on .van-switch__node,
+  .theme-switch.ts-md3 .van-switch--on .van-switch__node {
+    transform: translateX(20px);
+    background: var(--qsc-on-primary, #fff);
+  }
+
+  .chip-row .chip,
+  .chip {
+    border-radius: var(--qsc-chip-radius);
+    padding: 8px 14px;
+    font-weight: 500;
+    background: var(--qsc-chip-bg);
+    color: var(--qsc-text-2);
+  }
+
+  .chip.active {
+    background: var(--qsc-primary-container, var(--qsc-primary-soft));
+    color: var(--qsc-primary);
+    font-weight: 650;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--qsc-primary) 28%, transparent);
+  }
+
+  .van-slider__bar {
+    background: var(--qsc-primary);
+  }
+
+  .van-slider__button {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--qsc-primary);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  }
+
+  .van-field__control {
+    background: var(--qsc-surface-2);
+    border-radius: 12px;
+    padding: 8px 12px;
+  }
+
+  .van-field__body {
+    background: transparent;
+  }
+
+  /* 贴底 MD3 NavigationBar：surface-container + 图标指示 pill */
+  .app-dock.van-tabbar.dock-md3 {
+    background: var(--qsc-surface-2) !important;
+    border-top: none;
+    box-shadow: 0 -1px 0 var(--qsc-hairline);
+  }
+
+  .app-dock.dock-md3 .van-tabbar-item {
+    position: relative;
+  }
+
+  .app-dock.dock-md3 .van-tabbar-item__icon {
+    position: relative;
+    z-index: 1;
+    width: 56px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .app-dock.dock-md3 .van-tabbar-item--active .van-tabbar-item__icon::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--qsc-primary) 22%, transparent);
+    z-index: -1;
+  }
+
+  .app-dock.dock-md3 .van-tabbar-item--active {
+    color: var(--qsc-primary) !important;
+  }
+
+  .app-topbar {
+    background: var(--qsc-bg);
+  }
+
+  .hero.card {
+    background: linear-gradient(
+      165deg,
+      var(--qsc-primary-container, var(--qsc-primary-soft)) 0%,
+      var(--qsc-surface) 55%
+    );
+  }
+}

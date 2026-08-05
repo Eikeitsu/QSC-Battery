@@ -10,6 +10,8 @@ import type { TabName } from "./shared/types";
 const store = useAppStore();
 const theme = useTheme();
 
+const base = import.meta.env.BASE_URL;
+
 const savedTab = localStorage.getItem("qsc_dock_page");
 const tab = ref<TabName>(
   savedTab === "home" ||
@@ -79,7 +81,7 @@ onMounted(async () => {
 <template>
   <div class="app-shell" :data-theme="theme.resolved" :data-pack="theme.themePack">
     <header class="app-topbar">
-      <img class="logo" src="/img/icon.png" width="36" height="36" alt="" />
+      <img class="logo" :src="`${base}img/icon.png`" width="36" height="36" alt="" />
       <div class="titles">
         <h1>充电控制</h1>
         <p>{{ store.deviceName }}</p>
@@ -102,6 +104,11 @@ onMounted(async () => {
 
     <van-tabbar
       class="app-dock"
+      :class="{
+        'dock-md3': theme.themePack === 'md3',
+        'dock-miuix': theme.themePack === 'miuix',
+        'dock-default': theme.themePack === 'default',
+      }"
       :model-value="tab"
       :safe-area-inset-bottom="false"
       active-color="var(--qsc-primary)"

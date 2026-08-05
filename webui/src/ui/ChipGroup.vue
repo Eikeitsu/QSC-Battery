@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ChipOption } from "../shared";
+import { useTheme } from "../stores";
 
 withDefaults(
   defineProps<{
@@ -15,10 +16,12 @@ withDefaults(
 defineEmits<{
   "update:modelValue": [id: string | number];
 }>();
+
+const theme = useTheme();
 </script>
 
 <template>
-  <div class="chip-row">
+  <div class="chip-row" :data-pack="theme.themePack">
     <button
       v-for="opt in options"
       :key="opt.id"
@@ -42,7 +45,7 @@ defineEmits<{
 
 .chip {
   border: none;
-  border-radius: 999px;
+  border-radius: var(--qsc-chip-radius, 999px);
   padding: 7px 14px;
   font-size: 13px;
   background: var(--qsc-chip-bg);
@@ -50,7 +53,8 @@ defineEmits<{
   transition:
     transform 0.15s ease,
     background 0.15s ease,
-    color 0.15s ease;
+    color 0.15s ease,
+    box-shadow 0.15s ease;
 
   &:active {
     transform: scale(0.96);
@@ -61,5 +65,21 @@ defineEmits<{
     color: var(--qsc-on-primary, #fff);
     font-weight: 600;
   }
+}
+
+.chip-row[data-pack="md3"] .chip.active {
+  background: var(--qsc-primary-container, var(--qsc-primary-soft));
+  color: var(--qsc-primary);
+  font-weight: 650;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--qsc-primary) 28%, transparent);
+}
+
+.chip-row[data-pack="miuix"] .chip {
+  border-radius: 12px;
+}
+
+.chip-row[data-pack="miuix"] .chip.active {
+  background: var(--qsc-primary);
+  color: var(--qsc-on-primary, #fff);
 }
 </style>

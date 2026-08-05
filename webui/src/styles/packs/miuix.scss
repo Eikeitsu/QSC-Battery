@@ -1,0 +1,141 @@
+/* MIUIX / HyperOS — 对照 SukiSU Miuix：粗开关、分组白卡片、可选悬浮玻璃底栏 */
+
+html.pack-miuix {
+  --qsc-card-radius: 20px;
+  --qsc-cell-pad-x: 16px;
+  --qsc-cell-pad-y: 13px;
+  --qsc-chip-radius: 12px;
+  --qsc-dock-h: 58px;
+
+  .card {
+    border-radius: var(--qsc-card-radius);
+    border: none;
+    box-shadow: none;
+  }
+
+  .section-head .title {
+    font-size: 13px;
+    font-weight: 620;
+    color: var(--qsc-text-2);
+  }
+
+  .section-head .hint {
+    font-size: 12px;
+    color: var(--qsc-text-3);
+  }
+
+  .van-cell {
+    padding: var(--qsc-cell-pad-y) var(--qsc-cell-pad-x);
+  }
+
+  .van-cell::after {
+    border-color: var(--qsc-hairline);
+    left: var(--qsc-cell-pad-x);
+    right: var(--qsc-cell-pad-x);
+  }
+
+  .van-cell__title {
+    font-size: 16px;
+    font-weight: 500;
+  }
+
+  .van-cell__label {
+    font-size: 12px;
+    margin-top: 3px;
+  }
+
+  /* HyperOS 粗胶囊开关 */
+  .van-switch,
+  .theme-switch.ts-miuix .van-switch {
+    width: 50px !important;
+    height: 30px !important;
+    border-radius: 15px;
+    background: color-mix(in srgb, var(--qsc-text) 12%, transparent) !important;
+    border: none;
+  }
+
+  .van-switch__node,
+  .theme-switch.ts-miuix .van-switch__node {
+    width: 26px;
+    height: 26px;
+    top: 2px;
+    left: 2px;
+    background: #fff;
+    box-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.18),
+      0 0 1px rgba(0, 0, 0, 0.08);
+  }
+
+  .van-switch--on,
+  .theme-switch.ts-miuix .van-switch--on {
+    background: var(--qsc-primary) !important;
+  }
+
+  .van-switch--on .van-switch__node,
+  .theme-switch.ts-miuix .van-switch--on .van-switch__node {
+    transform: translateX(20px);
+    background: #fff;
+  }
+
+  &[data-theme="dark"] {
+    .van-switch:not(.van-switch--on),
+    .theme-switch.ts-miuix .van-switch:not(.van-switch--on) {
+      background: rgba(255, 255, 255, 0.16) !important;
+    }
+  }
+
+  .chip-row .chip,
+  .chip {
+    border-radius: var(--qsc-chip-radius);
+    padding: 7px 14px;
+    font-weight: 500;
+    background: var(--qsc-chip-bg);
+    color: var(--qsc-text-2);
+  }
+
+  .chip.active {
+    background: var(--qsc-primary);
+    color: var(--qsc-on-primary, #fff);
+    font-weight: 600;
+    box-shadow: none;
+  }
+
+  .van-slider__button {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid var(--qsc-primary);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+
+  .van-field__control {
+    background: transparent;
+    border-radius: 0;
+    padding: 0;
+  }
+
+  /* 悬浮底栏选中：柔和色块，非 MD3 pill */
+  .app-dock.dock-miuix .van-tabbar-item--active {
+    color: var(--qsc-primary) !important;
+  }
+
+  .app-dock.dock-miuix .van-tabbar-item--active .van-tabbar-item__icon {
+    transform: none;
+  }
+
+  .app-topbar .titles h1 {
+    font-weight: 700;
+    font-size: 18px;
+  }
+
+  .hero.card {
+    background: var(--qsc-surface);
+    padding-top: 18px;
+    padding-bottom: 16px;
+  }
+
+  .hero .hero-glow {
+    opacity: 0.55;
+  }
+}

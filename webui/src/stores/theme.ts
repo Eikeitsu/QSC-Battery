@@ -162,7 +162,13 @@ export function useTheme() {
     root.classList.toggle("bar-blur", barBlur.value);
     root.classList.toggle("compact-on", compactOn.value);
     root.style.setProperty("--font-scale", String(fontScale.value));
-    root.style.fontSize = `${16 * fontScale.value}px`;
+    // 页面大量写死 px；用 zoom 统一缩放，避免只改 html font-size 无效
+    const appEl = document.getElementById("app");
+    if (appEl) {
+      (appEl.style as CSSStyleDeclaration & { zoom?: string }).zoom = String(
+        fontScale.value,
+      );
+    }
     applyAccentVars();
     // 同步 van 主色
     root.style.setProperty("--van-primary-color", "var(--qsc-primary)");
@@ -208,6 +214,37 @@ export function useTheme() {
       localStorage.setItem(PACK_KEY, next);
     } catch {
       /* ignore */
+    }
+    // 切包时套用壳层默认（仍可被 More 里开关覆盖并持久化）
+    if (next === "md3") {
+      floatDock.value = false;
+      dockGlass.value = false;
+      try {
+        localStorage.setItem(FLOAT_KEY, "0");
+        localStorage.setItem(GLASS_KEY, "0");
+      } catch {
+        /* ignore */
+      }
+    } else if (next === "miuix") {
+      floatDock.value = true;
+      dockGlass.value = true;
+      barBlur.value = true;
+      try {
+        localStorage.setItem(FLOAT_KEY, "1");
+        localStorage.setItem(GLASS_KEY, "1");
+        localStorage.setItem(BAR_BLUR_KEY, "1");
+      } catch {
+        /* ignore */
+      }
+    } else {
+      floatDock.value = false;
+      dockGlass.value = false;
+      try {
+        localStorage.setItem(FLOAT_KEY, "0");
+        localStorage.setItem(GLASS_KEY, "0");
+      } catch {
+        /* ignore */
+      }
     }
     applyThemeDom();
     if (toast) {
