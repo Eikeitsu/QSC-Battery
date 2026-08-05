@@ -1,7 +1,7 @@
 #!/system/bin/sh
 # 模块简介动态文案
-# 格式：[大状态|子状态] 括号外说明
-# emoji 后无空格；方括号内 | 两侧不加空格
+# 格式：[大状态 | 子状态] 括号外说明
+# emoji 后无空格；方括号内 | 两侧加空格；子状态分隔统一用 ●（两侧加空格）
 
 DESC_INTRO="电量/温度停充；电流控制为安装时可选。配置：config/config.conf，日志：data/log.log。"
 
@@ -13,7 +13,7 @@ qsc_format_module_description() {
 	local head
 
 	if [ -n "$inner" ]; then
-		head="[${major}|${inner}]"
+		head="[${major} | ${inner}]"
 	else
 		head="[${major}]"
 	fi
@@ -105,9 +105,9 @@ qsc_refresh_module_description() {
 		[ -z "$stop_bits" ] && stop_bits="停充中"
 
 		if [ -n "$level" ] && [ -n "$temp" ]; then
-			inner="${stop_bits} · ${level}% · ${temp}°C"
+			inner="${stop_bits} ● ${level}% ● ${temp}°C"
 		elif [ -n "$level" ]; then
-			inner="${stop_bits} · ${level}%"
+			inner="${stop_bits} ● ${level}%"
 		else
 			inner="$stop_bits"
 		fi
@@ -130,7 +130,7 @@ qsc_refresh_module_description() {
 	# 充满再停等待中
 	if [ "${full_log:-0}" = "1" ]; then
 		inner="电量100%"
-		[ -n "$temp" ] && inner="${inner} · ${temp}°C"
+		[ -n "$temp" ] && inner="${inner} ● ${temp}°C"
 		qsc_write_module_description "🔋充满再停" "$inner" \
 			"等待涓流结束（电流持续偏低）后再停充"
 		return 0
@@ -139,7 +139,7 @@ qsc_refresh_module_description() {
 	# 未插电
 	if [ -z "${battery_powered:-}" ]; then
 		if [ -n "$level" ] && [ -n "$temp" ]; then
-			inner="${level}% · ${temp}°C"
+			inner="${level}% ● ${temp}°C"
 		elif [ -n "$level" ]; then
 			inner="${level}%"
 		else
@@ -156,7 +156,7 @@ qsc_refresh_module_description() {
 	cur_mode="${cur_tag%%:*}"
 
 	if [ -n "$level" ] && [ -n "$temp" ]; then
-		inner="${level}% · ${temp}°C"
+		inner="${level}% ● ${temp}°C"
 	elif [ -n "$level" ]; then
 		inner="${level}%"
 	else
