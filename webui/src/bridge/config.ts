@@ -43,6 +43,16 @@ export function normalizeAppList(value: unknown): string[] {
     .filter(Boolean);
 }
 
+export function normalizeScheduleList(value: unknown): string[] {
+  const raw = Array.isArray(value)
+    ? value.map((s) => String(s).trim())
+    : String(value || "")
+        .split(/\n+/)
+        .map((s) => s.trim());
+  const re = /^([01]?\d|2[0-3]):([0-5]\d)-([01]?\d|2[0-3]):([0-5]\d)$/;
+  return raw.filter((s) => re.test(s));
+}
+
 export async function loadCurrentJsonc(): Promise<CurrentConfig> {
   const result = await exec(`cat '${PATHS.CURRENT_CONF}' 2>/dev/null`);
   if (!result.stdout.trim()) return { ...CURRENT_DEFAULTS };
@@ -55,10 +65,12 @@ export async function loadCurrentJsonc(): Promise<CurrentConfig> {
     merged.app_list = Array.isArray(merged.app_list)
       ? normalizeAppList(merged.app_list)
       : [...CURRENT_DEFAULTS.app_list];
+    merged.bypass_schedule = normalizeScheduleList(merged.bypass_schedule);
     merged.battery_current = Array.isArray(merged.battery_current)
       ? merged.battery_current
       : [];
     merged.bypass_mode = merged.bypass_mode === "auto" ? "auto" : "sim";
+    merged.bypass_temp = Number(merged.bypass_temp) || 110;
     return merged;
   } catch {
     return { ...CURRENT_DEFAULTS };
@@ -69,6 +81,8 @@ export async function saveCurrentJsonc(obj: CurrentConfig): Promise<boolean> {
   const payload: CurrentConfig = {
     current_control: Number(obj.current_control) ? 1 : 0,
     battery_stop: Number(obj.battery_stop) || 110,
+    bypass_temp: Number(obj.bypass_temp) || 110,
+    bypass_schedule: normalizeScheduleList(obj.bypass_schedule),
     slow_charge: Number(obj.slow_charge) || 110,
     default_current_max: Number(obj.default_current_max) || 5000000,
     temperature_current: Number(obj.temperature_current) ? 1 : 0,

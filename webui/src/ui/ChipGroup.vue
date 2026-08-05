@@ -58,7 +58,7 @@ defineEmits<{
 
   &.active {
     background: var(--qsc-primary);
-    color: #fff;
+    color: var(--qsc-on-primary, #fff);
     font-weight: 600;
   }
 }

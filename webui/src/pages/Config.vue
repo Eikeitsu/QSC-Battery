@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import ChipGroup from "../ui/ChipGroup.vue";
 import AppPicker from "../features/app-picker/AppPicker.vue";
 import {
@@ -16,6 +16,27 @@ import { useAppStore } from "../stores";
 const store = useAppStore();
 const showApps = ref(false);
 const currentOpen = ref(["1"]);
+
+const appListValue = computed(() => {
+  const n = store.current.app_list?.length || 0;
+  return n ? `${n} 个` : "未选";
+});
+
+const appListLabel = computed(() => {
+  const n = store.current.app_list?.length || 0;
+  if (!n) return "点此选择需要限流的前台应用";
+  return "已选应用会在列表顶部优先显示";
+});
+
+const bypassScheduleText = computed({
+  get: () => (store.current.bypass_schedule || []).join("\n"),
+  set: (v: string) => {
+    store.current.bypass_schedule = String(v || "")
+      .split(/\n+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  },
+});
 
 async function setPower(key: ConfigKey, id: string | number) {
   store.settings[key] = String(id);
@@ -41,7 +62,7 @@ async function onCurrentSwitch(
 }
 
 async function setCurrentLevel(
-  key: keyof Pick<CurrentConfig, "battery_stop" | "slow_charge">,
+  key: keyof Pick<CurrentConfig, "battery_stop" | "slow_charge" | "bypass_temp">,
   id: string | number,
 ) {
   store.current[key] = Number(id);
@@ -54,6 +75,10 @@ async function onBypass(mode: string | number) {
 }
 
 async function onAppsSaved() {
+  await store.saveCurrent();
+}
+
+async function saveSchedule() {
   await store.saveCurrent();
 }
 </script>
@@ -172,12 +197,49 @@ async function onAppsSaved() {
                 :model-value="store.current.bypass_mode"
                 @update:model-value="onBypass"
               />
-              <div class="block-label">模拟旁路电量</div>
+              <div class="block-label">旁路电量（≥ 触发，110=关）</div>
               <ChipGroup
                 :options="LEVEL_PRESETS"
                 :model-value="String(store.current.battery_stop)"
                 @update:model-value="(id) => setCurrentLevel('battery_stop', id)"
               />
+              <van-field
+                v-model.number="store.current.battery_stop"
+                type="digit"
+                label="自定义旁路电量"
+                input-align="right"
+                @change="store.saveCurrent()"
+              />
+              <div class="block-label">旁路温度（≥ 触发，110=关）</div>
+              <ChipGroup
+                :options="[
+                  { id: '110', l: '关闭' },
+                  { id: '38', l: '38°' },
+                  { id: '40', l: '40°' },
+                  { id: '42', l: '42°' },
+                  { id: '45', l: '45°' },
+                ]"
+                :model-value="String(store.current.bypass_temp)"
+                @update:model-value="(id) => setCurrentLevel('bypass_temp', id)"
+              />
+              <van-field
+                v-model.number="store.current.bypass_temp"
+                type="digit"
+                label="自定义旁路温度 °C"
+                input-align="right"
+                @change="store.saveCurrent()"
+              />
+              <van-field
+                v-model="bypassScheduleText"
+                rows="2"
+                autosize
+                type="textarea"
+                label="旁路时段"
+                placeholder="每行一段，如 22:00-08:00"
+                input-align="right"
+                @change="saveSchedule"
+              />
+              <p class="field-hint">电量 / 温度 / 时段任一满足即开旁路；支持跨天</p>
               <div class="block-label">慢充电量</div>
               <ChipGroup
                 :options="LEVEL_PRESETS"
@@ -188,6 +250,7 @@ async function onAppsSaved() {
                 v-model.number="store.current.safety_temp_max"
                 type="digit"
                 label="旁路安全温度"
+                placeholder="过热改二限小电流"
                 input-align="right"
                 @change="store.saveCurrent()"
               />
@@ -254,7 +317,8 @@ async function onAppsSaved() {
               <van-cell
                 title="游戏应用"
                 is-link
-                :value="`${store.current.app_list?.length || 0} 个`"
+                :label="appListLabel"
+                :value="appListValue"
                 @click="showApps = true"
               />
             </div>
@@ -284,5 +348,12 @@ async function onAppsSaved() {
   font-size: 13px;
   color: var(--qsc-text-2);
   margin: 6px 0 2px;
+}
+
+.field-hint {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  color: var(--qsc-text-3);
+  line-height: 1.4;
 }
 </style>

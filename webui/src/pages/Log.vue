@@ -58,7 +58,7 @@ async function onClear() {
 
 <style scoped lang="scss">
 .page {
-  min-height: calc(100vh - 120px);
+  min-height: calc(100dvh - 56px - var(--qsc-inset-top, 0px) - var(--dock-pad, 72px));
 }
 
 .meta {

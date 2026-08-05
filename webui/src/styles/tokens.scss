@@ -1,3 +1,7 @@
+/* WebUI-X：安全区 + 系统莫奈色板（MIUIX 莫奈依赖） */
+@import "https://mui.kernelsu.org/internal/insets.css";
+@import "https://mui.kernelsu.org/internal/colors.css";
+
 $radius-card: 18px;
 $radius-card-compact: 14px;
 $ease-page: 0.22s ease;
@@ -5,6 +9,8 @@ $space-page: 16px;
 
 :root {
   --font-scale: 1;
+  --qsc-inset-top: var(--window-inset-top, env(safe-area-inset-top, 0px));
+  --qsc-inset-bottom: var(--window-inset-bottom, env(safe-area-inset-bottom, 0px));
   --qsc-bg: #eef1f5;
   --qsc-surface: #fff;
   --qsc-surface-2: #f7f9fc;
@@ -13,12 +19,16 @@ $space-page: 16px;
   --qsc-text-3: #8a97a6;
   --qsc-primary: #0d9488;
   --qsc-primary-soft: color-mix(in srgb, #0d9488 14%, transparent);
+  --qsc-on-primary: #fff;
+  --qsc-primary-container: color-mix(in srgb, #0d9488 12%, #fff);
   --qsc-warn: #d97706;
   --qsc-danger: #dc2626;
   --qsc-success: #059669;
   --qsc-hairline: rgba(21, 32, 43, 0.08);
   --qsc-chip-bg: rgba(91, 107, 124, 0.1);
-  --qsc-hero-glow: color-mix(in srgb, #0d9488 12%, transparent);
+  --qsc-hero-glow: color-mix(in srgb, var(--qsc-primary) 12%, transparent);
+  --qsc-press: color-mix(in srgb, var(--qsc-text) 6%, transparent);
+  --qsc-dock-h: 56px;
   --van-primary-color: var(--qsc-primary);
   --van-background: var(--qsc-bg);
   --van-background-2: var(--qsc-surface);
@@ -27,7 +37,7 @@ $space-page: 16px;
   --van-text-color-2: var(--qsc-text-2);
   --van-border-color: var(--qsc-hairline);
   --van-nav-bar-background: var(--qsc-surface);
-  --van-tabbar-background: color-mix(in srgb, var(--qsc-surface) 92%, transparent);
+  --van-tabbar-background: var(--qsc-surface);
   --van-success-color: var(--qsc-success);
   --van-warning-color: var(--qsc-warn);
   --van-danger-color: var(--qsc-danger);
@@ -42,24 +52,130 @@ html[data-theme="dark"] {
   --qsc-text-3: #7a8794;
   --qsc-primary: #2dd4bf;
   --qsc-primary-soft: color-mix(in srgb, #2dd4bf 18%, transparent);
+  --qsc-on-primary: #0a1214;
+  --qsc-primary-container: color-mix(in srgb, #2dd4bf 16%, #181c22);
   --qsc-warn: #fbbf24;
   --qsc-danger: #f87171;
   --qsc-success: #34d399;
   --qsc-hairline: rgba(255, 255, 255, 0.08);
   --qsc-chip-bg: rgba(255, 255, 255, 0.08);
-  --qsc-hero-glow: color-mix(in srgb, #2dd4bf 16%, transparent);
+  --qsc-hero-glow: color-mix(in srgb, var(--qsc-primary) 16%, transparent);
+  --qsc-press: color-mix(in srgb, #fff 8%, transparent);
 }
 
-html.monet-on {
-  --qsc-primary: var(--md-sys-color-primary, var(--primary, #0d9488));
+/* MD3 包：更圆、更分层的表面 */
+html.pack-md3[data-theme="light"] {
+  --qsc-bg: #f7f2fa;
+  --qsc-surface: #fffbfe;
+  --qsc-surface-2: #f3edf7;
+  --qsc-hairline: rgba(103, 80, 164, 0.12);
+  --qsc-chip-bg: color-mix(in srgb, var(--qsc-primary) 12%, transparent);
+}
+
+html.pack-md3[data-theme="dark"] {
+  --qsc-bg: #141218;
+  --qsc-surface: #1d1b20;
+  --qsc-surface-2: #2b2930;
+  --qsc-hairline: rgba(208, 188, 255, 0.14);
+  --qsc-chip-bg: color-mix(in srgb, var(--qsc-primary) 16%, transparent);
+}
+
+/* MIUIX 包：偏 HyperOS 中性面 + 大圆角 */
+html.pack-miuix[data-theme="light"] {
+  --qsc-bg: #f5f6f7;
+  --qsc-surface: #fff;
+  --qsc-surface-2: #f0f1f2;
+  --qsc-text: #000;
+  --qsc-text-2: rgba(0, 0, 0, 0.6);
+  --qsc-text-3: rgba(0, 0, 0, 0.4);
+  --qsc-primary: #3482ff;
+  --qsc-primary-soft: rgba(52, 130, 255, 0.12);
+  --qsc-on-primary: #fff;
+  --qsc-hairline: rgba(0, 0, 0, 0.06);
+  --qsc-chip-bg: rgba(0, 0, 0, 0.05);
+}
+
+html.pack-miuix[data-theme="dark"] {
+  --qsc-bg: #000;
+  --qsc-surface: #1c1c1e;
+  --qsc-surface-2: #2c2c2e;
+  --qsc-text: #fff;
+  --qsc-text-2: rgba(255, 255, 255, 0.65);
+  --qsc-text-3: rgba(255, 255, 255, 0.4);
+  --qsc-primary: #5b9bff;
+  --qsc-primary-soft: rgba(91, 155, 255, 0.2);
+  --qsc-on-primary: #000;
+  --qsc-hairline: rgba(255, 255, 255, 0.08);
+  --qsc-chip-bg: rgba(255, 255, 255, 0.08);
+}
+
+/* MIUIX + 莫奈：WebUI-X camelCase 与 md-sys 双通道 */
+html.pack-miuix.monet-on[data-theme="light"] {
+  --qsc-primary: var(--md-sys-color-primary, var(--primary, #3482ff));
   --qsc-primary-soft: color-mix(
     in srgb,
-    var(--md-sys-color-primary, var(--primary, #0d9488)) 14%,
+    var(--md-sys-color-primary, var(--primary, #3482ff)) 14%,
     transparent
   );
-  --qsc-bg: var(--md-sys-color-surface, var(--background, var(--qsc-bg)));
-  --qsc-surface: var(--md-sys-color-surface-container, var(--card, var(--qsc-surface)));
-  --qsc-text: var(--md-sys-color-on-surface, var(--text, var(--qsc-text)));
-  --qsc-text-2: var(--md-sys-color-on-surface-variant, var(--text-2, var(--qsc-text-2)));
+  --qsc-on-primary: var(--md-sys-color-on-primary, var(--onPrimary, #fff));
+  --qsc-bg: var(--md-sys-color-background, var(--background, #f5f6f7));
+  --qsc-surface: var(
+    --md-sys-color-surface-container,
+    var(--surfaceContainer, var(--surface, #fff))
+  );
+  --qsc-surface-2: var(
+    --md-sys-color-surface-container-high,
+    var(--surfaceContainerHigh, #f0f1f2)
+  );
+  --qsc-text: var(
+    --md-sys-color-on-background,
+    var(--onBackground, var(--onSurface, #000))
+  );
+  --qsc-text-2: var(
+    --md-sys-color-on-surface-variant,
+    var(--onSurfaceVariant, rgba(0, 0, 0, 0.6))
+  );
   --qsc-hero-glow: color-mix(in srgb, var(--qsc-primary) 12%, transparent);
+}
+
+html.pack-miuix.monet-on[data-theme="dark"] {
+  --qsc-primary: var(--md-sys-color-primary, var(--primary, #5b9bff));
+  --qsc-primary-soft: color-mix(
+    in srgb,
+    var(--md-sys-color-primary, var(--primary, #5b9bff)) 22%,
+    transparent
+  );
+  --qsc-on-primary: var(--md-sys-color-on-primary, var(--onPrimary, #000));
+  --qsc-bg: color-mix(
+    in srgb,
+    var(--md-sys-color-primary, var(--primary, #5b9bff)) 10%,
+    #000
+  );
+  --qsc-surface: color-mix(
+    in srgb,
+    var(--md-sys-color-primary, var(--primary, #5b9bff)) 8%,
+    #1c1c1e
+  );
+  --qsc-surface-2: color-mix(
+    in srgb,
+    var(--md-sys-color-primary, var(--primary, #5b9bff)) 10%,
+    #2c2c2e
+  );
+  --qsc-text: #fff;
+  --qsc-text-2: rgba(255, 255, 255, 0.65);
+  --qsc-text-3: rgba(255, 255, 255, 0.4);
+  --qsc-hero-glow: color-mix(in srgb, var(--qsc-primary) 16%, transparent);
+}
+
+@supports (color: color-mix(in srgb, red, blue)) {
+  html.pack-miuix.monet-on[data-theme="dark"] {
+    --qsc-bg: var(
+      --md-sys-color-background,
+      var(--background, color-mix(in srgb, var(--primary, #d0bcff) 12%, #000))
+    );
+    --qsc-surface: var(
+      --md-sys-color-surface-container,
+      var(--surfaceContainer, color-mix(in srgb, var(--primary, #d0bcff) 10%, #1c1b22))
+    );
+  }
 }

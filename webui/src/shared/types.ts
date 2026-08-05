@@ -14,6 +14,8 @@ export type Settings = Record<ConfigKey, string>;
 export interface CurrentConfig {
   current_control: number;
   battery_stop: number;
+  bypass_temp: number;
+  bypass_schedule: string[];
   slow_charge: number;
   default_current_max: number;
   temperature_current: number;

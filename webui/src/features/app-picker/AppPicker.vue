@@ -17,6 +17,7 @@ const emit = defineEmits<{
 
 const search = ref("");
 const loading = ref(false);
+const loadedOnce = ref(false);
 const entries = ref<AppEntry[]>([]);
 const selected = ref<Set<string>>(new Set());
 const manualOpen = ref(false);
@@ -24,18 +25,23 @@ const manualText = ref("");
 const listEl = ref<HTMLElement | null>(null);
 const failedIcons = ref<Set<string>>(new Set());
 let observer: IntersectionObserver | null = null;
+let loadSeq = 0;
 
 watch(
   () => props.show,
-  (v) => {
-    if (v) {
-      selected.value = new Set(props.modelValue || []);
-      manualText.value = [...selected.value].join("\n");
-      failedIcons.value = new Set();
-      void nextTick(() => setupObserver());
-    } else {
+  async (v) => {
+    if (!v) {
       teardownObserver();
+      search.value = "";
+      manualOpen.value = false;
+      return;
     }
+    selected.value = new Set(props.modelValue || []);
+    manualText.value = [...selected.value].join("\n");
+    failedIcons.value = new Set();
+    await nextTick();
+    // 打开即自动加载；已有缓存时静默刷新
+    await load({ silent: loadedOnce.value && entries.value.length > 0 });
   },
 );
 
@@ -52,7 +58,13 @@ const filtered = computed(() => {
         e.package.toLowerCase().includes(q) || (e.name || "").toLowerCase().includes(q),
     );
   }
-  return sortAppsSelectedFirst(list, selected.value).slice(0, 300);
+  return sortAppsSelectedFirst(list, selected.value).slice(0, 400);
+});
+
+/** 已选但不在当前列表里的包（手动添加或卸载后残留） */
+const orphanSelected = computed(() => {
+  const known = new Set(entries.value.map((e) => e.package));
+  return [...selected.value].filter((pkg) => !known.has(pkg));
 });
 
 function setupObserver() {
@@ -71,7 +83,7 @@ function setupObserver() {
         observer?.unobserve(el);
       }
     },
-    { root: listEl.value, rootMargin: "120px", threshold: 0.01 },
+    { root: listEl.value, rootMargin: "160px", threshold: 0.01 },
   );
   listEl.value
     .querySelectorAll<HTMLElement>(".app-row")
@@ -88,18 +100,26 @@ watch(filtered, async () => {
   if (props.show) setupObserver();
 });
 
-async function load() {
+async function load(opts: { silent?: boolean } = {}) {
+  const seq = ++loadSeq;
   loading.value = true;
   try {
-    entries.value = await listInstalledApps();
-    showToast(`已加载 ${entries.value.length} 个应用`);
+    const list = await listInstalledApps();
+    if (seq !== loadSeq) return;
+    entries.value = list;
+    loadedOnce.value = true;
+    if (!opts.silent) {
+      showToast(list.length ? `已加载 ${list.length} 个应用` : "未找到已安装应用");
+    }
     await nextTick();
     setupObserver();
   } catch {
-    entries.value = [];
+    if (seq !== loadSeq) return;
+    if (!entries.value.length) entries.value = [];
     showToast("读取应用失败");
+  } finally {
+    if (seq === loadSeq) loading.value = false;
   }
-  loading.value = false;
 }
 
 function toggle(pkg: string, on: boolean) {
@@ -134,8 +154,9 @@ function close() {
   emit("update:show", false);
 }
 
-function selectedName(pkg: string) {
-  return entries.value.find((e) => e.package === pkg)?.name || pkg;
+function displayName(pkg: string, name?: string) {
+  const n = name || entries.value.find((e) => e.package === pkg)?.name;
+  return n && n !== pkg ? n : pkg;
 }
 </script>
 
@@ -144,81 +165,114 @@ function selectedName(pkg: string) {
     :show="show"
     position="bottom"
     round
-    :style="{ height: '90%' }"
+    class="app-picker-popup"
+    :style="{ height: '88%' }"
+    :z-index="3000"
     @update:show="(v: boolean) => emit('update:show', v)"
   >
     <div class="picker">
       <div class="picker-head">
         <button type="button" class="link" @click="close">取消</button>
-        <div class="title">游戏应用</div>
+        <div class="titles">
+          <div class="title">选择游戏应用</div>
+          <div class="sub">已选 {{ selected.size }} · 点选切换</div>
+        </div>
         <button type="button" class="link primary" @click="confirm">完成</button>
       </div>
 
-      <van-search v-model="search" placeholder="搜索应用名或包名" shape="round" />
-
-      <div class="toolbar">
-        <van-button size="small" type="primary" plain :loading="loading" @click="load">
-          加载已安装应用
-        </van-button>
-        <span class="hint">已选 {{ selected.size }}</span>
-      </div>
-
-      <div v-if="selected.size" class="selected">
-        <van-tag
-          v-for="pkg in selected"
-          :key="pkg"
-          closeable
-          type="primary"
-          class="tag"
-          @close="toggle(pkg, false)"
-        >
-          {{ selectedName(pkg) }}
-        </van-tag>
+      <div class="search-wrap">
+        <van-search
+          v-model="search"
+          placeholder="搜索应用名或包名"
+          shape="round"
+          background="transparent"
+        />
       </div>
 
       <div ref="listEl" class="list">
-        <button
-          v-for="e in filtered"
-          :key="e.package"
-          type="button"
-          class="app-row"
-          :class="{ on: selected.has(e.package) }"
-          @click="toggle(e.package, !selected.has(e.package))"
-        >
-          <div
-            class="icon-wrap"
-            :style="{
-              background: `hsl(${hueFromPackage(e.package)} 42% 42%)`,
-            }"
-          >
-            <span v-if="failedIcons.has(e.package)" class="fallback">{{
-              initialFromName(e.name)
-            }}</span>
-            <img
-              v-else
-              class="app-icon"
-              alt=""
-              :data-src="e.iconUrl"
-              @error="onIconError(e.package)"
-            />
-          </div>
-          <div class="meta">
-            <div class="name">{{ e.name || e.package }}</div>
-            <div class="pkg">{{ e.package }}</div>
-          </div>
-          <van-checkbox
-            :model-value="selected.has(e.package)"
-            @click.stop
-            @update:model-value="(v: boolean) => toggle(e.package, v)"
-          />
-        </button>
+        <div v-if="loading && !entries.length" class="state">
+          <van-loading size="24px" vertical>正在加载应用…</van-loading>
+        </div>
 
-        <van-empty
-          v-if="!loading && !filtered.length"
-          :description="
-            entries.length ? '无匹配应用' : '先加载应用列表，或下方手动填写包名'
-          "
-        />
+        <template v-else>
+          <button
+            v-for="e in filtered"
+            :key="e.package"
+            type="button"
+            class="app-row"
+            :class="{ on: selected.has(e.package) }"
+            @click="toggle(e.package, !selected.has(e.package))"
+          >
+            <div
+              class="icon-wrap"
+              :style="{
+                background: `hsl(${hueFromPackage(e.package)} 42% 42%)`,
+              }"
+            >
+              <span v-if="failedIcons.has(e.package)" class="fallback">{{
+                initialFromName(e.name)
+              }}</span>
+              <img
+                v-else
+                class="app-icon"
+                alt=""
+                :data-src="e.iconUrl"
+                @error="onIconError(e.package)"
+              />
+            </div>
+            <div class="meta">
+              <div class="name">{{ displayName(e.package, e.name) }}</div>
+              <div class="pkg">{{ e.package }}</div>
+            </div>
+            <van-checkbox
+              :model-value="selected.has(e.package)"
+              checked-color="var(--qsc-primary)"
+              @click.stop
+              @update:model-value="(v: boolean) => toggle(e.package, v)"
+            />
+          </button>
+
+          <div v-if="orphanSelected.length" class="orphan">
+            <div class="orphan-title">已选但不在列表中</div>
+            <button
+              v-for="pkg in orphanSelected"
+              :key="pkg"
+              type="button"
+              class="app-row on"
+              @click="toggle(pkg, false)"
+            >
+              <div
+                class="icon-wrap"
+                :style="{
+                  background: `hsl(${hueFromPackage(pkg)} 42% 42%)`,
+                }"
+              >
+                <span class="fallback">{{ initialFromName(pkg) }}</span>
+              </div>
+              <div class="meta">
+                <div class="name">{{ pkg }}</div>
+                <div class="pkg">点按可取消选择</div>
+              </div>
+              <van-checkbox :model-value="true" checked-color="var(--qsc-primary)" />
+            </button>
+          </div>
+
+          <van-empty
+            v-if="!loading && !filtered.length && !orphanSelected.length"
+            :description="entries.length ? '无匹配应用' : '未能读取应用列表'"
+          >
+            <van-button
+              v-if="!entries.length"
+              size="small"
+              type="primary"
+              round
+              :loading="loading"
+              @click="load()"
+            >
+              重试
+            </van-button>
+          </van-empty>
+        </template>
       </div>
 
       <div class="manual">
@@ -228,10 +282,10 @@ function selectedName(pkg: string) {
         <van-field
           v-if="manualOpen"
           v-model="manualText"
-          rows="4"
+          rows="3"
           autosize
           type="textarea"
-          placeholder="一行一个包名"
+          placeholder="一行一个包名，适合列表里找不到的应用"
           @update:model-value="onManualInput"
         />
       </div>
@@ -245,18 +299,32 @@ function selectedName(pkg: string) {
   flex-direction: column;
   height: 100%;
   background: var(--qsc-bg);
+  color: var(--qsc-text);
 }
 
 .picker-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: 56px 1fr 56px;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px 6px;
+  padding: 14px 12px 4px;
+  background: var(--qsc-bg);
+}
+
+.titles {
+  text-align: center;
+  min-width: 0;
 }
 
 .title {
-  font-weight: 700;
+  font-weight: 720;
   font-size: 16px;
+  line-height: 1.2;
+}
+
+.sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--qsc-text-3);
 }
 
 .link {
@@ -264,42 +332,46 @@ function selectedName(pkg: string) {
   background: transparent;
   color: var(--qsc-text-2);
   font-size: 15px;
-  padding: 4px 2px;
+  padding: 8px 4px;
+  border-radius: 8px;
+
+  &:active {
+    background: var(--qsc-press);
+  }
 }
 
 .link.primary {
   color: var(--qsc-primary);
-  font-weight: 600;
+  font-weight: 650;
+  justify-self: end;
 }
 
-.toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px 8px;
-}
+.search-wrap {
+  background: var(--qsc-bg);
+  padding-bottom: 4px;
 
-.hint {
-  font-size: 12px;
-  color: var(--qsc-text-3);
-}
+  :deep(.van-search) {
+    padding: 6px 12px;
+  }
 
-.selected {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 16px 10px;
-}
-
-.tag {
-  max-width: 100%;
+  :deep(.van-search__content) {
+    background: var(--qsc-surface);
+  }
 }
 
 .list {
   flex: 1;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 0 8px 8px;
+  padding: 4px 10px 12px;
+  background: var(--qsc-bg);
+}
+
+.state {
+  display: grid;
+  place-items: center;
+  min-height: 40vh;
+  color: var(--qsc-text-2);
 }
 
 .app-row {
@@ -310,7 +382,7 @@ function selectedName(pkg: string) {
   background: var(--qsc-surface);
   border-radius: 14px;
   padding: 10px 12px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   text-align: left;
   color: inherit;
   border: 1px solid transparent;
@@ -324,7 +396,7 @@ function selectedName(pkg: string) {
   }
 
   &.on {
-    border-color: color-mix(in srgb, var(--qsc-primary) 35%, transparent);
+    border-color: color-mix(in srgb, var(--qsc-primary) 40%, transparent);
     background: var(--qsc-primary-soft);
   }
 }
@@ -376,9 +448,20 @@ function selectedName(pkg: string) {
   white-space: nowrap;
 }
 
+.orphan {
+  margin-top: 8px;
+  padding-top: 4px;
+}
+
+.orphan-title {
+  font-size: 12px;
+  color: var(--qsc-text-3);
+  padding: 4px 6px 8px;
+}
+
 .manual {
   border-top: 1px solid var(--qsc-hairline);
-  padding: 8px 12px calc(10px + env(safe-area-inset-bottom));
+  padding: 8px 12px calc(12px + var(--qsc-inset-bottom, 0px));
   background: var(--qsc-surface);
 }
 
@@ -389,5 +472,24 @@ function selectedName(pkg: string) {
   font-size: 13px;
   font-weight: 600;
   padding: 6px 4px 8px;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.manual :deep(.van-field) {
+  background: var(--qsc-bg);
+  border-radius: 12px;
+  overflow: hidden;
+}
+</style>
+
+<style lang="scss">
+/* 弹层必须实底，避免主题/毛玻璃导致「透明看穿」 */
+.app-picker-popup.van-popup {
+  background: var(--qsc-bg) !important;
+  color: var(--qsc-text);
+  overflow: hidden;
 }
 </style>

@@ -8,14 +8,21 @@
 }
 
 html,
-body {
+body,
+#app {
   margin: 0;
   padding: 0;
+  min-height: 100%;
   background: var(--qsc-bg);
   color: var(--qsc-text);
+}
+
+html,
+body {
   font-family:
     system-ui,
     -apple-system,
+    MiSans,
     "Segoe UI",
     "PingFang SC",
     "Noto Sans SC",
@@ -87,8 +94,61 @@ html.compact-on {
   background: transparent;
 }
 
-.van-tabbar {
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  border-top: 1px solid var(--qsc-hairline);
+.van-hairline--top-bottom::after,
+.van-hairline-unset--top-bottom::after {
+  border-color: var(--qsc-hairline);
+}
+
+/* 全局弹层 / 遮罩：跟主题底色，避免透明穿帮 */
+.van-popup {
+  background: var(--qsc-bg);
+  color: var(--qsc-text);
+}
+
+.van-popup--bottom {
+  background: var(--qsc-bg);
+}
+
+.van-overlay {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.van-dialog {
+  background: var(--qsc-surface);
+  color: var(--qsc-text);
+}
+
+.van-toast {
+  background: color-mix(in srgb, var(--qsc-text) 88%, transparent) !important;
+}
+
+.van-empty__description {
+  color: var(--qsc-text-3);
+}
+
+.van-cell {
+  background: transparent;
+  color: var(--qsc-text);
+}
+
+.van-cell__label {
+  color: var(--qsc-text-3);
+}
+
+.van-field__control {
+  color: var(--qsc-text);
+}
+
+.van-collapse-item__title {
+  background: transparent;
+}
+
+.van-collapse-item__content {
+  color: var(--qsc-text);
+  background: var(--qsc-surface) !important;
+}
+
+/* 折叠面板内容区不要透底 */
+.van-collapse-item {
+  background: var(--qsc-surface);
 }

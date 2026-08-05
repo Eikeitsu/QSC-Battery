@@ -128,13 +128,26 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
 
 <style scoped lang="scss">
 .page {
-  min-height: calc(100vh - 120px);
+  min-height: calc(100dvh - 56px - var(--qsc-inset-top, 0px) - var(--dock-pad, 72px));
 }
 
 .hero {
   position: relative;
   padding: 20px 18px 16px;
   overflow: hidden;
+}
+
+.strategy {
+  padding: 6px 4px 10px;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    background-color 0.15s ease;
+
+  &:active {
+    transform: scale(0.985);
+    background: var(--qsc-press);
+  }
 }
 
 .hero-glow {
@@ -202,11 +215,6 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
 
 .switch-card {
   margin-top: 12px;
-}
-
-.strategy {
-  padding: 6px 4px 10px;
-  cursor: pointer;
 }
 
 .strategy-row {

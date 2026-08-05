@@ -1,0 +1,130 @@
+/* 顶栏 / 底栏沉浸 + MIUIX 悬浮液态玻璃 */
+
+.app-shell {
+  --dock-pad: calc(var(--qsc-dock-h) + var(--qsc-inset-bottom, 0px));
+
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--qsc-bg);
+  color: var(--qsc-text);
+
+  /* 底色铺满系统导航区，避免按键栏露白 */
+  padding-bottom: var(--dock-pad);
+}
+
+html.float-dock .app-shell {
+  --dock-pad: calc(var(--qsc-dock-h) + 16px + var(--qsc-inset-bottom, 0px));
+}
+
+.app-topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: calc(56px + var(--qsc-inset-top, 0px));
+  padding: var(--qsc-inset-top, 0) 16px 10px;
+  background: var(--qsc-bg);
+  border-bottom: 1px solid transparent;
+  color: var(--qsc-text);
+}
+
+html.bar-blur .app-topbar {
+  background: color-mix(in srgb, var(--qsc-bg) 78%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.35);
+  backdrop-filter: blur(22px) saturate(1.35);
+  border-bottom-color: var(--qsc-hairline);
+}
+
+html.pack-miuix.bar-blur .app-topbar {
+  background: color-mix(in srgb, var(--qsc-bg) 72%, transparent);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  backdrop-filter: blur(28px) saturate(1.5);
+}
+
+.app-main {
+  position: relative;
+  overflow-x: hidden;
+  padding-top: calc(56px + var(--qsc-inset-top, 0px));
+}
+
+/* 底栏：fixed，背景延伸进系统导航区 */
+.app-dock.van-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  height: auto;
+  min-height: var(--qsc-dock-h);
+  padding-bottom: var(--qsc-inset-bottom, 0);
+  background: var(--qsc-bg) !important;
+  border-top: 1px solid var(--qsc-hairline);
+  box-sizing: content-box;
+}
+
+html.bar-blur .app-dock.van-tabbar {
+  background: color-mix(in srgb, var(--qsc-bg) 82%, transparent) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(1.35);
+  backdrop-filter: blur(22px) saturate(1.35);
+}
+
+/* MIUIX 悬浮底栏 */
+html.float-dock .app-dock.van-tabbar {
+  left: 14px;
+  right: 14px;
+  bottom: calc(10px + var(--qsc-inset-bottom, 0px));
+  width: auto;
+  min-height: 58px;
+  padding-bottom: 0;
+  border: 1px solid color-mix(in srgb, #fff 35%, var(--qsc-hairline));
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.35) inset;
+}
+
+html.float-dock[data-theme="dark"] .app-dock.van-tabbar {
+  border-color: color-mix(in srgb, #fff 10%, transparent);
+  box-shadow:
+    0 10px 32px rgba(0, 0, 0, 0.45),
+    0 1px 0 rgba(255, 255, 255, 0.08) inset;
+}
+
+/* 液态玻璃 */
+html.float-dock.dock-glass .app-dock.van-tabbar {
+  background: color-mix(in srgb, var(--qsc-surface) 55%, transparent) !important;
+  -webkit-backdrop-filter: blur(36px) saturate(1.8) brightness(1.05);
+  backdrop-filter: blur(36px) saturate(1.8) brightness(1.05);
+}
+
+html.float-dock.dock-glass[data-theme="dark"] .app-dock.van-tabbar {
+  background: color-mix(
+    in srgb,
+    var(--qsc-surface) 45%,
+    rgba(255, 255, 255, 0.06)
+  ) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(1.6);
+  backdrop-filter: blur(40px) saturate(1.6);
+}
+
+/* 悬浮时系统导航区仍用页面底色填满（壳层 padding 区域） */
+html.float-dock .app-shell::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--qsc-inset-bottom, 0);
+  background: var(--qsc-bg);
+  z-index: 35;
+  pointer-events: none;
+}
+
+.app-dock .van-tabbar-item {
+  background: transparent;
+}

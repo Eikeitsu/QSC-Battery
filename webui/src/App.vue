@@ -44,6 +44,8 @@ function setTab(name: string | number) {
   } catch {
     /* ignore */
   }
+  // 轻触反馈后刷新系统栏衔接（悬浮底栏切换页时）
+  requestAnimationFrame(() => theme.syncStatusBar());
 }
 
 provide("setTab", setTab);
@@ -70,12 +72,13 @@ onMounted(async () => {
   theme.load();
   theme.bindSystemListener();
   await store.init();
+  theme.syncStatusBar();
 });
 </script>
 
 <template>
-  <div class="app-shell" :data-theme="theme.resolved">
-    <header class="topbar">
+  <div class="app-shell" :data-theme="theme.resolved" :data-pack="theme.themePack">
+    <header class="app-topbar">
       <img class="logo" src="/img/icon.png" width="36" height="36" alt="" />
       <div class="titles">
         <h1>充电控制</h1>
@@ -83,7 +86,7 @@ onMounted(async () => {
       </div>
     </header>
 
-    <main class="main">
+    <main class="app-main">
       <Transition
         :name="slideDir === 'forward' ? 'slide-left' : 'slide-right'"
         mode="out-in"
@@ -98,8 +101,9 @@ onMounted(async () => {
     </main>
 
     <van-tabbar
+      class="app-dock"
       :model-value="tab"
-      safe-area-inset-bottom
+      :safe-area-inset-bottom="false"
       active-color="var(--qsc-primary)"
       inactive-color="var(--qsc-text-3)"
       @update:model-value="setTab"
@@ -113,30 +117,13 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
-.app-shell {
-  min-height: 100vh;
-  min-height: 100dvh;
-  background: var(--qsc-bg);
-  color: var(--qsc-text);
-  padding-bottom: calc(52px + env(safe-area-inset-bottom));
-}
-
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
-  background: color-mix(in srgb, var(--qsc-surface) 86%, transparent);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  border-bottom: 1px solid var(--qsc-hairline);
-}
-
 .logo {
   border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.titles {
+  min-width: 0;
 }
 
 .titles h1 {
@@ -155,10 +142,5 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.main {
-  position: relative;
-  overflow-x: hidden;
 }
 </style>

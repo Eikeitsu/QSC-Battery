@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" class="monet-on">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -12,28 +12,42 @@
     <script>
       (function () {
         try {
+          var root = document.documentElement;
           var mode = localStorage.getItem("qsc_theme_mode") || "system";
           var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
           var resolved =
             mode === "light" || mode === "dark" ? mode : dark ? "dark" : "light";
-          document.documentElement.setAttribute("data-theme", resolved);
-          document.documentElement.style.colorScheme =
-            resolved === "dark" ? "only dark" : "only light";
+          var pack = localStorage.getItem("qsc_theme_pack") || "default";
+          if (pack !== "md3" && pack !== "miuix") pack = "default";
+          root.setAttribute("data-theme", resolved);
+          root.setAttribute("data-pack", pack);
+          root.style.colorScheme = resolved === "dark" ? "only dark" : "only light";
+          root.style.backgroundColor = resolved === "dark" ? "#0f1216" : "#eef1f5";
+          document.body &&
+            (document.body.style.backgroundColor = root.style.backgroundColor);
           var themeMeta = document.querySelector('meta[name="theme-color"]');
-          if (themeMeta)
-            themeMeta.setAttribute(
-              "content",
-              resolved === "dark" ? "#0f1216" : "#eef1f5",
-            );
+          if (themeMeta) themeMeta.setAttribute("content", root.style.backgroundColor);
+          root.classList.toggle("pack-default", pack === "default");
+          root.classList.toggle("pack-md3", pack === "md3");
+          root.classList.toggle("pack-miuix", pack === "miuix");
           var monet = localStorage.getItem("qsc_monet");
-          var monetOn = monet === null ? true : monet === "1";
-          document.documentElement.classList.toggle("monet-on", monetOn);
-          document.documentElement.classList.toggle("monet-off", !monetOn);
-          var compact = localStorage.getItem("qsc_compact") === "1";
-          document.documentElement.classList.toggle("compact-on", compact);
+          var monetOn = pack === "miuix" && (monet === null || monet === "1");
+          root.classList.toggle("monet-on", monetOn);
+          root.classList.toggle("monet-off", !monetOn);
+          var floatOn =
+            pack === "miuix" && localStorage.getItem("qsc_float_dock") !== "0";
+          root.classList.toggle("float-dock", floatOn);
+          root.classList.toggle(
+            "dock-glass",
+            pack === "miuix" && localStorage.getItem("qsc_dock_glass") !== "0",
+          );
+          root.classList.toggle("bar-blur", localStorage.getItem("qsc_bar_blur") !== "0");
+          root.classList.toggle(
+            "compact-on",
+            localStorage.getItem("qsc_compact") === "1",
+          );
           var scale = localStorage.getItem("qsc_font_scale");
-          if (scale)
-            document.documentElement.style.setProperty("--font-scale", String(scale));
+          if (scale) root.style.setProperty("--font-scale", String(scale));
         } catch (e) {}
       })();
     </script>

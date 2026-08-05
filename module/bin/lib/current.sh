@@ -311,12 +311,74 @@ qsc_current_game_hit() {
 	return 1
 }
 
+# HH:MM → 当日分钟数（0–1439）；非法返回空
+qsc_hm_to_min() {
+	local hm="$1" h m
+	hm="$(printf '%s' "$hm" | tr -d ' \r\n')"
+	case "$hm" in
+		[0-1][0-9]:[0-5][0-9] | 2[0-3]:[0-5][0-9]) ;;
+		*) return 1 ;;
+	esac
+	h="${hm%%:*}"
+	m="${hm##*:}"
+	# 去前导零，避免 08 被部分 shell 当八进制
+	h="${h#0}"
+	m="${m#0}"
+	[ -n "$h" ] || h=0
+	[ -n "$m" ] || m=0
+	echo $((h * 60 + m))
+}
+
+# 当前时刻是否落在 start-end（支持跨天：22:00-08:00）
+qsc_time_in_range() {
+	local start="$1" end="$2" now_hm now_m start_m end_m
+	now_hm="$(date +%H:%M 2>/dev/null)" || return 1
+	now_m="$(qsc_hm_to_min "$now_hm")" || return 1
+	start_m="$(qsc_hm_to_min "$start")" || return 1
+	end_m="$(qsc_hm_to_min "$end")" || return 1
+	if [ "$start_m" -le "$end_m" ]; then
+		[ "$now_m" -ge "$start_m" ] && [ "$now_m" -lt "$end_m" ]
+	else
+		# 跨天：now >= start 或 now < end
+		[ "$now_m" -ge "$start_m" ] || [ "$now_m" -lt "$end_m" ]
+	fi
+}
+
+# bypass_schedule 字符串数组任一段命中则返回 0
+qsc_bypass_schedule_hit() {
+	local range start end list_file
+	list_file="$DATADIR/.bypass_sched_tmp"
+	qsc_current_conf_get_strings bypass_schedule >"$list_file" 2>/dev/null || {
+		rm -f "$list_file"
+		return 1
+	}
+	while IFS= read -r range || [ -n "$range" ]; do
+		range="$(printf '%s' "$range" | tr -d ' \r\n')"
+		[ -n "$range" ] || continue
+		case "$range" in
+			*-*-*) continue ;; # 拒绝异常多段
+			*-*)
+				start="${range%%-*}"
+				end="${range#*-}"
+				if qsc_time_in_range "$start" "$end"; then
+					rm -f "$list_file"
+					return 0
+				fi
+				;;
+		esac
+	done <"$list_file"
+	rm -f "$list_file"
+	return 1
+}
+
 # 依赖外部环境：battery_level temperature；且未触发供电开关停充
 qsc_apply_current_control() {
 	local enable battery_stop slow_charge temp_cur
 	local limit1 limit2 cur1 cur2 def_max app_on app_cur
 	local reason target now_c battery_stop_1
-	local mode_tag="" bypass_mode safety_temp want_bypass=0 used_hw=0
+	local mode_tag="" bypass_mode safety_temp bypass_temp
+	local want_bypass=0 used_hw=0 by_level=0 by_temp=0 by_sched=0
+	local reasons=""
 
 	[ -f "$CURRENT_CONF" ] || return 0
 	enable="$(qsc_current_conf_get current_control)"
@@ -330,6 +392,8 @@ qsc_apply_current_control() {
 
 	battery_stop="$(qsc_current_conf_get battery_stop)"
 	[ -z "$battery_stop" ] && battery_stop=110
+	bypass_temp="$(qsc_current_conf_get bypass_temp)"
+	[ -z "$bypass_temp" ] && bypass_temp=110
 	slow_charge="$(qsc_current_conf_get slow_charge)"
 	[ -z "$slow_charge" ] && slow_charge=110
 	temp_cur="$(qsc_current_conf_get temperature_current)"
@@ -355,12 +419,28 @@ qsc_apply_current_control() {
 	[ "$app_cur" -lt 50000 ] 2>/dev/null && app_cur=50000
 	[ "$def_max" -gt 10000000 ] 2>/dev/null && def_max=10000000
 
-	# 优先级：模拟旁路 > 二限/旁路回补/慢充 > 游戏限流 > 一限 > 默认
-	if [ "$battery_stop" -le 100 ] && [ "$battery_level" -ge "$battery_stop" ]; then
+	# 旁路触发：电量 / 温度 / 时段 任一满足（OR）
+	if [ "$battery_stop" -le 100 ] && [ -n "$battery_level" ] && [ "$battery_level" -ge "$battery_stop" ]; then
+		by_level=1
+		reasons="${reasons}电量 "
+	fi
+	if [ "$bypass_temp" -le 100 ] && [ -n "$temperature" ] && [ "$temperature" -ge "$bypass_temp" ]; then
+		by_temp=1
+		reasons="${reasons}温度 "
+	fi
+	if qsc_bypass_schedule_hit; then
+		by_sched=1
+		reasons="${reasons}时段 "
+	fi
+	if [ "$by_level$by_temp$by_sched" != "000" ]; then
 		want_bypass=1
 		target=0
-		mode_tag="模拟旁路"
-	else
+		reasons="$(printf '%s' "$reasons" | sed 's/ $//' | tr ' ' '/')"
+		mode_tag="旁路·${reasons}"
+	fi
+
+	# 优先级：旁路 > 二限/旁路回补/慢充 > 游戏限流 > 一限 > 默认
+	if [ "$want_bypass" != "1" ]; then
 		battery_stop_1=$((battery_stop - 1))
 		if [ "$temp_cur" = "1" ] && [ -n "$temperature" ] && [ "$temperature" -ge "$limit2" ]; then
 			target="$cur2"

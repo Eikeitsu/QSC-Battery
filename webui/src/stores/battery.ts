@@ -55,6 +55,8 @@ function planCurrent(): string {
   if (!Number(current.current_control)) return "已关闭";
   const parts = ["已开启"];
   if (Number(current.battery_stop) <= 100) parts.push(`旁路≥${current.battery_stop}%`);
+  if (Number(current.bypass_temp) <= 100) parts.push(`旁路≥${current.bypass_temp}°C`);
+  if ((current.bypass_schedule || []).length) parts.push("旁路时段");
   if (Number(current.slow_charge) <= 100) parts.push(`慢充≥${current.slow_charge}%`);
   if (Number(current.temperature_current)) parts.push("温控限流");
   if (Number(current.app_limit)) parts.push("游戏限流");
