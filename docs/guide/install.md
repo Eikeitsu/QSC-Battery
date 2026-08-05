@@ -40,9 +40,9 @@ WebUI、电流控制是否安装会在每次刷入时**分别询问**。
 
 若设备上仍装有以下旧版，安装本版时会自动卸载（**不迁移配置**）：
 
-| 显示名 | 模块 id |
-| ------ | ------- |
-| QSC定量停充 | `QuantitativeStopCharging` |
+| 显示名                 | 模块 id                           |
+| ---------------------- | --------------------------------- |
+| QSC定量停充            | `QuantitativeStopCharging`        |
 | QSC定量停充_独立开关版 | `QuantitativeStopCharging_switch` |
 
 流程：

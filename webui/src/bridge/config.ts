@@ -1,0 +1,92 @@
+import { CURRENT_DEFAULTS } from "../shared/defaults";
+import { PATHS } from "../shared/paths";
+import type { CurrentConfig } from "../shared/types";
+import { exec } from "./ksu";
+
+export async function getConf(key: string): Promise<string> {
+  const result = await exec(
+    `grep '^${key}=' '${PATHS.CONF}' 2>/dev/null | tail -1 | cut -d= -f2-`,
+  );
+  return result.stdout.trim();
+}
+
+export async function setConf(key: string, value: string | number): Promise<void> {
+  const safeKey = String(key).replace(/[^a-zA-Z0-9_]/g, "");
+  const safeVal = String(value).replace(/'/g, "");
+  await exec(
+    `sed -i '/^${safeKey}=/d' '${PATHS.CONF}' 2>/dev/null; echo '${safeKey}=${safeVal}' >> '${PATHS.CONF}'`,
+  );
+}
+
+export function parseJsonc(text: string): Record<string, unknown> {
+  const cleaned = String(text || "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "")
+    .replace(/,\s*([\]}])/g, "$1");
+  return JSON.parse(cleaned) as Record<string, unknown>;
+}
+
+export async function hasCurrentFeature(): Promise<boolean> {
+  const result = await exec(
+    `[ -f '${PATHS.CURRENT_CONF}' ] && [ -f '${PATHS.CURRENT_LIB}' ] && echo 1 || echo 0`,
+  );
+  return result.stdout.trim() === "1";
+}
+
+export function normalizeAppList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((s) => String(s).trim()).filter(Boolean);
+  }
+  return String(value || "")
+    .split(/\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export async function loadCurrentJsonc(): Promise<CurrentConfig> {
+  const result = await exec(`cat '${PATHS.CURRENT_CONF}' 2>/dev/null`);
+  if (!result.stdout.trim()) return { ...CURRENT_DEFAULTS };
+  try {
+    const parsed = parseJsonc(result.stdout);
+    const merged: CurrentConfig = {
+      ...CURRENT_DEFAULTS,
+      ...(parsed as Partial<CurrentConfig>),
+    };
+    merged.app_list = Array.isArray(merged.app_list)
+      ? normalizeAppList(merged.app_list)
+      : [...CURRENT_DEFAULTS.app_list];
+    merged.battery_current = Array.isArray(merged.battery_current)
+      ? merged.battery_current
+      : [];
+    merged.bypass_mode = merged.bypass_mode === "auto" ? "auto" : "sim";
+    return merged;
+  } catch {
+    return { ...CURRENT_DEFAULTS };
+  }
+}
+
+export async function saveCurrentJsonc(obj: CurrentConfig): Promise<boolean> {
+  const payload: CurrentConfig = {
+    current_control: Number(obj.current_control) ? 1 : 0,
+    battery_stop: Number(obj.battery_stop) || 110,
+    slow_charge: Number(obj.slow_charge) || 110,
+    default_current_max: Number(obj.default_current_max) || 5000000,
+    temperature_current: Number(obj.temperature_current) ? 1 : 0,
+    default_current_limit: Number(obj.default_current_limit) || 40,
+    default_current_max_limit: Number(obj.default_current_max_limit) || 1500000,
+    temperature_current_limit: Number(obj.temperature_current_limit) || 45,
+    constant_current_max: Math.max(50000, Number(obj.constant_current_max) || 100000),
+    app_limit: Number(obj.app_limit) ? 1 : 0,
+    app_current_max: Math.max(50000, Number(obj.app_current_max) || 200000),
+    app_list: normalizeAppList(obj.app_list),
+    bypass_mode: obj.bypass_mode === "auto" ? "auto" : "sim",
+    safety_temp_max: Math.min(55, Math.max(40, Number(obj.safety_temp_max) || 48)),
+    battery_current: Array.isArray(obj.battery_current) ? obj.battery_current : [],
+  };
+  const json = JSON.stringify(payload, null, 2);
+  const b64 = btoa(unescape(encodeURIComponent(json)));
+  const result = await exec(
+    `echo '${b64}' | base64 -d > '${PATHS.CURRENT_CONF}' 2>/dev/null || echo '${b64}' | base64 --decode > '${PATHS.CURRENT_CONF}' 2>/dev/null`,
+  );
+  return result.errno === 0;
+}

@@ -1,8 +1,7 @@
 import { defineConfig } from "vitepress";
 
 const repoName =
-  process.env.VITEPRESS_BASE?.replace(/^\//, "").replace(/\/$/, "") ||
-  "QSC-Battery";
+  process.env.VITEPRESS_BASE?.replace(/^\//, "").replace(/\/$/, "") || "QSC-Battery";
 
 export default defineConfig({
   title: "充电控制",

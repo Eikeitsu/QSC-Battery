@@ -4,14 +4,24 @@ on:
   push:
     branches: [main, master]
     paths:
+      - "webui/**"
       - "module/webroot/**"
       - "tooling/scripts/build-web.mjs"
       - "tooling/scripts/publish-web-branch.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - "eslint.config.js"
+      - ".prettierrc"
+      - ".prettierignore"
   pull_request:
     branches: [main, master]
     paths:
+      - "webui/**"
       - "module/webroot/**"
       - "tooling/scripts/build-web.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - "eslint.config.js"
   workflow_dispatch:
 
 permissions:
@@ -29,6 +39,9 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - run: npm run lint:js
+      - run: npm run lint:style
+      - run: npm run typecheck:web
       - run: npm run build:web
 
       - uses: actions/upload-artifact@v4

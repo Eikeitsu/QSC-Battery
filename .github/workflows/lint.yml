@@ -1,0 +1,44 @@
+name: Lint
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - run: npm ci
+
+      - name: ESLint / Stylelint / Markdown / Shell
+        run: npm run lint
+        env:
+          REQUIRE_SHELLCHECK: "1"
+
+      - name: Typecheck WebUI
+        run: npm run typecheck:web
+
+      - name: Prettier check
+        run: npm run format:check
+
+      - name: Commitlint (PR range)
+        if: github.event_name == 'pull_request'
+        run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose

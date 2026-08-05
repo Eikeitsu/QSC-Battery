@@ -1,0 +1,65 @@
+$radius-card: 18px;
+$radius-card-compact: 14px;
+$ease-page: 0.22s ease;
+$space-page: 16px;
+
+:root {
+  --font-scale: 1;
+  --qsc-bg: #eef1f5;
+  --qsc-surface: #fff;
+  --qsc-surface-2: #f7f9fc;
+  --qsc-text: #15202b;
+  --qsc-text-2: #5b6b7c;
+  --qsc-text-3: #8a97a6;
+  --qsc-primary: #0d9488;
+  --qsc-primary-soft: color-mix(in srgb, #0d9488 14%, transparent);
+  --qsc-warn: #d97706;
+  --qsc-danger: #dc2626;
+  --qsc-success: #059669;
+  --qsc-hairline: rgba(21, 32, 43, 0.08);
+  --qsc-chip-bg: rgba(91, 107, 124, 0.1);
+  --qsc-hero-glow: color-mix(in srgb, #0d9488 12%, transparent);
+  --van-primary-color: var(--qsc-primary);
+  --van-background: var(--qsc-bg);
+  --van-background-2: var(--qsc-surface);
+  --van-cell-background: var(--qsc-surface);
+  --van-text-color: var(--qsc-text);
+  --van-text-color-2: var(--qsc-text-2);
+  --van-border-color: var(--qsc-hairline);
+  --van-nav-bar-background: var(--qsc-surface);
+  --van-tabbar-background: color-mix(in srgb, var(--qsc-surface) 92%, transparent);
+  --van-success-color: var(--qsc-success);
+  --van-warning-color: var(--qsc-warn);
+  --van-danger-color: var(--qsc-danger);
+}
+
+html[data-theme="dark"] {
+  --qsc-bg: #0f1216;
+  --qsc-surface: #181c22;
+  --qsc-surface-2: #1e242c;
+  --qsc-text: #e8eef4;
+  --qsc-text-2: #a8b4c0;
+  --qsc-text-3: #7a8794;
+  --qsc-primary: #2dd4bf;
+  --qsc-primary-soft: color-mix(in srgb, #2dd4bf 18%, transparent);
+  --qsc-warn: #fbbf24;
+  --qsc-danger: #f87171;
+  --qsc-success: #34d399;
+  --qsc-hairline: rgba(255, 255, 255, 0.08);
+  --qsc-chip-bg: rgba(255, 255, 255, 0.08);
+  --qsc-hero-glow: color-mix(in srgb, #2dd4bf 16%, transparent);
+}
+
+html.monet-on {
+  --qsc-primary: var(--md-sys-color-primary, var(--primary, #0d9488));
+  --qsc-primary-soft: color-mix(
+    in srgb,
+    var(--md-sys-color-primary, var(--primary, #0d9488)) 14%,
+    transparent
+  );
+  --qsc-bg: var(--md-sys-color-surface, var(--background, var(--qsc-bg)));
+  --qsc-surface: var(--md-sys-color-surface-container, var(--card, var(--qsc-surface)));
+  --qsc-text: var(--md-sys-color-on-surface, var(--text, var(--qsc-text)));
+  --qsc-text-2: var(--md-sys-color-on-surface-variant, var(--text-2, var(--qsc-text-2)));
+  --qsc-hero-glow: color-mix(in srgb, var(--qsc-primary) 12%, transparent);
+}

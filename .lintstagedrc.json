@@ -1,0 +1,10 @@
+{
+  "*.{ts,vue,js,mjs,cjs}": [
+    "eslint --fix --max-warnings 0 --no-warn-ignored",
+    "prettier --write"
+  ],
+  "*.{scss,css}": ["stylelint --fix --allow-empty-input", "prettier --write"],
+  "*.vue": ["stylelint --fix --allow-empty-input"],
+  "*.{json,html,yml,yaml,md}": ["prettier --write"],
+  "*.md": ["markdownlint-cli2"]
+}

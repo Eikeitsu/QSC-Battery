@@ -1,7 +1,11 @@
 #!/system/bin/sh
 # 电流控制：模拟旁路 / 慢充 / 默认限流 / 温度阶梯 / 游戏限流
 # 配置：config/current.jsonc；总开关 current_control=0 时整段跳过。
-# 安全约束：不写 /data/vendor/thermal；不做 MCA/内核补丁；硬件旁路节点仅在存在且可读写时选用。
+# 安全约束：
+# - 不写 /data/vendor/thermal；不做 MCA/内核补丁
+# - 永不写入 charge_control_limit / thermal_input_current 等非 µA 语义节点
+# - 未配置 battery_current 时只选「单一」安全 *_max 节点，禁止多节点 shotgun
+# - 写入策略：可降流步进、也可抬流到目标；危险节点仍禁写/拉黑
 
 # JSONC 解析
 [ -n "$QSC_JSONC_LOADED" ] || {
@@ -13,16 +17,29 @@
 	QSC_JSONC_LOADED=1
 }
 
-QSC_CURRENT_FALLBACK="\
+# 禁止写入：档位/温控/瞬时类，µA 策略套上去会在小米 MTK 等机型上触发重启
+QSC_CURRENT_DENY="\
+charge_control_limit \
+thermal_input_current \
+constant_charge_current \
+fast_charge_current \
+charge_current \
+current_now \
+voltage_now \
+status \
+capacity \
+temp \
+type \
+uevent"
+
+# 自动探测白名单（仅 *_max / 明确上限类）；按优先级取「第一个存在的」
+QSC_CURRENT_SAFE_FALLBACK="\
 /sys/class/power_supply/battery/constant_charge_current_max \
-/sys/class/power_supply/battery/constant_charge_current \
-/sys/class/power_supply/battery/fast_charge_current \
 /sys/class/power_supply/battery/fast_charge_current_max \
-/sys/class/power_supply/battery/thermal_input_current \
-/sys/class/power_supply/battery/current_max \
 /sys/class/power_supply/battery/input_current_max \
-/sys/class/power_supply/battery/charge_current \
-/sys/class/power_supply/battery/charge_control_limit"
+/sys/class/power_supply/battery/current_max \
+/sys/class/power_supply/usb/input_current_max \
+/sys/class/power_supply/usb/current_max"
 
 # 可选硬件旁路节点（仅探测，不强制创建）
 QSC_BYPASS_NODE_CANDIDATES="\
@@ -41,24 +58,93 @@ qsc_current_conf_get_strings() {
 	qsc_jsonc_get_strings "$CURRENT_CONF" "$key"
 }
 
+qsc_current_node_denied() {
+	local node="$1" base deny
+	base="${node##*/}"
+	for deny in $QSC_CURRENT_DENY; do
+		[ "$base" = "$deny" ] && return 0
+	done
+	return 1
+}
+
+qsc_current_is_mtk() {
+	[ -d /proc/mtk_battery_cmd ] && return 0
+	[ -f /sys/devices/platform/charger/mtk_charger ] && return 0
+	getprop ro.board.platform 2>/dev/null | grep -qiE 'mt[0-9]|dimensity|helio' && return 0
+	getprop ro.hardware 2>/dev/null | grep -qiE '^mt' && return 0
+	return 1
+}
+
+qsc_current_node_blacklisted() {
+	local node="$1"
+	[ -f "$DATADIR/current_node_blacklist" ] || return 1
+	grep -Fqx "$node" "$DATADIR/current_node_blacklist" 2>/dev/null
+}
+
+qsc_current_blacklist_node() {
+	local node="$1" why="$2"
+	[ -n "$node" ] || return 0
+	mkdir -p "$DATADIR" 2>/dev/null
+	grep -Fqx "$node" "$DATADIR/current_node_blacklist" 2>/dev/null && return 0
+	echo "$node" >>"$DATADIR/current_node_blacklist"
+	echo "$(date +%F_%T) 电流节点拉黑：$node（$why）" >>"$LOG_FILE"
+}
+
 qsc_current_build_nodes() {
-	local node
+	local node first="" configured=0
 	QSC_CURRENT_NODES=""
-	# 优先读 battery_current 字符串数组
+	QSC_CURRENT_NODES_USER=0
+
 	qsc_current_conf_get_strings battery_current >"$DATADIR/.current_nodes_tmp" 2>/dev/null || : >"$DATADIR/.current_nodes_tmp"
 	while IFS= read -r node || [ -n "$node" ]; do
 		case "$node" in
 			/sys/*|/proc/*)
-				[ -f "$node" ] && QSC_CURRENT_NODES="$QSC_CURRENT_NODES $node"
+				[ -f "$node" ] || continue
+				if qsc_current_node_denied "$node"; then
+					echo "$(date +%F_%T) 忽略危险电流节点配置：$node" >>"$LOG_FILE"
+					continue
+				fi
+				if qsc_current_node_blacklisted "$node"; then
+					continue
+				fi
+				configured=1
+				QSC_CURRENT_NODES="$QSC_CURRENT_NODES $node"
 				;;
 		esac
 	done <"$DATADIR/.current_nodes_tmp"
 	rm -f "$DATADIR/.current_nodes_tmp"
-	if [ -z "$(echo "$QSC_CURRENT_NODES" | tr -d ' ')" ]; then
-		for node in $QSC_CURRENT_FALLBACK; do
-			[ -f "$node" ] && QSC_CURRENT_NODES="$QSC_CURRENT_NODES $node"
-		done
+
+	if [ "$configured" = "1" ]; then
+		QSC_CURRENT_NODES_USER=1
+		return 0
 	fi
+
+	# 未配置：只选一个安全 *_max 节点，禁止旧版多节点 shotgun（K50 插电重启根因）
+	for node in $QSC_CURRENT_SAFE_FALLBACK; do
+		[ -f "$node" ] || continue
+		qsc_current_node_denied "$node" && continue
+		qsc_current_node_blacklisted "$node" && continue
+		first="$node"
+		break
+	done
+
+	if [ -z "$first" ]; then
+		if [ "$(cat "$DATADIR/current_mode_tag" 2>/dev/null)" != "无可用节点" ]; then
+			echo "$(date +%F_%T) 电流控制：未配置 battery_current 且无安全 *_max 节点，跳过写入" >>"$LOG_FILE"
+			echo "无可用节点" >"$DATADIR/current_mode_tag"
+		fi
+		QSC_CURRENT_NODES=""
+		return 1
+	fi
+
+	QSC_CURRENT_NODES=" $first"
+	if qsc_current_is_mtk; then
+		if [ "$(cat "$DATADIR/current_node_note" 2>/dev/null)" != "$first" ]; then
+			echo "$(date +%F_%T) 电流控制(MTK)：自动选用单一节点 $first" >>"$LOG_FILE"
+			echo "$first" >"$DATADIR/current_node_note"
+		fi
+	fi
+	return 0
 }
 
 # 探测可用硬件旁路节点；写入 QSC_BYPASS_NODE（可能为空）
@@ -111,9 +197,27 @@ qsc_bypass_hw_off() {
 	return 0
 }
 
+# 校验节点读回值是否像 µA 上限（拒绝档位索引）
+qsc_current_value_plausible() {
+	local cur="$1" target="$2"
+	case "$cur" in
+		""|*[!0-9]*) return 1 ;;
+	esac
+	# 读回像档位（0–32）却要写超大 µA → 危险
+	if [ "$cur" -le 64 ] && [ "$target" -gt 1000 ]; then
+		return 1
+	fi
+	# 读回像 mA（常见 500–10000）而目标是 µA 量级：允许写；档位误判靠上方规则拦截
+	# 读回异常巨大（>20000000）跳过
+	if [ "$cur" -gt 20000000 ]; then
+		return 1
+	fi
+	return 0
+}
+
 qsc_current_write_target() {
 	local target="$1"
-	local node cur next wrote=0
+	local node cur next wrote=0 after
 	case "$target" in
 		""|*[!0-9]*) return 1 ;;
 	esac
@@ -121,26 +225,55 @@ qsc_current_write_target() {
 	if [ "$target" != "0" ] && [ "$target" -lt 50000 ]; then
 		target=50000
 	fi
+	# 硬顶：防止配置误填把 µA 写成天文数字
+	if [ "$target" -gt 10000000 ]; then
+		target=10000000
+	fi
+
 	for node in $QSC_CURRENT_NODES; do
 		[ -f "$node" ] || continue
+		qsc_current_node_denied "$node" && continue
+		qsc_current_node_blacklisted "$node" && continue
+
 		chmod 0644 "$node" 2>/dev/null
 		cur="$(cat "$node" 2>/dev/null | egrep -v '\-|\+' | tr -d ' \r\n')"
 		case "$cur" in
 			""|*[!0-9]*) continue ;;
 		esac
+
+		if ! qsc_current_value_plausible "$cur" "$target"; then
+			qsc_current_blacklist_node "$node" "读回值不像µA上限(cur=$cur target=$target)"
+			continue
+		fi
+
 		if [ "$cur" = "$target" ]; then
 			continue
 		fi
-		# 降流时分步，减轻充电 IC 突变压力
+
+		# 高于目标则分步降流；否则（含抬流）直接落到目标
 		if [ "$cur" -gt "$target" ]; then
 			next=$((cur - 500000))
 			if [ "$next" -gt "$target" ] && [ "$target" != "0" ]; then
-				echo "$next" >"$node" 2>/dev/null
+				echo "$next" >"$node" 2>/dev/null || continue
 			else
-				echo "$target" >"$node" 2>/dev/null
+				echo "$target" >"$node" 2>/dev/null || continue
 			fi
 		else
-			echo "$target" >"$node" 2>/dev/null
+			echo "$target" >"$node" 2>/dev/null || continue
+		fi
+
+		after="$(cat "$node" 2>/dev/null | egrep -v '\-|\+' | tr -d ' \r\n')"
+		# 写后读回仍像档位 → 拉黑，避免每 3s 抢写
+		if [ -n "$after" ]; then
+			case "$after" in
+				*[!0-9]*) ;;
+				*)
+					if [ "$after" -le 64 ] && [ "$target" -gt 1000 ]; then
+						qsc_current_blacklist_node "$node" "写后读回仍像档位(after=$after)"
+						continue
+					fi
+					;;
+			esac
 		fi
 		wrote=1
 	done
@@ -192,7 +325,7 @@ qsc_apply_current_control() {
 		return 0
 	}
 
-	qsc_current_build_nodes
+	qsc_current_build_nodes || return 0
 	[ -n "$(echo "$QSC_CURRENT_NODES" | tr -d ' ')" ] || return 0
 
 	battery_stop="$(qsc_current_conf_get battery_stop)"
@@ -220,6 +353,7 @@ qsc_apply_current_control() {
 	# 二限电流下限保护（非旁路）
 	[ "$cur2" -lt 50000 ] 2>/dev/null && cur2=50000
 	[ "$app_cur" -lt 50000 ] 2>/dev/null && app_cur=50000
+	[ "$def_max" -gt 10000000 ] 2>/dev/null && def_max=10000000
 
 	# 优先级：模拟旁路 > 二限/旁路回补/慢充 > 游戏限流 > 一限 > 默认
 	if [ "$battery_stop" -le 100 ] && [ "$battery_level" -ge "$battery_stop" ]; then
@@ -280,12 +414,29 @@ qsc_apply_current_control() {
 		return 0
 	fi
 
+	# 同目标冷却：避免读回失败时每 3s 抢写
+	reason="${mode_tag}:${target}"
+	if [ "$(cat "$DATADIR/current_mode_tag" 2>/dev/null)" = "$reason" ]; then
+		now_ts="$(date +%s 2>/dev/null)"
+		last_ts="$(cat "$DATADIR/current_write_ts" 2>/dev/null)"
+		if [ -n "$now_ts" ] && [ -n "$last_ts" ]; then
+			case "${now_ts}${last_ts}" in
+				*[!0-9]*) ;;
+				*)
+					if [ $((now_ts - last_ts)) -lt 30 ]; then
+						return 0
+					fi
+					;;
+			esac
+		fi
+	fi
+
 	if qsc_current_write_target "$target"; then
-		reason="${mode_tag}:${target}"
 		if [ "$(cat "$DATADIR/current_mode_tag" 2>/dev/null)" != "$reason" ]; then
 			now_c="$(qsc_current_now_ua)"
-			echo "$(date +%F_%T) 电量$battery_level ${mode_tag}：目标电流${target} 实时电流${now_c} 温度${temperature}" >>"$LOG_FILE"
+			echo "$(date +%F_%T) 电量$battery_level ${mode_tag}：目标电流${target} 节点${QSC_CURRENT_NODES} 实时电流${now_c} 温度${temperature}" >>"$LOG_FILE"
 			echo "$reason" >"$DATADIR/current_mode_tag"
 		fi
+		date +%s >"$DATADIR/current_write_ts" 2>/dev/null
 	fi
 }

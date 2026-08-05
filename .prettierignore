@@ -1,0 +1,10 @@
+node_modules
+.build
+.release
+module/webroot
+archives
+docs/.vitepress/dist
+docs/.vitepress/cache
+package-lock.json
+*.min.js
+*.min.css

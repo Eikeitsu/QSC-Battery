@@ -1,0 +1,94 @@
+@use "./tokens" as *;
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--qsc-bg);
+  color: var(--qsc-text);
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "PingFang SC",
+    "Noto Sans SC",
+    sans-serif;
+  font-size: calc(16px * var(--font-scale));
+}
+
+body {
+  overscroll-behavior-y: none;
+}
+
+.page {
+  padding: 12px $space-page 28px;
+}
+
+.section-label {
+  margin: 18px 6px 10px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--qsc-text-3);
+}
+
+.section-head {
+  margin: 18px 6px 10px;
+
+  .title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--qsc-text);
+  }
+
+  .hint {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: var(--qsc-text-3);
+    line-height: 1.4;
+  }
+}
+
+.card {
+  background: var(--qsc-surface);
+  border-radius: $radius-card;
+  overflow: hidden;
+  border: 1px solid var(--qsc-hairline);
+  box-shadow: 0 1px 0 rgba(15, 18, 22, 0.03);
+}
+
+html.compact-on {
+  .card {
+    border-radius: $radius-card-compact;
+  }
+
+  .page {
+    padding-top: 8px !important;
+    padding-bottom: 16px !important;
+  }
+
+  .section-head,
+  .section-label {
+    margin-top: 12px;
+  }
+}
+
+.van-cell-group,
+.van-collapse-item__content {
+  background: transparent;
+}
+
+.van-tabbar {
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border-top: 1px solid var(--qsc-hairline);
+}

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN" class="monet-on">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#eef1f5" />
+    <meta name="color-scheme" content="light dark" />
+    <title>充电控制</title>
+    <script>
+      (function () {
+        try {
+          var mode = localStorage.getItem("qsc_theme_mode") || "system";
+          var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var resolved =
+            mode === "light" || mode === "dark" ? mode : dark ? "dark" : "light";
+          document.documentElement.setAttribute("data-theme", resolved);
+          document.documentElement.style.colorScheme =
+            resolved === "dark" ? "only dark" : "only light";
+          var themeMeta = document.querySelector('meta[name="theme-color"]');
+          if (themeMeta)
+            themeMeta.setAttribute(
+              "content",
+              resolved === "dark" ? "#0f1216" : "#eef1f5",
+            );
+          var monet = localStorage.getItem("qsc_monet");
+          var monetOn = monet === null ? true : monet === "1";
+          document.documentElement.classList.toggle("monet-on", monetOn);
+          document.documentElement.classList.toggle("monet-off", !monetOn);
+          var compact = localStorage.getItem("qsc_compact") === "1";
+          document.documentElement.classList.toggle("compact-on", compact);
+          var scale = localStorage.getItem("qsc_font_scale");
+          if (scale)
+            document.documentElement.style.setProperty("--font-scale", String(scale));
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
