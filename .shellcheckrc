@@ -1,0 +1,12 @@
+# Magisk 模块脚本：#!/system/bin/sh（Android ash/mksh，支持 local）
+# ShellCheck 用 bash 方言最接近；下列规则在「多文件 source」场景下噪音过大。
+shell=bash
+external-sources=true
+
+# 库脚本里给其它文件用的变量 / 跨文件赋值
+disable=SC2034
+disable=SC2154
+# 历史 Magisk 脚本大量使用 [ -a ] / [ -o ]
+disable=SC2166
+# find | while 在诊断脚本里可接受
+disable=SC2044

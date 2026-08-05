@@ -39,7 +39,7 @@ qsc_is_plugged() {
 qsc_switch_entry_safe() {
 	local entry="$1"
 	case "$entry" in
-		*constant_charge_current*|*current_max*|*input_current_max*|*charge_current*|*fast_charge*)
+		*constant_charge_current*|*input_current_max*|*charge_current*|*fast_charge*|*current_max*)
 			return 1
 			;;
 		*charge_type*|*charge_control_end*|*charger_limit,*)
@@ -61,7 +61,7 @@ qsc_looks_stopped() {
 	st="$(qsc_batt_status)"
 	cur="$(qsc_abs_ua)"
 	case "$st" in
-		Discharging|"Not charging"|Not\ charging) return 0 ;;
+		Discharging|"Not charging") return 0 ;;
 	esac
 	# 插着电但电流很小，视为接近停充/idle（阈值保守）
 	[ "$cur" -lt 80000 ] 2>/dev/null && return 0

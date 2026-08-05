@@ -1,6 +1,6 @@
 #!/system/bin/sh
 OUT="/sdcard/qsc_diag2.txt"
-> "$OUT"
+: >"$OUT"
 
 echo "=== [1] MCA charger 目录完整列表 ===" >> "$OUT"
 ls -laR /sys/devices/platform/soc/soc:mca_business_charger/ >> "$OUT" 2>&1

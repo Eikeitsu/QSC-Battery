@@ -43,6 +43,7 @@ if (!whichShellcheck()) {
   process.exit(0);
 }
 
+// -x：跟随 source；严重级别 warning；方言与禁用项见仓库根 .shellcheckrc
 const r = spawnSync("shellcheck", ["-x", "-S", "warning", ...files], {
   stdio: "inherit",
   shell: process.platform === "win32",
