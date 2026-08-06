@@ -83,6 +83,23 @@ function copyDirFromModule(relPath, { filter } = {}) {
   }
 }
 
+function stripJsonComments(text) {
+  return String(text || "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "")
+    .replace(/,\s*([\]}])/g, "$1");
+}
+
+/** 仓库内 current.json 可带 // 注释方便开发；打进 zip 时写成严格 JSON */
+function normalizeCurrentJsonInStaging() {
+  const target = join(staging, "config", "current.json");
+  if (!existsSync(target)) return;
+  const raw = readFileSync(target, "utf8");
+  const parsed = JSON.parse(stripJsonComments(raw));
+  writeFileSync(target, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
+  log("stripped comments from config/current.json for package");
+}
+
 function copyBuiltWebroot() {
   if (!existsSync(builtWebDir)) {
     throw new Error("missing .build/webroot — run npm run build:web first");
@@ -123,6 +140,7 @@ mkdirSync(join(staging, "bin"), { recursive: true });
 for (const file of ROOT_FILES) copyFromModule(file);
 copyDirFromModule("META-INF");
 copyDirFromModule("config");
+normalizeCurrentJsonInStaging();
 for (const file of BIN_RELEASE) copyFromModule(join("bin", file));
 for (const file of BIN_LIB_FILES) copyFromModule(join("bin", "lib", file));
 if (includeDebug) {

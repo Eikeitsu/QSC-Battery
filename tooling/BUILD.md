@@ -1,4 +1,4 @@
-# 构建与发布说明
+﻿# 构建与发布说明
 
 面向维护者。用户文档请看 [`docs/`](../docs/)。
 
@@ -131,7 +131,7 @@ npm run package:module:debug   # 调试包（文件名带 -debug）
 | `lib/keys.sh`             | 音量键选择                       |
 | `lib/profile.sh`          | 本机 MCA 探测与 `device.profile` |
 | `lib/charge.sh`           | 停充/恢复写入与节点列表          |
-| `lib/jsonc.sh`            | current.jsonc 解析               |
+| `lib/jsonc.sh`            | current.json 解析                |
 | `lib/current.sh`          | 电流控制（可选）                 |
 | `lib/status.sh`           | 动态 module.prop 简介            |
 | `qsc_switch.sh`           | 停充策略主循环                   |

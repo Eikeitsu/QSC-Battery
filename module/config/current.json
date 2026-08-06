@@ -47,12 +47,12 @@
     "com.tencent.tmgp.sgame",
     "com.tencent.tmgp.pubgmhd",
     "com.miHoYo.Yuanshen",
-    "com.tencent.lolm",
+    "com.tencent.lolm"
   ],
 
   // 自定义电流节点（可选，字符串数组）。
-  // 空数组：按优先顺序自动选一个安全节点（current_max → constant_charge_current_max → …）。
-  // force_battery_current=1 且非空：强制按本数组全写（可含非 _max 路径）。
+  // 空数组：按探测白名单自动选一个节点。
+  // force_battery_current=1 且非空：强制按本数组全写。
   // 建议在本机诊断确认节点后再填写；错误节点可能导致插电重启。
-  "battery_current": [],
+  "battery_current": []
 }

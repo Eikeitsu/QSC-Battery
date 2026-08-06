@@ -1,4 +1,4 @@
-# QSC 充电控制（原定量停充 WebUI 版）
+﻿# QSC 充电控制（原定量停充 WebUI 版）
 
 基于 **top大佬** 原作，由 **许小墨** 维护。模块显示名：**充电控制**（id 仍为 `QSC_Battery`）。
 
@@ -23,7 +23,7 @@
 - 电量 / 温度阈值停充与恢复；多条件同时触发时，全部达到恢复条件后才重新充电
 - 充满再停、自动拔插；**兼容模式**可跳过电流控制以便与其它限流模块共存
 - Action 可实测停充开关并锁定 `preferred_switch`（插电测试，测完恢复）
-- **电流控制（安装时可选，默认关）**：独立配置 `config/current.jsonc`；模拟旁路 / 慢充 / 默认限流 / 电流温控 / 游戏限流
+- **电流控制（安装时可选，默认关）**：独立配置 `config/current.json`；模拟旁路 / 慢充 / 默认限流 / 电流温控 / 游戏限流
 - 可选 WebUI：状态、配置、日志；主题 / 莫奈取色 / 悬浮分页 / 卡片紧凑等显示选项
 - 更新时可用音量键选择保留原配置或恢复默认配置
 - 模块 id：`QSC_Battery`；支持 `updateJson` 在线更新
@@ -33,7 +33,7 @@
 1. 从 [Releases](https://github.com/Eikeitsu/QSC-Battery/releases) 下载 zip
 2. 刷入模块，按音量键确认安装，并选择是否安装 WebUI / 电流控制
 3. 更新安装时选择保留原配置或使用新版默认配置
-4. 重启后通过 WebUI 或 `config/config.conf`（电流控制为 `config/current.jsonc`）调整
+4. 重启后通过 WebUI 或 `config/config.conf`（电流控制为 `config/current.json`）调整
 
 从旧版 `QSC定量停充` / `QSC定量停充_独立开关版`（id：`QuantitativeStopCharging` / `QuantitativeStopCharging_switch`）升级时，安装脚本会**自动卸载旧版模块**（不迁移配置），请在 WebUI 重新设置。
 

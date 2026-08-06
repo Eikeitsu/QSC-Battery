@@ -1,13 +1,13 @@
-# 配置说明
+﻿# 配置说明
 
 推荐通过 **WebUI** 修改。停充与电流控制使用**两套配置文件**，互不混写。
 
-| 文件                   | 内容                                          |
-| ---------------------- | --------------------------------------------- |
-| `config/config.conf`   | 电量 / 温度停充、充满再停、自动拔插、兼容模式 |
-| `config/current.jsonc` | 电流控制（安装时可选；未安装则无此文件）      |
+| 文件                  | 内容                                          |
+| --------------------- | --------------------------------------------- |
+| `config/config.conf`  | 电量 / 温度停充、充满再停、自动拔插、兼容模式 |
+| `config/current.json` | 电流控制（安装时可选；未安装则无此文件）      |
 
-`current.jsonc` 由 `bin/lib/jsonc.sh` 在机上用 **awk/sed** 按 JSON 解析（不依赖 `jq` / Python；普通 Magisk 环境通常也不自带它们）。数字、字符串、布尔与字符串数组（`app_list`、`battery_current`）均走同一套解析；WebUI 读写则用浏览器原生 `JSON.parse` / `JSON.stringify`。
+`current.json` 由 `bin/lib/jsonc.sh` 在机上用 **awk/sed** 解析（不依赖 `jq` / Python）。仓库源文件可带 `//` 注释方便开发；`npm run package:module` 打包时会剥注释写成严格 JSON。WebUI 保存亦为无注释 JSON。字段含义见下表。
 
 ## 模块开关
 
@@ -53,7 +53,7 @@
 
 电量和温控可能在同一轮同时触发。模块会分别记录停充原因，只有电量不高于 `power_start` 且温度不高于 `temperature_switch_start` 后才恢复充电，避免高电量下反复启停。
 
-## 电流控制（`current.jsonc`，可选）
+## 电流控制（`current.json`，可选）
 
 安装时选择「电流控制」后才会写入脚本与配置。未安装时 WebUI 不显示相关入口。
 
@@ -77,7 +77,7 @@
 ::: warning
 电流控制**不修改** `/data/vendor/thermal`，也**不做**内核 / MCA 补丁。默认旁路为写电流的「模拟旁路」；`auto` 仅在探测到只读值为 `0/1` 的已知节点时才写入，失败立即回退。效果因机而异，可能与其它快充 / 限流模块冲突。仅需停充时可不装此组件，或保持总开关关闭；若仍冲突，在 `config.conf` 开启 `Compatibility_mode=1`。
 
-**安全说明**：默认不写 `charge_control_limit`、`thermal_input_current`、无 `_max` 的 `constant_charge_current` / `fast_charge_current` 等。仅当 `force_battery_current=1` 且 `battery_current` 非空时按配置强写（可含上述路径），部分机型可能插电重启——请自担风险。
+**安全说明**：自动探测会按顺序尝试 `fast_charge_current` / `current_max` / `constant_charge_current` / `constant_charge_current_max` 等，仍不写 `charge_control_limit`、`thermal_input_current` 等。`force_battery_current=1` 且数组非空时可强写配置列表。部分机型对电流节点敏感，若插电重启请关闭电流控制或开兼容模式。
 :::
 
 WebUI 游戏列表：可「加载应用列表」后搜索应用名 / 包名并勾选（优先使用管理器自带的应用枚举接口，否则 `pm list packages -3`）。也可继续手动编辑包名。
@@ -85,7 +85,7 @@ WebUI 游戏列表：可「加载应用列表」后搜索应用名 / 包名并�
 ## WebUI 使用提示
 
 - 停充配置修改后一般 **即时生效**（主循环约 3 秒一轮）
-- 电流控制在 WebUI 中单独保存到 `current.jsonc`
+- 电流控制在 WebUI 中单独保存到 `current.json`
 - 「最近日志」可查看停充 / 恢复 / 限流记录；悬浮分页下默认展示更多行
 - 「更多 → 显示」可切换主题包（默认 / MD3 / MIUIX）、深浅色、颜色主题或 MD3 色值；MIUIX 支持莫奈、悬浮底栏与液态玻璃
 - 显示相关选项保存在本机 WebUI 本地存储，**不会**写入配置文件

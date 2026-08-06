@@ -1,7 +1,7 @@
-export const PATHS = {
+﻿export const PATHS = {
   MODDIR: "/data/adb/modules/QSC_Battery",
   CONF: "/data/adb/modules/QSC_Battery/config/config.conf",
-  CURRENT_CONF: "/data/adb/modules/QSC_Battery/config/current.jsonc",
+  CURRENT_CONF: "/data/adb/modules/QSC_Battery/config/current.json",
   CURRENT_LIB: "/data/adb/modules/QSC_Battery/bin/lib/current.sh",
   DATADIR: "/data/adb/modules/QSC_Battery/data",
   OFF_FLAG: "/data/adb/modules/QSC_Battery/data/off_qsc",

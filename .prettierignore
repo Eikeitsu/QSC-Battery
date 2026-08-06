@@ -8,3 +8,5 @@ docs/.vitepress/cache
 package-lock.json
 *.min.js
 *.min.css
+# 开发用带注释；打包脚本会剥注释后写入 zip
+module/config/current.json

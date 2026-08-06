@@ -1,0 +1,5 @@
+{
+  "files.associations": {
+    "**/module/config/current.json": "jsonc"
+  }
+}

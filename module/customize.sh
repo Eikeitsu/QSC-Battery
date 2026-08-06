@@ -1,4 +1,4 @@
-#!/system/bin/sh
+﻿#!/system/bin/sh
 
 ui_print "********************************"
 ui_print " 充电控制 (QSC-Battery) "
@@ -120,10 +120,10 @@ esac
 KEEP_CONFIG=0
 CURRENT_MODULE="/data/adb/modules/QSC_Battery"
 CURRENT_CONF="$CURRENT_MODULE/config/config.conf"
-CURRENT_JSONC="$CURRENT_MODULE/config/current.jsonc"
+CURRENT_JSON="$CURRENT_MODULE/config/current.json"
 CONFIG_BACKUP="${TMPDIR:-/data/local/tmp}/qsc-config-backup.$$"
-CURRENT_JSONC_BACKUP="${TMPDIR:-/data/local/tmp}/qsc-current-jsonc-backup.$$"
-rm -f "$CONFIG_BACKUP" "$CURRENT_JSONC_BACKUP"
+CURRENT_JSON_BACKUP="${TMPDIR:-/data/local/tmp}/qsc-current-json-backup.$$"
+rm -f "$CONFIG_BACKUP" "$CURRENT_JSON_BACKUP"
 if [ -f "$CURRENT_CONF" ] && [ ! -L "$CURRENT_CONF" ]; then
 	CONFIG_SIZE="$(wc -c <"$CURRENT_CONF" 2>/dev/null | tr -d ' ')"
 	case "$CONFIG_SIZE" in ""|*[!0-9]*) CONFIG_SIZE=0 ;; esac
@@ -133,8 +133,8 @@ if [ -f "$CURRENT_CONF" ] && [ ! -L "$CURRENT_CONF" ]; then
 		ui_print "- 旧配置大小异常，将使用新版默认配置"
 	fi
 fi
-if [ -f "$CURRENT_JSONC" ] && [ ! -L "$CURRENT_JSONC" ]; then
-	cp -f "$CURRENT_JSONC" "$CURRENT_JSONC_BACKUP" 2>/dev/null || true
+if [ -f "$CURRENT_JSON" ] && [ ! -L "$CURRENT_JSON" ]; then
+	cp -f "$CURRENT_JSON" "$CURRENT_JSON_BACKUP" 2>/dev/null || true
 fi
 if [ -f "$CONFIG_BACKUP" ]; then
 	ui_print "--------------------------------"
@@ -167,7 +167,7 @@ INSTALL_CURRENT=1
 ui_print "--------------------------------"
 ui_print " 是否安装「电流控制」组件？"
 ui_print " （模拟旁路 / 慢充 / 限流 / 游戏限流）"
-ui_print " 配置文件：config/current.jsonc"
+ui_print " 配置文件：config/current.json"
 ui_print " 音量上：安装（默认关闭，需手动开启）"
 ui_print " 音量下：不安装（不写入相关文件）"
 ui_print " 20 秒未选择时默认安装"
@@ -261,16 +261,16 @@ if [ "$INSTALL_WEBUI" != "1" ]; then
 fi
 
 if [ "$INSTALL_CURRENT" = "1" ]; then
-	if [ "$KEEP_CONFIG" = "1" ] && [ -f "$CURRENT_JSONC_BACKUP" ]; then
-		cp -f "$CURRENT_JSONC_BACKUP" "$MODPATH/config/current.jsonc" 2>/dev/null && ui_print "- 已保留电流控制配置 current.jsonc"
+	if [ "$KEEP_CONFIG" = "1" ] && [ -f "$CURRENT_JSON_BACKUP" ]; then
+		cp -f "$CURRENT_JSON_BACKUP" "$MODPATH/config/current.json" 2>/dev/null && ui_print "- 已保留电流控制配置 current.json"
 	fi
-	ui_print "- 已安装电流控制：config/current.jsonc（默认关闭）"
+	ui_print "- 已安装电流控制：config/current.json（默认关闭）"
 else
 	rm -f "$MODPATH/bin/lib/current.sh"
-	rm -f "$MODPATH/config/current.jsonc"
+	rm -f "$MODPATH/config/current.json"
 	ui_print "- 未安装电流控制：已移除相关脚本与配置"
 fi
-rm -f "$CURRENT_JSONC_BACKUP"
+rm -f "$CURRENT_JSON_BACKUP"
 
 ui_print "--------------------------------"
 ui_print " 探测本机充电控制节点..."
@@ -291,7 +291,7 @@ else
 	ui_print " 本次未安装 WebUI，可直接编辑配置文件 "
 fi
 ui_print " 配置: config/config.conf "
-[ "$INSTALL_CURRENT" = "1" ] && ui_print " 电流控制: config/current.jsonc "
+[ "$INSTALL_CURRENT" = "1" ] && ui_print " 电流控制: config/current.json "
 ui_print " 日志: data/log.log "
 ui_print " Action: 上=刷新 / 下=诊断菜单 "
 ui_print "--------------------------------"

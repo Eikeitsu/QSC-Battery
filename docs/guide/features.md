@@ -1,4 +1,4 @@
-# 功能介绍
+﻿# 功能介绍
 
 **充电控制**（仓库名 QSC-Battery，模块 id `QSC_Battery`）是运行在 Magisk / KernelSU 上的充电管理模块，基于 top大佬原作 QSC 定量停充，由许小墨维护 WebUI 与扩展能力。
 
@@ -56,7 +56,7 @@
 电流控制配置（仅安装该组件时存在）：
 
 ```text
-/data/adb/modules/QSC_Battery/config/current.jsonc
+/data/adb/modules/QSC_Battery/config/current.json
 ```
 
 运行日志：

@@ -1,4 +1,4 @@
-# 安装与升级
+﻿# 安装与升级
 
 ## 环境要求
 
@@ -25,14 +25,14 @@ WebUI 概览页示意：
 
 检测到已安装的 `QSC_Battery` 时，安装脚本会询问如何处理配置：
 
-- **音量上**：保留原有 `config.conf`；若同时安装电流控制且存在旧 `current.jsonc`，也会一并保留
+- **音量上**：保留原有 `config.conf`；若同时安装电流控制且存在旧 `current.json`，也会一并保留
 - **音量下**：使用安装包中的新版默认配置
 - **20 秒未选择**：默认保留原有配置，避免静默覆盖
 
 WebUI、电流控制是否安装会在每次刷入时**分别询问**。
 
 - 选择不安装 WebUI：不保留 `webroot/`，可直接编辑配置文件
-- 选择不安装电流控制：删除 `bin/lib/current.sh` 与 `config/current.jsonc`，不写入相关功能
+- 选择不安装电流控制：删除 `bin/lib/current.sh` 与 `config/current.json`，不写入相关功能
 
 ## 从旧版升级
 
@@ -60,7 +60,7 @@ WebUI、电流控制是否安装会在每次刷入时**分别询问**。
 ├── bin/                      # 核心逻辑（含 bin/lib/）
 ├── config/
 │   ├── config.conf           # 停充配置
-│   └── current.jsonc         # 电流控制（可选）
+│   └── current.json          # 电流控制（可选）
 ├── data/                     # 日志与运行状态
 └── webroot/                  # 可选 WebUI
 ```

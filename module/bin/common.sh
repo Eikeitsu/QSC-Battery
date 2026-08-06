@@ -1,4 +1,4 @@
-#!/system/bin/sh
+﻿#!/system/bin/sh
 # 公共入口：路径初始化 + 按功能加载 lib/*
 # 其它脚本统一：. "$MODDIR/bin/common.sh" 或 . "${0%/*}/common.sh"
 
@@ -20,7 +20,7 @@ qsc_init_paths() {
 	DATADIR="$MODDIR/data"
 	ASSETDIR="$MODDIR/assets"
 	CONF="$CONFDIR/config.conf"
-	CURRENT_CONF="$CONFDIR/current.jsonc"
+	CURRENT_CONF="$CONFDIR/current.json"
 	LIST_SWITCH="$DATADIR/list_switch"
 	LOG_FILE="$DATADIR/log.log"
 	OFF_FLAG="$DATADIR/off_qsc"

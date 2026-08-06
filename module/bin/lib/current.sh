@@ -1,10 +1,10 @@
-#!/system/bin/sh
+﻿#!/system/bin/sh
 # 电流控制：模拟旁路 / 慢充 / 默认限流 / 温度阶梯 / 游戏限流
-# 配置：config/current.jsonc；总开关 current_control=0 时整段跳过。
+# 配置：config/current.json；总开关 current_control=0 时整段跳过。
 # 安全约束（force_battery_current=0 时）：
 # - 不写 /data/vendor/thermal；不做 MCA/内核补丁
-# - 不写 charge_control_limit / thermal_input_current 等非 µA 语义节点
-# - 未配置 battery_current 时只选「单一」安全节点，禁止多节点 shotgun
+# - 不写 charge_control_limit / thermal_input_current 等非电流策略节点
+# - 未配置 battery_current 时只选「单一」探测白名单节点
 # - force_battery_current=1 且 battery_current 非空：按配置数组全量写入（跳过黑名单）
 # - force_battery_current=1 但数组为空：与关闭相同，回退自动探测
 
@@ -18,13 +18,11 @@
 	QSC_JSONC_LOADED=1
 }
 
-# 禁止写入：档位/温控/瞬时类，µA 策略套上去会在小米 MTK 等机型上触发重启
-# （force_battery_current=1 时跳过此限制）
+# 禁止写入：档位/温控/瞬时类（force_battery_current=1 时跳过）
+# 默认四路径中的 fast_charge_current / constant_charge_current 已纳入探测白名单，不在此拒绝
 QSC_CURRENT_DENY="\
 charge_control_limit \
 thermal_input_current \
-constant_charge_current \
-fast_charge_current \
 charge_current \
 current_now \
 voltage_now \
@@ -34,17 +32,14 @@ temp \
 type \
 uevent"
 
-# 默认电流路径顺序参考（仅作文档；空数组强制模式会回退自动探测，不会套用此列表）
-# fast_charge_current → current_max → constant_charge_current → constant_charge_current_max
-
-# 自动探测：按此顺序优先，再补其它常见上限节点；取「第一个存在且未拒绝的」
+# 自动探测白名单：先按配置四路径顺序，再补其它常见上限节点；取「第一个存在且未拒绝的」
 QSC_CURRENT_SAFE_FALLBACK="\
+/sys/class/power_supply/battery/fast_charge_current \
 /sys/class/power_supply/battery/current_max \
+/sys/class/power_supply/battery/constant_charge_current \
 /sys/class/power_supply/battery/constant_charge_current_max \
 /sys/class/power_supply/battery/fast_charge_current_max \
-/sys/class/power_supply/battery/input_current_max \
-/sys/class/power_supply/usb/input_current_max \
-/sys/class/power_supply/usb/current_max"
+/sys/class/power_supply/battery/input_current_max"
 
 # 可选硬件旁路节点（仅探测，不强制创建）
 QSC_BYPASS_NODE_CANDIDATES="\
