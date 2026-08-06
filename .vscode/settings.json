@@ -1,5 +1,12 @@
 {
   "files.associations": {
     "**/module/config/current.json": "jsonc"
-  }
+  },
+  "files.encoding": "utf8",
+  "files.autoGuessEncoding": false,
+  "[shellscript]": {
+    "files.encoding": "utf8",
+    "files.eol": "\n"
+  },
+  "files.encodingInsertFinalNewLine": true
 }
