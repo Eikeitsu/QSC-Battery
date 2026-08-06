@@ -1,4 +1,4 @@
-#!/system/bin/sh
+﻿#!/system/bin/sh
 # 电流控制：模拟旁路 / 慢充 / 默认限流 / 温度阶梯 / 游戏限流
 # 配置：config/current.json；总开关 current_control=0 时整段跳过。
 # 安全约束（force_battery_current=0 时）：
@@ -243,9 +243,16 @@ qsc_current_value_plausible() {
 	return 0
 }
 
+# 写入电流目标。副作用（供日志）：
+#   QSC_CW_FROM / QSC_CW_TO：本轮实际写入前后值
+#   QSC_CW_REACHED=1：已到最终目标；QSC_CW_STEPPING=1：本轮只是降流步进
 qsc_current_write_target() {
 	local target="$1"
-	local node cur next wrote=0 after
+	local node cur next wrote=0 after at_target=0 step_to=""
+	QSC_CW_FROM=""
+	QSC_CW_TO=""
+	QSC_CW_REACHED=0
+	QSC_CW_STEPPING=0
 	case "$target" in
 		""|*[!0-9]*) return 1 ;;
 	esac
@@ -279,19 +286,25 @@ qsc_current_write_target() {
 		fi
 
 		if [ "$cur" = "$target" ]; then
+			at_target=1
+			QSC_CW_REACHED=1
+			QSC_CW_FROM="$cur"
+			QSC_CW_TO="$cur"
 			continue
 		fi
 
-		# 高于目标则分步降流；否则（含抬流）直接落到目标
+		# 高于目标：分步降流（每次约 -500000µA）；低于目标：直接抬流到位
+		step_to="$target"
 		if [ "$cur" -gt "$target" ]; then
 			next=$((cur - 500000))
 			if [ "$next" -gt "$target" ] && [ "$target" != "0" ]; then
-				echo "$next" >"$node" 2>/dev/null || continue
-			else
-				echo "$target" >"$node" 2>/dev/null || continue
+				step_to="$next"
+				QSC_CW_STEPPING=1
 			fi
+			echo "$step_to" >"$node" 2>/dev/null || continue
 		else
 			echo "$target" >"$node" 2>/dev/null || continue
+			step_to="$target"
 		fi
 
 		if [ "${QSC_CURRENT_FORCE:-0}" != "1" ]; then
@@ -308,10 +321,26 @@ qsc_current_write_target() {
 						;;
 				esac
 			fi
+		else
+			after="$step_to"
 		fi
+
 		wrote=1
+		if [ -z "$QSC_CW_FROM" ]; then
+			QSC_CW_FROM="$cur"
+			QSC_CW_TO="${after:-$step_to}"
+			if [ "$QSC_CW_TO" = "$target" ] || [ "$step_to" = "$target" ]; then
+				QSC_CW_REACHED=1
+				QSC_CW_STEPPING=0
+			fi
+		fi
 	done
-	[ "$wrote" = "1" ]
+
+	if [ "$at_target" = "1" ] && [ "$wrote" != "1" ]; then
+		QSC_CW_REACHED=1
+		QSC_CW_STEPPING=0
+	fi
+	[ "$wrote" = "1" ] || [ "$at_target" = "1" ]
 }
 
 qsc_current_now_ua() {
@@ -409,7 +438,7 @@ qsc_bypass_schedule_hit() {
 qsc_apply_current_control() {
 	local enable battery_stop slow_charge temp_cur
 	local limit1 limit2 cur1 cur2 def_max app_on app_cur
-	local reason target now_c battery_stop_1
+	local reason target now_c battery_stop_1 prev_tag write_ok reached_flag
 	local mode_tag="" bypass_mode safety_temp bypass_temp
 	local want_bypass=0 used_hw=0 by_level=0 by_temp=0 by_sched=0
 	local reasons=""
@@ -528,9 +557,12 @@ qsc_apply_current_control() {
 		return 0
 	fi
 
-	# 同目标冷却：避免读回失败时每 3s 抢写
+	# 同目标且已到位：冷却 30s，避免每 3s 空转抢写
+	# 降流步进未到位时不冷却，主循环约每 3s 继续下一阶
 	reason="${mode_tag}:${target}"
-	if [ "$(cat "$DATADIR/current_mode_tag" 2>/dev/null)" = "$reason" ]; then
+	prev_tag="$(cat "$DATADIR/current_mode_tag" 2>/dev/null)"
+	reached_flag="$(cat "$DATADIR/current_reached" 2>/dev/null)"
+	if [ "$prev_tag" = "$reason" ] && [ "$reached_flag" = "1" ]; then
 		now_ts="$(date +%s 2>/dev/null)"
 		last_ts="$(cat "$DATADIR/current_write_ts" 2>/dev/null)"
 		if [ -n "$now_ts" ] && [ -n "$last_ts" ]; then
@@ -545,12 +577,37 @@ qsc_apply_current_control() {
 		fi
 	fi
 
-	if qsc_current_write_target "$target"; then
-		if [ "$(cat "$DATADIR/current_mode_tag" 2>/dev/null)" != "$reason" ]; then
-			now_c="$(qsc_current_now_ua)"
-			echo "$(date +%F_%T) 电量$battery_level ${mode_tag}：目标电流${target} 节点${QSC_CURRENT_NODES} 实时电流${now_c} 温度${temperature}" >>"$LOG_FILE"
-			echo "$reason" >"$DATADIR/current_mode_tag"
+	write_ok=0
+	qsc_current_write_target "$target" && write_ok=1
+	now_c="$(qsc_current_now_ua)"
+
+	if [ "$write_ok" != "1" ]; then
+		if [ "$prev_tag" != "fail:$reason" ]; then
+			echo "$(date +%F_%T) 电量$battery_level 电流写入失败：${mode_tag} 目标${target} 节点${QSC_CURRENT_NODES:-无} 实时电流${now_c}" >>"$LOG_FILE"
+			echo "fail:$reason" >"$DATADIR/current_mode_tag"
+			echo 0 >"$DATADIR/current_reached"
 		fi
-		date +%s >"$DATADIR/current_write_ts" 2>/dev/null
+		return 0
 	fi
+
+	if [ "${QSC_CW_STEPPING:-0}" = "1" ]; then
+		# 降流未到位：每阶都记日志，并允许下一轮继续步进
+		echo "$(date +%F_%T) 电量$battery_level ${mode_tag}降流步进：${QSC_CW_FROM}→${QSC_CW_TO}（目标${target}）节点${QSC_CURRENT_NODES} 实时电流${now_c} 温度${temperature}" >>"$LOG_FILE"
+		echo "$reason" >"$DATADIR/current_mode_tag"
+		echo 0 >"$DATADIR/current_reached"
+		date +%s >"$DATADIR/current_write_ts" 2>/dev/null
+		return 0
+	fi
+
+	# 抬流直接到位，或降流最后一阶 / 已是目标
+	if [ "$prev_tag" != "$reason" ] || [ "$reached_flag" != "1" ]; then
+		if [ "${QSC_CW_FROM:-}" != "${QSC_CW_TO:-}" ] && [ -n "${QSC_CW_FROM:-}" ]; then
+			echo "$(date +%F_%T) 电量$battery_level ${mode_tag}：${QSC_CW_FROM}→${QSC_CW_TO}（目标${target}）节点${QSC_CURRENT_NODES} 实时电流${now_c} 温度${temperature}" >>"$LOG_FILE"
+		else
+			echo "$(date +%F_%T) 电量$battery_level ${mode_tag}：目标电流${target} 节点${QSC_CURRENT_NODES} 实时电流${now_c} 温度${temperature}" >>"$LOG_FILE"
+		fi
+	fi
+	echo "$reason" >"$DATADIR/current_mode_tag"
+	echo 1 >"$DATADIR/current_reached"
+	date +%s >"$DATADIR/current_write_ts" 2>/dev/null
 }
