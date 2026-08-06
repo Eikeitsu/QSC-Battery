@@ -1,4 +1,4 @@
-﻿#!/system/bin/sh
+#!/system/bin/sh
 
 ui_print "********************************"
 ui_print " 充电控制 (QSC-Battery) "

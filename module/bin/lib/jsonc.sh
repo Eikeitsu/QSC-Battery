@@ -1,4 +1,4 @@
-﻿#!/system/bin/sh
+#!/system/bin/sh
 # current.json 读取器（面向 Magisk 机上环境：只有 toybox/busybox awk+sed，无 jq/python）
 # 流程：去 // 与尾逗号（兼容手改残留）→ awk 按 JSON 取值
 # 标量：qsc_jsonc_get <file> <key>

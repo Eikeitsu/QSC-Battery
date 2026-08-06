@@ -1,4 +1,4 @@
-﻿#!/system/bin/sh
+#!/system/bin/sh
 # 公共入口：路径初始化 + 按功能加载 lib/*
 # 其它脚本统一：. "$MODDIR/bin/common.sh" 或 . "${0%/*}/common.sh"
 

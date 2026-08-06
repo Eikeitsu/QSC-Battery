@@ -1,4 +1,4 @@
-﻿#!/system/bin/sh
+#!/system/bin/sh
 # 电流控制：模拟旁路 / 慢充 / 默认限流 / 温度阶梯 / 游戏限流
 # 配置：config/current.json；总开关 current_control=0 时整段跳过。
 # 安全约束（force_battery_current=0 时）：
