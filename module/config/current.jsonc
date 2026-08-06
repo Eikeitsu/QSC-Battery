@@ -15,6 +15,11 @@
   // 不会改温控文件，也不会做内核补丁。
   "bypass_mode": "sim",
 
+  // 强制按 battery_current 数组写入：0 关 / 1 开。默认关闭。
+  // 开且数组非空：存在的路径全部写入（跳过危险节点黑名单与读回校验）。
+  // 开但数组为空：与关闭相同，回退自动探测单一安全节点。
+  "force_battery_current": 0,
+
   // 旁路安全温度上限 (°C)：达到后不写 0 / 不开节点旁路，改为二限小电流。
   "safety_temp_max": 48,
 
@@ -42,12 +47,12 @@
     "com.tencent.tmgp.sgame",
     "com.tencent.tmgp.pubgmhd",
     "com.miHoYo.Yuanshen",
-    "com.tencent.lolm"
+    "com.tencent.lolm",
   ],
 
   // 自定义电流节点（可选，字符串数组）。
-  // 空数组时：仅自动选用「一个」安全的 *_max 节点（如 constant_charge_current_max），
-  // 不再对 charge_control_limit / thermal_input_current 等多节点 shotgun 写入。
+  // 空数组：按优先顺序自动选一个安全节点（current_max → constant_charge_current_max → …）。
+  // force_battery_current=1 且非空：强制按本数组全写（可含非 _max 路径）。
   // 建议在本机诊断确认节点后再填写；错误节点可能导致插电重启。
-  "battery_current": []
+  "battery_current": [],
 }

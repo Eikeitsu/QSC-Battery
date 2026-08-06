@@ -71,6 +71,7 @@ export async function loadCurrentJsonc(): Promise<CurrentConfig> {
       : [];
     merged.bypass_mode = merged.bypass_mode === "auto" ? "auto" : "sim";
     merged.bypass_temp = Number(merged.bypass_temp) || 110;
+    merged.force_battery_current = Number(merged.force_battery_current) ? 1 : 0;
     return merged;
   } catch {
     return { ...CURRENT_DEFAULTS };
@@ -95,6 +96,7 @@ export async function saveCurrentJsonc(obj: CurrentConfig): Promise<boolean> {
     app_list: normalizeAppList(obj.app_list),
     bypass_mode: obj.bypass_mode === "auto" ? "auto" : "sim",
     safety_temp_max: Math.min(55, Math.max(40, Number(obj.safety_temp_max) || 48)),
+    force_battery_current: Number(obj.force_battery_current) ? 1 : 0,
     battery_current: Array.isArray(obj.battery_current) ? obj.battery_current : [],
   };
   const json = JSON.stringify(payload, null, 2);

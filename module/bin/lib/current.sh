@@ -1,11 +1,12 @@
 #!/system/bin/sh
 # 电流控制：模拟旁路 / 慢充 / 默认限流 / 温度阶梯 / 游戏限流
 # 配置：config/current.jsonc；总开关 current_control=0 时整段跳过。
-# 安全约束：
+# 安全约束（force_battery_current=0 时）：
 # - 不写 /data/vendor/thermal；不做 MCA/内核补丁
-# - 永不写入 charge_control_limit / thermal_input_current 等非 µA 语义节点
-# - 未配置 battery_current 时只选「单一」安全 *_max 节点，禁止多节点 shotgun
-# - 写入策略：可降流步进、也可抬流到目标；危险节点仍禁写/拉黑
+# - 不写 charge_control_limit / thermal_input_current 等非 µA 语义节点
+# - 未配置 battery_current 时只选「单一」安全节点，禁止多节点 shotgun
+# - force_battery_current=1 且 battery_current 非空：按配置数组全量写入（跳过黑名单）
+# - force_battery_current=1 但数组为空：与关闭相同，回退自动探测
 
 # JSONC 解析
 [ -n "$QSC_JSONC_LOADED" ] || {
@@ -18,6 +19,7 @@
 }
 
 # 禁止写入：档位/温控/瞬时类，µA 策略套上去会在小米 MTK 等机型上触发重启
+# （force_battery_current=1 时跳过此限制）
 QSC_CURRENT_DENY="\
 charge_control_limit \
 thermal_input_current \
@@ -32,12 +34,15 @@ temp \
 type \
 uevent"
 
-# 自动探测白名单（仅 *_max / 明确上限类）；按优先级取「第一个存在的」
+# 默认电流路径顺序参考（仅作文档；空数组强制模式会回退自动探测，不会套用此列表）
+# fast_charge_current → current_max → constant_charge_current → constant_charge_current_max
+
+# 自动探测：按此顺序优先，再补其它常见上限节点；取「第一个存在且未拒绝的」
 QSC_CURRENT_SAFE_FALLBACK="\
+/sys/class/power_supply/battery/current_max \
 /sys/class/power_supply/battery/constant_charge_current_max \
 /sys/class/power_supply/battery/fast_charge_current_max \
 /sys/class/power_supply/battery/input_current_max \
-/sys/class/power_supply/battery/current_max \
 /sys/class/power_supply/usb/input_current_max \
 /sys/class/power_supply/usb/current_max"
 
@@ -90,36 +95,64 @@ qsc_current_blacklist_node() {
 	echo "$(date +%F_%T) 电流节点拉黑：$node（$why）" >>"$LOG_FILE"
 }
 
-qsc_current_build_nodes() {
-	local node first="" configured=0
-	QSC_CURRENT_NODES=""
-	QSC_CURRENT_NODES_USER=0
+qsc_current_force_on() {
+	local v
+	v="$(qsc_current_conf_get force_battery_current 2>/dev/null)"
+	[ "$v" = "1" ] || [ "$v" = "true" ]
+}
 
-	qsc_current_conf_get_strings battery_current >"$DATADIR/.current_nodes_tmp" 2>/dev/null || : >"$DATADIR/.current_nodes_tmp"
+# 将节点列表文本追加进 QSC_CURRENT_NODES（仅保留存在的路径）
+qsc_current_append_existing() {
+	local list_file="$1" force="$2" node
 	while IFS= read -r node || [ -n "$node" ]; do
 		case "$node" in
 			/sys/*|/proc/*)
 				[ -f "$node" ] || continue
-				if qsc_current_node_denied "$node"; then
-					echo "$(date +%F_%T) 忽略危险电流节点配置：$node" >>"$LOG_FILE"
-					continue
+				if [ "$force" != "1" ]; then
+					if qsc_current_node_denied "$node"; then
+						echo "$(date +%F_%T) 忽略危险电流节点配置：$node" >>"$LOG_FILE"
+						continue
+					fi
+					qsc_current_node_blacklisted "$node" && continue
 				fi
-				if qsc_current_node_blacklisted "$node"; then
-					continue
-				fi
-				configured=1
 				QSC_CURRENT_NODES="$QSC_CURRENT_NODES $node"
 				;;
 		esac
-	done <"$DATADIR/.current_nodes_tmp"
+	done <"$list_file"
+}
+
+qsc_current_build_nodes() {
+	local node first="" configured=0 force=0
+	QSC_CURRENT_NODES=""
+	QSC_CURRENT_NODES_USER=0
+	QSC_CURRENT_FORCE=0
+
+	# 仅当开关开且数组非空时才强制；空数组回退默认逻辑
+	if qsc_current_force_on; then
+		force=1
+	fi
+
+	qsc_current_conf_get_strings battery_current >"$DATADIR/.current_nodes_tmp" 2>/dev/null || : >"$DATADIR/.current_nodes_tmp"
+	if [ -s "$DATADIR/.current_nodes_tmp" ]; then
+		qsc_current_append_existing "$DATADIR/.current_nodes_tmp" "$force"
+		[ -n "$(echo "$QSC_CURRENT_NODES" | tr -d ' ')" ] && configured=1
+	fi
 	rm -f "$DATADIR/.current_nodes_tmp"
 
 	if [ "$configured" = "1" ]; then
 		QSC_CURRENT_NODES_USER=1
+		if [ "$force" = "1" ]; then
+			QSC_CURRENT_FORCE=1
+			if [ "$(cat "$DATADIR/current_node_note" 2>/dev/null)" != "force-cfg" ]; then
+				echo "$(date +%F_%T) 电流控制：force_battery_current=1，按配置数组写入$QSC_CURRENT_NODES" >>"$LOG_FILE"
+				echo "force-cfg" >"$DATADIR/current_node_note"
+			fi
+		fi
 		return 0
 	fi
 
-	# 未配置：只选一个安全 *_max 节点，禁止旧版多节点 shotgun（K50 插电重启根因）
+	# 未配置（或强制开但数组为空/节点均不存在）：只选一个安全节点
+	QSC_CURRENT_FORCE=0
 	for node in $QSC_CURRENT_SAFE_FALLBACK; do
 		[ -f "$node" ] || continue
 		qsc_current_node_denied "$node" && continue
@@ -130,7 +163,7 @@ qsc_current_build_nodes() {
 
 	if [ -z "$first" ]; then
 		if [ "$(cat "$DATADIR/current_mode_tag" 2>/dev/null)" != "无可用节点" ]; then
-			echo "$(date +%F_%T) 电流控制：未配置 battery_current 且无安全 *_max 节点，跳过写入" >>"$LOG_FILE"
+			echo "$(date +%F_%T) 电流控制：未配置 battery_current 且无安全节点，跳过写入" >>"$LOG_FILE"
 			echo "无可用节点" >"$DATADIR/current_mode_tag"
 		fi
 		QSC_CURRENT_NODES=""
@@ -232,8 +265,10 @@ qsc_current_write_target() {
 
 	for node in $QSC_CURRENT_NODES; do
 		[ -f "$node" ] || continue
-		qsc_current_node_denied "$node" && continue
-		qsc_current_node_blacklisted "$node" && continue
+		if [ "${QSC_CURRENT_FORCE:-0}" != "1" ]; then
+			qsc_current_node_denied "$node" && continue
+			qsc_current_node_blacklisted "$node" && continue
+		fi
 
 		chmod 0644 "$node" 2>/dev/null
 		cur="$(cat "$node" 2>/dev/null | egrep -v '\-|\+' | tr -d ' \r\n')"
@@ -241,9 +276,11 @@ qsc_current_write_target() {
 			""|*[!0-9]*) continue ;;
 		esac
 
-		if ! qsc_current_value_plausible "$cur" "$target"; then
-			qsc_current_blacklist_node "$node" "读回值不像µA上限(cur=$cur target=$target)"
-			continue
+		if [ "${QSC_CURRENT_FORCE:-0}" != "1" ]; then
+			if ! qsc_current_value_plausible "$cur" "$target"; then
+				qsc_current_blacklist_node "$node" "读回值不像µA上限(cur=$cur target=$target)"
+				continue
+			fi
 		fi
 
 		if [ "$cur" = "$target" ]; then
@@ -262,18 +299,20 @@ qsc_current_write_target() {
 			echo "$target" >"$node" 2>/dev/null || continue
 		fi
 
-		after="$(cat "$node" 2>/dev/null | egrep -v '\-|\+' | tr -d ' \r\n')"
-		# 写后读回仍像档位 → 拉黑，避免每 3s 抢写
-		if [ -n "$after" ]; then
-			case "$after" in
-				*[!0-9]*) ;;
-				*)
-					if [ "$after" -le 64 ] && [ "$target" -gt 1000 ]; then
-						qsc_current_blacklist_node "$node" "写后读回仍像档位(after=$after)"
-						continue
-					fi
-					;;
-			esac
+		if [ "${QSC_CURRENT_FORCE:-0}" != "1" ]; then
+			after="$(cat "$node" 2>/dev/null | egrep -v '\-|\+' | tr -d ' \r\n')"
+			# 写后读回仍像档位 → 拉黑，避免每 3s 抢写
+			if [ -n "$after" ]; then
+				case "$after" in
+					*[!0-9]*) ;;
+					*)
+						if [ "$after" -le 64 ] && [ "$target" -gt 1000 ]; then
+							qsc_current_blacklist_node "$node" "写后读回仍像档位(after=$after)"
+							continue
+						fi
+						;;
+				esac
+			fi
 		fi
 		wrote=1
 	done

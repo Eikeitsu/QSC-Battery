@@ -46,5 +46,6 @@ export const CURRENT_DEFAULTS: CurrentConfig = {
   ],
   bypass_mode: "sim",
   safety_temp_max: 48,
+  force_battery_current: 0,
   battery_current: [],
 };
