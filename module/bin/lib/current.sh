@@ -1,12 +1,14 @@
 #!/system/bin/sh
 # 电流控制：模拟旁路 / 慢充 / 默认限流 / 温度阶梯 / 游戏限流
 # 配置：config/current.json；总开关 current_control=0 时整段跳过。
-# 安全约束（force_battery_current=0 时）：
+# 写入策略：
+# - 从 battery_current 读取节点列表，对本机存在的路径全部写入
+# - 额外合并开机探测的 *restrict*_cur*（list_charge_current）
+# - 限流前按 restricted 写入策略参数（如 qcom restrict_chg）
+# 安全约束：
 # - 不写 /data/vendor/thermal；不做 MCA/内核补丁
 # - 不写 charge_control_limit / thermal_input_current 等非电流策略节点
-# - 未配置 battery_current 时只选「单一」探测白名单节点
-# - force_battery_current=1 且 battery_current 非空：按配置数组全量写入（跳过黑名单）
-# - force_battery_current=1 但数组为空：与关闭相同，回退自动探测
+# - 危险节点名、写入无效/读回不像 µA 上限的节点会跳过或拉黑
 
 # JSONC 解析
 [ -n "$QSC_JSONC_LOADED" ] || {
@@ -18,8 +20,8 @@
 	QSC_JSONC_LOADED=1
 }
 
-# 禁止写入：档位/温控/瞬时类（force_battery_current=1 时跳过）
-# 默认四路径中的 fast_charge_current / constant_charge_current 已纳入探测白名单，不在此拒绝
+# 禁止写入：档位/温控/瞬时类
+# battery_current 默认四路径中的 fast_charge_current / constant_charge_current 不在此拒绝
 QSC_CURRENT_DENY="\
 charge_control_limit \
 thermal_input_current \
@@ -32,14 +34,12 @@ temp \
 type \
 uevent"
 
-# 自动探测白名单：先按配置四路径顺序，再补其它常见上限节点；取「第一个存在且未拒绝的」
+# 配置缺失/数组为空时的兜底四路径（与 current.json 默认一致）
 QSC_CURRENT_SAFE_FALLBACK="\
 /sys/class/power_supply/battery/fast_charge_current \
 /sys/class/power_supply/battery/current_max \
 /sys/class/power_supply/battery/constant_charge_current \
-/sys/class/power_supply/battery/constant_charge_current_max \
-/sys/class/power_supply/battery/fast_charge_current_max \
-/sys/class/power_supply/battery/input_current_max"
+/sys/class/power_supply/battery/constant_charge_current_max"
 
 # 可选硬件旁路节点（仅探测，不强制创建）
 QSC_BYPASS_NODE_CANDIDATES="\
@@ -67,14 +67,6 @@ qsc_current_node_denied() {
 	return 1
 }
 
-qsc_current_is_mtk() {
-	[ -d /proc/mtk_battery_cmd ] && return 0
-	[ -f /sys/devices/platform/charger/mtk_charger ] && return 0
-	getprop ro.board.platform 2>/dev/null | grep -qiE 'mt[0-9]|dimensity|helio' && return 0
-	getprop ro.hardware 2>/dev/null | grep -qiE '^mt' && return 0
-	return 1
-}
-
 qsc_current_node_blacklisted() {
 	local node="$1"
 	[ -f "$DATADIR/current_node_blacklist" ] || return 1
@@ -87,90 +79,186 @@ qsc_current_blacklist_node() {
 	mkdir -p "$DATADIR" 2>/dev/null
 	grep -Fqx "$node" "$DATADIR/current_node_blacklist" 2>/dev/null && return 0
 	echo "$node" >>"$DATADIR/current_node_blacklist"
+	# 已拉黑则清掉失败计数
+	if [ -f "$DATADIR/current_node_failcnt" ]; then
+		grep -Fv "${node}|" "$DATADIR/current_node_failcnt" >"$DATADIR/.failcnt_tmp" 2>/dev/null || : >"$DATADIR/.failcnt_tmp"
+		mv "$DATADIR/.failcnt_tmp" "$DATADIR/current_node_failcnt"
+	fi
 	echo "$(date +%F_%T) 电流节点拉黑：$node（$why）" >>"$LOG_FILE"
 }
 
-qsc_current_force_on() {
-	local v
-	v="$(qsc_current_conf_get force_battery_current 2>/dev/null)"
-	[ "$v" = "1" ] || [ "$v" = "true" ]
+# 写入失败：连续 3 次才拉黑，避免偶发读回抖动误杀
+qsc_current_mark_write_fail() {
+	local node="$1" why="$2" line cnt=0
+	[ -n "$node" ] || return 0
+	mkdir -p "$DATADIR" 2>/dev/null
+	line="$(grep -F "${node}|" "$DATADIR/current_node_failcnt" 2>/dev/null | head -n 1)"
+	if [ -n "$line" ]; then
+		cnt="${line##*|}"
+		case "$cnt" in
+			""|*[!0-9]*) cnt=0 ;;
+		esac
+	fi
+	cnt=$((cnt + 1))
+	if [ -f "$DATADIR/current_node_failcnt" ]; then
+		grep -Fv "${node}|" "$DATADIR/current_node_failcnt" >"$DATADIR/.failcnt_tmp" 2>/dev/null || : >"$DATADIR/.failcnt_tmp"
+	else
+		: >"$DATADIR/.failcnt_tmp"
+	fi
+	if [ "$cnt" -ge 3 ]; then
+		mv "$DATADIR/.failcnt_tmp" "$DATADIR/current_node_failcnt"
+		qsc_current_blacklist_node "$node" "$why"
+		return 0
+	fi
+	echo "${node}|${cnt}" >>"$DATADIR/.failcnt_tmp"
+	mv "$DATADIR/.failcnt_tmp" "$DATADIR/current_node_failcnt"
+	echo "$(date +%F_%T) 电流节点写入未生效（第${cnt}/3次，暂不拉黑）：$node（$why）" >>"$LOG_FILE"
 }
 
-# 将节点列表文本追加进 QSC_CURRENT_NODES（仅保留存在的路径）
+qsc_current_clear_write_fail() {
+	local node="$1"
+	[ -n "$node" ] || return 0
+	[ -f "$DATADIR/current_node_failcnt" ] || return 0
+	grep -Fv "${node}|" "$DATADIR/current_node_failcnt" >"$DATADIR/.failcnt_tmp" 2>/dev/null || : >"$DATADIR/.failcnt_tmp"
+	mv "$DATADIR/.failcnt_tmp" "$DATADIR/current_node_failcnt"
+}
+
+# battery_current / restricted 变更时清拉黑并重扫 restrict*_cur*
+qsc_current_sync_conf_guard() {
+	local new fp
+	new="$(
+		{
+			qsc_current_conf_get_strings battery_current 2>/dev/null || true
+			echo '---'
+			qsc_current_conf_get_strings restricted 2>/dev/null || true
+		} | tr -d '\r' | cksum 2>/dev/null | awk '{print $1}'
+	)"
+	[ -n "$new" ] || return 0
+	fp="$(cat "$DATADIR/current_conf_fp" 2>/dev/null)"
+	if [ "$fp" != "$new" ]; then
+		rm -f "$DATADIR/current_node_blacklist" "$DATADIR/current_node_failcnt"
+		rm -f "${LIST_CHARGE_CURRENT:-$DATADIR/list_charge_current}"
+		echo "$new" >"$DATADIR/current_conf_fp"
+	fi
+}
+
+qsc_current_refresh_restrict_list() {
+	local list="${LIST_CHARGE_CURRENT:-$DATADIR/list_charge_current}"
+	mkdir -p "$DATADIR" 2>/dev/null
+	find /sys/class /sys/devices /sys/module -type f -name '*restrict*_cur*' 2>/dev/null \
+		| egrep -i -v 'usb' \
+		| sort -u >"$list"
+}
+
+# 将节点列表文本追加进 QSC_CURRENT_NODES（仅保留存在的路径，去重）
 qsc_current_append_existing() {
-	local list_file="$1" force="$2" node
+	local list_file="$1" node
+	[ -f "$list_file" ] || return 0
 	while IFS= read -r node || [ -n "$node" ]; do
+		node="$(echo "$node" | tr -d ' \r\n')"
 		case "$node" in
 			/sys/*|/proc/*)
 				[ -f "$node" ] || continue
-				if [ "$force" != "1" ]; then
-					if qsc_current_node_denied "$node"; then
-						echo "$(date +%F_%T) 忽略危险电流节点配置：$node" >>"$LOG_FILE"
-						continue
-					fi
-					qsc_current_node_blacklisted "$node" && continue
+				case " $QSC_CURRENT_NODES " in
+					*" $node "*) continue ;;
+				esac
+				if qsc_current_node_denied "$node"; then
+					echo "$(date +%F_%T) 忽略危险电流节点配置：$node" >>"$LOG_FILE"
+					continue
 				fi
+				qsc_current_node_blacklisted "$node" && continue
 				QSC_CURRENT_NODES="$QSC_CURRENT_NODES $node"
 				;;
 		esac
 	done <"$list_file"
 }
 
-qsc_current_build_nodes() {
-	local node first="" configured=0 force=0
-	QSC_CURRENT_NODES=""
-	QSC_CURRENT_NODES_USER=0
-	QSC_CURRENT_FORCE=0
+# 合并开机探测的 *restrict*_cur*
+qsc_current_append_restrict_cur() {
+	local list="${LIST_CHARGE_CURRENT:-$DATADIR/list_charge_current}"
+	[ -f "$list" ] || qsc_current_refresh_restrict_list
+	[ -f "$list" ] || return 0
+	qsc_current_append_existing "$list"
+}
 
-	# 仅当开关开且数组非空时才强制；空数组回退默认逻辑
-	if qsc_current_force_on; then
-		force=1
-	fi
+# 按 restricted 配置写非 µA 策略节点（若存在）
+qsc_current_apply_restricted() {
+	local line route val cur list_file="$DATADIR/.restricted_tmp"
+	: >"$list_file"
+	qsc_current_conf_get_strings restricted >"$list_file" 2>/dev/null || : >"$list_file"
+	[ -s "$list_file" ] || {
+		rm -f "$list_file"
+		return 0
+	}
+	while IFS= read -r line || [ -n "$line" ]; do
+		line="$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr -d '\r')"
+		[ -n "$line" ] || continue
+		case "$line" in
+			*" value="*)
+				route="${line%% value=*}"
+				val="${line#* value=}"
+				;;
+			*"|"*)
+				route="${line%%|*}"
+				val="${line#*|}"
+				;;
+			*)
+				continue
+				;;
+		esac
+		route="$(echo "$route" | tr -d ' \r\n')"
+		val="$(echo "$val" | tr -d ' \r\n')"
+		[ -f "$route" ] || continue
+		[ -n "$val" ] || continue
+		chmod 0644 "$route" 2>/dev/null
+		cur="$(cat "$route" 2>/dev/null | tr -d ' \r\n')"
+		if [ -n "$cur" ] && [ "$cur" != "$val" ]; then
+			echo "$val" >"$route" 2>/dev/null || true
+		fi
+	done <"$list_file"
+	rm -f "$list_file"
+}
+
+qsc_current_build_nodes() {
+	local node note=""
+	QSC_CURRENT_NODES=""
+
+	qsc_current_sync_conf_guard
 
 	qsc_current_conf_get_strings battery_current >"$DATADIR/.current_nodes_tmp" 2>/dev/null || : >"$DATADIR/.current_nodes_tmp"
 	if [ -s "$DATADIR/.current_nodes_tmp" ]; then
-		qsc_current_append_existing "$DATADIR/.current_nodes_tmp" "$force"
-		[ -n "$(echo "$QSC_CURRENT_NODES" | tr -d ' ')" ] && configured=1
+		qsc_current_append_existing "$DATADIR/.current_nodes_tmp"
 	fi
 	rm -f "$DATADIR/.current_nodes_tmp"
 
-	if [ "$configured" = "1" ]; then
-		QSC_CURRENT_NODES_USER=1
-		if [ "$force" = "1" ]; then
-			QSC_CURRENT_FORCE=1
-			if [ "$(cat "$DATADIR/current_node_note" 2>/dev/null)" != "force-cfg" ]; then
-				echo "$(date +%F_%T) 电流控制：force_battery_current=1，按配置数组写入$QSC_CURRENT_NODES" >>"$LOG_FILE"
-				echo "force-cfg" >"$DATADIR/current_node_note"
-			fi
-		fi
-		return 0
+	# 配置为空或节点均不存在：用兜底四路径
+	if [ -z "$(echo "$QSC_CURRENT_NODES" | tr -d ' ')" ]; then
+		for node in $QSC_CURRENT_SAFE_FALLBACK; do
+			[ -f "$node" ] || continue
+			qsc_current_node_denied "$node" && continue
+			qsc_current_node_blacklisted "$node" && continue
+			case " $QSC_CURRENT_NODES " in
+				*" $node "*) continue ;;
+			esac
+			QSC_CURRENT_NODES="$QSC_CURRENT_NODES $node"
+		done
 	fi
 
-	# 未配置（或强制开但数组为空/节点均不存在）：只选一个安全节点
-	QSC_CURRENT_FORCE=0
-	for node in $QSC_CURRENT_SAFE_FALLBACK; do
-		[ -f "$node" ] || continue
-		qsc_current_node_denied "$node" && continue
-		qsc_current_node_blacklisted "$node" && continue
-		first="$node"
-		break
-	done
+	qsc_current_append_restrict_cur
 
-	if [ -z "$first" ]; then
+	if [ -z "$(echo "$QSC_CURRENT_NODES" | tr -d ' ')" ]; then
 		if [ "$(cat "$DATADIR/current_mode_tag" 2>/dev/null)" != "无可用节点" ]; then
-			echo "$(date +%F_%T) 电流控制：未配置 battery_current 且无安全节点，跳过写入" >>"$LOG_FILE"
+			echo "$(date +%F_%T) 电流控制：battery_current 无可用节点，跳过写入" >>"$LOG_FILE"
 			echo "无可用节点" >"$DATADIR/current_mode_tag"
 		fi
 		QSC_CURRENT_NODES=""
 		return 1
 	fi
 
-	QSC_CURRENT_NODES=" $first"
-	if qsc_current_is_mtk; then
-		if [ "$(cat "$DATADIR/current_node_note" 2>/dev/null)" != "$first" ]; then
-			echo "$(date +%F_%T) 电流控制(MTK)：自动选用单一节点 $first" >>"$LOG_FILE"
-			echo "$first" >"$DATADIR/current_node_note"
-		fi
+	note="nodes:$QSC_CURRENT_NODES"
+	if [ "$(cat "$DATADIR/current_node_note" 2>/dev/null)" != "$note" ]; then
+		echo "$(date +%F_%T) 电流控制：写入节点$QSC_CURRENT_NODES" >>"$LOG_FILE"
+		echo "$note" >"$DATADIR/current_node_note"
 	fi
 	return 0
 }
@@ -267,10 +355,8 @@ qsc_current_write_target() {
 
 	for node in $QSC_CURRENT_NODES; do
 		[ -f "$node" ] || continue
-		if [ "${QSC_CURRENT_FORCE:-0}" != "1" ]; then
-			qsc_current_node_denied "$node" && continue
-			qsc_current_node_blacklisted "$node" && continue
-		fi
+		qsc_current_node_denied "$node" && continue
+		qsc_current_node_blacklisted "$node" && continue
 
 		chmod 0644 "$node" 2>/dev/null
 		cur="$(cat "$node" 2>/dev/null | egrep -v '\-|\+' | tr -d ' \r\n')"
@@ -278,11 +364,9 @@ qsc_current_write_target() {
 			""|*[!0-9]*) continue ;;
 		esac
 
-		if [ "${QSC_CURRENT_FORCE:-0}" != "1" ]; then
-			if ! qsc_current_value_plausible "$cur" "$target"; then
-				qsc_current_blacklist_node "$node" "读回值不像µA上限(cur=$cur target=$target)"
-				continue
-			fi
+		if ! qsc_current_value_plausible "$cur" "$target"; then
+			qsc_current_blacklist_node "$node" "读回值不像µA上限(cur=$cur target=$target)"
+			continue
 		fi
 
 		if [ "$cur" = "$target" ]; then
@@ -290,6 +374,7 @@ qsc_current_write_target() {
 			QSC_CW_REACHED=1
 			QSC_CW_FROM="$cur"
 			QSC_CW_TO="$cur"
+			qsc_current_clear_write_fail "$node"
 			continue
 		fi
 
@@ -299,7 +384,6 @@ qsc_current_write_target() {
 			next=$((cur - 500000))
 			if [ "$next" -gt "$target" ] && [ "$target" != "0" ]; then
 				step_to="$next"
-				QSC_CW_STEPPING=1
 			fi
 			echo "$step_to" >"$node" 2>/dev/null || continue
 		else
@@ -307,31 +391,37 @@ qsc_current_write_target() {
 			step_to="$target"
 		fi
 
-		if [ "${QSC_CURRENT_FORCE:-0}" != "1" ]; then
-			after="$(cat "$node" 2>/dev/null | egrep -v '\-|\+' | tr -d ' \r\n')"
-			# 写后读回仍像档位 → 拉黑，避免每 3s 抢写
-			if [ -n "$after" ]; then
-				case "$after" in
-					*[!0-9]*) ;;
-					*)
-						if [ "$after" -le 64 ] && [ "$target" -gt 1000 ]; then
-							qsc_current_blacklist_node "$node" "写后读回仍像档位(after=$after)"
-							continue
-						fi
-						;;
-				esac
-			fi
-		else
-			after="$step_to"
+		after="$(cat "$node" 2>/dev/null | egrep -v '\-|\+' | tr -d ' \r\n')"
+		case "$after" in
+			""|*[!0-9]*) continue ;;
+		esac
+
+		# 写后读回仍像档位 → 拉黑，避免每 3s 抢写
+		if [ "$after" -le 64 ] && [ "$target" -gt 1000 ]; then
+			qsc_current_blacklist_node "$node" "写后读回仍像档位(after=$after)"
+			continue
 		fi
 
+		# 内核忽略写入：读回未变且仍不是目标 → 计次，连续 3 次再拉黑
+		if [ "$after" = "$cur" ] && [ "$cur" != "$target" ]; then
+			qsc_current_mark_write_fail "$node" "写入无效(读回仍为$cur,目标$target)"
+			continue
+		fi
+
+		qsc_current_clear_write_fail "$node"
 		wrote=1
 		if [ -z "$QSC_CW_FROM" ]; then
 			QSC_CW_FROM="$cur"
-			QSC_CW_TO="${after:-$step_to}"
-			if [ "$QSC_CW_TO" = "$target" ] || [ "$step_to" = "$target" ]; then
+			QSC_CW_TO="$after"
+			if [ "$after" = "$target" ]; then
 				QSC_CW_REACHED=1
 				QSC_CW_STEPPING=0
+			elif [ "$cur" -gt "$target" ] && [ "$after" -lt "$cur" ]; then
+				QSC_CW_STEPPING=1
+				QSC_CW_REACHED=0
+			else
+				QSC_CW_STEPPING=0
+				QSC_CW_REACHED=0
 			fi
 		fi
 	done
@@ -452,6 +542,9 @@ qsc_apply_current_control() {
 
 	qsc_current_build_nodes || return 0
 	[ -n "$(echo "$QSC_CURRENT_NODES" | tr -d ' ')" ] || return 0
+
+	# 限流前先写 restricted 类参数
+	qsc_current_apply_restricted
 
 	battery_stop="$(qsc_current_conf_get battery_stop)"
 	[ -z "$battery_stop" ] && battery_stop=110

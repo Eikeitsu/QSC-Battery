@@ -66,19 +66,31 @@ export async function loadCurrentJsonc(): Promise<CurrentConfig> {
       ? normalizeAppList(merged.app_list)
       : [...CURRENT_DEFAULTS.app_list];
     merged.bypass_schedule = normalizeScheduleList(merged.bypass_schedule);
-    merged.battery_current = Array.isArray(merged.battery_current)
-      ? merged.battery_current
-      : [];
+    merged.battery_current =
+      Array.isArray(merged.battery_current) && merged.battery_current.length > 0
+        ? merged.battery_current
+        : [...CURRENT_DEFAULTS.battery_current];
+    merged.restricted = Array.isArray(merged.restricted)
+      ? merged.restricted.filter((x): x is string => typeof x === "string")
+      : [...CURRENT_DEFAULTS.restricted];
     merged.bypass_mode = merged.bypass_mode === "auto" ? "auto" : "sim";
     merged.bypass_temp = Number(merged.bypass_temp) || 110;
-    merged.force_battery_current = Number(merged.force_battery_current) ? 1 : 0;
     return merged;
   } catch {
-    return { ...CURRENT_DEFAULTS };
+    return {
+      ...CURRENT_DEFAULTS,
+      battery_current: [...CURRENT_DEFAULTS.battery_current],
+      restricted: [...CURRENT_DEFAULTS.restricted],
+      app_list: [...CURRENT_DEFAULTS.app_list],
+    };
   }
 }
 
 export async function saveCurrentJsonc(obj: CurrentConfig): Promise<boolean> {
+  const batteryCurrent =
+    Array.isArray(obj.battery_current) && obj.battery_current.length > 0
+      ? obj.battery_current
+      : [...CURRENT_DEFAULTS.battery_current];
   const payload: CurrentConfig = {
     current_control: Number(obj.current_control) ? 1 : 0,
     battery_stop: Number(obj.battery_stop) || 110,
@@ -96,8 +108,10 @@ export async function saveCurrentJsonc(obj: CurrentConfig): Promise<boolean> {
     app_list: normalizeAppList(obj.app_list),
     bypass_mode: obj.bypass_mode === "auto" ? "auto" : "sim",
     safety_temp_max: Math.min(55, Math.max(40, Number(obj.safety_temp_max) || 48)),
-    force_battery_current: Number(obj.force_battery_current) ? 1 : 0,
-    battery_current: Array.isArray(obj.battery_current) ? obj.battery_current : [],
+    battery_current: batteryCurrent,
+    restricted: Array.isArray(obj.restricted)
+      ? obj.restricted.filter((x): x is string => typeof x === "string")
+      : [...CURRENT_DEFAULTS.restricted],
   };
   const json = JSON.stringify(payload, null, 2);
   const b64 = btoa(unescape(encodeURIComponent(json)));

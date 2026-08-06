@@ -46,6 +46,15 @@ export const CURRENT_DEFAULTS: CurrentConfig = {
   ],
   bypass_mode: "sim",
   safety_temp_max: 48,
-  force_battery_current: 0,
-  battery_current: [],
+  battery_current: [
+    "/sys/class/power_supply/battery/fast_charge_current",
+    "/sys/class/power_supply/battery/current_max",
+    "/sys/class/power_supply/battery/constant_charge_current",
+    "/sys/class/power_supply/battery/constant_charge_current_max",
+  ],
+  restricted: [
+    "/sys/class/qcom-battery/restrict_chg value=1",
+    "/sys/class/qcom-battery/restricted_charging value=1",
+    "/sys/class/power_supply/battery/step_charging_enabled value=0",
+  ],
 };

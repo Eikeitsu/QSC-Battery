@@ -22,6 +22,7 @@ qsc_init_paths() {
 	CONF="$CONFDIR/config.conf"
 	CURRENT_CONF="$CONFDIR/current.json"
 	LIST_SWITCH="$DATADIR/list_switch"
+	LIST_CHARGE_CURRENT="$DATADIR/list_charge_current"
 	LOG_FILE="$DATADIR/log.log"
 	OFF_FLAG="$DATADIR/off_qsc"
 	DEVICE_PROFILE="$DATADIR/device.profile"

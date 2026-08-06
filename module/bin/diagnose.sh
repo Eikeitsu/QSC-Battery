@@ -173,22 +173,34 @@ fi
 echo "  电流控制组件: $([ -f "$BINDIR/lib/current.sh" ] && echo 已安装 || echo 未安装)" >> "$OUT"
 echo "  电流节点可写性:" >> "$OUT"
 for node in \
-  "/sys/class/power_supply/battery/constant_charge_current_max" \
+  "/sys/class/power_supply/battery/fast_charge_current" \
   "/sys/class/power_supply/battery/current_max" \
-  "/sys/class/power_supply/battery/input_current_max" \
-  "/sys/class/power_supply/battery/charge_current" \
-  "/sys/class/qcom-battery/constant_charge_current_max" \
+  "/sys/class/power_supply/battery/constant_charge_current" \
+  "/sys/class/power_supply/battery/constant_charge_current_max" \
 ; do
   if [ -f "$node" ]; then
-    if [ -w "$node" ] || chmod 0644 "$node" 2>/dev/null; then
-      # 只读探测：chmod 后仍可能写不进；不实际写入
-      perm=$(stat -c '%a' "$node" 2>/dev/null)
-      echo "    $node [$perm] 存在" >> "$OUT"
-    else
-      echo "    $node 存在但权限受限" >> "$OUT"
-    fi
+    perm=$(stat -c '%a' "$node" 2>/dev/null)
+    val=$(cat "$node" 2>/dev/null | tr -d ' \r\n' | head -c 32)
+    echo "    $node [$perm] 读回=${val:-?}" >> "$OUT"
   fi
 done
+if [ -n "${LIST_CHARGE_CURRENT:-}" ] && [ -s "$LIST_CHARGE_CURRENT" ]; then
+  echo "  restrict*_cur* 探测:" >> "$OUT"
+  while IFS= read -r node || [ -n "$node" ]; do
+    [ -n "$node" ] || continue
+    perm=$(stat -c '%a' "$node" 2>/dev/null)
+    val=$(cat "$node" 2>/dev/null | tr -d ' \r\n' | head -c 32)
+    echo "    $node [$perm] 读回=${val:-?}" >> "$OUT"
+  done <"$LIST_CHARGE_CURRENT"
+else
+  echo "  restrict*_cur* 探测: 无（可重启服务或跑 list_switch）" >> "$OUT"
+fi
+if [ -f "$DATADIR/current_node_blacklist" ]; then
+  echo "  电流节点拉黑:" >> "$OUT"
+  sed 's/^/    /' "$DATADIR/current_node_blacklist" >> "$OUT" 2>/dev/null
+else
+  echo "  电流节点拉黑: 无" >> "$OUT"
+fi
 if [ -n "$LIST_SWITCH" ] && [ -s "$LIST_SWITCH" ]; then
   echo "  list_switch 行数: $(wc -l <"$LIST_SWITCH" | tr -d ' ')" >> "$OUT"
 else

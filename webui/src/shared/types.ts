@@ -28,9 +28,9 @@ export interface CurrentConfig {
   app_list: string[];
   bypass_mode: "sim" | "auto";
   safety_temp_max: number;
-  /** 1=按 battery_current 数组强制写入（空数组无效，回退默认） */
-  force_battery_current: number;
   battery_current: unknown[];
+  /** 可选；`"路径 value=值"`；空则跳过 */
+  restricted: string[];
 }
 
 export interface ChipOption {
