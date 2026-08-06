@@ -3,11 +3,16 @@
 .app-shell {
   --dock-pad: calc(var(--qsc-dock-h) + var(--qsc-inset-bottom, 0px));
 
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   min-height: 100vh;
   min-height: 100dvh;
+  max-height: 100dvh;
   background: var(--qsc-bg);
   color: var(--qsc-text);
   overscroll-behavior: none;
+  overflow: hidden;
 
   /* 底色铺满系统导航区，避免按键栏露白 */
   padding-bottom: var(--dock-pad);
@@ -48,8 +53,11 @@ html.pack-miuix.bar-blur .app-topbar {
 
 .app-main {
   position: relative;
+  flex: 1 1 auto;
+  min-height: 0; /* flex 子项可收缩，才能形成真实滚动视口 */
   overflow-x: hidden;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: none;
   padding-top: calc(56px + var(--qsc-inset-top, 0px));
 

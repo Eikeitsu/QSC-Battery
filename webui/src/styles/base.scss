@@ -12,11 +12,13 @@ body,
 #app {
   margin: 0;
   padding: 0;
+  height: 100%;
   min-height: 100%;
   background: var(--qsc-bg);
   color: var(--qsc-text);
 
-  /* 禁止整页橡胶回弹：回弹时 WebView 会短暂把 safe-area 报成 0，顶栏边距塌掉 */
+  /* 滚动交给 .app-main；禁止整页橡胶回弹（回弹时 safe-area 会报 0） */
+  overflow: hidden;
   overscroll-behavior: none;
 }
 
