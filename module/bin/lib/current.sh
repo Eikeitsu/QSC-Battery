@@ -46,6 +46,41 @@ QSC_BYPASS_NODE_CANDIDATES="\
 /sys/class/qcom-battery/bypass_charging_enable \
 /sys/class/power_supply/battery/enable_bypass_mode"
 
+# µA → 可读 mA（日志用）
+qsc_fmt_ma() {
+	local ua="$1"
+	case "$ua" in
+		""|*[!0-9]*) printf '%s' "$ua" ;;
+		*) printf '%smA' "$((ua / 1000))" ;;
+	esac
+}
+
+# 节点路径缩短：保留末两级
+qsc_node_short() {
+	local p="$1" a b
+	b="${p##*/}"
+	a="${p%/*}"
+	a="${a##*/}"
+	if [ -n "$a" ] && [ "$a" != "$p" ]; then
+		printf '%s/%s' "$a" "$b"
+	else
+		printf '%s' "$b"
+	fi
+}
+
+qsc_nodes_short() {
+	local n out=""
+	for n in $1; do
+		[ -n "$n" ] || continue
+		if [ -n "$out" ]; then
+			out="$out $(qsc_node_short "$n")"
+		else
+			out="$(qsc_node_short "$n")"
+		fi
+	done
+	printf '%s' "$out"
+}
+
 qsc_current_conf_get() {
 	local key="$1"
 	[ -f "$CURRENT_CONF" ] || return 1
@@ -80,7 +115,8 @@ qsc_current_blacklist_node() {
 	grep -Fqx "$node" "$DATADIR/current_node_blacklist" 2>/dev/null && return 0
 	echo "$node" >>"$DATADIR/current_node_blacklist"
 	qsc_current_clear_write_fail "$node"
-	echo "$(date +%F_%T) 电流节点拉黑：$node（$why）" >>"$LOG_FILE"
+	echo 1 >"$DATADIR/current_force_log"
+	echo "$(date +%F_%T) 已排除无效节点 $(qsc_node_short "$node")：$why（后续改用剩余节点）" >>"$LOG_FILE"
 }
 
 # 写入失败：连续 3 次才拉黑
@@ -116,7 +152,7 @@ qsc_current_mark_write_fail() {
 	fi
 	printf '%s %s\n' "$cnt" "$node" >>"$tmp"
 	mv "$tmp" "$f"
-	echo "$(date +%F_%T) 电流节点写入未生效（第${cnt}/3次，暂不拉黑）：$node（$why）" >>"$LOG_FILE"
+	echo "$(date +%F_%T) 节点 $(qsc_node_short "$node") 写入未生效（第${cnt}/3次，满3次将排除）：$why" >>"$LOG_FILE"
 }
 
 qsc_current_clear_write_fail() {
@@ -271,7 +307,8 @@ qsc_current_build_nodes() {
 
 	note="nodes:$QSC_CURRENT_NODES"
 	if [ "$(cat "$DATADIR/current_node_note" 2>/dev/null)" != "$note" ]; then
-		echo "$(date +%F_%T) 电流控制：写入节点$QSC_CURRENT_NODES" >>"$LOG_FILE"
+		echo 1 >"$DATADIR/current_force_log"
+		echo "$(date +%F_%T) 电流控制：将写入 $(qsc_nodes_short "$QSC_CURRENT_NODES")" >>"$LOG_FILE"
 		echo "$note" >"$DATADIR/current_node_note"
 	fi
 	return 0
@@ -379,7 +416,7 @@ qsc_current_write_target() {
 		esac
 
 		if ! qsc_current_value_plausible "$cur" "$target"; then
-			qsc_current_blacklist_node "$node" "读回值不像µA上限(cur=$cur target=$target)"
+			qsc_current_blacklist_node "$node" "读回值不像µA上限(现$(qsc_fmt_ma "$cur")/目标$(qsc_fmt_ma "$target"))"
 			continue
 		fi
 
@@ -399,15 +436,24 @@ qsc_current_write_target() {
 			if [ "$next" -gt "$target" ] && [ "$target" != "0" ]; then
 				step_to="$next"
 			fi
-			echo "$step_to" >"$node" 2>/dev/null || continue
+			if ! echo "$step_to" >"$node" 2>/dev/null; then
+				qsc_current_mark_write_fail "$node" "无法写入(权限或只读)"
+				continue
+			fi
 		else
-			echo "$target" >"$node" 2>/dev/null || continue
+			if ! echo "$target" >"$node" 2>/dev/null; then
+				qsc_current_mark_write_fail "$node" "无法写入(权限或只读)"
+				continue
+			fi
 			step_to="$target"
 		fi
 
 		after="$(cat "$node" 2>/dev/null | egrep -v '\-|\+' | tr -d ' \r\n')"
 		case "$after" in
-			""|*[!0-9]*) continue ;;
+			""|*[!0-9]*)
+				qsc_current_mark_write_fail "$node" "写后无法读回有效数值"
+				continue
+				;;
 		esac
 
 		# 写后读回仍像档位 → 拉黑，避免每 3s 抢写
@@ -418,7 +464,7 @@ qsc_current_write_target() {
 
 		# 内核忽略写入：读回未变且仍不是目标 → 计次，连续 3 次再拉黑
 		if [ "$after" = "$cur" ] && [ "$cur" != "$target" ]; then
-			qsc_current_mark_write_fail "$node" "写入无效(读回仍为$cur,目标$target)"
+			qsc_current_mark_write_fail "$node" "内核未接受(读回仍$(qsc_fmt_ma "$cur")，目标$(qsc_fmt_ma "$target"))"
 			continue
 		fi
 
@@ -687,34 +733,42 @@ qsc_apply_current_control() {
 	write_ok=0
 	qsc_current_write_target "$target" && write_ok=1
 	now_c="$(qsc_current_now_ua)"
+	force_log="$(cat "$DATADIR/current_force_log" 2>/dev/null)"
+	nodes_s="$(qsc_nodes_short "${QSC_CURRENT_NODES:-}")"
+	tgt_s="$(qsc_fmt_ma "$target")"
+	now_s="$(qsc_fmt_ma "$now_c")"
 
 	if [ "$write_ok" != "1" ]; then
-		if [ "$prev_tag" != "fail:$reason" ]; then
-			echo "$(date +%F_%T) 电量$battery_level 电流写入失败：${mode_tag} 目标${target} 节点${QSC_CURRENT_NODES:-无} 实时电流${now_c}" >>"$LOG_FILE"
+		# 同原因失败默认只记一次；节点集合变更后必须再记一次成败，避免「改用节点」后无下文
+		if [ "$prev_tag" != "fail:$reason" ] || [ "$force_log" = "1" ]; then
+			echo "$(date +%F_%T) 电量$battery_level 限流未生效：${mode_tag} 目标${tgt_s} 节点${nodes_s:-无} 实时约${now_s}（内核未接受或节点不可写）" >>"$LOG_FILE"
 			echo "fail:$reason" >"$DATADIR/current_mode_tag"
 			echo 0 >"$DATADIR/current_reached"
+			rm -f "$DATADIR/current_force_log"
 		fi
 		return 0
 	fi
 
 	if [ "${QSC_CW_STEPPING:-0}" = "1" ]; then
 		# 降流未到位：每阶都记日志，并允许下一轮继续步进
-		echo "$(date +%F_%T) 电量$battery_level ${mode_tag}降流步进：${QSC_CW_FROM}→${QSC_CW_TO}（目标${target}）节点${QSC_CURRENT_NODES} 实时电流${now_c} 温度${temperature}" >>"$LOG_FILE"
+		echo "$(date +%F_%T) 电量$battery_level ${mode_tag}降流中：$(qsc_fmt_ma "$QSC_CW_FROM")→$(qsc_fmt_ma "$QSC_CW_TO")（目标${tgt_s}）节点${nodes_s} 实时约${now_s} 温度${temperature}" >>"$LOG_FILE"
 		echo "$reason" >"$DATADIR/current_mode_tag"
 		echo 0 >"$DATADIR/current_reached"
 		date +%s >"$DATADIR/current_write_ts" 2>/dev/null
+		rm -f "$DATADIR/current_force_log"
 		return 0
 	fi
 
 	# 抬流直接到位，或降流最后一阶 / 已是目标
-	if [ "$prev_tag" != "$reason" ] || [ "$reached_flag" != "1" ]; then
+	if [ "$prev_tag" != "$reason" ] || [ "$reached_flag" != "1" ] || [ "$force_log" = "1" ]; then
 		if [ "${QSC_CW_FROM:-}" != "${QSC_CW_TO:-}" ] && [ -n "${QSC_CW_FROM:-}" ]; then
-			echo "$(date +%F_%T) 电量$battery_level ${mode_tag}：${QSC_CW_FROM}→${QSC_CW_TO}（目标${target}）节点${QSC_CURRENT_NODES} 实时电流${now_c} 温度${temperature}" >>"$LOG_FILE"
+			echo "$(date +%F_%T) 电量$battery_level 限流已生效：${mode_tag} $(qsc_fmt_ma "$QSC_CW_FROM")→$(qsc_fmt_ma "$QSC_CW_TO")（目标${tgt_s}）节点${nodes_s} 实时约${now_s} 温度${temperature}" >>"$LOG_FILE"
 		else
-			echo "$(date +%F_%T) 电量$battery_level ${mode_tag}：目标电流${target} 节点${QSC_CURRENT_NODES} 实时电流${now_c} 温度${temperature}" >>"$LOG_FILE"
+			echo "$(date +%F_%T) 电量$battery_level 限流已到位：${mode_tag} 目标${tgt_s} 节点${nodes_s} 实时约${now_s} 温度${temperature}" >>"$LOG_FILE"
 		fi
 	fi
 	echo "$reason" >"$DATADIR/current_mode_tag"
 	echo 1 >"$DATADIR/current_reached"
 	date +%s >"$DATADIR/current_write_ts" 2>/dev/null
+	rm -f "$DATADIR/current_force_log"
 }
