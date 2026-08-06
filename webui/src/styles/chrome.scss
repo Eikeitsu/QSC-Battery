@@ -7,6 +7,7 @@
   min-height: 100dvh;
   background: var(--qsc-bg);
   color: var(--qsc-text);
+  overscroll-behavior: none;
 
   /* 底色铺满系统导航区，避免按键栏露白 */
   padding-bottom: var(--dock-pad);
@@ -48,7 +49,12 @@ html.pack-miuix.bar-blur .app-topbar {
 .app-main {
   position: relative;
   overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: none;
   padding-top: calc(56px + var(--qsc-inset-top, 0px));
+
+  /* 隔离页面内下拉刷新 transform，减轻对 fixed 顶栏的影响 */
+  isolation: isolate;
 }
 
 /* 底栏：fixed，背景延伸进系统导航区 */

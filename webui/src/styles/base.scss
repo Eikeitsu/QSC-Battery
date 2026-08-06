@@ -15,6 +15,9 @@ body,
   min-height: 100%;
   background: var(--qsc-bg);
   color: var(--qsc-text);
+
+  /* 禁止整页橡胶回弹：回弹时 WebView 会短暂把 safe-area 报成 0，顶栏边距塌掉 */
+  overscroll-behavior: none;
 }
 
 html,

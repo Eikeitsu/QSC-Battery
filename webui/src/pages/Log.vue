@@ -9,8 +9,8 @@ const pullLoading = ref(false);
 
 async function doRefresh(showTip: boolean) {
   await store.refreshLog(showTip);
+  theme.restoreChromeInsets?.();
   theme.syncStatusBar();
-  requestAnimationFrame(() => theme.syncStatusBar());
 }
 
 async function onPullRefresh() {
@@ -19,11 +19,12 @@ async function onPullRefresh() {
     await doRefresh(true);
   } finally {
     pullLoading.value = false;
+    theme.restoreChromeInsets?.();
   }
 }
 
 async function onButtonRefresh() {
-  // 不驱动 van-pull-refresh，避免按钮刷新把顶栏间距撑乱
+  // 不驱动 van-pull-refresh loading 头
   await doRefresh(true);
 }
 
@@ -34,7 +35,7 @@ async function onClear() {
       message: "确认清空运行日志？",
     });
     await store.clearLog();
-    theme.syncStatusBar();
+    theme.restoreChromeInsets?.();
   } catch {
     /* cancelled */
   }
@@ -42,11 +43,7 @@ async function onClear() {
 </script>
 
 <template>
-  <van-pull-refresh
-    v-model="pullLoading"
-    success-text="日志已刷新"
-    @refresh="onPullRefresh"
-  >
+  <van-pull-refresh v-model="pullLoading" :success-duration="0" @refresh="onPullRefresh">
     <div
       class="page"
       :class="{
@@ -133,6 +130,15 @@ async function onClear() {
 <style scoped lang="scss">
 .page {
   min-height: calc(100dvh - 56px - var(--qsc-inset-top, 0px) - var(--dock-pad, 72px));
+}
+
+:deep(.van-pull-refresh) {
+  overflow: clip;
+}
+
+:deep(.van-pull-refresh__track) {
+  /* 回弹动画结束后清掉残留 transform 带来的合成层副作用 */
+  will-change: auto;
 }
 
 .meta {

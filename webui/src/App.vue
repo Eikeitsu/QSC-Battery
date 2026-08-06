@@ -63,8 +63,8 @@ async function onRefreshHome() {
     await store.refreshStatus(true);
   } finally {
     refreshing.value = false;
+    theme.restoreChromeInsets?.();
     theme.syncStatusBar();
-    requestAnimationFrame(() => theme.syncStatusBar());
   }
 }
 
@@ -73,6 +73,7 @@ onMounted(async () => {
   theme.bindSystemListener();
   await store.init();
   theme.syncStatusBar();
+  window.setTimeout(() => theme.syncStatusBar(), 200);
 });
 </script>
 

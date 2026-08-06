@@ -37,7 +37,7 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
 <template>
   <van-pull-refresh
     :model-value="refreshing"
-    success-text="已刷新"
+    :success-duration="0"
     @refresh="$emit('refresh')"
   >
     <!-- MD3：tonal 状态 + 并排指标 + List 策略 -->

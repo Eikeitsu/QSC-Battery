@@ -136,6 +136,64 @@ export function useTheme() {
     root.style.setProperty("--qsc-on-primary", dark ? "#0A1214" : "#FFFFFF");
   }
 
+  function restorePinnedInsets(): void {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    const pinnedTop = root.style.getPropertyValue("--qsc-inset-top-pinned").trim();
+    const pinnedBottom = root.style.getPropertyValue("--qsc-inset-bottom-pinned").trim();
+    if (pinnedTop) root.style.setProperty("--qsc-inset-top", pinnedTop);
+    if (pinnedBottom) root.style.setProperty("--qsc-inset-bottom", pinnedBottom);
+  }
+
+  /** 测量并钉死安全区。force 时允许旋转/回前台后重测。 */
+  function pinSafeInsets(force = false): void {
+    if (typeof document === "undefined" || !document.body) return;
+    const root = document.documentElement;
+    if (force) {
+      root.style.removeProperty("--qsc-inset-top-pinned");
+      root.style.removeProperty("--qsc-inset-bottom-pinned");
+    }
+
+    const probe = document.createElement("div");
+    probe.setAttribute("aria-hidden", "true");
+    probe.style.cssText =
+      "position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;" +
+      "padding-top:var(--window-inset-top, env(safe-area-inset-top, 0px));" +
+      "padding-bottom:var(--window-inset-bottom, env(safe-area-inset-bottom, 0px));";
+    document.body.appendChild(probe);
+    const cs = getComputedStyle(probe);
+    const top = cs.paddingTop;
+    const bottom = cs.paddingBottom;
+    document.body.removeChild(probe);
+
+    const pinnedTop = root.style.getPropertyValue("--qsc-inset-top-pinned").trim();
+    const pinnedBottom = root.style.getPropertyValue("--qsc-inset-bottom-pinned").trim();
+
+    // 下拉/overscroll 回弹时 WebView 常短暂报 0：已有钉值则只恢复
+    if (top && top !== "0px") {
+      root.style.setProperty("--qsc-inset-top", top);
+      root.style.setProperty("--qsc-inset-top-pinned", top);
+    } else if (pinnedTop) {
+      root.style.setProperty("--qsc-inset-top", pinnedTop);
+    }
+
+    if (bottom && bottom !== "0px") {
+      root.style.setProperty("--qsc-inset-bottom", bottom);
+      root.style.setProperty("--qsc-inset-bottom-pinned", bottom);
+    } else if (pinnedBottom) {
+      root.style.setProperty("--qsc-inset-bottom", pinnedBottom);
+    }
+  }
+
+  function scheduleInsetRestore(): void {
+    restorePinnedInsets();
+    requestAnimationFrame(() => restorePinnedInsets());
+    window.setTimeout(() => restorePinnedInsets(), 50);
+    window.setTimeout(() => restorePinnedInsets(), 200);
+    window.setTimeout(() => restorePinnedInsets(), 450);
+    window.setTimeout(() => restorePinnedInsets(), 700);
+  }
+
   function syncSystemChrome(): void {
     const dark = resolved.value === "dark";
     const meta = document.querySelector('meta[name="theme-color"]');
@@ -147,6 +205,7 @@ export function useTheme() {
     document.documentElement.style.colorScheme = dark ? "only dark" : "only light";
     const lightBars = relativeLuminance(bg) > 0.45;
     applyStatusBars(lightBars);
+    pinSafeInsets(false);
   }
 
   function applyThemeDom(): void {
@@ -164,7 +223,7 @@ export function useTheme() {
     root.classList.toggle("bar-blur", barBlur.value);
     root.classList.toggle("compact-on", compactOn.value);
     root.style.setProperty("--font-scale", String(fontScale.value));
-    // 页面大量写死 px；用 zoom 统一缩放，避免只改 html font-size 无效
+    // 页面大量写死 px；用 zoom 统一缩放
     const appEl = document.getElementById("app");
     if (appEl) {
       (appEl.style as CSSStyleDeclaration & { zoom?: string }).zoom = String(
@@ -390,6 +449,36 @@ export function useTheme() {
     if (typeof media.addEventListener === "function")
       media.addEventListener("change", onChange);
     else if (typeof media.addListener === "function") media.addListener(onChange);
+
+    // 全局：下拉回弹 / visualViewport 抖动后恢复已钉死的安全区
+    const onViewportGlitch = () => restorePinnedInsets();
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener("resize", onViewportGlitch);
+      vv.addEventListener("scroll", onViewportGlitch);
+    }
+    window.addEventListener("orientationchange", () => {
+      window.setTimeout(() => pinSafeInsets(true), 300);
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        window.setTimeout(() => pinSafeInsets(true), 100);
+      }
+    });
+    document.addEventListener(
+      "touchend",
+      () => {
+        scheduleInsetRestore();
+      },
+      { passive: true },
+    );
+    document.addEventListener(
+      "touchcancel",
+      () => {
+        scheduleInsetRestore();
+      },
+      { passive: true },
+    );
   }
 
   const accentOptions = computed(() =>
@@ -424,5 +513,6 @@ export function useTheme() {
     setFontScale,
     bindSystemListener,
     syncStatusBar: syncSystemChrome,
+    restoreChromeInsets: scheduleInsetRestore,
   });
 }
