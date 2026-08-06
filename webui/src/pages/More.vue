@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { showConfirmDialog, showToast } from "vant";
 import ChipGroup from "../ui/ChipGroup.vue";
 import ThemeSwitch from "../ui/ThemeSwitch.vue";
@@ -11,6 +11,15 @@ const store = useAppStore();
 const theme = useTheme();
 const tipOpen = ref(false);
 const base = import.meta.env.BASE_URL;
+/** 拖动中仅本地预览百分比，松手后再写入主题 */
+const fontDraft = ref(Number(theme.fontScale));
+
+watch(
+  () => theme.fontScale,
+  (v) => {
+    fontDraft.value = Number(v);
+  },
+);
 
 const themePresets = [
   { id: "light", l: "浅色" },
@@ -31,6 +40,7 @@ const md3Presets = [
   { id: "#E11D48", l: "玫" },
   { id: "#D97706", l: "橙" },
   { id: "#059669", l: "绿" },
+  { id: "custom", l: "自定义" },
 ];
 
 const brandMark = computed(() =>
@@ -40,14 +50,40 @@ const brandMark = computed(() =>
 );
 
 const packLabel = computed(() => {
-  if (theme.themePack === "md3") return "Material You：开关 / 底栏 / 芯片形态";
-  if (theme.themePack === "miuix") return "HyperOS：粗开关、悬浮底栏与玻璃";
-  return "充电控制默认控件";
+  if (theme.themePack === "md3") return "Material You 控件与布局";
+  if (theme.themePack === "miuix") return "HyperOS 控件与悬浮底栏";
+  return "默认控件形态";
 });
+
+const md3ChipValue = computed(() => {
+  const seed = String(theme.md3Seed || "").toUpperCase();
+  const hit = md3Presets.find((p) => p.id !== "custom" && p.id.toUpperCase() === seed);
+  return hit ? hit.id : "custom";
+});
+
+const md3CustomSeed = computed(() => md3ChipValue.value === "custom");
+
+function onMd3Chip(id: string | number) {
+  const raw = String(id);
+  if (raw === "custom") {
+    if (!md3CustomSeed.value) theme.setMd3Seed(theme.md3Seed || "#6750A4", false);
+    return;
+  }
+  theme.setMd3Seed(raw);
+}
 
 function onSeedInput(e: Event) {
   const v = (e.target as HTMLInputElement).value;
   theme.setMd3Seed(v, false);
+}
+
+function onFontDrag(v: number) {
+  fontDraft.value = Number(v);
+}
+
+function onFontCommit(v: number) {
+  theme.setFontScale(v, true);
+  fontDraft.value = Number(theme.fontScale);
 }
 
 async function resetConfig() {
@@ -76,7 +112,7 @@ async function tipAuthor() {
   <div class="page">
     <div class="section-head">
       <p class="title">显示</p>
-      <p class="hint">主题包会切换控件形态与布局，不只是换色</p>
+      <p class="hint">主题包切换控件形态；进阶项请开启自定义</p>
     </div>
     <section class="card">
       <van-cell title="主题包" :label="packLabel" />
@@ -103,8 +139,17 @@ async function tipAuthor() {
         />
       </div>
 
-      <template v-if="theme.themePack === 'default'">
-        <van-cell title="颜色主题" label="默认主题色板，不跟随莫奈" />
+      <van-cell center title="自定义外观" label="开启后显示颜色与底栏等进阶项">
+        <template #right-icon>
+          <ThemeSwitch
+            :model-value="theme.uiCustom"
+            @update:model-value="(v) => theme.setUiCustom(v)"
+          />
+        </template>
+      </van-cell>
+
+      <template v-if="theme.uiCustom && theme.themePack === 'default'">
+        <van-cell title="颜色主题" label="默认色板，不跟随莫奈" />
         <div class="pad">
           <ChipGroup
             :options="theme.accentOptions"
@@ -114,27 +159,28 @@ async function tipAuthor() {
         </div>
       </template>
 
-      <template v-if="theme.themePack === 'md3'">
+      <template v-if="theme.uiCustom && theme.themePack === 'md3'">
         <van-cell title="MD3 色值" :label="theme.md3Seed" />
         <div class="pad">
           <ChipGroup
             :options="md3Presets"
-            :model-value="theme.md3Seed.toUpperCase()"
-            @update:model-value="(id) => theme.setMd3Seed(id)"
+            :model-value="md3ChipValue"
+            @update:model-value="onMd3Chip"
           />
         </div>
-        <div class="pad seed-row">
-          <label class="seed-label">自定义</label>
+        <div v-if="md3CustomSeed" class="pad seed-row">
+          <label class="seed-label">取色</label>
           <input
             class="seed-input"
             type="color"
             :value="theme.md3Seed"
             @input="onSeedInput"
           />
+          <span class="seed-hex">{{ theme.md3Seed }}</span>
         </div>
       </template>
 
-      <template v-if="theme.themePack === 'miuix'">
+      <template v-if="theme.uiCustom && theme.themePack === 'miuix'">
         <van-cell center title="莫奈取色" label="跟随系统壁纸色">
           <template #right-icon>
             <ThemeSwitch
@@ -177,15 +223,15 @@ async function tipAuthor() {
           />
         </template>
       </van-cell>
-      <van-cell title="字体大小" :value="`${Math.round(theme.fontScale * 100)}%`" />
+      <van-cell title="字体大小" :value="`${Math.round(fontDraft * 100)}%`" />
       <div class="pad slider">
         <van-slider
-          :model-value="Number(theme.fontScale)"
+          :model-value="fontDraft"
           :min="0.85"
           :max="1.3"
           :step="0.05"
-          @update:model-value="(v) => theme.setFontScale(v)"
-          @change="(v) => theme.setFontScale(v, true)"
+          @update:model-value="onFontDrag"
+          @change="onFontCommit"
         />
       </div>
     </section>
@@ -222,19 +268,58 @@ async function tipAuthor() {
     <div class="section-head">
       <p class="title">关于</p>
     </div>
-    <section class="card about-brand">
-      <img class="about-mark" :src="brandMark" alt="" width="72" height="72" />
-      <div class="about-text">
+
+    <!-- MD3：居中 tonal 品牌区 -->
+    <template v-if="theme.themePack === 'md3'">
+      <section class="md3-tonal about-md3">
+        <img class="about-mark" :src="brandMark" alt="" width="80" height="80" />
         <div class="name">充电控制</div>
-        <div class="sub">QSC-Battery</div>
-        <div class="ver">{{ store.status.version }}</div>
-      </div>
-    </section>
-    <p class="about-note">
-      本模块基于 <b>top大佬</b> 的 QSC 定量停充，补充了 WebUI
-      与可选电流控制，感谢原作者开源贡献。
-    </p>
-    <section class="card">
+        <div class="sub">QSC-Battery · {{ store.status.version }}</div>
+        <p class="about-note-inline">
+          基于 top大佬 QSC 定量停充，补充 WebUI 与可选电流控制。
+        </p>
+      </section>
+    </template>
+
+    <!-- MIUIX：横排品牌 -->
+    <template v-else-if="theme.themePack === 'miuix'">
+      <section class="miuix-card about-brand">
+        <img class="about-mark" :src="brandMark" alt="" width="72" height="72" />
+        <div class="about-text">
+          <div class="name">充电控制</div>
+          <div class="sub">QSC-Battery</div>
+          <div class="ver">{{ store.status.version }}</div>
+        </div>
+      </section>
+      <p class="about-note">
+        本模块基于 <b>top大佬</b> 的 QSC 定量停充，补充了 WebUI
+        与可选电流控制，感谢原作者开源贡献。
+      </p>
+    </template>
+
+    <!-- 默认 -->
+    <template v-else>
+      <section class="card about-brand">
+        <img class="about-mark" :src="brandMark" alt="" width="72" height="72" />
+        <div class="about-text">
+          <div class="name">充电控制</div>
+          <div class="sub">QSC-Battery</div>
+          <div class="ver">{{ store.status.version }}</div>
+        </div>
+      </section>
+      <p class="about-note">
+        本模块基于 <b>top大佬</b> 的 QSC 定量停充，补充了 WebUI
+        与可选电流控制，感谢原作者开源贡献。
+      </p>
+    </template>
+
+    <section
+      class="card"
+      :class="{
+        'md3-tonal': theme.themePack === 'md3',
+        'miuix-card': theme.themePack === 'miuix',
+      }"
+    >
       <van-cell
         title="本仓库"
         label="GitHub · Releases"
@@ -321,6 +406,12 @@ async function tipAuthor() {
   background: transparent;
 }
 
+.seed-hex {
+  font-size: 12px;
+  color: var(--qsc-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
 .guide {
   padding: 14px 16px;
   font-size: 13px;
@@ -348,6 +439,35 @@ async function tipAuthor() {
   gap: 14px;
   padding: 16px;
   margin-bottom: 10px;
+}
+
+.about-md3 {
+  padding: 28px 20px 22px;
+  text-align: center;
+  margin-bottom: 12px;
+
+  .about-mark {
+    margin: 0 auto 12px;
+  }
+
+  .name {
+    font-size: 20px;
+    font-weight: 650;
+  }
+
+  .sub {
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--qsc-text-2);
+  }
+
+  .about-note-inline {
+    margin: 14px auto 0;
+    max-width: 28em;
+    font-size: 12px;
+    color: var(--qsc-text-2);
+    line-height: 1.5;
+  }
 }
 
 .about-mark {

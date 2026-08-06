@@ -1,0 +1,196 @@
+/* 默认主题包 */
+
+html.pack-default {
+  --qsc-card-radius: 16px;
+  --qsc-cell-pad-x: 16px;
+  --qsc-cell-pad-y: 13px;
+  --qsc-chip-radius: 999px;
+  --qsc-page-pad: 16px;
+  --qsc-dock-h: 56px;
+
+  .page {
+    padding-left: var(--qsc-page-pad);
+    padding-right: var(--qsc-page-pad);
+  }
+
+  .card {
+    border-radius: var(--qsc-card-radius);
+    border: 1px solid color-mix(in srgb, var(--qsc-hairline) 70%, transparent);
+    box-shadow: 0 1px 2px rgba(15, 18, 22, 0.04);
+  }
+
+  &[data-theme="dark"] .card {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  }
+
+  .section-head {
+    margin: 20px 4px 10px;
+  }
+
+  .section-head .title {
+    font-size: 14px;
+    font-weight: 650;
+    letter-spacing: 0;
+  }
+
+  .section-head .hint {
+    margin-top: 3px;
+    font-size: 12px;
+  }
+
+  .van-cell {
+    padding: var(--qsc-cell-pad-y) var(--qsc-cell-pad-x);
+  }
+
+  .van-cell__title {
+    font-size: 15px;
+    font-weight: 550;
+  }
+
+  .van-cell__label {
+    font-size: 12px;
+    margin-top: 2px;
+  }
+
+  .van-switch,
+  .theme-switch.ts-default .van-switch {
+    width: 46px !important;
+    height: 26px !important;
+    border-radius: 13px;
+    background: color-mix(in srgb, var(--qsc-text) 14%, transparent) !important;
+  }
+
+  .van-switch__node,
+  .theme-switch.ts-default .van-switch__node {
+    width: 22px;
+    height: 22px;
+    top: 2px;
+    left: 2px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  }
+
+  .van-switch--on,
+  .theme-switch.ts-default .van-switch--on {
+    background: var(--qsc-primary) !important;
+  }
+
+  .van-switch--on .van-switch__node,
+  .theme-switch.ts-default .van-switch--on .van-switch__node {
+    transform: translateX(20px);
+  }
+
+  .chip-row .chip,
+  .chip {
+    border-radius: var(--qsc-chip-radius);
+    padding: 7px 13px;
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--qsc-chip-bg);
+    color: var(--qsc-text-2);
+  }
+
+  .chip.active {
+    background: var(--qsc-primary);
+    color: var(--qsc-on-primary, #fff);
+    font-weight: 600;
+  }
+
+  .app-dock.dock-default.van-tabbar {
+    border-top-color: color-mix(in srgb, var(--qsc-hairline) 80%, transparent);
+    box-shadow: 0 -4px 16px rgba(15, 18, 22, 0.04);
+  }
+
+  .app-dock.dock-default .van-tabbar-item--active {
+    font-weight: 600;
+  }
+
+  .app-topbar.topbar-default {
+    background: color-mix(in srgb, var(--qsc-bg) 92%, transparent);
+  }
+
+  /* 概览 hero */
+  .page-default .hero.card {
+    padding: 18px 16px 16px;
+    background: linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--qsc-primary) 10%, var(--qsc-surface)) 0%,
+      var(--qsc-surface) 58%
+    );
+    border: none;
+    box-shadow: 0 2px 10px color-mix(in srgb, var(--qsc-primary) 8%, transparent);
+  }
+
+  .page-default .hero-glow {
+    opacity: 0.55;
+  }
+
+  .page-default .metric .value {
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: -0.6px;
+  }
+
+  .page-default .metric .label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--qsc-text-3);
+  }
+
+  .page-default .desc {
+    font-size: 13px;
+    color: var(--qsc-text-2);
+  }
+
+  .page-default .switch-card {
+    margin-top: 10px;
+  }
+
+  .page-default .strategy {
+    padding: 2px 0 4px;
+  }
+
+  .page-default .strategy-row {
+    padding: 11px 16px;
+    font-size: 14px;
+  }
+
+  .page-default .strategy-row .k {
+    color: var(--qsc-text-2);
+  }
+
+  .page-default .strategy-row .v {
+    font-weight: 600;
+  }
+
+  .page-default .go {
+    padding: 6px 16px 12px;
+    font-size: 13px;
+  }
+
+  .page-default .mini-grid {
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .page-default .mini {
+    background: var(--qsc-surface-2);
+    border-radius: 12px;
+    padding: 12px 10px;
+  }
+
+  .page-default .mini .mv {
+    font-size: 16px;
+    font-weight: 650;
+  }
+
+  .page-default .mini .ml {
+    font-size: 11px;
+  }
+
+  .page-default .tips.card {
+    margin-top: 12px;
+    border: none;
+    background: color-mix(in srgb, var(--qsc-primary) 8%, var(--qsc-surface));
+    box-shadow: none;
+  }
+}

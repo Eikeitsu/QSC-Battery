@@ -17,6 +17,7 @@ const FLOAT_KEY = "qsc_float_dock";
 const GLASS_KEY = "qsc_dock_glass";
 const BAR_BLUR_KEY = "qsc_bar_blur";
 const COMPACT_KEY = "qsc_compact";
+const UI_CUSTOM_KEY = "qsc_ui_custom";
 
 export type ThemeMode = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
@@ -32,6 +33,7 @@ const dockGlass = ref(true);
 const barBlur = ref(true);
 const compactOn = ref(false);
 const fontScale = ref(1);
+const uiCustom = ref(false);
 
 export function useTheme() {
   const resolved = computed<ResolvedTheme>(() => {
@@ -198,6 +200,7 @@ export function useTheme() {
       dockGlass.value = localStorage.getItem(GLASS_KEY) !== "0";
       barBlur.value = localStorage.getItem(BAR_BLUR_KEY) !== "0";
       compactOn.value = localStorage.getItem(COMPACT_KEY) === "1";
+      uiCustom.value = localStorage.getItem(UI_CUSTOM_KEY) === "1";
       const s = parseFloat(localStorage.getItem(FONT_KEY) || "1");
       fontScale.value = Number.isFinite(s) ? Math.min(1.3, Math.max(0.85, s)) : 1;
     } catch {
@@ -357,6 +360,16 @@ export function useTheme() {
     if (toast) showToast(on ? "已开启紧凑显示" : "已关闭紧凑显示");
   }
 
+  function setUiCustom(on: boolean, toast = true): void {
+    uiCustom.value = !!on;
+    try {
+      localStorage.setItem(UI_CUSTOM_KEY, on ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+    if (toast) showToast(on ? "已开启自定义外观" : "已关闭自定义外观");
+  }
+
   function setFontScale(v: number | string, toast = false): void {
     fontScale.value = Math.min(1.3, Math.max(0.85, Number(v) || 1));
     try {
@@ -393,6 +406,7 @@ export function useTheme() {
     dockGlass,
     barBlur,
     compactOn,
+    uiCustom,
     fontScale,
     resolved,
     accentOptions,
@@ -406,6 +420,7 @@ export function useTheme() {
     setDockGlass,
     setBarBlur,
     setCompact,
+    setUiCustom,
     setFontScale,
     bindSystemListener,
     syncStatusBar: syncSystemChrome,

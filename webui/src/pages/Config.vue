@@ -12,9 +12,10 @@ import {
   type ConfigKey,
   type CurrentConfig,
 } from "../shared";
-import { useAppStore } from "../stores";
+import { useAppStore, useTheme } from "../stores";
 
 const store = useAppStore();
+const theme = useTheme();
 const showApps = ref(false);
 const currentOpen = ref(["1"]);
 
@@ -85,12 +86,25 @@ async function saveSchedule() {
 </script>
 
 <template>
-  <div class="page">
-    <div class="section-head">
+  <div
+    class="page"
+    :class="{
+      'page-md3': theme.themePack === 'md3',
+      'page-miuix': theme.themePack === 'miuix',
+      'page-default': theme.themePack === 'default',
+    }"
+  >
+    <div class="section-head" :class="{ 'miuix-sec': theme.themePack === 'miuix' }">
       <p class="title">电量停充</p>
       <p class="hint">到达阈值后停止充电，掉到恢复值再继续</p>
     </div>
-    <section class="card">
+    <section
+      class="card"
+      :class="{
+        'md3-tonal': theme.themePack === 'md3',
+        'miuix-card': theme.themePack === 'miuix',
+      }"
+    >
       <div class="block">
         <div class="block-label">停止电量 · {{ store.powerPlan }}</div>
         <ChipGroup
@@ -387,5 +401,38 @@ async function saveSchedule() {
   font-size: 12px;
   color: var(--qsc-text-3);
   line-height: 1.4;
+}
+
+.page-md3 {
+  .section-head {
+    margin: 20px 4px 12px;
+  }
+
+  .section-head .title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--qsc-text-2);
+    letter-spacing: 0.02em;
+  }
+
+  .card {
+    margin-bottom: 4px;
+  }
+}
+
+.page-miuix {
+  .section-head {
+    margin: 16px 10px 8px;
+  }
+
+  .section-head .title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--qsc-text-2);
+  }
+
+  .section-head .hint {
+    font-size: 11px;
+  }
 }
 </style>

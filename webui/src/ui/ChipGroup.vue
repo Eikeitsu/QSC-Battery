@@ -40,7 +40,7 @@ const theme = useTheme();
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 4px 0 8px;
+  padding: 2px 0 10px;
 }
 
 .chip {
@@ -48,6 +48,7 @@ const theme = useTheme();
   border-radius: var(--qsc-chip-radius, 999px);
   padding: 7px 14px;
   font-size: 13px;
+  line-height: 1.2;
   background: var(--qsc-chip-bg);
   color: var(--qsc-text-2);
   transition:
@@ -67,15 +68,21 @@ const theme = useTheme();
   }
 }
 
+.chip-row[data-pack="md3"] .chip {
+  border-radius: 8px;
+  background: var(--qsc-surface-2);
+  color: var(--qsc-text);
+}
+
 .chip-row[data-pack="md3"] .chip.active {
   background: var(--qsc-primary-container, var(--qsc-primary-soft));
   color: var(--qsc-primary);
   font-weight: 650;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--qsc-primary) 28%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--qsc-primary) 22%, transparent);
 }
 
 .chip-row[data-pack="miuix"] .chip {
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .chip-row[data-pack="miuix"] .chip.active {

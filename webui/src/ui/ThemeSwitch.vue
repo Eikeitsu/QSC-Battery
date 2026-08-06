@@ -25,9 +25,10 @@ const packClass = computed(() => {
   return "ts-default";
 });
 
+/** size 仅作兜底；实际尺寸由 packs/*.scss 控制 */
 const size = computed(() => {
-  if (theme.themePack === "md3") return "28px";
-  if (theme.themePack === "miuix") return "30px";
+  if (theme.themePack === "md3") return "32px";
+  if (theme.themePack === "miuix") return "28px";
   return "22px";
 });
 </script>
@@ -48,5 +49,6 @@ const size = computed(() => {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
+  line-height: 0;
 }
 </style>

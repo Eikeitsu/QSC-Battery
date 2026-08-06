@@ -34,6 +34,12 @@ const views: Record<TabName, Component> = {
 
 const activeView = computed(() => views[tab.value] || Home);
 
+const shellClass = computed(() => ({
+  "shell-md3": theme.themePack === "md3",
+  "shell-miuix": theme.themePack === "miuix",
+  "shell-default": theme.themePack === "default",
+}));
+
 function setTab(name: string | number) {
   const next = String(name) as TabName;
   if (!order.includes(next)) return;
@@ -46,7 +52,6 @@ function setTab(name: string | number) {
   } catch {
     /* ignore */
   }
-  // 轻触反馈后刷新系统栏衔接（悬浮底栏切换页时）
   requestAnimationFrame(() => theme.syncStatusBar());
 }
 
@@ -79,8 +84,30 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="app-shell" :data-theme="theme.resolved" :data-pack="theme.themePack">
-    <header class="app-topbar">
+  <div
+    class="app-shell"
+    :class="shellClass"
+    :data-theme="theme.resolved"
+    :data-pack="theme.themePack"
+  >
+    <!-- MD3：大标题顶栏，无小图标主导 -->
+    <header v-if="theme.themePack === 'md3'" class="app-topbar topbar-md3">
+      <div class="md3-top">
+        <p class="md3-eyebrow">{{ store.deviceName || "本机" }}</p>
+        <h1>充电控制</h1>
+      </div>
+    </header>
+
+    <!-- MIUIX：紧凑横排 -->
+    <header v-else-if="theme.themePack === 'miuix'" class="app-topbar topbar-miuix">
+      <div class="titles">
+        <h1>充电控制</h1>
+        <p>{{ store.deviceName }}</p>
+      </div>
+    </header>
+
+    <!-- 默认 -->
+    <header v-else class="app-topbar topbar-default">
       <img class="logo" :src="`${base}img/icon.png`" width="36" height="36" alt="" />
       <div class="titles">
         <h1>充电控制</h1>
@@ -149,5 +176,66 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.topbar-md3 {
+  flex-direction: column;
+  align-items: stretch;
+  min-height: calc(72px + var(--qsc-inset-top, 0px));
+  padding-bottom: 12px;
+}
+
+.md3-top {
+  width: 100%;
+}
+
+.md3-eyebrow {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--qsc-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-md3 h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: -0.4px;
+  line-height: 1.15;
+}
+
+.topbar-miuix {
+  min-height: calc(48px + var(--qsc-inset-top, 0px));
+  padding-bottom: 6px;
+}
+
+.topbar-miuix .titles h1 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.topbar-default .logo {
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(15, 18, 22, 0.1);
+}
+
+.topbar-default .titles h1 {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.shell-default .app-main {
+  padding-top: calc(56px + var(--qsc-inset-top, 0px));
+}
+
+.shell-md3 .app-main {
+  padding-top: calc(72px + var(--qsc-inset-top, 0px));
+}
+
+.shell-miuix .app-main {
+  padding-top: calc(48px + var(--qsc-inset-top, 0px));
 }
 </style>
