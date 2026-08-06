@@ -10,6 +10,7 @@ import {
   Field,
   Loading,
   NavBar,
+  PickerGroup,
   Popup,
   PullRefresh,
   Search,
@@ -18,6 +19,7 @@ import {
   Tabbar,
   TabbarItem,
   Tag,
+  TimePicker,
   showConfirmDialog,
   showSuccessToast,
   showToast,
@@ -38,6 +40,7 @@ const app = createApp(App);
   Field,
   Loading,
   NavBar,
+  PickerGroup,
   Popup,
   PullRefresh,
   Search,
@@ -46,6 +49,7 @@ const app = createApp(App);
   Tabbar,
   TabbarItem,
   Tag,
+  TimePicker,
 ].forEach((c) => app.use(c));
 
 app.config.globalProperties.$toast = showToast;

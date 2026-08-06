@@ -40,3 +40,11 @@ export const LEVEL_PRESETS: ChipOption[] = [
   { id: "97", l: "97%" },
   { id: "110", l: "关闭" },
 ];
+
+export const BYPASS_TEMP_PRESETS: ChipOption[] = [
+  { id: "110", l: "关闭" },
+  { id: "38", l: "38°" },
+  { id: "40", l: "40°" },
+  { id: "42", l: "42°" },
+  { id: "45", l: "45°" },
+];

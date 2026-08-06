@@ -55,7 +55,12 @@ const packLabel = computed(() => {
   return "默认控件形态";
 });
 
+const md3ForceCustom = ref(false);
+const seedInput = ref<HTMLInputElement | null>(null);
+const seedHexDraft = ref("");
+
 const md3ChipValue = computed(() => {
+  if (md3ForceCustom.value) return "custom";
   const seed = String(theme.md3Seed || "").toUpperCase();
   const hit = md3Presets.find((p) => p.id !== "custom" && p.id.toUpperCase() === seed);
   return hit ? hit.id : "custom";
@@ -63,18 +68,40 @@ const md3ChipValue = computed(() => {
 
 const md3CustomSeed = computed(() => md3ChipValue.value === "custom");
 
+watch(
+  () => theme.md3Seed,
+  (v) => {
+    seedHexDraft.value = String(v || "#6750A4");
+  },
+  { immediate: true },
+);
+
 function onMd3Chip(id: string | number) {
   const raw = String(id);
   if (raw === "custom") {
-    if (!md3CustomSeed.value) theme.setMd3Seed(theme.md3Seed || "#6750A4", false);
+    md3ForceCustom.value = true;
+    seedHexDraft.value = String(theme.md3Seed || "#6750A4");
     return;
   }
+  md3ForceCustom.value = false;
   theme.setMd3Seed(raw);
+}
+
+function openSeedPicker() {
+  seedInput.value?.click();
 }
 
 function onSeedInput(e: Event) {
   const v = (e.target as HTMLInputElement).value;
+  seedHexDraft.value = v;
   theme.setMd3Seed(v, false);
+}
+
+function onSeedHexCommit() {
+  const raw = String(seedHexDraft.value || "").trim();
+  if (!raw) return;
+  theme.setMd3Seed(raw, true);
+  seedHexDraft.value = String(theme.md3Seed);
 }
 
 function onFontDrag(v: number) {
@@ -168,15 +195,28 @@ async function tipAuthor() {
             @update:model-value="onMd3Chip"
           />
         </div>
-        <div v-if="md3CustomSeed" class="pad seed-row">
-          <label class="seed-label">取色</label>
+        <div v-if="md3CustomSeed" class="pad seed-panel">
+          <button type="button" class="seed-swatch" @click="openSeedPicker">
+            <span class="seed-swatch__dot" :style="{ background: theme.md3Seed }"></span>
+            <span>点此取色</span>
+          </button>
           <input
-            class="seed-input"
+            ref="seedInput"
+            class="seed-input-hidden"
             type="color"
             :value="theme.md3Seed"
             @input="onSeedInput"
+            @change="onSeedInput"
           />
-          <span class="seed-hex">{{ theme.md3Seed }}</span>
+          <van-field
+            v-model="seedHexDraft"
+            label="色值"
+            placeholder="#6750A4"
+            input-align="right"
+            maxlength="7"
+            @change="onSeedHexCommit"
+            @blur="onSeedHexCommit"
+          />
         </div>
       </template>
 
@@ -385,31 +425,41 @@ async function tipAuthor() {
   padding-bottom: 18px;
 }
 
-.seed-row {
+.seed-panel {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
   padding-bottom: 14px;
 }
 
-.seed-label {
+.seed-swatch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--qsc-surface-2, var(--qsc-chip-bg));
+  color: var(--qsc-text);
   font-size: 13px;
-  color: var(--qsc-text-2);
+  text-align: left;
 }
 
-.seed-input {
-  width: 42px;
-  height: 32px;
-  padding: 0;
+.seed-swatch__dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   border: 1px solid var(--qsc-hairline);
-  border-radius: 10px;
-  background: transparent;
+  flex-shrink: 0;
 }
 
-.seed-hex {
-  font-size: 12px;
-  color: var(--qsc-text-3);
-  font-variant-numeric: tabular-nums;
+.seed-input-hidden {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  width: 40px;
+  height: 40px;
+  opacity: 0;
 }
 
 .guide {

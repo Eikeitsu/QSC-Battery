@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import ChipGroup from "../ui/ChipGroup.vue";
+import PresetValue from "../ui/PresetValue.vue";
+import ScheduleEditor from "../ui/ScheduleEditor.vue";
 import ThemeSwitch from "../ui/ThemeSwitch.vue";
 import AppPicker from "../features/app-picker/AppPicker.vue";
 import {
+  BYPASS_TEMP_PRESETS,
   LEVEL_PRESETS,
   POWER_START_PRESETS,
   POWER_STOP_PRESETS,
@@ -28,16 +31,6 @@ const appListLabel = computed(() => {
   const n = store.current.app_list?.length || 0;
   if (!n) return "点此选择需要限流的前台应用";
   return "已选应用会在列表顶部优先显示";
-});
-
-const bypassScheduleText = computed({
-  get: () => (store.current.bypass_schedule || []).join("\n"),
-  set: (v: string) => {
-    store.current.bypass_schedule = String(v || "")
-      .split(/\n+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-  },
 });
 
 async function setPower(key: ConfigKey, id: string | number) {
@@ -107,32 +100,20 @@ async function saveSchedule() {
     >
       <div class="block">
         <div class="block-label">停止电量 · {{ store.powerPlan }}</div>
-        <ChipGroup
+        <PresetValue
           :options="POWER_STOP_PRESETS"
           :model-value="store.settings.power_stop"
+          label="停止电量 %"
+          placeholder="1–100，110=关闭"
           @update:model-value="(id) => setPower('power_stop', id)"
         />
-        <van-field
-          v-model="store.settings.power_stop"
-          type="digit"
-          label="自定义停止电量"
-          placeholder="1–100，110=关闭"
-          input-align="right"
-          @change="store.saveSettings()"
-        />
         <div class="block-label">恢复电量</div>
-        <ChipGroup
+        <PresetValue
           :options="POWER_START_PRESETS"
           :model-value="store.settings.power_start"
-          @update:model-value="(id) => setPower('power_start', id)"
-        />
-        <van-field
-          v-model="store.settings.power_start"
-          type="digit"
-          label="自定义恢复电量"
+          label="恢复电量 %"
           placeholder="须小于停止电量"
-          input-align="right"
-          @change="store.saveSettings()"
+          @update:model-value="(id) => setPower('power_start', id)"
         />
         <van-field
           v-model="store.settings.power_stop_time"
@@ -183,30 +164,18 @@ async function saveSchedule() {
       </van-cell>
       <div v-if="store.settings.temperature_switch !== '0'" class="block">
         <div class="block-label">停止温度</div>
-        <ChipGroup
+        <PresetValue
           :options="TEMP_STOP_PRESETS"
           :model-value="store.settings.temperature_switch_stop"
+          label="停止温度 °C"
           @update:model-value="(id) => setTemp('temperature_switch_stop', id)"
         />
-        <van-field
-          v-model="store.settings.temperature_switch_stop"
-          type="digit"
-          label="自定义停止温度 °C"
-          input-align="right"
-          @change="store.saveSettings()"
-        />
         <div class="block-label">恢复温度</div>
-        <ChipGroup
+        <PresetValue
           :options="TEMP_START_PRESETS"
           :model-value="store.settings.temperature_switch_start"
+          label="恢复温度 °C"
           @update:model-value="(id) => setTemp('temperature_switch_start', id)"
-        />
-        <van-field
-          v-model="store.settings.temperature_switch_start"
-          type="digit"
-          label="自定义恢复温度 °C"
-          input-align="right"
-          @change="store.saveSettings()"
         />
       </div>
     </section>
@@ -238,61 +207,35 @@ async function saveSchedule() {
                 @update:model-value="onBypass"
               />
               <div class="block-label">旁路电量（≥ 触发，110=关）</div>
-              <ChipGroup
+              <PresetValue
                 :options="LEVEL_PRESETS"
-                :model-value="String(store.current.battery_stop)"
+                :model-value="store.current.battery_stop"
+                as-number
+                label="旁路电量 %"
                 @update:model-value="(id) => setCurrentLevel('battery_stop', id)"
               />
-              <van-field
-                v-model.number="store.current.battery_stop"
-                type="digit"
-                label="自定义旁路电量"
-                input-align="right"
-                @change="store.saveCurrent()"
-              />
               <div class="block-label">旁路温度（≥ 触发，110=关）</div>
-              <ChipGroup
-                :options="[
-                  { id: '110', l: '关闭' },
-                  { id: '38', l: '38°' },
-                  { id: '40', l: '40°' },
-                  { id: '42', l: '42°' },
-                  { id: '45', l: '45°' },
-                ]"
-                :model-value="String(store.current.bypass_temp)"
+              <PresetValue
+                :options="BYPASS_TEMP_PRESETS"
+                :model-value="store.current.bypass_temp"
+                as-number
+                label="旁路温度 °C"
                 @update:model-value="(id) => setCurrentLevel('bypass_temp', id)"
               />
-              <van-field
-                v-model.number="store.current.bypass_temp"
-                type="digit"
-                label="自定义旁路温度 °C"
-                input-align="right"
-                @change="store.saveCurrent()"
-              />
-              <van-field
-                v-model="bypassScheduleText"
-                rows="2"
-                autosize
-                type="textarea"
-                label="旁路时段"
-                placeholder="每行一段，如 22:00-08:00"
-                input-align="right"
+              <div class="block-label">旁路时段</div>
+              <ScheduleEditor
+                v-model="store.current.bypass_schedule"
                 @change="saveSchedule"
               />
               <p class="field-hint">电量 / 温度 / 时段任一满足即开旁路；支持跨天</p>
               <div class="block-label">慢充电量</div>
-              <ChipGroup
+              <PresetValue
                 :options="LEVEL_PRESETS"
-                :model-value="String(store.current.slow_charge)"
-                @update:model-value="(id) => setCurrentLevel('slow_charge', id)"
-              />
-              <van-field
-                v-model.number="store.current.slow_charge"
-                type="digit"
-                label="自定义慢充电量"
+                :model-value="store.current.slow_charge"
+                as-number
+                label="慢充电量 %"
                 placeholder="110=关闭"
-                input-align="right"
-                @change="store.saveCurrent()"
+                @update:model-value="(id) => setCurrentLevel('slow_charge', id)"
               />
               <van-field
                 v-model.number="store.current.safety_temp_max"
@@ -427,12 +370,6 @@ async function saveSchedule() {
 
   .section-head .title {
     font-size: 13px;
-    font-weight: 600;
-    color: var(--qsc-text-2);
-  }
-
-  .section-head .hint {
-    font-size: 11px;
   }
 }
 </style>
