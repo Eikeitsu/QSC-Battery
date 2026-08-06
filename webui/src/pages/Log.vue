@@ -1,16 +1,31 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { showConfirmDialog } from "vant";
 import { useAppStore, useTheme } from "../stores";
 
-defineProps<{
-  refreshing?: boolean;
-}>();
-defineEmits<{
-  refresh: [];
-}>();
-
 const store = useAppStore();
 const theme = useTheme();
+const pullLoading = ref(false);
+
+async function doRefresh(showTip: boolean) {
+  await store.refreshLog(showTip);
+  theme.syncStatusBar();
+  requestAnimationFrame(() => theme.syncStatusBar());
+}
+
+async function onPullRefresh() {
+  pullLoading.value = true;
+  try {
+    await doRefresh(true);
+  } finally {
+    pullLoading.value = false;
+  }
+}
+
+async function onButtonRefresh() {
+  // 不驱动 van-pull-refresh，避免按钮刷新把顶栏间距撑乱
+  await doRefresh(true);
+}
 
 async function onClear() {
   try {
@@ -19,6 +34,7 @@ async function onClear() {
       message: "确认清空运行日志？",
     });
     await store.clearLog();
+    theme.syncStatusBar();
   } catch {
     /* cancelled */
   }
@@ -27,9 +43,9 @@ async function onClear() {
 
 <template>
   <van-pull-refresh
-    :model-value="refreshing"
+    v-model="pullLoading"
     success-text="日志已刷新"
-    @refresh="$emit('refresh')"
+    @refresh="onPullRefresh"
   >
     <div
       class="page"
@@ -49,7 +65,7 @@ async function onClear() {
               </div>
             </div>
             <div class="log-md3-meta__actions">
-              <van-button size="small" round type="primary" @click="$emit('refresh')">
+              <van-button size="small" round type="primary" @click="onButtonRefresh">
                 刷新
               </van-button>
               <van-button size="small" round plain type="danger" @click="onClear">
@@ -76,9 +92,7 @@ async function onClear() {
             <b>{{ store.logSize }}</b>
           </div>
           <div class="miuix-actions">
-            <button type="button" class="miuix-btn" @click="$emit('refresh')">
-              刷新
-            </button>
+            <button type="button" class="miuix-btn" @click="onButtonRefresh">刷新</button>
             <button type="button" class="miuix-btn danger" @click="onClear">清空</button>
           </div>
         </section>
@@ -100,7 +114,7 @@ async function onClear() {
             <span>{{ store.logSize }}</span>
           </div>
           <div class="actions">
-            <van-button size="small" type="primary" plain @click="$emit('refresh')">
+            <van-button size="small" type="primary" plain @click="onButtonRefresh">
               刷新
             </van-button>
             <van-button size="small" type="danger" plain @click="onClear">

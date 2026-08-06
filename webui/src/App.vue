@@ -63,15 +63,8 @@ async function onRefreshHome() {
     await store.refreshStatus(true);
   } finally {
     refreshing.value = false;
-  }
-}
-
-async function onRefreshLog() {
-  refreshing.value = true;
-  try {
-    await store.refreshLog(true);
-  } finally {
-    refreshing.value = false;
+    theme.syncStatusBar();
+    requestAnimationFrame(() => theme.syncStatusBar());
   }
 }
 
@@ -124,7 +117,7 @@ onMounted(async () => {
           :is="activeView"
           :key="tab"
           :refreshing="refreshing"
-          @refresh="tab === 'log' ? onRefreshLog() : onRefreshHome()"
+          @refresh="onRefreshHome()"
         />
       </Transition>
     </main>
@@ -181,17 +174,22 @@ onMounted(async () => {
 .topbar-md3 {
   flex-direction: column;
   align-items: stretch;
+  justify-content: flex-end;
   min-height: calc(72px + var(--qsc-inset-top, 0px));
   padding-bottom: 12px;
 }
 
 .md3-top {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .md3-eyebrow {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: 12px;
+  line-height: 1.35;
   color: var(--qsc-text-3);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -203,7 +201,7 @@ onMounted(async () => {
   font-size: 28px;
   font-weight: 650;
   letter-spacing: -0.4px;
-  line-height: 1.15;
+  line-height: 1.2;
 }
 
 .topbar-miuix {

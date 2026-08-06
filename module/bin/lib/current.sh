@@ -88,20 +88,22 @@ qsc_current_blacklist_node() {
 }
 
 # 写入失败：连续 3 次才拉黑，避免偶发读回抖动误杀
+# 计数文件格式：路径|次数（读写均去 \r，避免始终读成第 1 次）
 qsc_current_mark_write_fail() {
 	local node="$1" why="$2" line cnt=0
 	[ -n "$node" ] || return 0
 	mkdir -p "$DATADIR" 2>/dev/null
-	line="$(grep -F "${node}|" "$DATADIR/current_node_failcnt" 2>/dev/null | head -n 1)"
+	line="$(grep -F "${node}|" "$DATADIR/current_node_failcnt" 2>/dev/null | head -n 1 | tr -d '\r')"
 	if [ -n "$line" ]; then
 		cnt="${line##*|}"
+		cnt="$(echo "$cnt" | tr -d ' \r\n')"
 		case "$cnt" in
 			""|*[!0-9]*) cnt=0 ;;
 		esac
 	fi
 	cnt=$((cnt + 1))
 	if [ -f "$DATADIR/current_node_failcnt" ]; then
-		grep -Fv "${node}|" "$DATADIR/current_node_failcnt" >"$DATADIR/.failcnt_tmp" 2>/dev/null || : >"$DATADIR/.failcnt_tmp"
+		grep -Fv "${node}|" "$DATADIR/current_node_failcnt" | tr -d '\r' >"$DATADIR/.failcnt_tmp" 2>/dev/null || : >"$DATADIR/.failcnt_tmp"
 	else
 		: >"$DATADIR/.failcnt_tmp"
 	fi
@@ -110,7 +112,7 @@ qsc_current_mark_write_fail() {
 		qsc_current_blacklist_node "$node" "$why"
 		return 0
 	fi
-	echo "${node}|${cnt}" >>"$DATADIR/.failcnt_tmp"
+	printf '%s|%s\n' "$node" "$cnt" >>"$DATADIR/.failcnt_tmp"
 	mv "$DATADIR/.failcnt_tmp" "$DATADIR/current_node_failcnt"
 	echo "$(date +%F_%T) 电流节点写入未生效（第${cnt}/3次，暂不拉黑）：$node（$why）" >>"$LOG_FILE"
 }
@@ -119,27 +121,30 @@ qsc_current_clear_write_fail() {
 	local node="$1"
 	[ -n "$node" ] || return 0
 	[ -f "$DATADIR/current_node_failcnt" ] || return 0
-	grep -Fv "${node}|" "$DATADIR/current_node_failcnt" >"$DATADIR/.failcnt_tmp" 2>/dev/null || : >"$DATADIR/.failcnt_tmp"
+	grep -Fv "${node}|" "$DATADIR/current_node_failcnt" | tr -d '\r' >"$DATADIR/.failcnt_tmp" 2>/dev/null || : >"$DATADIR/.failcnt_tmp"
 	mv "$DATADIR/.failcnt_tmp" "$DATADIR/current_node_failcnt"
 }
 
-# battery_current / restricted 变更时清拉黑并重扫 restrict*_cur*
+# battery_current / restricted 文本变更时清拉黑并重扫 restrict*_cur*
+# 首次建立快照不清理（避免每轮/启动误清空计数）
 qsc_current_sync_conf_guard() {
-	local new fp
-	new="$(
-		{
-			qsc_current_conf_get_strings battery_current 2>/dev/null || true
-			echo '---'
-			qsc_current_conf_get_strings restricted 2>/dev/null || true
-		} | tr -d '\r' | cksum 2>/dev/null | awk '{print $1}'
-	)"
-	[ -n "$new" ] || return 0
-	fp="$(cat "$DATADIR/current_conf_fp" 2>/dev/null)"
-	if [ "$fp" != "$new" ]; then
+	local snap="$DATADIR/current_conf_snap"
+	local tmp="$DATADIR/.current_conf_snap_new"
+	mkdir -p "$DATADIR" 2>/dev/null
+	{
+		qsc_current_conf_get_strings battery_current 2>/dev/null || true
+		echo '---'
+		qsc_current_conf_get_strings restricted 2>/dev/null || true
+	} | tr -d '\r' >"$tmp"
+	if [ -f "$snap" ] && cmp -s "$snap" "$tmp" 2>/dev/null; then
+		rm -f "$tmp"
+		return 0
+	fi
+	if [ -f "$snap" ]; then
 		rm -f "$DATADIR/current_node_blacklist" "$DATADIR/current_node_failcnt"
 		rm -f "${LIST_CHARGE_CURRENT:-$DATADIR/list_charge_current}"
-		echo "$new" >"$DATADIR/current_conf_fp"
 	fi
+	mv "$tmp" "$snap"
 }
 
 qsc_current_refresh_restrict_list() {
