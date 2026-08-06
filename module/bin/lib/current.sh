@@ -79,72 +79,81 @@ qsc_current_blacklist_node() {
 	mkdir -p "$DATADIR" 2>/dev/null
 	grep -Fqx "$node" "$DATADIR/current_node_blacklist" 2>/dev/null && return 0
 	echo "$node" >>"$DATADIR/current_node_blacklist"
-	# 已拉黑则清掉失败计数
-	if [ -f "$DATADIR/current_node_failcnt" ]; then
-		grep -Fv "${node}|" "$DATADIR/current_node_failcnt" >"$DATADIR/.failcnt_tmp" 2>/dev/null || : >"$DATADIR/.failcnt_tmp"
-		mv "$DATADIR/.failcnt_tmp" "$DATADIR/current_node_failcnt"
-	fi
+	qsc_current_clear_write_fail "$node"
 	echo "$(date +%F_%T) 电流节点拉黑：$node（$why）" >>"$LOG_FILE"
 }
 
-# 写入失败：连续 3 次才拉黑，避免偶发读回抖动误杀
-# 计数文件格式：路径|次数（读写均去 \r，避免始终读成第 1 次）
+# 写入失败：连续 3 次才拉黑
+# 计数文件每行：「次数 路径」（不用 |，避免部分机 grep 把 | 当正则导致永远第 1 次）
 qsc_current_mark_write_fail() {
-	local node="$1" why="$2" line cnt=0
+	local node="$1" why="$2" line cnt=0 c n
+	local f="$DATADIR/current_node_failcnt"
+	local tmp="$DATADIR/.failcnt_tmp"
 	[ -n "$node" ] || return 0
 	mkdir -p "$DATADIR" 2>/dev/null
-	line="$(grep -F "${node}|" "$DATADIR/current_node_failcnt" 2>/dev/null | head -n 1 | tr -d '\r')"
-	if [ -n "$line" ]; then
-		cnt="${line##*|}"
-		cnt="$(echo "$cnt" | tr -d ' \r\n')"
-		case "$cnt" in
-			""|*[!0-9]*) cnt=0 ;;
-		esac
+	: >"$tmp"
+	if [ -f "$f" ]; then
+		while IFS= read -r line || [ -n "$line" ]; do
+			line="$(printf '%s' "$line" | tr -d '\r')"
+			[ -n "$line" ] || continue
+			c="${line%% *}"
+			n="${line#* }"
+			if [ "$n" = "$node" ]; then
+				case "$c" in
+					""|*[!0-9]*) cnt=0 ;;
+					*) cnt="$c" ;;
+				esac
+				continue
+			fi
+			printf '%s\n' "$line" >>"$tmp"
+		done <"$f"
 	fi
 	cnt=$((cnt + 1))
-	if [ -f "$DATADIR/current_node_failcnt" ]; then
-		grep -Fv "${node}|" "$DATADIR/current_node_failcnt" | tr -d '\r' >"$DATADIR/.failcnt_tmp" 2>/dev/null || : >"$DATADIR/.failcnt_tmp"
-	else
-		: >"$DATADIR/.failcnt_tmp"
-	fi
 	if [ "$cnt" -ge 3 ]; then
-		mv "$DATADIR/.failcnt_tmp" "$DATADIR/current_node_failcnt"
+		mv "$tmp" "$f"
 		qsc_current_blacklist_node "$node" "$why"
 		return 0
 	fi
-	printf '%s|%s\n' "$node" "$cnt" >>"$DATADIR/.failcnt_tmp"
-	mv "$DATADIR/.failcnt_tmp" "$DATADIR/current_node_failcnt"
+	printf '%s %s\n' "$cnt" "$node" >>"$tmp"
+	mv "$tmp" "$f"
 	echo "$(date +%F_%T) 电流节点写入未生效（第${cnt}/3次，暂不拉黑）：$node（$why）" >>"$LOG_FILE"
 }
 
 qsc_current_clear_write_fail() {
-	local node="$1"
+	local node="$1" line c n
+	local f="$DATADIR/current_node_failcnt"
+	local tmp="$DATADIR/.failcnt_tmp"
 	[ -n "$node" ] || return 0
-	[ -f "$DATADIR/current_node_failcnt" ] || return 0
-	grep -Fv "${node}|" "$DATADIR/current_node_failcnt" | tr -d '\r' >"$DATADIR/.failcnt_tmp" 2>/dev/null || : >"$DATADIR/.failcnt_tmp"
-	mv "$DATADIR/.failcnt_tmp" "$DATADIR/current_node_failcnt"
+	[ -f "$f" ] || return 0
+	: >"$tmp"
+	while IFS= read -r line || [ -n "$line" ]; do
+		line="$(printf '%s' "$line" | tr -d '\r')"
+		[ -n "$line" ] || continue
+		n="${line#* }"
+		[ "$n" = "$node" ] && continue
+		printf '%s\n' "$line" >>"$tmp"
+	done <"$f"
+	mv "$tmp" "$f"
 }
 
-# battery_current / restricted 文本变更时清拉黑并重扫 restrict*_cur*
-# 首次建立快照不清理（避免每轮/启动误清空计数）
+# current.json 的 mtime/size 变化时清拉黑（解析结果不稳定时不再误清计数）
 qsc_current_sync_conf_guard() {
-	local snap="$DATADIR/current_conf_snap"
-	local tmp="$DATADIR/.current_conf_snap_new"
+	local meta_file="$DATADIR/current_conf_meta"
+	local new=""
+	[ -f "$CURRENT_CONF" ] || return 0
 	mkdir -p "$DATADIR" 2>/dev/null
-	{
-		qsc_current_conf_get_strings battery_current 2>/dev/null || true
-		echo '---'
-		qsc_current_conf_get_strings restricted 2>/dev/null || true
-	} | tr -d '\r' >"$tmp"
-	if [ -f "$snap" ] && cmp -s "$snap" "$tmp" 2>/dev/null; then
-		rm -f "$tmp"
+	new="$(stat -c '%Y %s' "$CURRENT_CONF" 2>/dev/null)"
+	[ -n "$new" ] || new="$(ls -l "$CURRENT_CONF" 2>/dev/null)"
+	[ -n "$new" ] || return 0
+	if [ -f "$meta_file" ] && [ "$(cat "$meta_file" 2>/dev/null)" = "$new" ]; then
 		return 0
 	fi
-	if [ -f "$snap" ]; then
+	if [ -f "$meta_file" ]; then
 		rm -f "$DATADIR/current_node_blacklist" "$DATADIR/current_node_failcnt"
 		rm -f "${LIST_CHARGE_CURRENT:-$DATADIR/list_charge_current}"
+		echo "$(date +%F_%T) 电流控制：检测到 current.json 变更，已清空节点拉黑/失败计数" >>"$LOG_FILE"
 	fi
-	mv "$tmp" "$snap"
+	printf '%s\n' "$new" >"$meta_file"
 }
 
 qsc_current_refresh_restrict_list() {

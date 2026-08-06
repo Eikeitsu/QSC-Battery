@@ -43,7 +43,7 @@ fi
 rm -f "$LIST_SWITCH"
 "$BINDIR/list_switch.sh" > /dev/null 2>&1
 # 升级/重启后重试电流节点：清拉黑与失败计数
-rm -f "$DATADIR/current_node_blacklist" "$DATADIR/current_node_failcnt" "$DATADIR/current_conf_snap" "$DATADIR/current_conf_fp" 2>/dev/null
+rm -f "$DATADIR/current_node_blacklist" "$DATADIR/current_node_failcnt" "$DATADIR/current_conf_meta" "$DATADIR/current_conf_snap" "$DATADIR/current_conf_fp" 2>/dev/null
 # 按本机节点生成/刷新 device.profile（MCA 等能力动态启用）
 if [ -f "$BINDIR/detect_device.sh" ]; then
 	"$BINDIR/detect_device.sh" > /dev/null 2>&1
