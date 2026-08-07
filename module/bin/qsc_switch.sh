@@ -55,6 +55,30 @@ power_start="$(echo "$config_conf" | egrep '^power_start=' | sed -n 's/power_sta
 temperature_switch="$(echo "$config_conf" | egrep '^temperature_switch=' | sed -n 's/temperature_switch=//g;$p')"
 temperature_switch_stop="$(echo "$config_conf" | egrep '^temperature_switch_stop=' | sed -n 's/temperature_switch_stop=//g;$p')"
 temperature_switch_start="$(echo "$config_conf" | egrep '^temperature_switch_start=' | sed -n 's/temperature_switch_start=//g;$p')"
+
+# 配置兜底：拒非法/天文数字，避免误伤设备
+charge_full="$(qsc_clamp_int "$charge_full" 0 1 0)"
+power_reset="$(qsc_clamp_int "$power_reset" 0 1 0)"
+Shut_down="$(qsc_clamp_int "$Shut_down" 0 20 0)"
+power_stop="$(qsc_clamp_level_or_off "$power_stop" 100)"
+power_start="$(qsc_clamp_int "$power_start" 1 100 95)"
+if [ "$power_stop" -le 100 ] 2>/dev/null && [ "$power_stop" -le "$power_start" ] 2>/dev/null; then
+	if [ "$power_stop" -gt 5 ] 2>/dev/null; then
+		power_start=$((power_stop - 5))
+	else
+		power_start=1
+	fi
+fi
+temperature_switch="$(qsc_clamp_int "$temperature_switch" 0 1 1)"
+temperature_switch_stop="$(qsc_clamp_int "$temperature_switch_stop" 25 70 60)"
+temperature_switch_start="$(qsc_clamp_int "$temperature_switch_start" 25 70 50)"
+if [ "$temperature_switch_stop" -le "$temperature_switch_start" ] 2>/dev/null; then
+	if [ "$temperature_switch_stop" -gt 30 ] 2>/dev/null; then
+		temperature_switch_start=$((temperature_switch_stop - 5))
+	else
+		temperature_switch_start=25
+	fi
+fi
 off_qsc=0
 qsc_debug_step 5
 
@@ -197,6 +221,7 @@ if [ -n "$battery_powered" ]; then
 		fi
 		if [ "$cpu_log" = "0" -a "$charge_full" != "1" -a "$first_stop" = "1" ]; then
 			power_stop_time="$(echo "$config_conf" | egrep '^power_stop_time=' | sed -n 's/power_stop_time=//g;$p')"
+			power_stop_time="$(qsc_clamp_int "$power_stop_time" 1 120 3)"
 			if [ "$power_stop_time" -gt "0" ]; then
 				echo "$(date +%F_%T) 电量$battery_level 延时功能 继续充电$power_stop_time秒 倒计时中" >> "$LOG_FILE"
 				sleep "$power_stop_time"

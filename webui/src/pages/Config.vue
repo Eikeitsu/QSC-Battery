@@ -7,15 +7,22 @@ import ThemeSwitch from "../ui/ThemeSwitch.vue";
 import AppPicker from "../features/app-picker/AppPicker.vue";
 import {
   BYPASS_TEMP_PRESETS,
+  DEFAULT_CURRENT_PRESETS,
   LEVEL_PRESETS,
+  LIMITS,
+  ONE_LIMIT_CURRENT_PRESETS,
   POWER_START_PRESETS,
   POWER_STOP_PRESETS,
+  SMALL_CURRENT_PRESETS,
   TEMP_START_PRESETS,
   TEMP_STOP_PRESETS,
+  clampLevelOrOff,
+  clampUa,
   type ConfigKey,
   type CurrentConfig,
 } from "../shared";
 import { useAppStore, useTheme } from "../stores";
+import { showToast } from "vant";
 
 const store = useAppStore();
 const theme = useTheme();
@@ -60,12 +67,61 @@ async function setCurrentLevel(
   key: keyof Pick<CurrentConfig, "battery_stop" | "slow_charge" | "bypass_temp">,
   id: string | number,
 ) {
-  store.current[key] = Number(id);
+  const next = clampLevelOrOff(id, Number(store.current[key]));
+  if (next !== Number(id)) showToast("电量/温度阈值已限制在 1–100 或 110=关闭");
+  store.current[key] = next;
+  await store.saveCurrent();
+}
+
+async function setCurrentUa(
+  key: keyof Pick<
+    CurrentConfig,
+    | "default_current_max"
+    | "default_current_max_limit"
+    | "constant_current_max"
+    | "app_current_max"
+  >,
+  id: string | number,
+  small = false,
+) {
+  const maxUa: number = small ? LIMITS.uaSmallMax : LIMITS.uaMax;
+  const next = clampUa(id, Number(store.current[key]), maxUa);
+  if (next !== Number(id)) {
+    showToast(small ? "电流已限制在 100mA–3A" : "电流已限制在 100mA–10A");
+  }
+  store.current[key] = next;
   await store.saveCurrent();
 }
 
 async function onBypass(mode: string | number) {
   store.current.bypass_mode = mode === "auto" ? "auto" : "sim";
+  await store.saveCurrent();
+}
+
+async function onSafetyTemp() {
+  const n = Number(store.current.safety_temp_max);
+  const next = Math.min(
+    LIMITS.safetyTempMax,
+    Math.max(LIMITS.safetyTempMin, Number.isFinite(n) ? Math.round(n) : 48),
+  );
+  if (next !== n)
+    showToast(`旁路安全温度已限制在 ${LIMITS.safetyTempMin}–${LIMITS.safetyTempMax}°C`);
+  store.current.safety_temp_max = next;
+  await store.saveCurrent();
+}
+
+async function onCurrentTemp(key: "default_current_limit" | "temperature_current_limit") {
+  const n = Number(store.current[key]);
+  const next = Math.min(
+    LIMITS.currentTempMax,
+    Math.max(
+      LIMITS.currentTempMin,
+      Number.isFinite(n) ? Math.round(n) : store.current[key],
+    ),
+  );
+  if (next !== n)
+    showToast(`温度阈值已限制在 ${LIMITS.currentTempMin}–${LIMITS.currentTempMax}°C`);
+  store.current[key] = next;
   await store.saveCurrent();
 }
 
@@ -105,6 +161,8 @@ async function saveSchedule() {
           :model-value="store.settings.power_stop"
           label="停止电量 %"
           placeholder="1–100，110=关闭"
+          :min-display="1"
+          :max-display="110"
           @update:model-value="(id) => setPower('power_stop', id)"
         />
         <div class="block-label">恢复电量</div>
@@ -113,12 +171,15 @@ async function saveSchedule() {
           :model-value="store.settings.power_start"
           label="恢复电量 %"
           placeholder="须小于停止电量"
+          :min-display="1"
+          :max-display="100"
           @update:model-value="(id) => setPower('power_start', id)"
         />
         <van-field
           v-model="store.settings.power_stop_time"
           type="digit"
           label="延时秒数"
+          placeholder="1–120"
           input-align="right"
           @change="store.saveSettings()"
         />
@@ -168,6 +229,8 @@ async function saveSchedule() {
           :options="TEMP_STOP_PRESETS"
           :model-value="store.settings.temperature_switch_stop"
           label="停止温度 °C"
+          :min-display="25"
+          :max-display="70"
           @update:model-value="(id) => setTemp('temperature_switch_stop', id)"
         />
         <div class="block-label">恢复温度</div>
@@ -175,6 +238,8 @@ async function saveSchedule() {
           :options="TEMP_START_PRESETS"
           :model-value="store.settings.temperature_switch_start"
           label="恢复温度 °C"
+          :min-display="25"
+          :max-display="70"
           @update:model-value="(id) => setTemp('temperature_switch_start', id)"
         />
       </div>
@@ -212,6 +277,8 @@ async function saveSchedule() {
                 :model-value="store.current.battery_stop"
                 as-number
                 label="旁路电量 %"
+                :min-display="1"
+                :max-display="110"
                 @update:model-value="(id) => setCurrentLevel('battery_stop', id)"
               />
               <div class="block-label">旁路温度（≥ 触发，110=关）</div>
@@ -220,6 +287,8 @@ async function saveSchedule() {
                 :model-value="store.current.bypass_temp"
                 as-number
                 label="旁路温度 °C"
+                :min-display="1"
+                :max-display="110"
                 @update:model-value="(id) => setCurrentLevel('bypass_temp', id)"
               />
               <div class="block-label">旁路时段</div>
@@ -235,22 +304,29 @@ async function saveSchedule() {
                 as-number
                 label="慢充电量 %"
                 placeholder="110=关闭"
+                :min-display="1"
+                :max-display="110"
                 @update:model-value="(id) => setCurrentLevel('slow_charge', id)"
               />
               <van-field
                 v-model.number="store.current.safety_temp_max"
                 type="digit"
                 label="旁路安全温度 °C"
-                placeholder="过热改二限小电流"
+                placeholder="40–55"
                 input-align="right"
-                @change="store.saveCurrent()"
+                @change="onSafetyTemp"
               />
-              <van-field
-                v-model.number="store.current.default_current_max"
-                type="digit"
-                label="默认电流上限 μA"
-                input-align="right"
-                @change="store.saveCurrent()"
+              <div class="block-label">默认电流上限</div>
+              <PresetValue
+                :options="DEFAULT_CURRENT_PRESETS"
+                :model-value="store.current.default_current_max"
+                as-number
+                :unit-scale="1000"
+                label="默认电流 mA"
+                placeholder="100–10000"
+                :min-display="100"
+                :max-display="10000"
+                @update:model-value="(id) => setCurrentUa('default_current_max', id)"
               />
               <van-cell center title="电流温控">
                 <template #right-icon>
@@ -264,31 +340,47 @@ async function saveSchedule() {
                 v-model.number="store.current.default_current_limit"
                 type="digit"
                 label="一限温度 °C"
+                placeholder="25–60"
                 input-align="right"
-                @change="store.saveCurrent()"
+                @change="onCurrentTemp('default_current_limit')"
               />
-              <van-field
-                v-model.number="store.current.default_current_max_limit"
-                type="digit"
-                label="一限电流 μA"
-                input-align="right"
-                @change="store.saveCurrent()"
+              <div class="block-label">一限电流</div>
+              <PresetValue
+                :options="ONE_LIMIT_CURRENT_PRESETS"
+                :model-value="store.current.default_current_max_limit"
+                as-number
+                :unit-scale="1000"
+                label="一限电流 mA"
+                placeholder="100–10000"
+                :min-display="100"
+                :max-display="10000"
+                @update:model-value="
+                  (id) => setCurrentUa('default_current_max_limit', id)
+                "
               />
               <van-field
                 v-model.number="store.current.temperature_current_limit"
                 type="digit"
                 label="二限温度 °C"
+                placeholder="25–60"
                 input-align="right"
-                @change="store.saveCurrent()"
+                @change="onCurrentTemp('temperature_current_limit')"
               />
-              <van-field
-                v-model.number="store.current.constant_current_max"
-                type="digit"
-                label="二限电流 μA"
-                input-align="right"
-                @change="store.saveCurrent()"
+              <div class="block-label">二限电流（慢充/旁路回补共用）</div>
+              <PresetValue
+                :options="SMALL_CURRENT_PRESETS"
+                :model-value="store.current.constant_current_max"
+                as-number
+                :unit-scale="1000"
+                label="二限电流 mA"
+                placeholder="100–3000"
+                :min-display="100"
+                :max-display="3000"
+                @update:model-value="
+                  (id) => setCurrentUa('constant_current_max', id, true)
+                "
               />
-              <van-cell center title="游戏限流" label="仅匹配前台窗口">
+              <van-cell center title="游戏限流" label="进程或前台命中时限流">
                 <template #right-icon>
                   <ThemeSwitch
                     :model-value="!!Number(store.current.app_limit)"
@@ -296,12 +388,17 @@ async function saveSchedule() {
                   />
                 </template>
               </van-cell>
-              <van-field
-                v-model.number="store.current.app_current_max"
-                type="digit"
-                label="游戏电流 μA"
-                input-align="right"
-                @change="store.saveCurrent()"
+              <div class="block-label">游戏电流</div>
+              <PresetValue
+                :options="SMALL_CURRENT_PRESETS"
+                :model-value="store.current.app_current_max"
+                as-number
+                :unit-scale="1000"
+                label="游戏电流 mA"
+                placeholder="100–3000"
+                :min-display="100"
+                :max-display="3000"
+                @update:model-value="(id) => setCurrentUa('app_current_max', id, true)"
               />
               <van-cell
                 title="游戏应用"

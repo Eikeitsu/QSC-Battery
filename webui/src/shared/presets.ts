@@ -48,3 +48,28 @@ export const BYPASS_TEMP_PRESETS: ChipOption[] = [
   { id: "42", l: "42°" },
   { id: "45", l: "45°" },
 ];
+
+/** 电流快捷：id 为微安；≥1000mA 显示为安，其余显示毫安 */
+export const DEFAULT_CURRENT_PRESETS: ChipOption[] = [
+  { id: "2000000", l: "2A" },
+  { id: "3000000", l: "3A" },
+  { id: "5000000", l: "5A" },
+  { id: "6000000", l: "6A" },
+  { id: "8000000", l: "8A" },
+];
+
+export const ONE_LIMIT_CURRENT_PRESETS: ChipOption[] = [
+  { id: "500000", l: "500mA" },
+  { id: "1000000", l: "1A" },
+  { id: "1500000", l: "1.5A" },
+  { id: "2000000", l: "2A" },
+  { id: "3000000", l: "3A" },
+];
+
+export const SMALL_CURRENT_PRESETS: ChipOption[] = [
+  { id: "100000", l: "100mA" },
+  { id: "200000", l: "200mA" },
+  { id: "300000", l: "300mA" },
+  { id: "500000", l: "500mA" },
+  { id: "1000000", l: "1A" },
+];

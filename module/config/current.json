@@ -31,7 +31,7 @@
   "default_current_limit": 40,
   "default_current_max_limit": 1500000,
 
-  // 二限温度 (°C) / 二限电流（微安，慢充与旁路回补共用；建议 ≥50000）
+  // 二限电流值：默认值100000为100毫安，此数值同时也是模拟旁路回补和慢充的小电流值（建议 >=100000）
   "temperature_current_limit": 45,
   "constant_current_max": 100000,
 

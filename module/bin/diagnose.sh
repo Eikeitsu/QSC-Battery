@@ -195,11 +195,10 @@ if [ -n "${LIST_CHARGE_CURRENT:-}" ] && [ -s "$LIST_CHARGE_CURRENT" ]; then
 else
   echo "  restrict*_cur* 探测: 无（可重启服务或跑 list_switch）" >> "$OUT"
 fi
-if [ -f "$DATADIR/current_node_blacklist" ]; then
-  echo "  电流节点拉黑:" >> "$OUT"
-  sed 's/^/    /' "$DATADIR/current_node_blacklist" >> "$OUT" 2>/dev/null
+if [ -f "$DATADIR/current_mode_tag" ]; then
+  echo "  电流模式标记: $(cat "$DATADIR/current_mode_tag" 2>/dev/null)" >> "$OUT"
 else
-  echo "  电流节点拉黑: 无" >> "$OUT"
+  echo "  电流模式标记: 无" >> "$OUT"
 fi
 if [ -n "$LIST_SWITCH" ] && [ -s "$LIST_SWITCH" ]; then
   echo "  list_switch 行数: $(wc -l <"$LIST_SWITCH" | tr -d ' ')" >> "$OUT"

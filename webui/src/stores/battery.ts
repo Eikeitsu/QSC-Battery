@@ -6,6 +6,7 @@ import {
   DEFAULTS,
   PATHS,
   STATUS_INTERVAL,
+  sanitizeSettings,
   type BadgeType,
   type ConfigKey,
   type CurrentConfig,
@@ -106,6 +107,9 @@ export function useAppStore() {
   }
 
   async function saveSettings(toast = true): Promise<boolean> {
+    const result = sanitizeSettings({ ...settings });
+    Object.assign(settings, result.value);
+
     const powerStop = parseInt(settings.power_stop, 10);
     const powerStart = parseInt(settings.power_start, 10);
     const tempStop = parseInt(settings.temperature_switch_stop, 10);
@@ -128,33 +132,28 @@ export function useAppStore() {
       showToast("停止温度必须大于恢复温度");
       return false;
     }
-    const powerStopTime = parseInt(settings.power_stop_time, 10);
-    const pairs: [ConfigKey, number][] = [
-      ["power_stop", Number.isNaN(powerStop) ? 100 : powerStop],
-      ["power_start", Number.isNaN(powerStart) ? 95 : powerStart],
-      [
-        "power_stop_time",
-        Number.isNaN(powerStopTime) || powerStopTime < 1 ? 3 : powerStopTime,
-      ],
-      ["charge_full", settings.charge_full === "1" ? 1 : 0],
-      ["power_reset", settings.power_reset === "1" ? 1 : 0],
-      ["Compatibility_mode", settings.Compatibility_mode === "1" ? 1 : 0],
-      ["temperature_switch", settings.temperature_switch === "0" ? 0 : 1],
-      ["temperature_switch_stop", Number.isNaN(tempStop) ? 60 : tempStop],
-      ["temperature_switch_start", Number.isNaN(tempStart) ? 50 : tempStart],
-    ];
-    for (const [key, value] of pairs) {
-      await api.setConf(key, value);
-      settings[key] = String(value);
+    for (const key of CONFIG_KEYS) {
+      await api.setConf(key, settings[key]);
     }
-    if (toast) showSuccessToast("配置已保存");
+    if (toast) {
+      if (result.fixed) showToast("已自动修正超范围配置并保存");
+      else showSuccessToast("配置已保存");
+    }
     return true;
   }
 
   async function saveCurrent(toast = true): Promise<boolean> {
     if (!currentFeature.value) return false;
-    await api.saveCurrentJsonc(current);
-    if (toast) showSuccessToast("电流控制已保存");
+    const saved = await api.saveCurrentJsonc(current);
+    if (!saved.ok) {
+      showToast("电流配置保存失败");
+      return false;
+    }
+    Object.assign(current, saved.value);
+    if (toast) {
+      if (saved.fixed) showToast("已自动修正超范围电流配置并保存");
+      else showSuccessToast("电流控制已保存");
+    }
     return true;
   }
 
@@ -177,7 +176,8 @@ export function useAppStore() {
     }
     if (currentFeature.value) {
       Object.assign(current, { ...CURRENT_DEFAULTS });
-      await api.saveCurrentJsonc(current);
+      const saved = await api.saveCurrentJsonc(current);
+      if (saved.ok) Object.assign(current, saved.value);
     }
     showSuccessToast("已恢复默认配置");
     await refreshStatus();

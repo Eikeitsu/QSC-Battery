@@ -5,10 +5,10 @@
 # - 从 battery_current 读取节点列表，对本机存在的路径全部写入
 # - 额外合并开机探测的 *restrict*_cur*（list_charge_current）
 # - 限流前按 restricted 写入策略参数（如 qcom restrict_chg）
+# - 统一「当前值-500000」步进；不读回校验、不拉黑；节点文件存在即记日志
 # 安全约束：
 # - 不写 /data/vendor/thermal；不做 MCA/内核补丁
 # - 不写 charge_control_limit / thermal_input_current 等非电流策略节点
-# - 危险节点名、写入无效/读回不像 µA 上限的节点会跳过或拉黑
 
 # JSONC 解析
 [ -n "$QSC_JSONC_LOADED" ] || {
@@ -102,77 +102,7 @@ qsc_current_node_denied() {
 	return 1
 }
 
-qsc_current_node_blacklisted() {
-	local node="$1"
-	[ -f "$DATADIR/current_node_blacklist" ] || return 1
-	grep -Fqx "$node" "$DATADIR/current_node_blacklist" 2>/dev/null
-}
-
-qsc_current_blacklist_node() {
-	local node="$1" why="$2"
-	[ -n "$node" ] || return 0
-	mkdir -p "$DATADIR" 2>/dev/null
-	grep -Fqx "$node" "$DATADIR/current_node_blacklist" 2>/dev/null && return 0
-	echo "$node" >>"$DATADIR/current_node_blacklist"
-	qsc_current_clear_write_fail "$node"
-	echo 1 >"$DATADIR/current_force_log"
-	echo "$(date +%F_%T) 已排除无效节点 $(qsc_node_short "$node")：$why（后续改用剩余节点）" >>"$LOG_FILE"
-}
-
-# 写入失败：连续 3 次才拉黑
-# 计数文件每行：「次数 路径」（不用 |，避免部分机 grep 把 | 当正则导致永远第 1 次）
-qsc_current_mark_write_fail() {
-	local node="$1" why="$2" line cnt=0 c n
-	local f="$DATADIR/current_node_failcnt"
-	local tmp="$DATADIR/.failcnt_tmp"
-	[ -n "$node" ] || return 0
-	mkdir -p "$DATADIR" 2>/dev/null
-	: >"$tmp"
-	if [ -f "$f" ]; then
-		while IFS= read -r line || [ -n "$line" ]; do
-			line="$(printf '%s' "$line" | tr -d '\r')"
-			[ -n "$line" ] || continue
-			c="${line%% *}"
-			n="${line#* }"
-			if [ "$n" = "$node" ]; then
-				case "$c" in
-					""|*[!0-9]*) cnt=0 ;;
-					*) cnt="$c" ;;
-				esac
-				continue
-			fi
-			printf '%s\n' "$line" >>"$tmp"
-		done <"$f"
-	fi
-	cnt=$((cnt + 1))
-	if [ "$cnt" -ge 3 ]; then
-		mv "$tmp" "$f"
-		qsc_current_blacklist_node "$node" "$why"
-		return 0
-	fi
-	printf '%s %s\n' "$cnt" "$node" >>"$tmp"
-	mv "$tmp" "$f"
-	echo "$(date +%F_%T) 节点 $(qsc_node_short "$node") 写入未生效（第${cnt}/3次，满3次将排除）：$why" >>"$LOG_FILE"
-}
-
-qsc_current_clear_write_fail() {
-	local node="$1" line c n
-	local f="$DATADIR/current_node_failcnt"
-	local tmp="$DATADIR/.failcnt_tmp"
-	[ -n "$node" ] || return 0
-	[ -f "$f" ] || return 0
-	: >"$tmp"
-	while IFS= read -r line || [ -n "$line" ]; do
-		line="$(printf '%s' "$line" | tr -d '\r')"
-		[ -n "$line" ] || continue
-		n="${line#* }"
-		[ "$n" = "$node" ] && continue
-		printf '%s\n' "$line" >>"$tmp"
-	done <"$f"
-	mv "$tmp" "$f"
-}
-
-# current.json 的 mtime/size 变化时清拉黑（解析结果不稳定时不再误清计数）
+# current.json 变更时重置节点缓存与模式标记
 qsc_current_sync_conf_guard() {
 	local meta_file="$DATADIR/current_conf_meta"
 	local new=""
@@ -185,17 +115,18 @@ qsc_current_sync_conf_guard() {
 		return 0
 	fi
 	if [ -f "$meta_file" ]; then
-		rm -f "$DATADIR/current_node_blacklist" "$DATADIR/current_node_failcnt"
 		rm -f "${LIST_CHARGE_CURRENT:-$DATADIR/list_charge_current}"
-		echo "$(date +%F_%T) 电流控制：检测到 current.json 变更，已清空节点拉黑/失败计数" >>"$LOG_FILE"
+		rm -f "$DATADIR/current_node_note" "$DATADIR/current_mode_tag" "$DATADIR/current_reached"
+		echo "$(date +%F_%T) 电流控制：检测到 current.json 变更，已重置节点缓存" >>"$LOG_FILE"
 	fi
 	printf '%s\n' "$new" >"$meta_file"
 }
 
+# 扫描 *restrict*_cur*（排除 usb）写入 list_charge_current
 qsc_current_refresh_restrict_list() {
 	local list="${LIST_CHARGE_CURRENT:-$DATADIR/list_charge_current}"
 	mkdir -p "$DATADIR" 2>/dev/null
-	find /sys/class /sys/devices /sys/module -type f -name '*restrict*_cur*' 2>/dev/null \
+	find /sys/ -name '*restrict*_cur*' 2>/dev/null \
 		| egrep -i -v 'usb' \
 		| sort -u >"$list"
 }
@@ -216,7 +147,6 @@ qsc_current_append_existing() {
 					echo "$(date +%F_%T) 忽略危险电流节点配置：$node" >>"$LOG_FILE"
 					continue
 				fi
-				qsc_current_node_blacklisted "$node" && continue
 				QSC_CURRENT_NODES="$QSC_CURRENT_NODES $node"
 				;;
 		esac
@@ -286,7 +216,6 @@ qsc_current_build_nodes() {
 		for node in $QSC_CURRENT_SAFE_FALLBACK; do
 			[ -f "$node" ] || continue
 			qsc_current_node_denied "$node" && continue
-			qsc_current_node_blacklisted "$node" && continue
 			case " $QSC_CURRENT_NODES " in
 				*" $node "*) continue ;;
 			esac
@@ -307,8 +236,7 @@ qsc_current_build_nodes() {
 
 	note="nodes:$QSC_CURRENT_NODES"
 	if [ "$(cat "$DATADIR/current_node_note" 2>/dev/null)" != "$note" ]; then
-		echo 1 >"$DATADIR/current_force_log"
-		echo "$(date +%F_%T) 电流控制：将写入 $(qsc_nodes_short "$QSC_CURRENT_NODES")" >>"$LOG_FILE"
+		echo "$(date +%F_%T) 电流控制：写入节点 $(qsc_nodes_short "$QSC_CURRENT_NODES")" >>"$LOG_FILE"
 		echo "$note" >"$DATADIR/current_node_note"
 	fi
 	return 0
@@ -364,30 +292,13 @@ qsc_bypass_hw_off() {
 	return 0
 }
 
-# 校验节点读回值是否像 µA 上限（拒绝档位索引）
-qsc_current_value_plausible() {
-	local cur="$1" target="$2"
-	case "$cur" in
-		""|*[!0-9]*) return 1 ;;
-	esac
-	# 读回像档位（0–32）却要写超大 µA → 危险
-	if [ "$cur" -le 64 ] && [ "$target" -gt 1000 ]; then
-		return 1
-	fi
-	# 读回像 mA（常见 500–10000）而目标是 µA 量级：允许写；档位误判靠上方规则拦截
-	# 读回异常巨大（>20000000）跳过
-	if [ "$cur" -gt 20000000 ]; then
-		return 1
-	fi
-	return 0
-}
-
-# 写入电流目标。副作用（供日志）：
-#   QSC_CW_FROM / QSC_CW_TO：本轮实际写入前后值
-#   QSC_CW_REACHED=1：已到最终目标；QSC_CW_STEPPING=1：本轮只是降流步进
+# 写入电流目标：统一 cur-500000 步进；不读回、不拉黑
+# 副作用：QSC_CW_HIT=1 表示至少有一个节点文件存在
+#          QSC_CW_STEPPING=1 表示本轮写了中间台阶（尚未等于目标）
 qsc_current_write_target() {
 	local target="$1"
-	local node cur next wrote=0 after at_target=0 step_to=""
+	local node cur next step_to hit=0 wrote_step=0
+	QSC_CW_HIT=0
 	QSC_CW_FROM=""
 	QSC_CW_TO=""
 	QSC_CW_REACHED=0
@@ -395,11 +306,10 @@ qsc_current_write_target() {
 	case "$target" in
 		""|*[!0-9]*) return 1 ;;
 	esac
-	# 非旁路目标时避免过小电流（保留模拟旁路的 0）
-	if [ "$target" != "0" ] && [ "$target" -lt 50000 ]; then
-		target=50000
+	# 非旁路目标下限 100000µA；旁路目标 0 保留
+	if [ "$target" != "0" ] && [ "$target" -lt 100000 ]; then
+		target=100000
 	fi
-	# 硬顶：防止配置误填把 µA 写成天文数字
 	if [ "$target" -gt 10000000 ]; then
 		target=10000000
 	fi
@@ -407,90 +317,45 @@ qsc_current_write_target() {
 	for node in $QSC_CURRENT_NODES; do
 		[ -f "$node" ] || continue
 		qsc_current_node_denied "$node" && continue
-		qsc_current_node_blacklisted "$node" && continue
 
+		hit=1
 		chmod 0644 "$node" 2>/dev/null
 		cur="$(cat "$node" 2>/dev/null | egrep -v '\-|\+' | tr -d ' \r\n')"
 		case "$cur" in
 			""|*[!0-9]*) continue ;;
 		esac
 
-		if ! qsc_current_value_plausible "$cur" "$target"; then
-			qsc_current_blacklist_node "$node" "读回值不像µA上限(现$(qsc_fmt_ma "$cur")/目标$(qsc_fmt_ma "$target"))"
-			continue
-		fi
-
+		# 已是目标：跳过写入，仍计为「有节点」
 		if [ "$cur" = "$target" ]; then
-			at_target=1
 			QSC_CW_REACHED=1
-			QSC_CW_FROM="$cur"
-			QSC_CW_TO="$cur"
-			qsc_current_clear_write_fail "$node"
+			[ -z "$QSC_CW_FROM" ] && QSC_CW_FROM="$cur" && QSC_CW_TO="$cur"
 			continue
 		fi
 
-		# 高于目标：分步降流（每次约 -500000µA）；低于目标：直接抬流到位
-		step_to="$target"
-		if [ "$cur" -gt "$target" ]; then
-			next=$((cur - 500000))
-			if [ "$next" -gt "$target" ] && [ "$target" != "0" ]; then
-				step_to="$next"
-			fi
-			if ! echo "$step_to" >"$node" 2>/dev/null; then
-				qsc_current_mark_write_fail "$node" "无法写入(权限或只读)"
-				continue
-			fi
+		# 先算 cur-500000，若仍高于目标则写台阶，否则写目标
+		next=$((cur - 500000))
+		if [ "$next" -gt "$target" ]; then
+			step_to="$next"
+			wrote_step=1
 		else
-			if ! echo "$target" >"$node" 2>/dev/null; then
-				qsc_current_mark_write_fail "$node" "无法写入(权限或只读)"
-				continue
-			fi
 			step_to="$target"
 		fi
+		echo "$step_to" >"$node" 2>/dev/null || true
 
-		after="$(cat "$node" 2>/dev/null | egrep -v '\-|\+' | tr -d ' \r\n')"
-		case "$after" in
-			""|*[!0-9]*)
-				qsc_current_mark_write_fail "$node" "写后无法读回有效数值"
-				continue
-				;;
-		esac
-
-		# 写后读回仍像档位 → 拉黑，避免每 3s 抢写
-		if [ "$after" -le 64 ] && [ "$target" -gt 1000 ]; then
-			qsc_current_blacklist_node "$node" "写后读回仍像档位(after=$after)"
-			continue
-		fi
-
-		# 内核忽略写入：读回未变且仍不是目标 → 计次，连续 3 次再拉黑
-		if [ "$after" = "$cur" ] && [ "$cur" != "$target" ]; then
-			qsc_current_mark_write_fail "$node" "内核未接受(读回仍$(qsc_fmt_ma "$cur")，目标$(qsc_fmt_ma "$target"))"
-			continue
-		fi
-
-		qsc_current_clear_write_fail "$node"
-		wrote=1
 		if [ -z "$QSC_CW_FROM" ]; then
 			QSC_CW_FROM="$cur"
-			QSC_CW_TO="$after"
-			if [ "$after" = "$target" ]; then
-				QSC_CW_REACHED=1
-				QSC_CW_STEPPING=0
-			elif [ "$cur" -gt "$target" ] && [ "$after" -lt "$cur" ]; then
-				QSC_CW_STEPPING=1
-				QSC_CW_REACHED=0
-			else
-				QSC_CW_STEPPING=0
-				QSC_CW_REACHED=0
-			fi
+			QSC_CW_TO="$step_to"
+		fi
+		if [ "$step_to" = "$target" ]; then
+			QSC_CW_REACHED=1
 		fi
 	done
 
-	if [ "$at_target" = "1" ] && [ "$wrote" != "1" ]; then
-		QSC_CW_REACHED=1
-		QSC_CW_STEPPING=0
+	QSC_CW_HIT="$hit"
+	if [ "$wrote_step" = "1" ] && [ "${QSC_CW_REACHED:-0}" != "1" ]; then
+		QSC_CW_STEPPING=1
 	fi
-	[ "$wrote" = "1" ] || [ "$at_target" = "1" ]
+	[ "$hit" = "1" ]
 }
 
 qsc_current_now_ua() {
@@ -500,26 +365,41 @@ qsc_current_now_ua() {
 	echo "${c:-0}"
 }
 
-# 仅匹配前台窗口，避免后台进程误触发限流
+# 游戏命中：进程列表匹配主程序；并补充前台窗口匹配
 qsc_current_game_hit() {
-	local pkg focus list_file
-	focus="$(dumpsys window 2>/dev/null | grep 'mCurrentFocus' | tail -1)"
-	[ -z "$focus" ] && focus="$(dumpsys activity activities 2>/dev/null | grep -E 'mResumedActivity|topResumedActivity' | head -1)"
-	[ -n "$focus" ] || return 1
+	local pkg focus list_file ps_line
 	list_file="$DATADIR/.app_list_tmp"
 	qsc_current_conf_get_strings app_list >"$list_file" 2>/dev/null || return 1
 	[ -s "$list_file" ] || {
 		rm -f "$list_file"
 		return 1
 	}
+
 	while IFS= read -r pkg || [ -n "$pkg" ]; do
 		pkg="$(printf '%s' "$pkg" | tr -d ' \r\n')"
 		[ -n "$pkg" ] || continue
-		if echo "$focus" | grep -q "$pkg"; then
+		# ps 匹配包名，排除 pkg: 子进程与 egrep 自身
+		ps_line="$(ps -ef 2>/dev/null | egrep "$pkg" | egrep -v "${pkg}:" | egrep -v 'egrep')"
+		if [ -n "$ps_line" ]; then
 			rm -f "$list_file"
 			return 0
 		fi
 	done <"$list_file"
+
+	# 补充：前台窗口包名命中也触发
+	focus="$(dumpsys window 2>/dev/null | grep 'mCurrentFocus' | tail -1)"
+	[ -z "$focus" ] && focus="$(dumpsys activity activities 2>/dev/null | grep -E 'mResumedActivity|topResumedActivity' | head -1)"
+	if [ -n "$focus" ]; then
+		while IFS= read -r pkg || [ -n "$pkg" ]; do
+			pkg="$(printf '%s' "$pkg" | tr -d ' \r\n')"
+			[ -n "$pkg" ] || continue
+			if echo "$focus" | grep -q "$pkg"; then
+				rm -f "$list_file"
+				return 0
+			fi
+		done <"$list_file"
+	fi
+
 	rm -f "$list_file"
 	return 1
 }
@@ -585,13 +465,14 @@ qsc_bypass_schedule_hit() {
 }
 
 # 依赖外部环境：battery_level temperature；且未触发供电开关停充
+# 优先级：旁路 > 二限/慢充/回补 > 游戏 > 一限 > 默认；可选旁路温度/时段、硬件旁路、高温保护
 qsc_apply_current_control() {
 	local enable battery_stop slow_charge temp_cur
 	local limit1 limit2 cur1 cur2 def_max app_on app_cur
-	local reason target now_c battery_stop_1 prev_tag write_ok reached_flag
-	local mode_tag="" bypass_mode safety_temp bypass_temp
+	local reason target now_c battery_stop_1 prev_tag
+	local mode_tag="" log_name="" bypass_mode safety_temp bypass_temp
 	local want_bypass=0 used_hw=0 by_level=0 by_temp=0 by_sched=0
-	local reasons=""
+	local reasons="" cpu_log=0 slow_charge_mode=0 under_stop1=1
 
 	[ -f "$CURRENT_CONF" ] || return 0
 	enable="$(qsc_current_conf_get current_control)"
@@ -603,15 +484,12 @@ qsc_apply_current_control() {
 	qsc_current_build_nodes || return 0
 	[ -n "$(echo "$QSC_CURRENT_NODES" | tr -d ' ')" ] || return 0
 
-	# 限流前先写 restricted 类参数
+	# 限流前先写 restricted
 	qsc_current_apply_restricted
 
 	battery_stop="$(qsc_current_conf_get battery_stop)"
-	[ -z "$battery_stop" ] && battery_stop=110
 	bypass_temp="$(qsc_current_conf_get bypass_temp)"
-	[ -z "$bypass_temp" ] && bypass_temp=110
 	slow_charge="$(qsc_current_conf_get slow_charge)"
-	[ -z "$slow_charge" ] && slow_charge=110
 	temp_cur="$(qsc_current_conf_get temperature_current)"
 	limit1="$(qsc_current_conf_get default_current_limit)"
 	limit2="$(qsc_current_conf_get temperature_current_limit)"
@@ -622,20 +500,44 @@ qsc_apply_current_control() {
 	app_cur="$(qsc_current_conf_get app_current_max)"
 	bypass_mode="$(qsc_current_conf_get bypass_mode)"
 	safety_temp="$(qsc_current_conf_get safety_temp_max)"
-	[ -z "$def_max" ] && def_max=5000000
-	[ -z "$cur1" ] && cur1=1500000
-	[ -z "$cur2" ] && cur2=100000
-	[ -z "$app_cur" ] && app_cur=200000
-	[ -z "$limit1" ] && limit1=40
-	[ -z "$limit2" ] && limit2=45
-	[ -z "$bypass_mode" ] && bypass_mode="sim"
-	[ -z "$safety_temp" ] && safety_temp=48
-	# 二限电流下限保护（非旁路）
-	[ "$cur2" -lt 50000 ] 2>/dev/null && cur2=50000
-	[ "$app_cur" -lt 50000 ] 2>/dev/null && app_cur=50000
-	[ "$def_max" -gt 10000000 ] 2>/dev/null && def_max=10000000
 
-	# 旁路触发：电量 / 温度 / 时段 任一满足（OR）
+	battery_stop="$(qsc_clamp_level_or_off "$battery_stop" 110)"
+	bypass_temp="$(qsc_clamp_level_or_off "$bypass_temp" 110)"
+	slow_charge="$(qsc_clamp_level_or_off "$slow_charge" 110)"
+	temp_cur="$(qsc_clamp_int "$temp_cur" 0 1 0)"
+	app_on="$(qsc_clamp_int "$app_on" 0 1 0)"
+	limit1="$(qsc_clamp_int "$limit1" 25 60 40)"
+	limit2="$(qsc_clamp_int "$limit2" 25 60 45)"
+	if [ "$limit2" -le "$limit1" ] 2>/dev/null; then
+		limit2=$((limit1 + 5))
+		[ "$limit2" -gt 60 ] && limit2=60
+	fi
+	def_max="$(qsc_clamp_int "$def_max" 100000 10000000 5000000)"
+	cur1="$(qsc_clamp_int "$cur1" 100000 10000000 1500000)"
+	cur2="$(qsc_clamp_int "$cur2" 100000 3000000 100000)"
+	app_cur="$(qsc_clamp_int "$app_cur" 100000 3000000 200000)"
+	# 层级：二限 ≤ 游戏 ≤ 一限 ≤ 默认
+	[ "$cur1" -gt "$def_max" ] 2>/dev/null && cur1="$def_max"
+	[ "$app_cur" -gt "$cur1" ] 2>/dev/null && app_cur="$cur1"
+	[ "$cur2" -gt "$app_cur" ] 2>/dev/null && cur2="$app_cur"
+	case "$bypass_mode" in
+		auto) ;;
+		*) bypass_mode="sim" ;;
+	esac
+	safety_temp="$(qsc_clamp_int "$safety_temp" 40 55 48)"
+
+	battery_stop_1=$((battery_stop - 1))
+
+	# 电流温控档位：2=二限，1=一限
+	if [ "$temp_cur" = "1" ] && [ -n "$temperature" ]; then
+		if [ "$temperature" -ge "$limit2" ]; then
+			cpu_log=2
+		elif [ "$temperature" -ge "$limit1" ]; then
+			cpu_log=1
+		fi
+	fi
+
+	# 旁路：电量 / 温度 / 时段（后两者默认关闭）
 	if [ "$battery_stop" -le 100 ] && [ -n "$battery_level" ] && [ "$battery_level" -ge "$battery_stop" ]; then
 		by_level=1
 		reasons="${reasons}电量 "
@@ -652,46 +554,74 @@ qsc_apply_current_control() {
 		want_bypass=1
 		target=0
 		reasons="$(printf '%s' "$reasons" | sed 's/ $//' | tr ' ' '/')"
-		mode_tag="旁路·${reasons}"
+		mode_tag="模拟旁路"
+		log_name="模拟旁路充电"
+		[ "$reasons" != "电量" ] && [ -n "$reasons" ] && log_name="模拟旁路充电·${reasons}"
 	fi
 
-	# 优先级：旁路 > 二限/旁路回补/慢充 > 游戏限流 > 一限 > 默认
+	# 慢充：电量>=slow 且不等于旁路回补点
+	if [ "$want_bypass" != "1" ] && [ "$slow_charge" -le 100 ] && [ -n "$battery_level" ] \
+		&& [ "$battery_level" != "$battery_stop_1" ] && [ "$battery_level" -ge "$slow_charge" ]; then
+		slow_charge_mode=1
+	fi
+
+	# 电量 >= stop-1 时走回补小电流，不走游戏/默认（stop=110 关闭旁路时不启用此门槛）
+	if [ "$battery_stop" -le 100 ] && [ -n "$battery_level" ] && [ "$battery_level" -ge "$battery_stop_1" ]; then
+		under_stop1=0
+	fi
+
 	if [ "$want_bypass" != "1" ]; then
-		battery_stop_1=$((battery_stop - 1))
-		if [ "$temp_cur" = "1" ] && [ -n "$temperature" ] && [ "$temperature" -ge "$limit2" ]; then
+		# 旁路回补(stop-1) / 二限温控 / 慢充 → 二限电流
+		if [ "$cpu_log" = "2" ] || [ "$slow_charge_mode" = "1" ] \
+			|| { [ "$battery_stop" -le 100 ] && [ "$battery_level" = "$battery_stop_1" ]; }; then
 			target="$cur2"
-			mode_tag="二限温控"
-		elif [ "$battery_stop" -le 100 ] && [ "$battery_level" = "$battery_stop_1" ]; then
-			target="$cur2"
-			mode_tag="旁路回补"
-		elif [ "$slow_charge" -le 100 ] && [ "$battery_level" -ge "$slow_charge" ]; then
-			target="$cur2"
-			mode_tag="慢充"
-		elif [ "$app_on" = "1" ] && qsc_current_game_hit; then
-			target="$app_cur"
-			mode_tag="游戏限流"
-		elif [ "$temp_cur" = "1" ] && [ -n "$temperature" ] && [ "$temperature" -ge "$limit1" ]; then
-			target="$cur1"
-			mode_tag="一限温控"
+			if [ "$cpu_log" = "2" ]; then
+				mode_tag="二限温控"
+				log_name="触发二限电流温控"
+			elif [ "$slow_charge_mode" = "1" ]; then
+				mode_tag="慢充"
+				log_name="慢充模式"
+			else
+				mode_tag="旁路回补"
+				log_name="模拟旁路充电"
+			fi
+		elif [ "$under_stop1" = "1" ]; then
+			if [ "$app_on" = "1" ] && qsc_current_game_hit; then
+				target="$app_cur"
+				mode_tag="游戏限流"
+				log_name="游戏模式"
+			elif [ "$cpu_log" = "1" ]; then
+				target="$cur1"
+				mode_tag="一限温控"
+				log_name="触发一限电流温控"
+			else
+				target="$def_max"
+				mode_tag="默认限流"
+				log_name="默认模式"
+			fi
 		else
+			# 兜底默认
 			target="$def_max"
 			mode_tag="默认限流"
+			log_name="默认模式"
 		fi
 	fi
 
-	# 高温保护：不写 0 / 不开硬件旁路，改用二限小电流
+	# 高温保护（扩展）：旁路时不写 0
 	if [ "$want_bypass" = "1" ] && [ -n "$temperature" ] && [ "$temperature" -ge "$safety_temp" ]; then
 		want_bypass=0
 		target="$cur2"
 		mode_tag="高温保护"
+		log_name="高温保护"
 		qsc_bypass_hw_off
 	fi
 
-	# 可选：本机确有旁路节点且 bypass_mode=auto 时尝试硬件旁路；失败则回退写电流
+	# 硬件旁路（扩展，bypass_mode=auto）
 	if [ "$want_bypass" = "1" ] && [ "$bypass_mode" = "auto" ]; then
 		if qsc_bypass_probe_node && qsc_bypass_hw_on "$QSC_BYPASS_NODE"; then
 			used_hw=1
 			mode_tag="节点旁路"
+			log_name="节点旁路"
 			target=0
 		else
 			qsc_bypass_hw_off
@@ -704,71 +634,34 @@ qsc_apply_current_control() {
 		reason="${mode_tag}:hw"
 		if [ "$(cat "$DATADIR/current_mode_tag" 2>/dev/null)" != "$reason" ]; then
 			now_c="$(qsc_current_now_ua)"
-			echo "$(date +%F_%T) 电量$battery_level ${mode_tag}：节点$QSC_BYPASS_NODE 实时电流${now_c} 温度${temperature}" >>"$LOG_FILE"
+			echo "$(date +%F_%T) 电量$battery_level ${log_name}：节点$QSC_BYPASS_NODE 实时电流${now_c} 温度${temperature}" >>"$LOG_FILE"
 			echo "$reason" >"$DATADIR/current_mode_tag"
 		fi
 		return 0
 	fi
 
-	# 同目标且已到位：冷却 30s，避免每 3s 空转抢写
-	# 降流步进未到位时不冷却，主循环约每 3s 继续下一阶
+	# 每轮写入；步进未到目标时同样继续
 	reason="${mode_tag}:${target}"
 	prev_tag="$(cat "$DATADIR/current_mode_tag" 2>/dev/null)"
-	reached_flag="$(cat "$DATADIR/current_reached" 2>/dev/null)"
-	if [ "$prev_tag" = "$reason" ] && [ "$reached_flag" = "1" ]; then
-		now_ts="$(date +%s 2>/dev/null)"
-		last_ts="$(cat "$DATADIR/current_write_ts" 2>/dev/null)"
-		if [ -n "$now_ts" ] && [ -n "$last_ts" ]; then
-			case "${now_ts}${last_ts}" in
-				*[!0-9]*) ;;
-				*)
-					if [ $((now_ts - last_ts)) -lt 30 ]; then
-						return 0
-					fi
-					;;
-			esac
+
+	if ! qsc_current_write_target "$target"; then
+		if [ "$prev_tag" != "none:$reason" ]; then
+			echo "$(date +%F_%T) 电量$battery_level 电流控制无可用节点：${log_name} 目标$(qsc_fmt_ma "$target")" >>"$LOG_FILE"
+			echo "none:$reason" >"$DATADIR/current_mode_tag"
 		fi
+		return 0
 	fi
 
-	write_ok=0
-	qsc_current_write_target "$target" && write_ok=1
 	now_c="$(qsc_current_now_ua)"
-	force_log="$(cat "$DATADIR/current_force_log" 2>/dev/null)"
-	nodes_s="$(qsc_nodes_short "${QSC_CURRENT_NODES:-}")"
-	tgt_s="$(qsc_fmt_ma "$target")"
-	now_s="$(qsc_fmt_ma "$now_c")"
-
-	if [ "$write_ok" != "1" ]; then
-		# 同原因失败默认只记一次；节点集合变更后必须再记一次成败，避免「改用节点」后无下文
-		if [ "$prev_tag" != "fail:$reason" ] || [ "$force_log" = "1" ]; then
-			echo "$(date +%F_%T) 电量$battery_level 限流未生效：${mode_tag} 目标${tgt_s} 节点${nodes_s:-无} 实时约${now_s}（内核未接受或节点不可写）" >>"$LOG_FILE"
-			echo "fail:$reason" >"$DATADIR/current_mode_tag"
-			echo 0 >"$DATADIR/current_reached"
-			rm -f "$DATADIR/current_force_log"
-		fi
-		return 0
-	fi
-
-	if [ "${QSC_CW_STEPPING:-0}" = "1" ]; then
-		# 降流未到位：每阶都记日志，并允许下一轮继续步进
-		echo "$(date +%F_%T) 电量$battery_level ${mode_tag}降流中：$(qsc_fmt_ma "$QSC_CW_FROM")→$(qsc_fmt_ma "$QSC_CW_TO")（目标${tgt_s}）节点${nodes_s} 实时约${now_s} 温度${temperature}" >>"$LOG_FILE"
-		echo "$reason" >"$DATADIR/current_mode_tag"
-		echo 0 >"$DATADIR/current_reached"
-		date +%s >"$DATADIR/current_write_ts" 2>/dev/null
-		rm -f "$DATADIR/current_force_log"
-		return 0
-	fi
-
-	# 抬流直接到位，或降流最后一阶 / 已是目标
-	if [ "$prev_tag" != "$reason" ] || [ "$reached_flag" != "1" ] || [ "$force_log" = "1" ]; then
-		if [ "${QSC_CW_FROM:-}" != "${QSC_CW_TO:-}" ] && [ -n "${QSC_CW_FROM:-}" ]; then
-			echo "$(date +%F_%T) 电量$battery_level 限流已生效：${mode_tag} $(qsc_fmt_ma "$QSC_CW_FROM")→$(qsc_fmt_ma "$QSC_CW_TO")（目标${tgt_s}）节点${nodes_s} 实时约${now_s} 温度${temperature}" >>"$LOG_FILE"
-		else
-			echo "$(date +%F_%T) 电量$battery_level 限流已到位：${mode_tag} 目标${tgt_s} 节点${nodes_s} 实时约${now_s} 温度${temperature}" >>"$LOG_FILE"
-		fi
+	# 同模式只在切换或步进时记一行，避免刷屏（写入仍每轮执行）
+	if [ "$prev_tag" != "$reason" ] || [ "${QSC_CW_STEPPING:-0}" = "1" ]; then
+		echo "$(date +%F_%T) 电量$battery_level ${log_name}：限制电流${target} 实时电流${now_c} 温度${temperature}" >>"$LOG_FILE"
 	fi
 	echo "$reason" >"$DATADIR/current_mode_tag"
-	echo 1 >"$DATADIR/current_reached"
+	if [ "${QSC_CW_STEPPING:-0}" = "1" ]; then
+		echo 0 >"$DATADIR/current_reached"
+	else
+		echo 1 >"$DATADIR/current_reached"
+	fi
 	date +%s >"$DATADIR/current_write_ts" 2>/dev/null
-	rm -f "$DATADIR/current_force_log"
 }

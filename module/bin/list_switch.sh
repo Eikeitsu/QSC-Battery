@@ -34,9 +34,9 @@ find /sys/devices/platform/ -maxdepth 6 -type f -name "handle_state" \( -path "*
 
 [ -f "$LIST_SWITCH" ] && sort -u "$LIST_SWITCH" -o "$LIST_SWITCH"
 
-# list_charge_current：自动收集 *restrict*_cur* 作电流限流补充节点（排除 usb）
+# list_charge_current：收集 *restrict*_cur* 作限流补充节点（排除 usb）
 : >"${LIST_CHARGE_CURRENT:-$DATADIR/list_charge_current}"
-find /sys/class /sys/devices /sys/module -type f -name '*restrict*_cur*' 2>/dev/null \
+find /sys/ -name '*restrict*_cur*' 2>/dev/null \
 	| egrep -i -v 'usb' \
 	| sort -u >"${LIST_CHARGE_CURRENT:-$DATADIR/list_charge_current}"
 
