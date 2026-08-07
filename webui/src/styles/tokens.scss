@@ -33,6 +33,9 @@ $space-page: 16px;
   --qsc-cell-pad-x: 16px;
   --qsc-cell-pad-y: 12px;
   --qsc-chip-radius: 999px;
+
+  /* 折叠内容左右由 .block 统一，避免与芯片/cell 叠缩进 */
+  --van-collapse-item-content-padding: 8px 0;
   --van-primary-color: var(--qsc-primary);
   --van-background: var(--qsc-bg);
   --van-background-2: var(--qsc-surface);

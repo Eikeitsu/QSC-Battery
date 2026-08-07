@@ -192,9 +192,28 @@ html[data-theme="dark"] {
 .van-collapse-item__content {
   color: var(--qsc-text);
   background: var(--qsc-surface) !important;
+
+  /* 左右交给内部 .block，避免与 cell/芯片叠缩进（三主题通用） */
+  padding-left: 0 !important;
+  padding-right: 0 !important;
 }
 
 /* 折叠面板内容区不要透底 */
 .van-collapse-item {
   background: var(--qsc-surface);
+}
+
+/*
+ * 配置块已用 --qsc-cell-pad-x 做左右边距；
+ * 块内 cell/field 不再二次缩进，与芯片组对齐（default / md3 / miuix）。
+ */
+.block .van-cell,
+.block .van-field {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.block .van-cell::after {
+  left: 0 !important;
+  right: 0 !important;
 }

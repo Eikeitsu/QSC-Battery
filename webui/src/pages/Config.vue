@@ -423,7 +423,7 @@ async function saveSchedule() {
 
 <style scoped lang="scss">
 .block {
-  padding: 12px 16px 8px;
+  padding: 12px var(--qsc-cell-pad-x, 16px) 8px;
 }
 
 .block.nested {
