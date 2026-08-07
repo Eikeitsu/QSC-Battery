@@ -40,6 +40,12 @@ find /sys/ -name '*restrict*_cur*' 2>/dev/null \
 	| egrep -i -v 'usb' \
 	| sort -u >"${LIST_CHARGE_CURRENT:-$DATADIR/list_charge_current}"
 
+# 电流节点探测（充电时才有可信读数；未在充则保留旧列表）
+if [ -f "${0%/*}/list_curr.sh" ]; then
+	chmod 0755 "${0%/*}/list_curr.sh" 2>/dev/null
+	"${0%/*}/list_curr.sh" >/dev/null 2>&1 || true
+fi
+
 cat >> "$LIST_SWITCH" << 'EOF'
 /sys/class/power_supply/battery/charging_enabled,start=1,stop=0
 /sys/class/power_supply/battery/batt_slate_mode,start=0,stop=1

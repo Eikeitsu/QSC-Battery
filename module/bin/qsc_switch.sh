@@ -313,6 +313,15 @@ if [ -n "$battery_powered" ] && [ ! -f "$DATADIR/power_switch" ] && [ "$off_qsc"
 			qsc_bypass_hw_off
 		fi
 	elif type qsc_apply_current_control >/dev/null 2>&1; then
+		# 电流控制开启且探测列表为空时，充电中重探测
+		_cc="$(qsc_current_conf_get current_control 2>/dev/null)"
+		if [ "$_cc" = "1" ] \
+			&& [ ! -s "${CH_CURR_CTRL_FILES:-$DATADIR/ch_curr_ctrl_files}" ] \
+			&& type qsc_current_is_charging >/dev/null 2>&1 \
+			&& qsc_current_is_charging \
+			&& type qsc_current_probe_ctrl_files >/dev/null 2>&1; then
+			qsc_current_probe_ctrl_files
+		fi
 		qsc_apply_current_control
 	fi
 elif [ ! -n "$battery_powered" ]; then

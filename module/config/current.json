@@ -45,14 +45,18 @@
     "com.tencent.lolm"
   ],
 
-  // 电流节点（字符串数组）。运行时读取本数组，对本机存在的路径全部写入，
-  // 并额外合并开机探测的 *restrict*_cur*。可按机型增删；错误节点可能导致插电重启。
+  // 电流节点：用户补充列表（运行时以自动探测为主）。
+  // 插电后模块扫描 constant_charge_current* / current_max / input_current* / restrict*_cur* 等，
+  // 并识别 mA/µA；本数组仅作补充，对本机存在的路径合并写入。
   "battery_current": [
     "/sys/class/power_supply/battery/fast_charge_current",
     "/sys/class/power_supply/battery/current_max",
     "/sys/class/power_supply/battery/constant_charge_current",
     "/sys/class/power_supply/battery/constant_charge_current_max"
   ],
+
+  // 可选：台阶写入（微安）。0 或不写=直接写目标。如需兼容旧机可设 500000。
+  // "current_step_ua": 0,
 
   // 限流前写入的策略参数。字符串格式："路径 value=值"。空数组则跳过。
   "restricted": [

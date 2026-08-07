@@ -42,6 +42,11 @@ fi
 
 rm -f "$LIST_SWITCH"
 "$BINDIR/list_switch.sh" > /dev/null 2>&1
+# 插电后电流节点探测（未在充则跳过，主循环会重试）
+if [ -f "$BINDIR/list_curr.sh" ]; then
+	chmod 0755 "$BINDIR/list_curr.sh" 2>/dev/null
+	"$BINDIR/list_curr.sh" > /dev/null 2>&1 || true
+fi
 # 按本机节点生成/刷新 device.profile（MCA 等能力动态启用）
 if [ -f "$BINDIR/detect_device.sh" ]; then
 	"$BINDIR/detect_device.sh" > /dev/null 2>&1

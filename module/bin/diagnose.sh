@@ -195,10 +195,33 @@ if [ -n "${LIST_CHARGE_CURRENT:-}" ] && [ -s "$LIST_CHARGE_CURRENT" ]; then
 else
   echo "  restrict*_cur* 探测: 无（可重启服务或跑 list_switch）" >> "$OUT"
 fi
+_ctrl="${CH_CURR_CTRL_FILES:-$DATADIR/ch_curr_ctrl_files}"
+if [ -s "$_ctrl" ]; then
+  echo "  电流节点探测 (path::scale::default):" >> "$OUT"
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -n "$line" ] || continue
+    echo "    $line" >> "$OUT"
+  done <"$_ctrl"
+else
+  echo "  电流节点探测: 无（请插电充电后自动探测，或手动执行 bin/list_curr.sh）" >> "$OUT"
+fi
+_work="${CH_CURR_WORKING:-$DATADIR/ch_curr_working}"
+if [ -s "$_work" ]; then
+  echo "  本机有效电流节点(读回成功):" >> "$OUT"
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -n "$line" ] || continue
+    echo "    $line" >> "$OUT"
+  done <"$_work"
+else
+  echo "  本机有效电流节点: 尚无成功读回记录" >> "$OUT"
+fi
 if [ -f "$DATADIR/current_mode_tag" ]; then
   echo "  电流模式标记: $(cat "$DATADIR/current_mode_tag" 2>/dev/null)" >> "$OUT"
 else
   echo "  电流模式标记: 无" >> "$OUT"
+fi
+if [ -f "$DATADIR/current_write_ts" ]; then
+  echo "  最近电流写入时间戳: $(cat "$DATADIR/current_write_ts" 2>/dev/null)" >> "$OUT"
 fi
 if [ -n "$LIST_SWITCH" ] && [ -s "$LIST_SWITCH" ]; then
   echo "  list_switch 行数: $(wc -l <"$LIST_SWITCH" | tr -d ' ')" >> "$OUT"

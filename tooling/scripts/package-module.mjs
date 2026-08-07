@@ -32,6 +32,7 @@ const BIN_RELEASE = [
   "common.sh",
   "qsc_switch.sh",
   "list_switch.sh",
+  "list_curr.sh",
   "detect_device.sh",
   "diagnose.sh",
   "test_switch.sh",

@@ -2,10 +2,10 @@
 # 电流控制：模拟旁路 / 慢充 / 默认限流 / 温度阶梯 / 游戏限流
 # 配置：config/current.json；总开关 current_control=0 时整段跳过。
 # 写入策略：
-# - 从 battery_current 读取节点列表，对本机存在的路径全部写入
-# - 额外合并开机探测的 *restrict*_cur*（list_charge_current）
-# - 限流前按 restricted 写入策略参数（如 qcom restrict_chg）
-# - 统一「当前值-500000」步进；不读回校验、不拉黑；节点文件存在即记日志
+# - 优先使用充电时探测的 ch_curr_ctrl_files（path::scale::default）
+# - 合并 current.json 的 battery_current 用户补充列表与 restrict*_cur*
+# - 按节点 scale 换算 mA/µA；写后读回校验；330ms×3 重试
+# - 直接写目标（不再默认 cur-500000 台阶）；充电中主循环周期性重施
 # 安全约束：
 # - 不写 /data/vendor/thermal；不做 MCA/内核补丁
 # - 不写 charge_control_limit / thermal_input_current 等非电流策略节点
@@ -21,7 +21,6 @@
 }
 
 # 禁止写入：档位/温控/瞬时类
-# battery_current 默认四路径中的 fast_charge_current / constant_charge_current 不在此拒绝
 QSC_CURRENT_DENY="\
 charge_control_limit \
 thermal_input_current \
@@ -34,12 +33,13 @@ temp \
 type \
 uevent"
 
-# 配置缺失/数组为空时的兜底四路径（与 current.json 默认一致）
+# 配置缺失时的兜底路径（探测失败时的补充，仍须本机存在）
 QSC_CURRENT_SAFE_FALLBACK="\
-/sys/class/power_supply/battery/fast_charge_current \
-/sys/class/power_supply/battery/current_max \
+/sys/class/power_supply/main/constant_charge_current_max \
+/sys/class/power_supply/battery/constant_charge_current_max \
 /sys/class/power_supply/battery/constant_charge_current \
-/sys/class/power_supply/battery/constant_charge_current_max"
+/sys/class/power_supply/battery/fast_charge_current \
+/sys/class/power_supply/battery/current_max"
 
 # 可选硬件旁路节点（仅探测，不强制创建）
 QSC_BYPASS_NODE_CANDIDATES="\
@@ -102,6 +102,50 @@ qsc_current_node_denied() {
 	return 1
 }
 
+qsc_current_usleep() {
+	if command -v usleep >/dev/null 2>&1; then
+		usleep 330000 2>/dev/null || sleep 1
+	else
+		sleep 1
+	fi
+}
+
+# 是否在充电（与 list_curr 一致）
+qsc_current_is_charging() {
+	local st
+	st="$(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d ' \r\n')"
+	case "$st" in
+		Charging|Full|Quick\ Charge*|Fast\ Charging*) return 0 ;;
+	esac
+	st="$(cat /sys/class/power_supply/usb/online 2>/dev/null | tr -d ' \r\n')"
+	[ "$st" = "1" ] && return 0
+	return 1
+}
+
+# 触发电流节点探测（外部脚本）
+qsc_current_probe_ctrl_files() {
+	local script="${BINDIR:-}/list_curr.sh"
+	[ -f "$script" ] || return 1
+	chmod 0755 "$script" 2>/dev/null
+	"$script" >/dev/null 2>&1
+}
+
+# 首次限流前：放开常见上限节点写权限
+qsc_current_prepare_once() {
+	local f
+	[ -f "$DATADIR/current_prep_done" ] && return 0
+	for f in /sys/class/power_supply/*/constant_charge_current_max \
+		/sys/class/power_supply/*/constant_charge_current \
+		/sys/class/power_supply/main/constant_charge_current_max \
+		/sys/class/power_supply/battery/constant_charge_current_max; do
+		[ -f "$f" ] || continue
+		chown 0:0 "$f" 2>/dev/null
+		chmod 0664 "$f" 2>/dev/null
+	done
+	date +%s >"$DATADIR/current_prep_done" 2>/dev/null
+	return 0
+}
+
 # current.json 变更时重置节点缓存与模式标记
 qsc_current_sync_conf_guard() {
 	local meta_file="$DATADIR/current_conf_meta"
@@ -116,6 +160,8 @@ qsc_current_sync_conf_guard() {
 	fi
 	if [ -f "$meta_file" ]; then
 		rm -f "${LIST_CHARGE_CURRENT:-$DATADIR/list_charge_current}"
+		rm -f "${CH_CURR_WORKING:-$DATADIR/ch_curr_working}"
+		rm -f "$DATADIR/.ch_curr_session_fail" "$DATADIR/current_prep_done"
 		rm -f "$DATADIR/current_node_note" "$DATADIR/current_mode_tag" "$DATADIR/current_reached"
 		echo "$(date +%F_%T) 电流控制：检测到 current.json 变更，已重置节点缓存" >>"$LOG_FILE"
 	fi
@@ -131,34 +177,72 @@ qsc_current_refresh_restrict_list() {
 		| sort -u >"$list"
 }
 
-# 将节点列表文本追加进 QSC_CURRENT_NODES（仅保留存在的路径，去重）
-qsc_current_append_existing() {
+# QSC_CURR_ENTRIES：空格分隔 path::scale
+qsc_current_add_entry() {
+	local path="$1" scale="$2"
+	path="$(printf '%s' "$path" | tr -d ' \r\n')"
+	scale="$(printf '%s' "$scale" | tr -d ' \r\n')"
+	[ -n "$path" ] && [ -f "$path" ] || return 1
+	qsc_current_node_denied "$path" && return 1
+	case "$scale" in
+		1|1000) ;;
+		*) scale=1 ;;
+	esac
+	case " $QSC_CURR_ENTRIES " in
+		*" $path::"*) return 0 ;;
+	esac
+	QSC_CURR_ENTRIES="$QSC_CURR_ENTRIES $path::$scale"
+	return 0
+}
+
+qsc_current_load_ctrl_file() {
+	local list="${CH_CURR_CTRL_FILES:-$DATADIR/ch_curr_ctrl_files}"
+	local line path scale rest
+	[ -f "$list" ] || return 1
+	while IFS= read -r line || [ -n "$line" ]; do
+		line="$(printf '%s' "$line" | tr -d ' \r\n')"
+		[ -n "$line" ] || continue
+		case "$line" in
+			*::*::*)
+				path="${line%%::*}"
+				rest="${line#*::}"
+				scale="${rest%%::*}"
+				qsc_current_add_entry "$path" "$scale"
+				;;
+		esac
+	done <"$list"
+	return 0
+}
+
+qsc_current_add_path_guess_scale() {
+	local path="$1" cur
+	[ -f "$path" ] || return 1
+	qsc_current_node_denied "$path" && return 1
+	cur="$(cat "$path" 2>/dev/null | tr -d ' \r\n')"
+	case "$cur" in
+		""|-*|[01]|*[!0-9]*)
+			qsc_current_add_entry "$path" 1
+			return 0
+			;;
+	esac
+	if [ "$cur" -lt 10000 ] 2>/dev/null; then
+		qsc_current_add_entry "$path" 1000
+	else
+		qsc_current_add_entry "$path" 1
+	fi
+}
+
+qsc_current_append_existing_paths() {
 	local list_file="$1" node
 	[ -f "$list_file" ] || return 0
 	while IFS= read -r node || [ -n "$node" ]; do
 		node="$(echo "$node" | tr -d ' \r\n')"
 		case "$node" in
 			/sys/*|/proc/*)
-				[ -f "$node" ] || continue
-				case " $QSC_CURRENT_NODES " in
-					*" $node "*) continue ;;
-				esac
-				if qsc_current_node_denied "$node"; then
-					echo "$(date +%F_%T) 忽略危险电流节点配置：$node" >>"$LOG_FILE"
-					continue
-				fi
-				QSC_CURRENT_NODES="$QSC_CURRENT_NODES $node"
+				qsc_current_add_path_guess_scale "$node" || true
 				;;
 		esac
 	done <"$list_file"
-}
-
-# 合并开机探测的 *restrict*_cur*
-qsc_current_append_restrict_cur() {
-	local list="${LIST_CHARGE_CURRENT:-$DATADIR/list_charge_current}"
-	[ -f "$list" ] || qsc_current_refresh_restrict_list
-	[ -f "$list" ] || return 0
-	qsc_current_append_existing "$list"
 }
 
 # 按 restricted 配置写非 µA 策略节点（若存在）
@@ -199,42 +283,92 @@ qsc_current_apply_restricted() {
 	rm -f "$list_file"
 }
 
+# 构建运行时节点表 QSC_CURR_ENTRIES；兼容导出 QSC_CURRENT_NODES（仅 path）
 qsc_current_build_nodes() {
-	local node note=""
+	local node note="" path scale working="$DATADIR/ch_curr_working"
+	local ctrl="${CH_CURR_CTRL_FILES:-$DATADIR/ch_curr_ctrl_files}"
+	local list e ordered rest w
+	QSC_CURR_ENTRIES=""
 	QSC_CURRENT_NODES=""
 
 	qsc_current_sync_conf_guard
 
+	# 空探测列表且在充 → 触发探测
+	if [ ! -s "$ctrl" ] && qsc_current_is_charging; then
+		qsc_current_probe_ctrl_files
+	fi
+
+	# 1) 自动探测结果优先
+	qsc_current_load_ctrl_file
+
+	# 2) 用户补充 battery_current
 	qsc_current_conf_get_strings battery_current >"$DATADIR/.current_nodes_tmp" 2>/dev/null || : >"$DATADIR/.current_nodes_tmp"
 	if [ -s "$DATADIR/.current_nodes_tmp" ]; then
-		qsc_current_append_existing "$DATADIR/.current_nodes_tmp"
+		qsc_current_append_existing_paths "$DATADIR/.current_nodes_tmp"
 	fi
 	rm -f "$DATADIR/.current_nodes_tmp"
 
-	# 配置为空或节点均不存在：用兜底四路径
-	if [ -z "$(echo "$QSC_CURRENT_NODES" | tr -d ' ')" ]; then
+	# 3) 仍空：兜底四路径
+	if [ -z "$(echo "$QSC_CURR_ENTRIES" | tr -d ' ')" ]; then
 		for node in $QSC_CURRENT_SAFE_FALLBACK; do
-			[ -f "$node" ] || continue
-			qsc_current_node_denied "$node" && continue
-			case " $QSC_CURRENT_NODES " in
-				*" $node "*) continue ;;
-			esac
-			QSC_CURRENT_NODES="$QSC_CURRENT_NODES $node"
+			qsc_current_add_path_guess_scale "$node" || true
 		done
 	fi
 
-	qsc_current_append_restrict_cur
+	# 4) restrict*_cur*
+	list="${LIST_CHARGE_CURRENT:-$DATADIR/list_charge_current}"
+	[ -f "$list" ] || qsc_current_refresh_restrict_list
+	[ -f "$list" ] && qsc_current_append_existing_paths "$list"
 
-	if [ -z "$(echo "$QSC_CURRENT_NODES" | tr -d ' ')" ]; then
+	# constant_charge_current_max 优先（含 main/battery）
+	if [ -n "$(echo "$QSC_CURR_ENTRIES" | tr -d ' ')" ]; then
+		ordered=""
+		rest=""
+		for e in $QSC_CURR_ENTRIES; do
+			path="${e%%::*}"
+			case "$path" in
+				*/constant_charge_current_max) ordered="$ordered $e" ;;
+				*) rest="$rest $e" ;;
+			esac
+		done
+		QSC_CURR_ENTRIES="$ordered $rest"
+	fi
+
+	# 有效节点优先：working 中的条目挪到前面
+	if [ -s "$working" ] && [ -n "$(echo "$QSC_CURR_ENTRIES" | tr -d ' ')" ]; then
+		ordered=""
+		rest="$QSC_CURR_ENTRIES"
+		while IFS= read -r w || [ -n "$w" ]; do
+			w="$(printf '%s' "$w" | tr -d ' \r\n')"
+			[ -n "$w" ] || continue
+			case " $rest " in
+				*" $w "*) ordered="$ordered $w" ;;
+			esac
+		done <"$working"
+		for e in $rest; do
+			case " $ordered " in
+				*" $e "*) ;;
+				*) ordered="$ordered $e" ;;
+			esac
+		done
+		QSC_CURR_ENTRIES="$ordered"
+	fi
+
+	for e in $QSC_CURR_ENTRIES; do
+		path="${e%%::*}"
+		[ -n "$path" ] || continue
+		QSC_CURRENT_NODES="$QSC_CURRENT_NODES $path"
+	done
+
+	if [ -z "$(echo "$QSC_CURR_ENTRIES" | tr -d ' ')" ]; then
 		if [ "$(cat "$DATADIR/current_mode_tag" 2>/dev/null)" != "无可用节点" ]; then
-			echo "$(date +%F_%T) 电流控制：battery_current 无可用节点，跳过写入" >>"$LOG_FILE"
+			echo "$(date +%F_%T) 电流控制：无可用电流节点（请插电后让模块探测）" >>"$LOG_FILE"
 			echo "无可用节点" >"$DATADIR/current_mode_tag"
 		fi
-		QSC_CURRENT_NODES=""
 		return 1
 	fi
 
-	note="nodes:$QSC_CURRENT_NODES"
+	note="entries:$QSC_CURR_ENTRIES"
 	if [ "$(cat "$DATADIR/current_node_note" 2>/dev/null)" != "$note" ]; then
 		echo "$(date +%F_%T) 电流控制：写入节点 $(qsc_nodes_short "$QSC_CURRENT_NODES")" >>"$LOG_FILE"
 		echo "$note" >"$DATADIR/current_node_note"
@@ -292,70 +426,178 @@ qsc_bypass_hw_off() {
 	return 0
 }
 
-# 写入电流目标：统一 cur-500000 步进；不读回、不拉黑
-# 副作用：QSC_CW_HIT=1 表示至少有一个节点文件存在
-#          QSC_CW_STEPPING=1 表示本轮写了中间台阶（尚未等于目标）
+# 单节点写入：目标为节点原生单位；写后读回并重试
+qsc_current_write_one() {
+	local node="$1" want="$2"
+	local cur i after
+	[ -f "$node" ] || return 1
+	chown 0:0 "$node" 2>/dev/null
+	chmod 0644 "$node" 2>/dev/null
+	cur="$(cat "$node" 2>/dev/null | tr -d ' \r\n')"
+	case "$cur" in
+		""|*[!0-9-]*) cur="" ;;
+	esac
+	if [ -n "$cur" ] && [ "$cur" = "$want" ]; then
+		QSC_CW_RB="$cur"
+		return 0
+	fi
+	i=0
+	while [ "$i" -lt 3 ]; do
+		echo "$want" >"$node" 2>/dev/null || true
+		qsc_current_usleep
+		after="$(cat "$node" 2>/dev/null | tr -d ' \r\n')"
+		case "$after" in
+			""|*[!0-9-]*) after="" ;;
+		esac
+		if [ -n "$after" ] && [ "$after" = "$want" ]; then
+			QSC_CW_RB="$after"
+			return 0
+		fi
+		# 读回相对写入前已变化 → 内核有响应
+		if [ -n "$after" ] && [ -n "$cur" ] && [ "$after" != "$cur" ]; then
+			QSC_CW_RB="$after"
+			return 0
+		fi
+		i=$((i + 1))
+	done
+	QSC_CW_RB="${after:-$cur}"
+	return 1
+}
+
+# 写入电流目标（内部单位 µA）
+# 副作用：QSC_CW_HIT / QSC_CW_OK / QSC_CW_FROM / QSC_CW_TO / QSC_CW_RB / QSC_CW_NODE / QSC_CW_SCALE
 qsc_current_write_target() {
-	local target="$1"
-	local node cur next step_to hit=0 wrote_step=0
+	local target_ua="$1"
+	local entry path scale want_native cur hit=0 ok=0
+	local working="$DATADIR/ch_curr_working" session_fail="$DATADIR/.ch_curr_session_fail"
+	local step_on="" step_native next
+
 	QSC_CW_HIT=0
+	QSC_CW_OK=0
 	QSC_CW_FROM=""
 	QSC_CW_TO=""
+	QSC_CW_RB=""
+	QSC_CW_NODE=""
+	QSC_CW_SCALE=""
 	QSC_CW_REACHED=0
 	QSC_CW_STEPPING=0
-	case "$target" in
+
+	case "$target_ua" in
 		""|*[!0-9]*) return 1 ;;
 	esac
-	# 非旁路目标下限 100000µA；旁路目标 0 保留
-	if [ "$target" != "0" ] && [ "$target" -lt 100000 ]; then
-		target=100000
+	if [ "$target_ua" != "0" ] && [ "$target_ua" -lt 100000 ]; then
+		target_ua=100000
 	fi
-	if [ "$target" -gt 10000000 ]; then
-		target=10000000
+	if [ "$target_ua" -gt 10000000 ]; then
+		target_ua=10000000
 	fi
 
-	for node in $QSC_CURRENT_NODES; do
-		[ -f "$node" ] || continue
-		qsc_current_node_denied "$node" && continue
+	# 可选台阶（默认关）：current_step_ua，如 500000
+	step_on="$(qsc_current_conf_get current_step_ua 2>/dev/null)"
+	case "$step_on" in
+		""|0|*[!0-9]*) step_on=0 ;;
+	esac
 
-		hit=1
-		chmod 0644 "$node" 2>/dev/null
-		cur="$(cat "$node" 2>/dev/null | egrep -v '\-|\+' | tr -d ' \r\n')"
-		case "$cur" in
-			""|*[!0-9]*) continue ;;
-		esac
+	: >"$DATADIR/.ch_curr_ok_tmp" 2>/dev/null
 
-		# 已是目标：跳过写入，仍计为「有节点」
-		if [ "$cur" = "$target" ]; then
-			QSC_CW_REACHED=1
-			[ -z "$QSC_CW_FROM" ] && QSC_CW_FROM="$cur" && QSC_CW_TO="$cur"
+	for entry in $QSC_CURR_ENTRIES; do
+		path="${entry%%::*}"
+		scale="${entry##*::}"
+		[ -n "$path" ] && [ -f "$path" ] || continue
+		qsc_current_node_denied "$path" && continue
+
+		if [ -f "$session_fail" ] && grep -q "^${path}$" "$session_fail" 2>/dev/null; then
 			continue
 		fi
 
-		# 先算 cur-500000，若仍高于目标则写台阶，否则写目标
-		next=$((cur - 500000))
-		if [ "$next" -gt "$target" ]; then
-			step_to="$next"
-			wrote_step=1
-		else
-			step_to="$target"
-		fi
-		echo "$step_to" >"$node" 2>/dev/null || true
+		hit=1
+		case "$scale" in
+			1000) want_native=$((target_ua / 1000)) ;;
+			*)
+				scale=1
+				want_native="$target_ua"
+				;;
+		esac
 
-		if [ -z "$QSC_CW_FROM" ]; then
-			QSC_CW_FROM="$cur"
-			QSC_CW_TO="$step_to"
+		cur="$(cat "$path" 2>/dev/null | tr -d ' \r\n')"
+		case "$cur" in
+			""|*[!0-9]*) cur="" ;;
+		esac
+
+		# 降流可选台阶（current_step_ua）；抬流按约 300mA 分档逼近
+		if [ -n "$cur" ] && [ "$want_native" -gt "$cur" ] 2>/dev/null; then
+			if [ "$scale" = "1000" ]; then
+				step_native=300
+			else
+				step_native=300000
+			fi
+			next=$((cur + step_native))
+			if [ "$next" -lt "$want_native" ]; then
+				want_native="$next"
+				QSC_CW_STEPPING=1
+			fi
+		elif [ "$step_on" != "0" ] && [ "$want_native" != "0" ] && [ -n "$cur" ]; then
+			step_native=$((step_on / scale))
+			[ "$step_native" -lt 1 ] && step_native=1
+			next=$((cur - step_native))
+			if [ "$next" -gt "$want_native" ]; then
+				want_native="$next"
+				QSC_CW_STEPPING=1
+			fi
 		fi
-		if [ "$step_to" = "$target" ]; then
+
+		[ -z "$QSC_CW_FROM" ] && QSC_CW_FROM="$cur"
+		QSC_CW_TO="$want_native"
+		QSC_CW_NODE="$path"
+		QSC_CW_SCALE="$scale"
+
+		if qsc_current_write_one "$path" "$want_native"; then
+			ok=1
 			QSC_CW_REACHED=1
+			echo "$path::$scale" >>"$DATADIR/.ch_curr_ok_tmp"
+			if [ -f "$session_fail" ]; then
+				grep -v "^${path}$" "$session_fail" >"$DATADIR/.ch_curr_sf2" 2>/dev/null
+				mv "$DATADIR/.ch_curr_sf2" "$session_fail" 2>/dev/null
+			fi
+		else
+			echo "$path" >>"$session_fail" 2>/dev/null
 		fi
 	done
 
-	QSC_CW_HIT="$hit"
-	if [ "$wrote_step" = "1" ] && [ "${QSC_CW_REACHED:-0}" != "1" ]; then
-		QSC_CW_STEPPING=1
+	# 若全部因 session_fail 被跳过，清空失败表再试一轮
+	if [ "$hit" = "0" ] && [ -n "$(echo "$QSC_CURR_ENTRIES" | tr -d ' ')" ]; then
+		rm -f "$session_fail"
+		for entry in $QSC_CURR_ENTRIES; do
+			path="${entry%%::*}"
+			scale="${entry##*::}"
+			[ -f "$path" ] || continue
+			qsc_current_node_denied "$path" && continue
+			hit=1
+			case "$scale" in
+				1000) want_native=$((target_ua / 1000)) ;;
+				*) want_native="$target_ua"; scale=1 ;;
+			esac
+			cur="$(cat "$path" 2>/dev/null | tr -d ' \r\n')"
+			[ -z "$QSC_CW_FROM" ] && QSC_CW_FROM="$cur"
+			QSC_CW_TO="$want_native"
+			QSC_CW_NODE="$path"
+			QSC_CW_SCALE="$scale"
+			if qsc_current_write_one "$path" "$want_native"; then
+				ok=1
+				QSC_CW_REACHED=1
+				echo "$path::$scale" >>"$DATADIR/.ch_curr_ok_tmp"
+			fi
+		done
 	fi
-	[ "$hit" = "1" ]
+
+	if [ -s "$DATADIR/.ch_curr_ok_tmp" ]; then
+		sort -u "$DATADIR/.ch_curr_ok_tmp" -o "$working"
+	fi
+	rm -f "$DATADIR/.ch_curr_ok_tmp"
+
+	QSC_CW_HIT="$hit"
+	QSC_CW_OK="$ok"
+	[ "$ok" = "1" ]
 }
 
 qsc_current_now_ua() {
@@ -484,7 +726,8 @@ qsc_apply_current_control() {
 	qsc_current_build_nodes || return 0
 	[ -n "$(echo "$QSC_CURRENT_NODES" | tr -d ' ')" ] || return 0
 
-	# 限流前先写 restricted
+	# 限流前先写 restricted，并准备节点权限
+	qsc_current_prepare_once
 	qsc_current_apply_restricted
 
 	battery_stop="$(qsc_current_conf_get battery_stop)"
@@ -645,9 +888,9 @@ qsc_apply_current_control() {
 	prev_tag="$(cat "$DATADIR/current_mode_tag" 2>/dev/null)"
 
 	if ! qsc_current_write_target "$target"; then
-		if [ "$prev_tag" != "none:$reason" ]; then
-			echo "$(date +%F_%T) 电量$battery_level 电流控制无可用节点：${log_name} 目标$(qsc_fmt_ma "$target")" >>"$LOG_FILE"
-			echo "none:$reason" >"$DATADIR/current_mode_tag"
+		if [ "$prev_tag" != "fail:$reason" ]; then
+			echo "$(date +%F_%T) 电量$battery_level 电流写入未生效：${log_name} 目标$(qsc_fmt_ma "$target") 节点=${QSC_CW_NODE:-?} scale=${QSC_CW_SCALE:-?} 读回=${QSC_CW_RB:-?}" >>"$LOG_FILE"
+			echo "fail:$reason" >"$DATADIR/current_mode_tag"
 		fi
 		return 0
 	fi
@@ -655,7 +898,7 @@ qsc_apply_current_control() {
 	now_c="$(qsc_current_now_ua)"
 	# 同模式只在切换或步进时记一行，避免刷屏（写入仍每轮执行）
 	if [ "$prev_tag" != "$reason" ] || [ "${QSC_CW_STEPPING:-0}" = "1" ]; then
-		echo "$(date +%F_%T) 电量$battery_level ${log_name}：限制电流${target} 实时电流${now_c} 温度${temperature}" >>"$LOG_FILE"
+		echo "$(date +%F_%T) 电量$battery_level ${log_name}：限制电流$(qsc_fmt_ma "$target") 节点=$(qsc_node_short "${QSC_CW_NODE}") scale=${QSC_CW_SCALE} 读回=${QSC_CW_RB} 实时${now_c} 温度${temperature}" >>"$LOG_FILE"
 	fi
 	echo "$reason" >"$DATADIR/current_mode_tag"
 	if [ "${QSC_CW_STEPPING:-0}" = "1" ]; then

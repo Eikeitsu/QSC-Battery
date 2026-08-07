@@ -23,6 +23,8 @@ qsc_init_paths() {
 	CURRENT_CONF="$CONFDIR/current.json"
 	LIST_SWITCH="$DATADIR/list_switch"
 	LIST_CHARGE_CURRENT="$DATADIR/list_charge_current"
+	CH_CURR_CTRL_FILES="$DATADIR/ch_curr_ctrl_files"
+	CH_CURR_WORKING="$DATADIR/ch_curr_working"
 	LOG_FILE="$DATADIR/log.log"
 	OFF_FLAG="$DATADIR/off_qsc"
 	DEVICE_PROFILE="$DATADIR/device.profile"
