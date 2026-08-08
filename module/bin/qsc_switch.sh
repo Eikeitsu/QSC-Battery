@@ -309,6 +309,7 @@ Compatibility_mode="$(echo "$config_conf" | egrep '^Compatibility_mode=' | sed -
 if [ -n "$battery_powered" ] && [ ! -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
 	if [ "$Compatibility_mode" = "1" ]; then
 		rm -f "$DATADIR/current_mode_tag"
+		rm -f "$DATADIR/current_reaffirm_ts" "$DATADIR/current_drift_streak"
 		if type qsc_bypass_hw_off >/dev/null 2>&1; then
 			qsc_bypass_hw_off
 		fi
@@ -326,6 +327,7 @@ if [ -n "$battery_powered" ] && [ ! -f "$DATADIR/power_switch" ] && [ "$off_qsc"
 	fi
 elif [ ! -n "$battery_powered" ]; then
 	rm -f "$DATADIR/current_mode_tag"
+	rm -f "$DATADIR/current_reaffirm_ts" "$DATADIR/current_drift_streak"
 	if type qsc_bypass_hw_off >/dev/null 2>&1; then
 		qsc_bypass_hw_off
 	fi
