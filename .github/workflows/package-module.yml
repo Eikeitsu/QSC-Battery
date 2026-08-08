@@ -7,12 +7,20 @@ on:
       - "module/**"
       - "tooling/scripts/build-web.mjs"
       - "tooling/scripts/package-module.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/actions/setup-node-npm/**"
+      - ".github/workflows/package-module.yml"
   pull_request:
     branches: [main, master]
     paths:
       - "module/**"
       - "tooling/scripts/build-web.mjs"
       - "tooling/scripts/package-module.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/actions/setup-node-npm/**"
+      - ".github/workflows/package-module.yml"
   workflow_dispatch:
 
 permissions:
@@ -24,12 +32,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
+      - uses: ./.github/actions/setup-node-npm
 
-      - run: npm ci
       - run: npm run build:module
 
       - uses: actions/upload-artifact@v4

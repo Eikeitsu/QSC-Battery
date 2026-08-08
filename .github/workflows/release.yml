@@ -1,7 +1,6 @@
 name: Release Module
 
 on:
-  # 手动发布：在 Actions 页填写版本号即可
   workflow_dispatch:
     inputs:
       version:
@@ -23,17 +22,23 @@ on:
         required: false
         type: boolean
         default: false
-  # 推送 v* 标签时自动发 Release
   push:
     tags: ["v*"]
 
 permissions:
-  actions: write
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      raw: ${{ steps.meta.outputs.raw }}
+      version_code: ${{ steps.meta.outputs.version_code }}
+      name: ${{ steps.meta.outputs.name }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      draft: ${{ steps.meta.outputs.draft }}
+      zip: ${{ steps.meta.outputs.zip }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,79 +62,20 @@ jobs:
             echo "draft=false" >> "$GITHUB_OUTPUT"
           fi
 
-          # version: 2026.07.17 / 2026.07.17.2
-          # versionCode: 2026071701 / 2026071702（yyyyMMdd * 100 + 修订号）
-          eval "$(
-            RAW="$RAW" python3 - <<'PY'
-          import os, re
-          raw = os.environ["RAW"].strip().lstrip("vV")
-          if not raw:
-              raise SystemExit("empty version")
-
-          parts = [p for p in re.split(r"[.\-_/]", raw) if p != ""]
-          rev = 1
-          ymd = None
-
-          def only_digits(s: str) -> str:
-              return re.sub(r"\D", "", s)
-
-          if len(parts) >= 3 and len(only_digits(parts[0])) == 4:
-              # 2026.07.17 或 2026.07.17.2
-              y = only_digits(parts[0]).zfill(4)[-4:]
-              mo = only_digits(parts[1]).zfill(2)[-2:]
-              d = only_digits(parts[2]).zfill(2)[-2:]
-              ymd = y + mo + d
-              if len(parts) >= 4 and only_digits(parts[3]):
-                  rev = int(only_digits(parts[3]))
-          else:
-              digits = only_digits(raw)
-              if len(digits) < 6:
-                  raise SystemExit(f"unsupported version input: {raw}")
-              if digits.startswith("20") and len(digits) >= 8:
-                  ymd = digits[:8]
-                  rest = digits[8:]
-              else:
-                  ymd = "20" + digits[:6]
-                  rest = digits[6:]
-              # 20260717.2 → parts ['20260717','2']
-              if len(parts) >= 2 and only_digits(parts[1]):
-                  cand = int(only_digits(parts[1]))
-                  # >99 多半是旧的小时/分钟写法，忽略
-                  if 1 <= cand <= 99:
-                      rev = cand
-              elif rest and len(rest) <= 2:
-                  cand = int(rest)
-                  if 1 <= cand <= 99:
-                      rev = cand
-
-          if not ymd or len(ymd) != 8:
-              raise SystemExit(f"failed to parse date from: {raw}")
-          if not (1 <= rev <= 99):
-              raise SystemExit(f"revision must be 1..99, got: {rev}")
-
-          code = int(ymd) * 100 + rev  # 2026071701
-          if code > 2147483647:
-              raise SystemExit(f"versionCode {code} exceeds int32 max 2147483647")
-
-          version = f"{ymd[0:4]}.{ymd[4:6]}.{ymd[6:8]}"
-          if rev > 1:
-              version = f"{version}.{rev}"
-          print(f"version={version}")
-          print(f"version_code={code}")
-          PY
-          )"
-
+          eval "$(RAW="$RAW" python3 tooling/scripts/resolve-release-version.py)"
           TAG="v${version}"
           if [ -n "$CUSTOM_NAME" ]; then
             NAME="$CUSTOM_NAME"
           else
             NAME="$TAG"
           fi
+          ZIP="QSC-Battery_v${version}.zip"
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "raw=$version" >> "$GITHUB_OUTPUT"
           echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
           echo "Resolved release: $NAME ($TAG) versionCode=$version_code"
 
       - name: Sync module.prop version
@@ -148,12 +94,8 @@ jobs:
           echo "---- module.prop ----"
           cat "$PROP"
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
+      - uses: ./.github/actions/setup-node-npm
 
-      - run: npm ci
       - run: npm run build:module
 
       - name: Upload zip artifact
@@ -163,11 +105,24 @@ jobs:
           path: release/*.zip
           if-no-files-found: error
 
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: magisk-module-${{ needs.build.outputs.tag }}
+          path: release/
+
       - name: Prepare release notes
         shell: bash
         run: |
           python3 tooling/scripts/prepare-release-notes.py \
-            "${{ steps.meta.outputs.raw }}" \
+            "${{ needs.build.outputs.raw }}" \
             changelog.md \
             .release-body.md
           echo "---- release body preview ----"
@@ -176,11 +131,10 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          name: ${{ steps.meta.outputs.name }}
-          draft: ${{ steps.meta.outputs.draft }}
-          prerelease: ${{ steps.meta.outputs.prerelease }}
-          # 有手写版本日志时前置「更新说明」；始终保留 GitHub 自动 Full Changelog
+          tag_name: ${{ needs.build.outputs.tag }}
+          name: ${{ needs.build.outputs.name }}
+          draft: ${{ needs.build.outputs.draft }}
+          prerelease: ${{ needs.build.outputs.prerelease }}
           body_path: .release-body.md
           generate_release_notes: true
           files: release/*.zip
@@ -188,95 +142,28 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update update.json on default branch
-        if: ${{ steps.meta.outputs.draft != 'true' && steps.meta.outputs.prerelease != 'true' }}
-        shell: bash
+  post:
+    needs: [build, publish]
+    if: ${{ needs.build.outputs.draft != 'true' && needs.build.outputs.prerelease != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # 回写主分支需要可推送
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: magisk-module-${{ needs.build.outputs.tag }}
+          path: release/
+
+      - name: Update default branch (changelog / update.json / Pages zip)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          RAW="${{ steps.meta.outputs.raw }}"
-          CODE="${{ steps.meta.outputs.version_code }}"
-          TAG="${{ steps.meta.outputs.tag }}"
-          REPO="${{ github.repository }}"
-          ZIP="QSC-Battery_v${RAW}.zip"
-          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
-          PAGES_BASE="https://eikeitsu.github.io/QSC-Battery"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git reset --hard
-          git fetch origin "$DEFAULT_BRANCH"
-          git checkout -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"
-          git fetch --tags --force
-
-          # 将 ## Unreleased 提升为当前版本号，并保留空的 Unreleased 供下个周期
-          python3 tooling/scripts/promote-changelog.py "$RAW" changelog.md
-
-          if grep -Fxq "## ${RAW}" changelog.md 2>/dev/null; then
-            echo "changelog.md 已有 ${RAW}（含手写 Unreleased 提升），不再用 git log 覆盖"
-            : > .release-notes.md
-          else
-            PREV_TAG="$(git tag --sort=-v:refname | grep -Fxv "$TAG" | head -n 1 || true)"
-            if [ -n "$PREV_TAG" ]; then
-              RANGE="${PREV_TAG}..${TAG}"
-            else
-              RANGE="${TAG}"
-            fi
-            git log --pretty=format:'- %s' --no-merges "$RANGE" > .release-notes.md
-            if [ ! -s .release-notes.md ]; then
-              echo "- 发布 ${TAG}" > .release-notes.md
-            fi
-          fi
-
-          python3 - <<PY
-          import json, pathlib
-          notes = pathlib.Path(".release-notes.md").read_text(encoding="utf-8").strip()
-          data = {
-            "version": "${RAW}",
-            "versionCode": int("${CODE}"),
-            "zipUrl": f"${PAGES_BASE}/releases/${ZIP}",
-            "changelog": f"${PAGES_BASE}/changelog.md",
-          }
-          text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
-          pathlib.Path("update.json").write_text(text, encoding="utf-8")
-          pathlib.Path("docs/public").mkdir(parents=True, exist_ok=True)
-          pathlib.Path("docs/public/update.json").write_text(text, encoding="utf-8")
-          if notes:
-              changelog_path = pathlib.Path("changelog.md")
-              changelog = changelog_path.read_text(encoding="utf-8").strip() if changelog_path.exists() else ""
-              section = f"## ${RAW}\n\n{notes}"
-              if changelog.startswith("# Changelog"):
-                  header, _, rest = changelog.partition("\n")
-                  changelog = header + "\n\n" + section + ("\n\n" + rest.strip() if rest.strip() else "")
-              else:
-                  changelog = section + ("\n\n" + changelog if changelog else "")
-              changelog_path.write_text(changelog.rstrip() + "\n", encoding="utf-8")
-          print(text)
-          PY
-          rm -f .release-notes.md
-
-          PROP="module/module.prop"
-          sed -i "s/^version=.*/version=${RAW}/" "$PROP"
-          sed -i "s/^versionCode=.*/versionCode=${CODE}/" "$PROP"
-          if ! grep -q '^updateJson=' "$PROP"; then
-            echo "updateJson=https://eikeitsu.github.io/QSC-Battery/update.json" >> "$PROP"
-          else
-            sed -i "s|^updateJson=.*|updateJson=https://eikeitsu.github.io/QSC-Battery/update.json|" "$PROP"
-          fi
-
-          mkdir -p docs/public/releases docs/guide
-          cp "release/${ZIP}" "docs/public/releases/${ZIP}"
-          # 文档站两份 changelog：不含 Unreleased（仓库根 changelog.md 仍保留 stub）
-          python3 tooling/scripts/promote-changelog.py --export-docs changelog.md \
-            docs/public/changelog.md docs/guide/changelog.md
-
-          git add update.json docs/public/update.json docs/public/changelog.md \
-            "docs/public/releases/${ZIP}" docs/guide/changelog.md \
-            module/module.prop changelog.md
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-            exit 0
-          fi
-          git commit -m "chore: bump update.json to ${TAG} (versionCode ${CODE})"
-          git push origin "HEAD:$DEFAULT_BRANCH"
-          gh workflow run build-docs.yml --ref "$DEFAULT_BRANCH"
+          RAW: ${{ needs.build.outputs.raw }}
+          CODE: ${{ needs.build.outputs.version_code }}
+          TAG: ${{ needs.build.outputs.tag }}
+          ZIP: ${{ needs.build.outputs.zip }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PAGES_BASE: https://eikeitsu.github.io/QSC-Battery
+        run: bash tooling/scripts/post-release-update.sh

@@ -16,17 +16,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          # PR commitlint 需要完整历史；push 浅克隆即可
+          fetch-depth: ${{ github.event_name == 'pull_request' && 0 || 1 }}
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
+      - uses: ./.github/actions/setup-node-npm
 
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
-
-      - run: npm ci
 
       - name: ESLint / Stylelint / Markdown / Shell
         run: npm run lint

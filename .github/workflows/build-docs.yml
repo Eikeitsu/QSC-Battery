@@ -5,10 +5,18 @@ on:
     branches: [main, master]
     paths:
       - "docs/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/actions/setup-node-npm/**"
+      - ".github/workflows/build-docs.yml"
   pull_request:
     branches: [main, master]
     paths:
       - "docs/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/actions/setup-node-npm/**"
+      - ".github/workflows/build-docs.yml"
   workflow_dispatch:
 
 permissions:
@@ -26,12 +34,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
+      - uses: ./.github/actions/setup-node-npm
 
-      - run: npm ci
       - run: npm run build:docs
         env:
           VITEPRESS_BASE: /${{ github.event.repository.name }}/

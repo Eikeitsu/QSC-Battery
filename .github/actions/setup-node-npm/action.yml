@@ -1,0 +1,20 @@
+name: Setup Node and npm ci
+description: Install Node.js 22 with npm cache and run npm ci
+
+inputs:
+  node-version:
+    description: Node.js version
+    required: false
+    default: "22"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+
+    - name: npm ci
+      shell: bash
+      run: npm ci
