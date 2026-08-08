@@ -57,23 +57,23 @@
 
 安装时选择「电流控制」后才会写入脚本与配置。未安装时 WebUI 不显示相关入口。
 
-| 配置项                                                | 含义                                                                                                                                                                           |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `current_control`                                     | 总开关：`0` 关 / `1` 开（**默认 0**）                                                                                                                                          |
-| `battery_stop`                                        | 旁路·电量：电量 ≥ 该值时进入旁路；`110` = 关                                                                                                                                   |
-| `bypass_temp`                                         | 旁路·温度：温度 ≥ 该值时进入旁路；`110` = 关                                                                                                                                   |
-| `bypass_schedule`                                     | 旁路·时段：`["22:00-08:00"]` 等（支持跨天）；空数组 = 关；与上两项为「或」                                                                                                     |
-| `bypass_mode`                                         | `sim` 仅写电流（默认）；`auto` 本机有旁路节点才尝试，否则回退 `sim`                                                                                                            |
-| `safety_temp_max`                                     | 旁路安全温度上限 (°C，默认 48)；过热改用二限小电流                                                                                                                             |
-| `slow_charge`                                         | 慢充：电量 ≥ 该值时用二限小电流；`110` = 关                                                                                                                                    |
-| `default_current_max`                                 | 默认充电电流上限（微安）                                                                                                                                                       |
-| `temperature_current`                                 | 电流温控：`0` / `1`                                                                                                                                                            |
-| `default_current_limit` / `default_current_max_limit` | 一限温度 (°C) / 一限电流（微安）                                                                                                                                               |
-| `temperature_current_limit` / `constant_current_max`  | 二限温度 / 二限电流（建议 ≥ 50000）                                                                                                                                            |
-| `app_limit` / `app_current_max` / `app_list`          | 游戏限流开关、电流、包名（**JSON 字符串数组**；WebUI 可勾选）                                                                                                                  |
-| `battery_current`                                     | 用户补充电流节点数组；运行时主写各 `constant_charge_current_max`（排除 usb 等输入口），再补充电池侧节点与 `restrict*_cur*`；本数组仅合并补充 |
-| `current_step_ua`                                     | 可选；台阶写入（微安）。`0` 或不写 = 直接写目标；旧机可设 `500000`                                                                                                             |
-| `restricted`                                          | 可选；`"路径 value=值"` 字符串数组。限流前写入；空数组则跳过                                                                                                                   |
+| 配置项                                                | 含义                                                                                          |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `current_control`                                     | 总开关：`0` 关 / `1` 开（**默认 0**）                                                         |
+| `battery_stop`                                        | 旁路·电量：电量 ≥ 该值时进入旁路；`110` = 关                                                  |
+| `bypass_temp`                                         | 旁路·温度：温度 ≥ 该值时进入旁路；`110` = 关                                                  |
+| `bypass_schedule`                                     | 旁路·时段：`["22:00-08:00"]` 等（支持跨天）；空数组 = 关；与上两项为「或」                    |
+| `bypass_mode`                                         | `sim` 仅写电流（默认）；`auto` 本机有旁路节点才尝试，否则回退 `sim`                           |
+| `safety_temp_max`                                     | 旁路安全温度上限 (°C，默认 48)；过热改用二限小电流                                            |
+| `slow_charge`                                         | 慢充：电量 ≥ 该值时用二限小电流；`110` = 关                                                   |
+| `default_current_max`                                 | 默认充电电流上限（微安）                                                                      |
+| `temperature_current`                                 | 电流温控：`0` / `1`                                                                           |
+| `default_current_limit` / `default_current_max_limit` | 一限温度 (°C) / 一限电流（微安）                                                              |
+| `temperature_current_limit` / `constant_current_max`  | 二限温度 / 二限电流（建议 ≥ 50000）                                                           |
+| `app_limit` / `app_current_max` / `app_list`          | 游戏限流开关、电流、包名（**JSON 字符串数组**；WebUI 可勾选）                                 |
+| `battery_current`                                     | 用户补充节点；主写各 `constant_charge_current_max`（不含 usb），再补电池侧与 `restrict*_cur*` |
+| `current_step_ua`                                     | 可选；台阶写入（微安）。`0` 或不写 = 直接写目标；旧机可设 `500000`                            |
+| `restricted`                                          | 可选；`"路径 value=值"` 字符串数组。限流前写入；空数组则跳过                                  |
 
 ::: warning
 电流控制**不修改** `/data/vendor/thermal`，也**不做**内核 / MCA 补丁。默认旁路为写电流的「模拟旁路」；`auto` 仅在探测到只读值为 `0/1` 的已知节点时才写入，失败立即回退。效果因机而异，可能与其它快充 / 限流模块冲突。仅需停充时可不装此组件，或保持总开关关闭；若仍冲突，在 `config.conf` 开启 `Compatibility_mode=1`。
