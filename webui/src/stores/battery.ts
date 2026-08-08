@@ -12,8 +12,8 @@ import {
   type CurrentConfig,
   type Settings,
   type StatusState,
-} from "../shared";
-import * as api from "../bridge";
+} from "@/shared";
+import * as api from "@/shared/api";
 
 const settings = reactive<Settings>({ ...DEFAULTS });
 const current = reactive<CurrentConfig>({ ...CURRENT_DEFAULTS });

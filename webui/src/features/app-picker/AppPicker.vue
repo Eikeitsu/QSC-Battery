@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import { showToast } from "vant";
-import { listInstalledApps } from "../../bridge";
-import type { AppEntry } from "../../shared/types";
+import { listInstalledApps } from "@/shared/api";
+import type { AppEntry } from "@/shared/types";
 import { hueFromPackage, initialFromName, sortAppsSelectedFirst } from "./helpers";
 
 const props = defineProps<{

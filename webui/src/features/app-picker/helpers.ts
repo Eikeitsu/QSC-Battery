@@ -1,4 +1,4 @@
-import type { AppEntry } from "../../shared/types";
+import type { AppEntry } from "@/shared/types";
 
 export function sortAppsSelectedFirst(
   apps: AppEntry[],

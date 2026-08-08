@@ -10,6 +10,11 @@ export default defineConfig({
   root,
   base: "./",
   plugins: [vue()],
+  resolve: {
+    alias: {
+      "@": resolve(root, "src"),
+    },
+  },
   build: {
     outDir: resolve(repoRoot, ".build/webroot"),
     emptyOutDir: true,

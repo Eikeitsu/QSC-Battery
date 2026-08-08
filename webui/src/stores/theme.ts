@@ -1,12 +1,13 @@
 import { computed, reactive, ref } from "vue";
 import { showToast } from "vant";
-import { FONT_KEY } from "../shared";
+import { FONT_KEY } from "@/shared";
 import {
   DEFAULT_ACCENTS,
   deriveFromSeed,
   normalizeHex,
   relativeLuminanceHex,
-} from "../shared/color";
+} from "@/shared/lib/color";
+import type { ThemeMode, ThemePack } from "@/shared/types";
 
 const PACK_KEY = "qsc_theme_pack";
 const THEME_KEY = "qsc_theme_mode";
@@ -19,9 +20,8 @@ const BAR_BLUR_KEY = "qsc_bar_blur";
 const COMPACT_KEY = "qsc_compact";
 const UI_CUSTOM_KEY = "qsc_ui_custom";
 
-export type ThemeMode = "light" | "dark" | "system";
+export type { ThemeMode, ThemePack };
 export type ResolvedTheme = "light" | "dark";
-export type ThemePack = "default" | "md3" | "miuix";
 
 const themePack = ref<ThemePack>("default");
 const themeMode = ref<ThemeMode>("system");
