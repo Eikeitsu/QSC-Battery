@@ -50,7 +50,8 @@ def parse(text: str) -> tuple[str, list[tuple[str, str]]]:
         while i < len(lines) and not HEADING_RE.match(lines[i]):
             body.append(lines[i])
             i += 1
-        sections.append((heading, "\n".join(body).rstrip("\n")))
+        # strip 掉标题后/下一节前的空行，避免 render 再插空行变成 MD012
+        sections.append((heading, "\n".join(body).strip("\n").strip()))
     preamble_text = "\n".join(preamble).rstrip()
     if not preamble_text:
         preamble_text = "# 更新日志"
@@ -58,13 +59,15 @@ def parse(text: str) -> tuple[str, list[tuple[str, str]]]:
 
 
 def render(preamble: str, sections: list[tuple[str, str]]) -> str:
-    parts = [preamble.rstrip(), ""]
+    """Render with exactly one blank line after headings / between sections (MD012)."""
+    parts = [preamble.rstrip()]
     for heading, body in sections:
-        parts.append(f"## {heading}")
         parts.append("")
-        if body.strip():
-            parts.append(body.rstrip())
+        parts.append(f"## {heading}")
+        cleaned = body.strip("\n").strip()
+        if cleaned:
             parts.append("")
+            parts.append(cleaned)
     return "\n".join(parts).rstrip() + "\n"
 
 
@@ -97,9 +100,9 @@ def promote(text: str, version: str) -> tuple[str, str]:
         else:
             old_h, old_b = other[version_idx]
             merged = (
-                (old_b.strip() + "\n\n" + unreleased_body).strip()
+                (old_b.strip() + "\n" + unreleased_body.strip()).strip()
                 if old_b.strip()
-                else unreleased_body
+                else unreleased_body.strip()
             )
             other[version_idx] = (old_h, merged)
             status = f"merged Unreleased into existing {old_h}"
