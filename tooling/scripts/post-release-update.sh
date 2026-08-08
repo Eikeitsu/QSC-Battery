@@ -99,4 +99,5 @@ if git diff --cached --quiet; then
 fi
 git commit -m "chore: bump update.json to ${TAG} (versionCode ${CODE})"
 git push origin "HEAD:${DEFAULT_BRANCH}"
-# Build Docs 由 push docs/** 自动触发，不再手动 gh workflow run
+# GITHUB_TOKEN 推送不会触发其它工作流，需显式拉起文档构建
+gh workflow run build-docs.yml --ref "$DEFAULT_BRANCH"

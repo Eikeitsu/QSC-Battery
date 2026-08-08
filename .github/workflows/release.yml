@@ -26,6 +26,7 @@ on:
     tags: ["v*"]
 
 permissions:
+  actions: write
   contents: write
 
 jobs:
@@ -166,4 +167,5 @@ jobs:
           ZIP: ${{ needs.build.outputs.zip }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           PAGES_BASE: https://eikeitsu.github.io/QSC-Battery
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash tooling/scripts/post-release-update.sh

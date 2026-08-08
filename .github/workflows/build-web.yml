@@ -10,6 +10,9 @@ on:
       - "tooling/scripts/publish-web-branch.mjs"
       - "package.json"
       - "package-lock.json"
+      - "eslint.config.js"
+      - ".prettierrc"
+      - ".prettierignore"
       - ".github/actions/setup-node-npm/**"
       - ".github/workflows/build-web.yml"
   pull_request:
@@ -20,6 +23,7 @@ on:
       - "tooling/scripts/build-web.mjs"
       - "package.json"
       - "package-lock.json"
+      - "eslint.config.js"
       - ".github/actions/setup-node-npm/**"
       - ".github/workflows/build-web.yml"
   workflow_dispatch:

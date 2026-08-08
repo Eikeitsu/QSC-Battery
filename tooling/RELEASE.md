@@ -31,7 +31,7 @@ Actions → **Release Module**（或推送 `v*` tag）：
 1. 打包模块 zip，创建 GitHub Release（正文优先取当前版本节；没有则回退 Unreleased）
 2. `promote-changelog.py <version>`：非空 `Unreleased` → 当前日期版本号，并留下空 stub
 3. `promote-changelog.py --export-docs`：文档站两份 changelog **去掉 Unreleased**
-4. 更新 `update.json` / `module.prop` 等并推送主分支；`docs/**` 变更会自动触发 **Build Docs**（不再手动 `gh workflow run`）
+4. 更新 `update.json` / `module.prop` 等并推送主分支；因 `GITHUB_TOKEN` 推送不会连锁触发其它 Actions，脚本会再 `gh workflow run build-docs.yml`
 
 工作流拆为 `build` → `publish` → `post` 三阶段；版本解析见 `resolve-release-version.py`，回写见 `post-release-update.sh`。
 
