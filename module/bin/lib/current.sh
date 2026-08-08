@@ -2,10 +2,9 @@
 # 电流控制：模拟旁路 / 慢充 / 默认限流 / 温度阶梯 / 游戏限流
 # 配置：config/current.json；总开关 current_control=0 时整段跳过。
 # 写入策略：
-# - 优先使用充电时探测的 ch_curr_ctrl_files（path::scale::default）
-# - 合并 current.json 的 battery_current 用户补充列表与 restrict*_cur*
-# - 按节点 scale 换算 mA/µA；写后读回校验；330ms×3 重试
-# - 直接写目标（不再默认 cur-500000 台阶）；充电中主循环周期性重施
+# - 主路径：对各 power_supply/*/constant_charge_current_max 写微安目标（mA×1000）
+# - 补充：电池/main 其它上限、restrict*_cur*；不写 usb/qc_usb 等输入口节点
+# - 写后短间隔读回重试；抬流约 300mA 分档；充电中主循环周期性重施
 # 安全约束：
 # - 不写 /data/vendor/thermal；不做 MCA/内核补丁
 # - 不写 charge_control_limit / thermal_input_current 等非电流策略节点
@@ -95,6 +94,13 @@ qsc_current_conf_get_strings() {
 
 qsc_current_node_denied() {
 	local node="$1" base deny
+	# 不写 USB 等输入口电流节点（仅用 online 判断插电）
+	case "$node" in
+		*/power_supply/usb/*|*/power_supply/qc_usb/*|*/power_supply/pc_port/*| \
+		*/power_supply/dc/*|*/power_supply/wireless/*|*/power_supply/usb_pd/*)
+			return 0
+			;;
+	esac
 	base="${node##*/}"
 	for deny in $QSC_CURRENT_DENY; do
 		[ "$base" = "$deny" ] && return 0
@@ -130,15 +136,17 @@ qsc_current_probe_ctrl_files() {
 	"$script" >/dev/null 2>&1
 }
 
-# 首次限流前：放开常见上限节点写权限
+# 首次限流前：放开主路径上限节点写权限（跳过 usb 等输入口）
 qsc_current_prepare_once() {
 	local f
 	[ -f "$DATADIR/current_prep_done" ] && return 0
 	for f in /sys/class/power_supply/*/constant_charge_current_max \
-		/sys/class/power_supply/*/constant_charge_current \
 		/sys/class/power_supply/main/constant_charge_current_max \
-		/sys/class/power_supply/battery/constant_charge_current_max; do
+		/sys/class/power_supply/battery/constant_charge_current_max \
+		/sys/class/power_supply/battery/constant_charge_current \
+		/sys/class/power_supply/main/constant_charge_current; do
 		[ -f "$f" ] || continue
+		qsc_current_node_denied "$f" && continue
 		chown 0:0 "$f" 2>/dev/null
 		chmod 0664 "$f" 2>/dev/null
 	done
@@ -511,11 +519,20 @@ qsc_current_write_target() {
 		fi
 
 		hit=1
-		case "$scale" in
-			1000) want_native=$((target_ua / 1000)) ;;
-			*)
+		# 主路径 CCCM：一律按微安写（与 mA×1000 一致）
+		case "$path" in
+			*/constant_charge_current_max)
 				scale=1
 				want_native="$target_ua"
+				;;
+			*)
+				case "$scale" in
+					1000) want_native=$((target_ua / 1000)) ;;
+					*)
+						scale=1
+						want_native="$target_ua"
+						;;
+				esac
 				;;
 		esac
 
@@ -573,9 +590,17 @@ qsc_current_write_target() {
 			[ -f "$path" ] || continue
 			qsc_current_node_denied "$path" && continue
 			hit=1
-			case "$scale" in
-				1000) want_native=$((target_ua / 1000)) ;;
-				*) want_native="$target_ua"; scale=1 ;;
+			case "$path" in
+				*/constant_charge_current_max)
+					scale=1
+					want_native="$target_ua"
+					;;
+				*)
+					case "$scale" in
+						1000) want_native=$((target_ua / 1000)) ;;
+						*) want_native="$target_ua"; scale=1 ;;
+					esac
+					;;
 			esac
 			cur="$(cat "$path" 2>/dev/null | tr -d ' \r\n')"
 			[ -z "$QSC_CW_FROM" ] && QSC_CW_FROM="$cur"

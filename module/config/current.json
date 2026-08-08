@@ -45,14 +45,13 @@
     "com.tencent.lolm"
   ],
 
-  // 电流节点：用户补充列表（运行时以自动探测为主）。
-  // 插电后模块扫描 constant_charge_current* / current_max / input_current* / restrict*_cur* 等，
-  // 并识别 mA/µA；本数组仅作补充，对本机存在的路径合并写入。
+  // 电流节点：用户补充列表。运行时主写 constant_charge_current_max（不含 usb），
+  // 再合并电池侧补充节点与 restrict*_cur*；本数组仅作额外补充。
   "battery_current": [
-    "/sys/class/power_supply/battery/fast_charge_current",
-    "/sys/class/power_supply/battery/current_max",
+    "/sys/class/power_supply/main/constant_charge_current_max",
+    "/sys/class/power_supply/battery/constant_charge_current_max",
     "/sys/class/power_supply/battery/constant_charge_current",
-    "/sys/class/power_supply/battery/constant_charge_current_max"
+    "/sys/class/power_supply/battery/current_max"
   ],
 
   // 可选：台阶写入（微安）。0 或不写=直接写目标。如需兼容旧机可设 500000。

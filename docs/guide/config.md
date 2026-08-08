@@ -71,14 +71,14 @@
 | `default_current_limit` / `default_current_max_limit` | 一限温度 (°C) / 一限电流（微安）                                                                                                                                               |
 | `temperature_current_limit` / `constant_current_max`  | 二限温度 / 二限电流（建议 ≥ 50000）                                                                                                                                            |
 | `app_limit` / `app_current_max` / `app_list`          | 游戏限流开关、电流、包名（**JSON 字符串数组**；WebUI 可勾选）                                                                                                                  |
-| `battery_current`                                     | 用户补充电流节点数组；运行时以**自动探测**为主（插电后扫描 `constant_charge_current*` / `current_max` / `input_current*` / `restrict*_cur*` 等并识别 mA/µA），本数组仅合并补充 |
+| `battery_current`                                     | 用户补充电流节点数组；运行时主写各 `constant_charge_current_max`（排除 usb 等输入口），再补充电池侧节点与 `restrict*_cur*`；本数组仅合并补充 |
 | `current_step_ua`                                     | 可选；台阶写入（微安）。`0` 或不写 = 直接写目标；旧机可设 `500000`                                                                                                             |
 | `restricted`                                          | 可选；`"路径 value=值"` 字符串数组。限流前写入；空数组则跳过                                                                                                                   |
 
 ::: warning
 电流控制**不修改** `/data/vendor/thermal`，也**不做**内核 / MCA 补丁。默认旁路为写电流的「模拟旁路」；`auto` 仅在探测到只读值为 `0/1` 的已知节点时才写入，失败立即回退。效果因机而异，可能与其它快充 / 限流模块冲突。仅需停充时可不装此组件，或保持总开关关闭；若仍冲突，在 `config.conf` 开启 `Compatibility_mode=1`。
 
-**安全说明**：限流：充电时探测可用节点、按 mA/µA 换算写入、读回校验并短间隔重试。仍不写 `charge_control_limit`、`thermal_input_current` 等。WebUI 与脚本侧会对电量/温度/电流做范围钳位（电流约 100mA–10A，二限/游戏上限 3A，延时 1–120 秒），非法或天文数字会回落到安全默认。部分机型内核会忽略用户态限流；若插电重启请关闭电流控制或开兼容模式。诊断报告会列出探测节点与读回结果。
+**安全说明**：限流主写电池/`main` 的 `constant_charge_current_max`（微安），不写 usb 输入口电流节点；写后读回重试。仍不写 `charge_control_limit`、`thermal_input_current` 等。WebUI 与脚本侧会对电量/温度/电流做范围钳位（电流约 100mA–10A，二限/游戏上限 3A，延时 1–120 秒），非法或天文数字会回落到安全默认。部分机型内核会忽略用户态限流；若插电重启请关闭电流控制或开兼容模式。诊断报告会列出探测节点与读回结果。
 :::
 
 WebUI 游戏列表：可「加载应用列表」后搜索应用名 / 包名并勾选（优先使用管理器自带的应用枚举接口，否则 `pm list packages -3`）。也可继续手动编辑包名。
