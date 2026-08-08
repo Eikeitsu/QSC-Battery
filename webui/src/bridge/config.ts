@@ -57,11 +57,8 @@ export async function loadCurrentJsonc(): Promise<CurrentConfig> {
     if (!Object.prototype.hasOwnProperty.call(parsed, "bypass_enable")) {
       const bs = Number(parsed.battery_stop ?? 110);
       const bt = Number(parsed.bypass_temp ?? 110);
-      const sched = Array.isArray(parsed.bypass_schedule)
-        ? parsed.bypass_schedule
-        : [];
-      parsed.bypass_enable =
-        bs <= 100 || bt <= 100 || sched.length > 0 ? 1 : 0;
+      const sched = Array.isArray(parsed.bypass_schedule) ? parsed.bypass_schedule : [];
+      parsed.bypass_enable = bs <= 100 || bt <= 100 || sched.length > 0 ? 1 : 0;
     }
     return sanitizeCurrentConfig({
       ...CURRENT_DEFAULTS,
