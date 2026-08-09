@@ -499,6 +499,7 @@ function displayName(pkg: string, name?: string) {
   padding: 10px 12px;
   padding-bottom: calc(12px + var(--qsc-inset-bottom, 0px));
   background: var(--qsc-surface);
+
   /* 底色铺进系统导航区，避免小白条 / 断层 */
   box-shadow: 0 calc(var(--qsc-inset-bottom, 0px)) 0 0 var(--qsc-surface);
 }
