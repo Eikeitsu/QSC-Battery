@@ -168,6 +168,7 @@ function displayName(pkg: string, name?: string) {
     class="app-picker-popup"
     :style="{ height: '88%' }"
     :z-index="3000"
+    teleport="body"
     @update:show="(v: boolean) => emit('update:show', v)"
   >
     <div class="picker">
@@ -349,13 +350,46 @@ function displayName(pkg: string, name?: string) {
 .search-wrap {
   background: var(--qsc-bg);
   padding-bottom: 4px;
+  flex-shrink: 0;
 
   :deep(.van-search) {
-    padding: 6px 12px;
+    padding: 8px 12px;
   }
 
   :deep(.van-search__content) {
     background: var(--qsc-surface);
+    min-height: 40px;
+    align-items: center;
+    display: flex;
+  }
+
+  :deep(.van-search__field) {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    line-height: 40px;
+    padding: 0 4px;
+  }
+
+  :deep(.van-field__body),
+  :deep(.van-field__control) {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    height: 40px;
+    line-height: 22px;
+    font-size: 15px;
+  }
+
+  :deep(.van-field__left-icon) {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    margin-right: 6px;
+  }
+
+  :deep(input::placeholder) {
+    line-height: 22px;
   }
 }
 
@@ -363,7 +397,7 @@ function displayName(pkg: string, name?: string) {
   flex: 1;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 4px 10px 12px;
+  padding: 4px 10px 20px;
   background: var(--qsc-bg);
 }
 
@@ -460,9 +494,13 @@ function displayName(pkg: string, name?: string) {
 }
 
 .manual {
+  flex-shrink: 0;
   border-top: 1px solid var(--qsc-hairline);
-  padding: 8px 12px calc(12px + var(--qsc-inset-bottom, 0px));
+  padding: 10px 12px;
+  padding-bottom: calc(12px + var(--qsc-inset-bottom, 0px));
   background: var(--qsc-surface);
+  /* 底色铺进系统导航区，避免小白条 / 断层 */
+  box-shadow: 0 calc(var(--qsc-inset-bottom, 0px)) 0 0 var(--qsc-surface);
 }
 
 .manual-toggle {
@@ -471,7 +509,9 @@ function displayName(pkg: string, name?: string) {
   color: var(--qsc-primary);
   font-size: 13px;
   font-weight: 600;
-  padding: 6px 4px 8px;
+  padding: 8px 4px 10px;
+  width: 100%;
+  text-align: left;
 
   &:active {
     opacity: 0.7;
@@ -491,5 +531,36 @@ function displayName(pkg: string, name?: string) {
   background: var(--qsc-bg) !important;
   color: var(--qsc-text);
   overflow: hidden;
+}
+
+/* MD3：与顶栏留缝，避免贴死下边框 */
+html.pack-md3 .app-picker-popup.van-popup--bottom {
+  height: calc(88% - 10px) !important;
+  max-height: calc(100dvh - var(--qsc-inset-top, 0px) - 84px) !important;
+  margin-bottom: 0;
+}
+
+/* 默认主题搜索高度对齐其它包 */
+html.pack-default .app-picker-popup .van-search__content {
+  min-height: 40px !important;
+}
+
+/* 列表底部与底栏/手势条留白（MD3 / MIUIX） */
+html.pack-md3 .app-picker-popup .list,
+html.pack-miuix .app-picker-popup .list {
+  padding-bottom: 28px;
+}
+
+/* 悬浮底栏时抽屉贴底沉浸，去掉「非悬浮」式假空白 */
+html.float-dock .app-picker-popup.van-popup--bottom {
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+  height: 90% !important;
+  max-height: calc(100dvh - var(--qsc-inset-top, 0px) - 8px) !important;
+}
+
+html.float-dock .app-picker-popup .manual {
+  background: var(--qsc-bg);
+  box-shadow: 0 calc(var(--qsc-inset-bottom, 0px)) 0 0 var(--qsc-bg);
 }
 </style>

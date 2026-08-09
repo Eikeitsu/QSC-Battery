@@ -1,11 +1,12 @@
 #!/system/bin/sh
 # 电流控制：模拟旁路 / 慢充 / 默认限流 / 温度阶梯 / 游戏限流
 # 配置：config/current.json；总开关 current_control=0 时整段跳过。
-# 写入策略：
+# 写入策略（省 I/O / 省电）：
 # - 主路径：对各 power_supply/*/constant_charge_current_max 写微安目标（mA×1000）
 # - 补充：电池/main 其它上限、restrict*_cur*；不写 usb/qc_usb 等输入口节点
-# - 主循环约 3s：读回已等于目标则跳过 echo；默认约 15s 对工作节点强制轻量重申
-# - 实测 current_now 连续偏高则提前强制（防读回撒谎）；写后短间隔读回；抬流约 300mA 分档
+# - 实测电流已不高于目标+裕量：跳过节点巡检与周期重申（偏小不强制）
+# - 偏高：优先漂移强制（连续 2 轮）；到期周期重申仅在偏高时触发（默认约 24s）
+# - 读回已等于目标则跳过 echo；强制时只轻写工作节点、试 1 次
 # 安全约束：
 # - 不写 /data/vendor/thermal；不做 MCA/内核补丁
 # - 不写 charge_control_limit / thermal_input_current 等非电流策略节点
@@ -436,25 +437,69 @@ qsc_bypass_hw_off() {
 	return 0
 }
 
-# 是否需要强制重申（省 I/O：默认相等跳过；定时/漂移才强制）
-# $1=目标 µA；副作用：QSC_CW_FORCE / QSC_CW_FORCE_REASON
+# 是否需要强制重申 / 可否整轮跳过写节点
+# $1=目标 µA
+# 副作用：QSC_CW_FORCE / QSC_CW_FORCE_REASON / QSC_CW_NOW_UA / QSC_CW_OVER / QSC_CW_SKIP_IO
 qsc_current_decide_force() {
-	local target_ua="$1" ts last interval margin now_ua streak
+	local target_ua="$1" ts last interval margin now_ua streak thr
 	QSC_CW_FORCE=0
 	QSC_CW_FORCE_REASON=""
+	QSC_CW_NOW_UA=0
+	QSC_CW_OVER=0
+	QSC_CW_SKIP_IO=0
 
 	case "$target_ua" in
 		""|*[!0-9]*) return 0 ;;
 	esac
 
-	# 周期重申（默认 15s≈5 轮主循环）；0=关闭周期强制
+	margin="$(qsc_current_conf_get current_drift_ua 2>/dev/null)"
+	case "$margin" in
+		""|*[!0-9]*) margin=300000 ;;
+	esac
+	[ "$margin" -lt 100000 ] 2>/dev/null && margin=100000
+	[ "$margin" -gt 2000000 ] 2>/dev/null && margin=2000000
+
+	now_ua="$(qsc_current_now_ua)"
+	case "$now_ua" in
+		""|*[!0-9]*) now_ua=0 ;;
+	esac
+	QSC_CW_NOW_UA="$now_ua"
+
+	# 偏高阈值：目标>0 用 目标+裕量；旁路目标 0 用裕量本身
+	if [ "$target_ua" -gt 0 ] 2>/dev/null; then
+		thr=$((target_ua + margin))
+	else
+		thr="$margin"
+	fi
+	if [ "$now_ua" -gt "$thr" ] 2>/dev/null; then
+		QSC_CW_OVER=1
+	fi
+
+	if [ "$QSC_CW_OVER" = "1" ]; then
+		streak="$(cat "$DATADIR/current_drift_streak" 2>/dev/null | tr -d ' \r\n')"
+		case "$streak" in
+			""|*[!0-9]*) streak=0 ;;
+		esac
+		streak=$((streak + 1))
+		echo "$streak" >"$DATADIR/current_drift_streak" 2>/dev/null
+		# 连续 2 轮偏高 → 漂移强制（防读回撒谎）
+		if [ "$streak" -ge 2 ]; then
+			QSC_CW_FORCE=1
+			QSC_CW_FORCE_REASON="drift"
+		fi
+	else
+		# 偏小 / 正常：清漂移计数，绝不因偏低强制
+		echo 0 >"$DATADIR/current_drift_streak" 2>/dev/null
+	fi
+
+	# 周期重申：默认 24s；仅在偏高时强制；偏低则推进时钟并跳过
 	interval="$(qsc_current_conf_get current_reaffirm_sec 2>/dev/null)"
 	case "$interval" in
-		"" ) interval=15 ;;
-		*[!0-9]*) interval=15 ;;
+		"" ) interval=24 ;;
+		*[!0-9]*) interval=24 ;;
 	esac
 	if [ "$interval" != "0" ]; then
-		[ "$interval" -lt 6 ] 2>/dev/null && interval=6
+		[ "$interval" -lt 8 ] 2>/dev/null && interval=8
 		[ "$interval" -gt 120 ] 2>/dev/null && interval=120
 		ts="$(date +%s 2>/dev/null)"
 		last="$(cat "$DATADIR/current_reaffirm_ts" 2>/dev/null | tr -d ' \r\n')"
@@ -462,36 +507,15 @@ qsc_current_decide_force() {
 			""|*[!0-9]*) last=0 ;;
 		esac
 		if [ -n "$ts" ] && [ $((ts - last)) -ge "$interval" ]; then
-			QSC_CW_FORCE=1
-			QSC_CW_FORCE_REASON="periodic"
-		fi
-	fi
-
-	# 实测电流明显高于目标（读回可能撒谎）→ 连续 2 轮则强制
-	if [ "$target_ua" -gt 0 ] 2>/dev/null; then
-		margin="$(qsc_current_conf_get current_drift_ua 2>/dev/null)"
-		case "$margin" in
-			""|*[!0-9]*) margin=300000 ;;
-		esac
-		[ "$margin" -lt 100000 ] 2>/dev/null && margin=100000
-		[ "$margin" -gt 2000000 ] 2>/dev/null && margin=2000000
-		now_ua="$(qsc_current_now_ua)"
-		case "$now_ua" in
-			""|*[!0-9]*) now_ua=0 ;;
-		esac
-		if [ "$now_ua" -gt $((target_ua + margin)) ] 2>/dev/null; then
-			streak="$(cat "$DATADIR/current_drift_streak" 2>/dev/null | tr -d ' \r\n')"
-			case "$streak" in
-				""|*[!0-9]*) streak=0 ;;
-			esac
-			streak=$((streak + 1))
-			echo "$streak" >"$DATADIR/current_drift_streak" 2>/dev/null
-			if [ "$streak" -ge 2 ]; then
-				QSC_CW_FORCE=1
-				QSC_CW_FORCE_REASON="drift"
+			if [ "$QSC_CW_OVER" = "1" ]; then
+				if [ "$QSC_CW_FORCE" != "1" ]; then
+					QSC_CW_FORCE=1
+					QSC_CW_FORCE_REASON="periodic"
+				fi
+			else
+				# 已压住：不写，只刷新周期，避免空转到期
+				echo "$ts" >"$DATADIR/current_reaffirm_ts" 2>/dev/null
 			fi
-		else
-			echo 0 >"$DATADIR/current_drift_streak" 2>/dev/null
 		fi
 	fi
 }
@@ -502,8 +526,7 @@ qsc_current_write_one() {
 	local node="$1" want="$2" force="${3:-0}"
 	local cur i after max_try=3
 	[ -f "$node" ] || return 1
-	chown 0:0 "$node" 2>/dev/null
-	chmod 0644 "$node" 2>/dev/null
+	# 先读再决定是否 chmod/echo，相等且非强制则零写入
 	cur="$(cat "$node" 2>/dev/null | tr -d ' \r\n')"
 	case "$cur" in
 		""|*[!0-9-]*) cur="" ;;
@@ -512,6 +535,8 @@ qsc_current_write_one() {
 		QSC_CW_RB="$cur"
 		return 0
 	fi
+	chown 0:0 "$node" 2>/dev/null
+	chmod 0644 "$node" 2>/dev/null
 	[ "$force" = "1" ] && max_try=1
 	i=0
 	while [ "$i" -lt "$max_try" ]; do
@@ -578,8 +603,8 @@ qsc_current_write_target() {
 		""|0|*[!0-9]*) step_on=0 ;;
 	esac
 
-	# 强制重申时优先只写已验证工作节点，减少无效 echo
-	if [ "$force" = "1" ] && [ -s "$working" ]; then
+	# 有工作节点表时只巡检这些（强制/常规都如此），少读少写
+	if [ -s "$working" ]; then
 		while IFS= read -r entry || [ -n "$entry" ]; do
 			entry="$(printf '%s' "$entry" | tr -d ' \r\n')"
 			[ -n "$entry" ] || continue
@@ -1005,11 +1030,21 @@ qsc_apply_current_control() {
 		return 0
 	fi
 
-	# 每轮检查；读回相等则跳过写入。定时重申 / 实测漂移时强制轻量重写。
+	# 每轮：先看实测电流。已压住且模式未变则整轮不碰 sysfs。
 	reason="${mode_tag}:${target}"
 	prev_tag="$(cat "$DATADIR/current_mode_tag" 2>/dev/null)"
+	reached="$(cat "$DATADIR/current_reached" 2>/dev/null | tr -d ' \r\n')"
 
 	qsc_current_decide_force "$target"
+
+	if [ "${QSC_CW_FORCE:-0}" != "1" ] \
+		&& [ "${QSC_CW_OVER:-0}" != "1" ] \
+		&& [ "$prev_tag" = "$reason" ] \
+		&& [ "$reached" = "1" ]; then
+		# 偏小/正常：零节点 I/O
+		return 0
+	fi
+
 	if ! qsc_current_write_target "$target"; then
 		if [ "$prev_tag" != "fail:$reason" ]; then
 			echo "$(date +%F_%T) 电量$battery_level 电流写入未生效：${log_name} 目标$(qsc_fmt_ma "$target") 节点=${QSC_CW_NODE:-?} scale=${QSC_CW_SCALE:-?} 读回=${QSC_CW_RB:-?}" >>"$LOG_FILE"
@@ -1018,12 +1053,13 @@ qsc_apply_current_control() {
 		return 0
 	fi
 
-	now_c="$(qsc_current_now_ua)"
+	now_c="${QSC_CW_NOW_UA:-$(qsc_current_now_ua)}"
 	# 同模式只在切换、步进或漂移重申时记一行，避免刷屏
 	if [ "$prev_tag" != "$reason" ] || [ "${QSC_CW_STEPPING:-0}" = "1" ] \
 		|| { [ "${QSC_CW_FORCE_REASON:-}" = "drift" ] && [ "${QSC_CW_DID_WRITE:-0}" = "1" ]; }; then
 		_extra=""
 		[ "${QSC_CW_FORCE_REASON:-}" = "drift" ] && _extra=" 漂移重申"
+		[ "${QSC_CW_FORCE_REASON:-}" = "periodic" ] && [ "${QSC_CW_DID_WRITE:-0}" = "1" ] && _extra=" 周期重申"
 		echo "$(date +%F_%T) 电量$battery_level ${log_name}：限制电流$(qsc_fmt_ma "$target") 节点=$(qsc_node_short "${QSC_CW_NODE}") scale=${QSC_CW_SCALE} 读回=${QSC_CW_RB} 实时${now_c} 温度${temperature}${_extra}" >>"$LOG_FILE"
 	fi
 	echo "$reason" >"$DATADIR/current_mode_tag"

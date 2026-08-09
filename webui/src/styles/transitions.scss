@@ -21,3 +21,27 @@
 
 @include page-slide("slide-left", 18px, -12px);
 @include page-slide("slide-right", -18px, 12px);
+
+/* 配置项开关显隐 */
+.cfg-reveal-enter-active,
+.cfg-reveal-leave-active {
+  transition:
+    opacity 0.22s ease,
+    transform 0.22s ease,
+    max-height 0.28s ease;
+  overflow: hidden;
+}
+
+.cfg-reveal-enter-from,
+.cfg-reveal-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+  max-height: 0;
+}
+
+.cfg-reveal-enter-to,
+.cfg-reveal-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+  max-height: 720px;
+}

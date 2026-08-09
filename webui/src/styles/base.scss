@@ -42,7 +42,12 @@ body {
 }
 
 .page {
-  padding: 12px $space-page 28px;
+  padding: 12px $space-page 32px;
+}
+
+html.pack-md3 .page,
+html.pack-miuix .page {
+  padding-bottom: 36px;
 }
 
 .section-label {

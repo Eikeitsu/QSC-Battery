@@ -12,18 +12,17 @@ const theme = useTheme();
 
 const base = import.meta.env.BASE_URL;
 
-const savedTab = localStorage.getItem("qsc_dock_page");
-const tab = ref<TabName>(
-  savedTab === "home" ||
-    savedTab === "config" ||
-    savedTab === "log" ||
-    savedTab === "more"
-    ? savedTab
-    : "home",
-);
+/** 每次打开固定进首页；不再持久化上次 Tab */
+const tab = ref<TabName>("home");
 const refreshing = ref(false);
 const slideDir = ref<"forward" | "back">("forward");
 const order: TabName[] = ["home", "config", "log", "more"];
+
+try {
+  localStorage.removeItem("qsc_dock_page");
+} catch {
+  /* ignore */
+}
 
 const views: Record<TabName, Component> = {
   home: Home,
@@ -40,6 +39,32 @@ const shellClass = computed(() => ({
   "shell-default": theme.themePack === "default",
 }));
 
+/** 三套主题使用不同图标，避免视觉重复 */
+const dockIcons = computed(() => {
+  if (theme.themePack === "md3") {
+    return {
+      home: "home",
+      config: "setting",
+      log: "orders-o",
+      more: "friends-o",
+    } as const;
+  }
+  if (theme.themePack === "miuix") {
+    return {
+      home: "apps-o",
+      config: "cluster-o",
+      log: "description",
+      more: "contact",
+    } as const;
+  }
+  return {
+    home: "home-o",
+    config: "setting-o",
+    log: "notes-o",
+    more: "user-o",
+  } as const;
+});
+
 function setTab(name: string | number) {
   const next = String(name) as TabName;
   if (!order.includes(next)) return;
@@ -47,11 +72,6 @@ function setTab(name: string | number) {
   const to = order.indexOf(next);
   slideDir.value = to >= from ? "forward" : "back";
   tab.value = next;
-  try {
-    localStorage.setItem("qsc_dock_page", next);
-  } catch {
-    /* ignore */
-  }
   requestAnimationFrame(() => theme.syncStatusBar());
 }
 
@@ -136,10 +156,10 @@ onMounted(async () => {
       inactive-color="var(--qsc-text-3)"
       @update:model-value="setTab"
     >
-      <van-tabbar-item name="home" icon="home-o">概览</van-tabbar-item>
-      <van-tabbar-item name="config" icon="setting-o">策略</van-tabbar-item>
-      <van-tabbar-item name="log" icon="notes-o">日志</van-tabbar-item>
-      <van-tabbar-item name="more" icon="user-o">我的</van-tabbar-item>
+      <van-tabbar-item name="home" :icon="dockIcons.home">概览</van-tabbar-item>
+      <van-tabbar-item name="config" :icon="dockIcons.config">策略</van-tabbar-item>
+      <van-tabbar-item name="log" :icon="dockIcons.log">日志</van-tabbar-item>
+      <van-tabbar-item name="more" :icon="dockIcons.more">我的</van-tabbar-item>
     </van-tabbar>
   </div>
 </template>

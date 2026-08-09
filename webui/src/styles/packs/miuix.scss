@@ -118,8 +118,32 @@ html.pack-miuix {
     font-size: 11px;
   }
 
+  .app-dock.dock-miuix .van-tabbar-item__icon {
+    margin-bottom: 2px;
+  }
+
   .app-dock.dock-miuix .van-tabbar-item--active {
     color: var(--qsc-primary) !important;
+  }
+
+  /* 悬浮底栏：选中态更圆的胶囊高亮 */
+  &.float-dock .app-dock.dock-miuix .van-tabbar-item--active .van-tabbar-item__icon {
+    position: relative;
+    z-index: 1;
+    width: 52px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &.float-dock .app-dock.dock-miuix .van-tabbar-item--active .van-tabbar-item__icon::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--qsc-primary) 16%, transparent);
+    z-index: -1;
   }
 
   .app-topbar.topbar-miuix {

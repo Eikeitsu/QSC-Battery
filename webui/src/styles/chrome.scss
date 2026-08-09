@@ -19,7 +19,8 @@
 }
 
 html.float-dock .app-shell {
-  --dock-pad: calc(var(--qsc-dock-h) + 16px + var(--qsc-inset-bottom, 0px));
+  /* 略小于旧值，减轻悬浮时底部假空白 */
+  --dock-pad: calc(var(--qsc-dock-h) + 12px + var(--qsc-inset-bottom, 0px));
 }
 
 .app-topbar {
@@ -86,16 +87,16 @@ html.bar-blur .app-dock.van-tabbar {
   backdrop-filter: blur(22px) saturate(1.35);
 }
 
-/* MIUIX 悬浮底栏 */
+/* MIUIX 悬浮底栏：圆角更大，贴合手势条区域沉浸 */
 html.float-dock .app-dock.van-tabbar {
   left: 14px;
   right: 14px;
-  bottom: calc(10px + var(--qsc-inset-bottom, 0px));
+  bottom: calc(8px + var(--qsc-inset-bottom, 0px));
   width: auto;
   min-height: 58px;
   padding-bottom: 0;
   border: 1px solid color-mix(in srgb, #fff 35%, var(--qsc-hairline));
-  border-radius: 22px;
+  border-radius: 28px;
   overflow: hidden;
   box-shadow:
     0 8px 28px rgba(0, 0, 0, 0.12),
@@ -133,7 +134,7 @@ html.float-dock .app-shell::after {
   left: 0;
   right: 0;
   bottom: 0;
-  height: var(--qsc-inset-bottom, 0);
+  height: calc(var(--qsc-inset-bottom, 0px) + 8px);
   background: var(--qsc-bg);
   z-index: 35;
   pointer-events: none;
