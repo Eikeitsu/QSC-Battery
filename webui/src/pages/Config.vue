@@ -363,7 +363,9 @@ async function saveSchedule() {
                   <template #right-icon>
                     <ThemeSwitch
                       :model-value="tempCurrentOn"
-                      @update:model-value="(v) => onCurrentSwitch('temperature_current', v)"
+                      @update:model-value="
+                        (v) => onCurrentSwitch('temperature_current', v)
+                      "
                     />
                   </template>
                 </van-cell>
@@ -435,7 +437,9 @@ async function saveSchedule() {
                       placeholder="100–3000"
                       :min-display="100"
                       :max-display="3000"
-                      @update:model-value="(id) => setCurrentUa('app_current_max', id, true)"
+                      @update:model-value="
+                        (id) => setCurrentUa('app_current_max', id, true)
+                      "
                     />
                     <van-cell
                       title="游戏应用"

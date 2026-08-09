@@ -73,7 +73,7 @@
 | `app_limit` / `app_current_max` / `app_list`          | 游戏限流开关、电流、包名（**JSON 字符串数组**；WebUI 可勾选）                                 |
 | `battery_current`                                     | 用户补充节点；主写各 `constant_charge_current_max`（不含 usb），再补电池侧与 `restrict*_cur*` |
 | `current_step_ua`                                     | 可选；台阶写入（微安）。`0` 或不写 = 直接写目标；旧机可设 `500000`                            |
-| `current_reaffirm_sec`                                | 可选；偏高时周期重申间隔（秒，默认 24）。电流已压住则跳过。`0` = 关周期重申                  |
+| `current_reaffirm_sec`                                | 可选；偏高时周期重申间隔（秒，默认 24）。电流已压住则跳过。`0` = 关周期重申                   |
 | `current_drift_ua`                                    | 可选；偏高裕量（微安，默认 300000）。仅实测偏高才强制；偏低不重申                             |
 | `restricted`                                          | 可选；`"路径 value=值"` 字符串数组。限流前写入；空数组则跳过                                  |
 

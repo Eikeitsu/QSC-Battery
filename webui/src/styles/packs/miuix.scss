@@ -137,7 +137,10 @@ html.pack-miuix {
     justify-content: center;
   }
 
-  &.float-dock .app-dock.dock-miuix .van-tabbar-item--active .van-tabbar-item__icon::before {
+  &.float-dock
+    .app-dock.dock-miuix
+    .van-tabbar-item--active
+    .van-tabbar-item__icon::before {
     content: "";
     position: absolute;
     inset: 0;
