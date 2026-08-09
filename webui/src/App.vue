@@ -39,25 +39,27 @@ const shellClass = computed(() => ({
   "shell-default": theme.themePack === "default",
 }));
 
-/** 三套主题使用不同图标，避免视觉重复 */
+/** 每套主题四 Tab 统一描线或实底，不混用 */
 const dockIcons = computed(() => {
   if (theme.themePack === "md3") {
+    // 实底（home 在部分 WebView 空白，用 wap-home）
     return {
-      // 部分 WebView 对实心 home 渲染空白，改用 wap-home
       home: "wap-home",
       config: "setting",
-      log: "orders-o",
-      more: "friends-o",
+      log: "notes",
+      more: "friends",
     } as const;
   }
   if (theme.themePack === "miuix") {
+    // 描线
     return {
       home: "apps-o",
       config: "cluster-o",
-      log: "description",
-      more: "contact",
+      log: "description-o",
+      more: "contact-o",
     } as const;
   }
+  // 默认：描线
   return {
     home: "home-o",
     config: "setting-o",
