@@ -110,6 +110,7 @@ html.pack-miuix.float-dock .app-dock.van-tabbar {
   box-shadow:
     0 10px 32px rgba(0, 0, 0, 0.14),
     0 1px 0 rgba(255, 255, 255, 0.4) inset;
+
   /* 不延伸进系统手势区铺色，四周透出页面 */
   border-top: 1px solid color-mix(in srgb, #fff 40%, var(--qsc-hairline));
 }
