@@ -60,32 +60,32 @@ qsc_refresh_module_description() {
 	fi
 
 	if [ ! -f "$BINDIR/qsc_switch.sh" ]; then
-		qsc_write_module_description "⚠️异常" "核心脚本丢失" \
+		qsc_write_module_description "❗异常" "核心脚本丢失" \
 			"请重新安装模块并重启"
 		return 0
 	fi
 
 	if [ ! -f "$LIST_SWITCH" ] && [ ! -f "$BINDIR/list_switch.sh" ]; then
-		qsc_write_module_description "⚠️异常" "缺少开关列表" \
+		qsc_write_module_description "❗异常" "缺少开关列表" \
 			"请重新安装模块并重启"
 		return 0
 	fi
 
 	if [ -f "$DATADIR/no_battery_logged" ] && [ -z "$level" ]; then
-		qsc_write_module_description "⚠️异常" "无法读取电量" \
+		qsc_write_module_description "❗异常" "无法读取电量" \
 			"dumpsys 与 sysfs 均失败，请查看 data/log.log"
 		return 0
 	fi
 
 	if [ -f "$DATADIR/no_temp_logged" ] && [ -z "$temp" ]; then
-		qsc_write_module_description "⚠️异常" "无法读取温度" \
+		qsc_write_module_description "❗异常" "无法读取温度" \
 			"dumpsys 与 sysfs 均失败，请查看 data/log.log"
 		return 0
 	fi
 
 	if [ -f "$DATADIR/no_node_logged" ] && [ ! -f "$DATADIR/power_switch" ]; then
 		if [ ! -s "$LIST_SWITCH" ]; then
-			qsc_write_module_description "⚠️异常" "无可用停充节点" \
+			qsc_write_module_description "❗异常" "无可用停充节点" \
 				"请插电后在模块 Action 运行停充开关实测，或执行 bin/diagnose.sh"
 			return 0
 		fi
@@ -123,7 +123,7 @@ qsc_refresh_module_description() {
 				outer="温度降至 ${temperature_switch_start}°C 后恢复"
 			fi
 		fi
-		qsc_write_module_description "🛑已停充" "$inner" "$outer"
+		qsc_write_module_description "⏸️已停充" "$inner" "$outer"
 		return 0
 	fi
 
@@ -169,7 +169,7 @@ qsc_refresh_module_description() {
 				"充电电流压至约 0，接近旁路供电效果"
 			;;
 		节点旁路)
-			qsc_write_module_description "🔌节点旁路" "$inner" \
+			qsc_write_module_description "⚙️节点旁路" "$inner" \
 				"已使用本机旁路节点；无温控文件改动"
 			;;
 		高温保护)
@@ -189,7 +189,7 @@ qsc_refresh_module_description() {
 				"前台游戏命中列表，已限制充电电流"
 			;;
 		一限温控)
-			qsc_write_module_description "🌡️一限温控" "$inner" \
+			qsc_write_module_description "🌤️一限温控" "$inner" \
 				"温度达到一限，已降低充电电流"
 			;;
 		二限温控)

@@ -856,7 +856,7 @@ qsc_bypass_schedule_hit() {
 # 依赖外部环境：battery_level temperature；且未触发供电开关停充
 # 优先级：旁路 > 二限/慢充/回补 > 游戏 > 一限 > 默认；可选旁路温度/时段、硬件旁路、高温保护
 qsc_apply_current_control() {
-	local enable battery_stop slow_charge temp_cur
+	local enable battery_stop slow_charge temp_cur bypass_en
 	local limit1 limit2 cur1 cur2 def_max app_on app_cur
 	local reason target now_c battery_stop_1 prev_tag
 	local mode_tag="" log_name="" bypass_mode safety_temp bypass_temp
@@ -890,6 +890,13 @@ qsc_apply_current_control() {
 	app_cur="$(qsc_current_conf_get app_current_max)"
 	bypass_mode="$(qsc_current_conf_get bypass_mode)"
 	safety_temp="$(qsc_current_conf_get safety_temp_max)"
+	# 旧配置无字段：视为开启，保持原触发逻辑
+	bypass_en="$(qsc_current_conf_get bypass_enable)"
+	if [ -z "$bypass_en" ]; then
+		bypass_en=1
+	else
+		bypass_en="$(qsc_clamp_int "$bypass_en" 0 1 0)"
+	fi
 
 	battery_stop="$(qsc_clamp_level_or_off "$battery_stop" 110)"
 	bypass_temp="$(qsc_clamp_level_or_off "$bypass_temp" 110)"
@@ -916,6 +923,11 @@ qsc_apply_current_control() {
 	esac
 	safety_temp="$(qsc_clamp_int "$safety_temp" 40 55 48)"
 
+	# 旁路总开关关闭：本轮不触发旁路与回补
+	if [ "$bypass_en" != "1" ]; then
+		battery_stop=110
+		bypass_temp=110
+	fi
 	battery_stop_1=$((battery_stop - 1))
 
 	# 电流温控档位：2=二限，1=一限
@@ -927,26 +939,28 @@ qsc_apply_current_control() {
 		fi
 	fi
 
-	# 旁路：电量 / 温度 / 时段（后两者默认关闭）
-	if [ "$battery_stop" -le 100 ] && [ -n "$battery_level" ] && [ "$battery_level" -ge "$battery_stop" ]; then
-		by_level=1
-		reasons="${reasons}电量 "
-	fi
-	if [ "$bypass_temp" -le 100 ] && [ -n "$temperature" ] && [ "$temperature" -ge "$bypass_temp" ]; then
-		by_temp=1
-		reasons="${reasons}温度 "
-	fi
-	if qsc_bypass_schedule_hit; then
-		by_sched=1
-		reasons="${reasons}时段 "
-	fi
-	if [ "$by_level$by_temp$by_sched" != "000" ]; then
-		want_bypass=1
-		target=0
-		reasons="$(printf '%s' "$reasons" | sed 's/ $//' | tr ' ' '/')"
-		mode_tag="模拟旁路"
-		log_name="模拟旁路充电"
-		[ "$reasons" != "电量" ] && [ -n "$reasons" ] && log_name="模拟旁路充电·${reasons}"
+	# 旁路：电量 / 温度 / 时段（总开关关闭时跳过）
+	if [ "$bypass_en" = "1" ]; then
+		if [ "$battery_stop" -le 100 ] && [ -n "$battery_level" ] && [ "$battery_level" -ge "$battery_stop" ]; then
+			by_level=1
+			reasons="${reasons}电量 "
+		fi
+		if [ "$bypass_temp" -le 100 ] && [ -n "$temperature" ] && [ "$temperature" -ge "$bypass_temp" ]; then
+			by_temp=1
+			reasons="${reasons}温度 "
+		fi
+		if qsc_bypass_schedule_hit; then
+			by_sched=1
+			reasons="${reasons}时段 "
+		fi
+		if [ "$by_level$by_temp$by_sched" != "000" ]; then
+			want_bypass=1
+			target=0
+			reasons="$(printf '%s' "$reasons" | sed 's/ $//' | tr ' ' '/')"
+			mode_tag="模拟旁路"
+			log_name="模拟旁路充电"
+			[ "$reasons" != "电量" ] && [ -n "$reasons" ] && log_name="模拟旁路充电·${reasons}"
+		fi
 	fi
 
 	# 慢充：电量>=slow 且不等于旁路回补点

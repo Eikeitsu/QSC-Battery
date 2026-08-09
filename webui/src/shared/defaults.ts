@@ -26,6 +26,7 @@ export const DEFAULTS: Settings = {
 
 export const CURRENT_DEFAULTS: CurrentConfig = {
   current_control: 0,
+  bypass_enable: 0,
   battery_stop: 110,
   bypass_temp: 110,
   bypass_schedule: [],

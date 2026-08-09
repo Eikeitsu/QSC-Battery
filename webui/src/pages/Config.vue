@@ -62,6 +62,7 @@ const appListLabel = computed(() => {
   return "已选应用会在列表顶部优先显示";
 });
 
+const bypassOn = computed(() => !!Number(store.current.bypass_enable));
 const tempCurrentOn = computed(() => !!Number(store.current.temperature_current));
 const appLimitOn = computed(() => !!Number(store.current.app_limit));
 
@@ -81,7 +82,10 @@ async function onSwitch(key: ConfigKey, on: boolean) {
 }
 
 async function onCurrentSwitch(
-  key: keyof Pick<CurrentConfig, "current_control" | "temperature_current" | "app_limit">,
+  key: keyof Pick<
+    CurrentConfig,
+    "current_control" | "bypass_enable" | "temperature_current" | "app_limit"
+  >,
   on: boolean,
 ) {
   store.current[key] = on ? 1 : 0;
@@ -293,41 +297,61 @@ async function saveSchedule() {
           >
             <van-collapse-item name="1" title="旁路 / 慢充 / 限流">
               <div class="block nested">
-                <div class="block-label">旁路方式</div>
-                <ChipGroup
-                  :options="[
-                    { id: 'sim', l: '模拟写电流' },
-                    { id: 'auto', l: '自动节点' },
-                  ]"
-                  :model-value="store.current.bypass_mode"
-                  @update:model-value="onBypass"
-                />
-                <div class="block-label">旁路电量（≥ 触发，110=关）</div>
-                <PresetValue
-                  :options="LEVEL_PRESETS"
-                  :model-value="store.current.battery_stop"
-                  as-number
-                  label="旁路电量 %"
-                  :min-display="1"
-                  :max-display="110"
-                  @update:model-value="(id) => setCurrentLevel('battery_stop', id)"
-                />
-                <div class="block-label">旁路温度（≥ 触发，110=关）</div>
-                <PresetValue
-                  :options="BYPASS_TEMP_PRESETS"
-                  :model-value="store.current.bypass_temp"
-                  as-number
-                  label="旁路温度 °C"
-                  :min-display="1"
-                  :max-display="110"
-                  @update:model-value="(id) => setCurrentLevel('bypass_temp', id)"
-                />
-                <div class="block-label">旁路时段</div>
-                <ScheduleEditor
-                  v-model="store.current.bypass_schedule"
-                  @change="saveSchedule"
-                />
-                <p class="field-hint">电量 / 温度 / 时段任一满足即开旁路；支持跨天</p>
+                <van-cell center title="旁路" label="电量 / 温度 / 时段触发">
+                  <template #right-icon>
+                    <ThemeSwitch
+                      :model-value="bypassOn"
+                      @update:model-value="(v) => onCurrentSwitch('bypass_enable', v)"
+                    />
+                  </template>
+                </van-cell>
+                <Transition name="cfg-reveal">
+                  <div v-if="bypassOn" class="reveal-block">
+                    <div class="block-label">旁路方式</div>
+                    <ChipGroup
+                      :options="[
+                        { id: 'sim', l: '模拟写电流' },
+                        { id: 'auto', l: '自动节点' },
+                      ]"
+                      :model-value="store.current.bypass_mode"
+                      @update:model-value="onBypass"
+                    />
+                    <div class="block-label">旁路电量（≥ 触发，110=关）</div>
+                    <PresetValue
+                      :options="LEVEL_PRESETS"
+                      :model-value="store.current.battery_stop"
+                      as-number
+                      label="旁路电量 %"
+                      :min-display="1"
+                      :max-display="110"
+                      @update:model-value="(id) => setCurrentLevel('battery_stop', id)"
+                    />
+                    <div class="block-label">旁路温度（≥ 触发，110=关）</div>
+                    <PresetValue
+                      :options="BYPASS_TEMP_PRESETS"
+                      :model-value="store.current.bypass_temp"
+                      as-number
+                      label="旁路温度 °C"
+                      :min-display="1"
+                      :max-display="110"
+                      @update:model-value="(id) => setCurrentLevel('bypass_temp', id)"
+                    />
+                    <div class="block-label">旁路时段</div>
+                    <ScheduleEditor
+                      v-model="store.current.bypass_schedule"
+                      @change="saveSchedule"
+                    />
+                    <p class="field-hint">电量 / 温度 / 时段任一满足即开旁路；支持跨天</p>
+                    <van-field
+                      v-model.number="store.current.safety_temp_max"
+                      type="digit"
+                      label="旁路安全温度 °C"
+                      placeholder="40–55"
+                      input-align="right"
+                      @change="onSafetyTemp"
+                    />
+                  </div>
+                </Transition>
                 <div class="block-label">慢充电量</div>
                 <PresetValue
                   :options="LEVEL_PRESETS"
@@ -338,14 +362,6 @@ async function saveSchedule() {
                   :min-display="1"
                   :max-display="110"
                   @update:model-value="(id) => setCurrentLevel('slow_charge', id)"
-                />
-                <van-field
-                  v-model.number="store.current.safety_temp_max"
-                  type="digit"
-                  label="旁路安全温度 °C"
-                  placeholder="40–55"
-                  input-align="right"
-                  @change="onSafetyTemp"
                 />
                 <div class="block-label">默认电流上限</div>
                 <PresetValue

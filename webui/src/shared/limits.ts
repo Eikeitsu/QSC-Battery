@@ -276,6 +276,7 @@ export function sanitizeCurrentConfig(
     fixed,
     value: {
       current_control: Number(input.current_control) ? 1 : 0,
+      bypass_enable: Number(input.bypass_enable) ? 1 : 0,
       battery_stop,
       bypass_temp,
       bypass_schedule,

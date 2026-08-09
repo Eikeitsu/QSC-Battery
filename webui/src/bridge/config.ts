@@ -52,10 +52,20 @@ export async function loadCurrentJsonc(): Promise<CurrentConfig> {
   const result = await exec(`cat '${PATHS.CURRENT_CONF}' 2>/dev/null`);
   if (!result.stdout.trim()) return { ...CURRENT_DEFAULTS };
   try {
-    const parsed = parseJsonc(result.stdout);
+    const parsed = parseJsonc(result.stdout) as Partial<CurrentConfig>;
+    // 旧配置无 bypass_enable：已配置触发条件则视为开启，否则关
+    if (!Object.prototype.hasOwnProperty.call(parsed, "bypass_enable")) {
+      const bs = Number(parsed.battery_stop ?? 110);
+      const bt = Number(parsed.bypass_temp ?? 110);
+      const sched = Array.isArray(parsed.bypass_schedule)
+        ? parsed.bypass_schedule
+        : [];
+      parsed.bypass_enable =
+        bs <= 100 || bt <= 100 || sched.length > 0 ? 1 : 0;
+    }
     return sanitizeCurrentConfig({
       ...CURRENT_DEFAULTS,
-      ...(parsed as Partial<CurrentConfig>),
+      ...parsed,
     }).value;
   } catch {
     return {

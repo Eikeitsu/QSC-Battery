@@ -126,27 +126,29 @@ html.pack-miuix {
     color: var(--qsc-primary) !important;
   }
 
-  /* 悬浮底栏：选中态更圆的胶囊高亮 */
-  &.float-dock .app-dock.dock-miuix .van-tabbar-item--active .van-tabbar-item__icon {
+  /* 悬浮底栏：选中态胶囊包住图标+文字（仅 MIUIX 悬浮） */
+  &.float-dock .app-dock.dock-miuix .van-tabbar-item {
     position: relative;
-    z-index: 1;
-    width: 52px;
-    height: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    z-index: 0;
   }
 
-  &.float-dock
-    .app-dock.dock-miuix
-    .van-tabbar-item--active
-    .van-tabbar-item__icon::before {
+  &.float-dock .app-dock.dock-miuix .van-tabbar-item--active::before {
     content: "";
     position: absolute;
-    inset: 0;
+    left: 6px;
+    right: 6px;
+    top: 5px;
+    bottom: 5px;
     border-radius: 999px;
     background: color-mix(in srgb, var(--qsc-primary) 16%, transparent);
     z-index: -1;
+    pointer-events: none;
+  }
+
+  &.float-dock .app-dock.dock-miuix .van-tabbar-item--active .van-tabbar-item__icon,
+  &.float-dock .app-dock.dock-miuix .van-tabbar-item--active .van-tabbar-item__text {
+    position: relative;
+    z-index: 1;
   }
 
   .app-topbar.topbar-miuix {

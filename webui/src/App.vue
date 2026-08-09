@@ -43,7 +43,8 @@ const shellClass = computed(() => ({
 const dockIcons = computed(() => {
   if (theme.themePack === "md3") {
     return {
-      home: "home",
+      // 部分 WebView 对实心 home 渲染空白，改用 wap-home
+      home: "wap-home",
       config: "setting",
       log: "orders-o",
       more: "friends-o",

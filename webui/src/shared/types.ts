@@ -13,6 +13,8 @@ export type Settings = Record<ConfigKey, string>;
 
 export interface CurrentConfig {
   current_control: number;
+  /** 旁路总开关：0 关 / 1 开 */
+  bypass_enable: number;
   battery_stop: number;
   bypass_temp: number;
   bypass_schedule: string[];

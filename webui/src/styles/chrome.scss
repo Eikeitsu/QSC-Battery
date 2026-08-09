@@ -1,4 +1,4 @@
-/* 顶栏 / 底栏沉浸 + MIUIX 悬浮液态玻璃 */
+/* 顶栏 / 底栏沉浸 + MIUIX 真悬浮液态玻璃 */
 
 .app-shell {
   --dock-pad: calc(var(--qsc-dock-h) + var(--qsc-inset-bottom, 0px));
@@ -14,13 +14,8 @@
   overscroll-behavior: none;
   overflow: hidden;
 
-  /* 底色铺满系统导航区，避免按键栏露白 */
+  /* 非悬浮：底色铺满系统导航区 */
   padding-bottom: var(--dock-pad);
-}
-
-html.float-dock .app-shell {
-  /* 略小于旧值，减轻悬浮时底部假空白 */
-  --dock-pad: calc(var(--qsc-dock-h) + 12px + var(--qsc-inset-bottom, 0px));
 }
 
 .app-topbar {
@@ -55,18 +50,16 @@ html.pack-miuix.bar-blur .app-topbar {
 .app-main {
   position: relative;
   flex: 1 1 auto;
-  min-height: 0; /* flex 子项可收缩，才能形成真实滚动视口 */
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: none;
   padding-top: calc(56px + var(--qsc-inset-top, 0px));
-
-  /* 隔离页面内下拉刷新 transform，减轻对 fixed 顶栏的影响 */
   isolation: isolate;
 }
 
-/* 底栏：fixed，背景延伸进系统导航区 */
+/* 底栏：默认贴底（default / md3 / miuix 非悬浮） */
 .app-dock.van-tabbar {
   position: fixed;
   left: 0;
@@ -87,59 +80,70 @@ html.bar-blur .app-dock.van-tabbar {
   backdrop-filter: blur(22px) saturate(1.35);
 }
 
-/* MIUIX 悬浮底栏：圆角更大，贴合手势条区域沉浸 */
-html.float-dock .app-dock.van-tabbar {
-  left: 14px;
-  right: 14px;
-  bottom: calc(8px + var(--qsc-inset-bottom, 0px));
+.app-dock .van-tabbar-item {
+  background: transparent;
+}
+
+/* ========== 仅 MIUIX + 开启悬浮：真悬浮胶囊 ==========
+   两侧/下方露空，能看到底下滚动内容；不再铺假底栏 */
+html.pack-miuix.float-dock .app-shell {
+  /* 壳层不再垫实心底，避免「假底栏」 */
+  padding-bottom: 0;
+}
+
+html.pack-miuix.float-dock .app-main {
+  /* 内容滚过胶囊下方与两侧空隙 */
+  padding-bottom: calc(var(--qsc-dock-h) + 20px + var(--qsc-inset-bottom, 0px));
+}
+
+html.pack-miuix.float-dock .app-dock.van-tabbar {
+  left: 16px;
+  right: 16px;
+  bottom: calc(10px + var(--qsc-inset-bottom, 0px));
   width: auto;
   min-height: 58px;
   padding-bottom: 0;
-  border: 1px solid color-mix(in srgb, #fff 35%, var(--qsc-hairline));
+  border: 1px solid color-mix(in srgb, #fff 40%, var(--qsc-hairline));
   border-radius: 28px;
-  overflow: hidden;
+  overflow: visible;
+  background: color-mix(in srgb, var(--qsc-surface) 72%, transparent) !important;
   box-shadow:
-    0 8px 28px rgba(0, 0, 0, 0.12),
-    0 1px 0 rgba(255, 255, 255, 0.35) inset;
+    0 10px 32px rgba(0, 0, 0, 0.14),
+    0 1px 0 rgba(255, 255, 255, 0.4) inset;
+  /* 不延伸进系统手势区铺色，四周透出页面 */
+  border-top: 1px solid color-mix(in srgb, #fff 40%, var(--qsc-hairline));
 }
 
-html.float-dock[data-theme="dark"] .app-dock.van-tabbar {
-  border-color: color-mix(in srgb, #fff 10%, transparent);
+html.pack-miuix.float-dock[data-theme="dark"] .app-dock.van-tabbar {
+  border-color: color-mix(in srgb, #fff 12%, transparent);
+  background: color-mix(in srgb, var(--qsc-surface) 55%, transparent) !important;
   box-shadow:
-    0 10px 32px rgba(0, 0, 0, 0.45),
+    0 12px 36px rgba(0, 0, 0, 0.5),
     0 1px 0 rgba(255, 255, 255, 0.08) inset;
 }
 
-/* 液态玻璃 */
-html.float-dock.dock-glass .app-dock.van-tabbar {
-  background: color-mix(in srgb, var(--qsc-surface) 55%, transparent) !important;
-  -webkit-backdrop-filter: blur(36px) saturate(1.8) brightness(1.05);
-  backdrop-filter: blur(36px) saturate(1.8) brightness(1.05);
+html.pack-miuix.float-dock.dock-glass .app-dock.van-tabbar {
+  background: color-mix(in srgb, var(--qsc-surface) 48%, transparent) !important;
+  -webkit-backdrop-filter: blur(36px) saturate(1.85) brightness(1.06);
+  backdrop-filter: blur(36px) saturate(1.85) brightness(1.06);
 }
 
-html.float-dock.dock-glass[data-theme="dark"] .app-dock.van-tabbar {
+html.pack-miuix.float-dock.dock-glass[data-theme="dark"] .app-dock.van-tabbar {
   background: color-mix(
     in srgb,
-    var(--qsc-surface) 45%,
+    var(--qsc-surface) 38%,
     rgba(255, 255, 255, 0.06)
   ) !important;
-  -webkit-backdrop-filter: blur(40px) saturate(1.6);
-  backdrop-filter: blur(40px) saturate(1.6);
+  -webkit-backdrop-filter: blur(40px) saturate(1.65);
+  backdrop-filter: blur(40px) saturate(1.65);
 }
 
-/* 悬浮时系统导航区仍用页面底色填满（壳层 padding 区域） */
-html.float-dock .app-shell::after {
-  content: "";
-  position: fixed;
+/* 非 MIUIX 或未开悬浮时，不要残留旧的 float-dock 底栏样式 */
+html.float-dock:not(.pack-miuix) .app-dock.van-tabbar {
   left: 0;
   right: 0;
   bottom: 0;
-  height: calc(var(--qsc-inset-bottom, 0px) + 8px);
-  background: var(--qsc-bg);
-  z-index: 35;
-  pointer-events: none;
-}
-
-.app-dock .van-tabbar-item {
-  background: transparent;
+  width: auto;
+  border-radius: 0;
+  padding-bottom: var(--qsc-inset-bottom, 0);
 }
