@@ -299,7 +299,7 @@ fi
 ui_print " 配置: config/config.conf "
 [ "$INSTALL_CURRENT" = "1" ] && ui_print " 电流控制: config/current.json "
 ui_print " 日志: data/log.log "
-ui_print " Action: 上=刷新 / 下=诊断菜单 "
+ui_print " Action: 上=刷新 / 下=诊断 "
 ui_print "--------------------------------"
 ui_print " 安装完成，请重启设备 "
 ui_print "********************************"
