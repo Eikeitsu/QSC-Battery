@@ -3,7 +3,8 @@
 ## Unreleased
 
 - Action：重新设计Action功能，保证脚本不会被提前终止
-- WebUI：首页增加电池信息，可查看健康度、设计/真实容量、循环次数
+- WebUI：增加电池信息展示(健康度，设计容量，真实容量，循环次数)
+- WebUI：引入 Pinia，`useAppStore` / `useTheme` 改为 setup store
 
 ## 2026.08.10
 

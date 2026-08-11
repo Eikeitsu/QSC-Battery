@@ -1,4 +1,5 @@
 import { computed, reactive, ref } from "vue";
+import { defineStore } from "pinia";
 import { showSuccessToast, showToast } from "vant";
 import {
   CONFIG_KEYS,
@@ -15,66 +16,63 @@ import {
 } from "@/shared";
 import * as api from "@/shared/api";
 
-const settings = reactive<Settings>({ ...DEFAULTS });
-const current = reactive<CurrentConfig>({ ...CURRENT_DEFAULTS });
-const currentFeature = ref(false);
-const bridgeOk = ref(false);
-const deviceName = ref("加载中…");
-const status = reactive<StatusState>({
-  level: "--",
-  temp: "--",
-  badge: "状态加载中…",
-  badgeType: "default",
-  desc: "电量/温度停充；若安装了电流控制，可在配置页调节。",
-  chargeLabel: "--",
-  voltage: "--",
-  currentMa: "--",
-  version: "--",
-  updatedAt: "--",
-  moduleOn: true,
-  health: "--",
-  soh: "--",
-  designMah: "--",
-  fullMah: "--",
-  cycleCount: "--",
-});
-const logText = ref("暂无日志");
-const logLines = ref(0);
-const logSize = ref("--");
+export const useAppStore = defineStore("app", () => {
+  const settings = reactive<Settings>({ ...DEFAULTS });
+  const current = reactive<CurrentConfig>({ ...CURRENT_DEFAULTS });
+  const currentFeature = ref(false);
+  const bridgeOk = ref(false);
+  const deviceName = ref("加载中…");
+  const status = reactive<StatusState>({
+    level: "--",
+    temp: "--",
+    badge: "状态加载中…",
+    badgeType: "default",
+    desc: "电量/温度停充；若安装了电流控制，可在配置页调节。",
+    chargeLabel: "--",
+    voltage: "--",
+    currentMa: "--",
+    version: "--",
+    updatedAt: "--",
+    moduleOn: true,
+    health: "--",
+    soh: "--",
+    designMah: "--",
+    fullMah: "--",
+    cycleCount: "--",
+  });
+  const logText = ref("暂无日志");
+  const logLines = ref(0);
+  const logSize = ref("--");
 
-let statusTimer: ReturnType<typeof setInterval> | null = null;
+  let statusTimer: ReturnType<typeof setInterval> | null = null;
 
-function planPower(): string {
-  const stop = settings.power_stop;
-  const start = settings.power_start;
-  if (String(stop) === "110") return "已关闭";
-  return `停充 ≥${stop}% · 恢复 ≤${start}%`;
-}
+  const powerPlan = computed(() => {
+    const stop = settings.power_stop;
+    const start = settings.power_start;
+    if (String(stop) === "110") return "已关闭";
+    return `停充 ≥${stop}% · 恢复 ≤${start}%`;
+  });
 
-function planTemp(): string {
-  if (settings.temperature_switch === "0") return "已关闭";
-  return `停充 ≥${settings.temperature_switch_stop}°C · 恢复 ≤${settings.temperature_switch_start}°C`;
-}
+  const tempPlan = computed(() => {
+    if (settings.temperature_switch === "0") return "已关闭";
+    return `停充 ≥${settings.temperature_switch_stop}°C · 恢复 ≤${settings.temperature_switch_start}°C`;
+  });
 
-function planCurrent(): string {
-  if (!currentFeature.value) return "--";
-  if (!Number(current.current_control)) return "已关闭";
-  const parts = ["已开启"];
-  if (Number(current.bypass_enable)) {
-    if (Number(current.battery_stop) <= 100) parts.push(`旁路≥${current.battery_stop}%`);
-    if (Number(current.bypass_temp) <= 100) parts.push(`旁路≥${current.bypass_temp}°C`);
-    if ((current.bypass_schedule || []).length) parts.push("旁路时段");
-  }
-  if (Number(current.slow_charge) <= 100) parts.push(`慢充≥${current.slow_charge}%`);
-  if (Number(current.temperature_current)) parts.push("温控限流");
-  if (Number(current.app_limit)) parts.push("游戏限流");
-  return parts.join(" · ");
-}
+  const currentPlan = computed(() => {
+    if (!currentFeature.value) return "--";
+    if (!Number(current.current_control)) return "已关闭";
+    const parts = ["已开启"];
+    if (Number(current.bypass_enable)) {
+      if (Number(current.battery_stop) <= 100) parts.push(`旁路≥${current.battery_stop}%`);
+      if (Number(current.bypass_temp) <= 100) parts.push(`旁路≥${current.bypass_temp}°C`);
+      if ((current.bypass_schedule || []).length) parts.push("旁路时段");
+    }
+    if (Number(current.slow_charge) <= 100) parts.push(`慢充≥${current.slow_charge}%`);
+    if (Number(current.temperature_current)) parts.push("温控限流");
+    if (Number(current.app_limit)) parts.push("游戏限流");
+    return parts.join(" · ");
+  });
 
-export function useAppStore() {
-  const powerPlan = computed(planPower);
-  const tempPlan = computed(planTemp);
-  const currentPlan = computed(planCurrent);
   const fullPlan = computed(() => (settings.charge_full === "1" ? "已开启" : "已关闭"));
   const resetPlan = computed(() => (settings.power_reset === "1" ? "已开启" : "已关闭"));
   const compatPlan = computed(() =>
@@ -365,7 +363,7 @@ export function useAppStore() {
     }, STATUS_INTERVAL);
   }
 
-  return reactive({
+  return {
     settings,
     current,
     currentFeature,
@@ -389,5 +387,5 @@ export function useAppStore() {
     refreshStatus,
     refreshLog,
     clearLog,
-  });
-}
+  };
+});

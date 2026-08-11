@@ -1,4 +1,5 @@
-import { computed, reactive, ref } from "vue";
+import { computed, ref } from "vue";
+import { defineStore } from "pinia";
 import { showToast } from "vant";
 import { FONT_KEY } from "@/shared";
 import {
@@ -23,19 +24,19 @@ const UI_CUSTOM_KEY = "qsc_ui_custom";
 export type { ThemeMode, ThemePack };
 export type ResolvedTheme = "light" | "dark";
 
-const themePack = ref<ThemePack>("default");
-const themeMode = ref<ThemeMode>("system");
-const accentId = ref("teal");
-const md3Seed = ref("#6750A4");
-const monetOn = ref(true);
-const floatDock = ref(true);
-const dockGlass = ref(true);
-const barBlur = ref(true);
-const compactOn = ref(false);
-const fontScale = ref(1);
-const uiCustom = ref(false);
+export const useTheme = defineStore("theme", () => {
+  const themePack = ref<ThemePack>("default");
+  const themeMode = ref<ThemeMode>("system");
+  const accentId = ref("teal");
+  const md3Seed = ref("#6750A4");
+  const monetOn = ref(true);
+  const floatDock = ref(true);
+  const dockGlass = ref(true);
+  const barBlur = ref(true);
+  const compactOn = ref(false);
+  const fontScale = ref(1);
+  const uiCustom = ref(false);
 
-export function useTheme() {
   const resolved = computed<ResolvedTheme>(() => {
     if (themeMode.value === "light" || themeMode.value === "dark") {
       return themeMode.value;
@@ -485,7 +486,7 @@ export function useTheme() {
     Object.entries(DEFAULT_ACCENTS).map(([id, v]) => ({ id, l: v.label })),
   );
 
-  return reactive({
+  return {
     themePack,
     themeMode,
     accentId,
@@ -514,5 +515,5 @@ export function useTheme() {
     bindSystemListener,
     syncStatusBar: syncSystemChrome,
     restoreChromeInsets: scheduleInsetRestore,
-  });
-}
+  };
+});

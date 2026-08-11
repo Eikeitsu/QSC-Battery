@@ -105,7 +105,7 @@ const frameRx = computed(() => (props.variant === "miuix" ? 3.5 : 4));
 }
 
 .batt-glyph__frame {
-  stroke: currentColor;
+  stroke: currentcolor;
 }
 
 .batt-glyph__level {
