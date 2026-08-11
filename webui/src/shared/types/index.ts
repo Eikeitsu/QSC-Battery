@@ -54,6 +54,13 @@ export interface StatusState {
   version: string;
   updatedAt: string;
   moduleOn: boolean;
+  /** 电池健康文案，如 Good / Dead */
+  health: string;
+  /** SOH 百分比数字字符串，无则 "--" */
+  soh: string;
+  designMah: string;
+  fullMah: string;
+  cycleCount: string;
 }
 
 export interface AppEntry {

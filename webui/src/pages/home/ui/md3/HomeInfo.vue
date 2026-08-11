@@ -1,7 +1,17 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { useAppStore } from "@/stores";
 
 const store = useAppStore();
+
+const healthText = computed(() => {
+  const h = store.status.health;
+  const soh = store.status.soh;
+  const parts: string[] = [];
+  if (h && h !== "--") parts.push(h);
+  if (soh && soh !== "--") parts.push(`SOH ${soh}%`);
+  return parts.length ? parts.join(" · ") : "--";
+});
 </script>
 
 <template>
@@ -17,6 +27,26 @@ const store = useAppStore();
     <div class="md3-info__item">
       <div class="md3-info__k">电流</div>
       <div class="md3-info__v">{{ store.status.currentMa }} mA</div>
+    </div>
+    <div class="md3-info__item">
+      <div class="md3-info__k">电池健康</div>
+      <div class="md3-info__v">{{ healthText }}</div>
+    </div>
+    <div class="md3-info__item">
+      <div class="md3-info__k">设计容量</div>
+      <div class="md3-info__v">
+        {{ store.status.designMah === "--" ? "--" : `${store.status.designMah} mAh` }}
+      </div>
+    </div>
+    <div class="md3-info__item">
+      <div class="md3-info__k">真实容量</div>
+      <div class="md3-info__v">
+        {{ store.status.fullMah === "--" ? "--" : `${store.status.fullMah} mAh` }}
+      </div>
+    </div>
+    <div class="md3-info__item">
+      <div class="md3-info__k">循环次数</div>
+      <div class="md3-info__v">{{ store.status.cycleCount }}</div>
     </div>
     <div class="md3-info__item">
       <div class="md3-info__k">版本</div>

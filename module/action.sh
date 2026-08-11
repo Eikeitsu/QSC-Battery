@@ -1,10 +1,13 @@
 #!/system/bin/sh
+# Action：开头一轮音量二选一；超时默认刷新状态。
+#   音量上 / 超时 → 短状态刷新
+#   音量下       → 只读诊断（/sdcard/qsc_diagnose.txt）
+# Magisk / 官方 KSU / APatch 通常可跑完；SukiSU 约 10s 总时长，故只保留一轮。
+# 改阈值 / 软开关 → WebUI；停充实测等 → adb。
 
 MODDIR=${0%/*}
 
-echo "========================================"
-echo " 充电控制 · Action"
-echo "========================================"
+echo "======== 充电控制 · Action ========"
 
 if [ ! -f "$MODDIR/bin/common.sh" ]; then
 	echo "[错误] 缺少 bin/common.sh，请重新安装模块"
@@ -13,184 +16,164 @@ fi
 
 . "$MODDIR/bin/common.sh"
 mkdir -p "$DATADIR" 2>/dev/null
-chmod 0755 "$BINDIR"/*.sh 2>/dev/null
 
-if [ -f "$BINDIR/.qsc_debug" ] || [ -f "$BINDIR/testing.sh" ] || [ -f "$BINDIR/diag2.sh" ]; then
-	echo " 当前为调试包（含写入类工具）"
-else
-	echo " 当前为正式包（含只读诊断与受控停充开关实测；testing/diag2 需刷 debug zip）"
+if [ ! -f "$LIBDIR/keys.sh" ]; then
+	echo "[错误] 缺少 bin/lib/keys.sh"
+	exit 1
 fi
+# shellcheck disable=SC1090
+. "$LIBDIR/keys.sh"
+
+echo "音量上：刷新状态"
+echo "音量下：功能诊断 → /sdcard/qsc_diagnose.txt"
+echo "5 秒内未按键 → 自动刷新状态"
+
+qsc_volume_choice 5
+_vol_rc=$?
 
 qsc_action_refresh() {
-	echo "----------------------------------------"
-	echo "[刷新] 权限与状态检查"
-	echo "----------------------------------------"
-	echo "[1/4] 刷新脚本权限..."
+	echo "-------- 状态 --------"
+
 	chmod 0755 "$BINDIR"/*.sh 2>/dev/null
-	echo "  bin/*.sh -> 0755"
-
-	echo "[2/4] 刷新配置权限..."
-	if [ -f "$CONF" ]; then
-		chmod 0644 "$CONF" 2>/dev/null
-		echo "  config.conf -> 0644"
-	else
-		echo "  警告: 未找到 config.conf"
-	fi
-
-	echo "[3/4] 刷新 WebUI 文件权限..."
+	[ -d "$BINDIR/lib" ] && chmod 0755 "$BINDIR/lib"/*.sh 2>/dev/null
+	[ -f "$CONF" ] && chmod 0644 "$CONF" 2>/dev/null
+	[ -f "$CURRENT_CONF" ] && chmod 0644 "$CURRENT_CONF" 2>/dev/null
 	if [ -d "$MODDIR/webroot" ]; then
-		find "$MODDIR/webroot" -type f -exec chmod 0644 {} \; 2>/dev/null
-		find "$MODDIR/webroot" -type d -exec chmod 0755 {} \; 2>/dev/null
-		echo "  webroot 已处理"
-	else
-		echo "  webroot 未安装（核心停充功能不受影响）"
+		chmod 0755 "$MODDIR/webroot" "$MODDIR/webroot"/js "$MODDIR/webroot"/css 2>/dev/null
+		chmod 0644 "$MODDIR/webroot"/*.* "$MODDIR/webroot"/js/* "$MODDIR/webroot"/css/* 2>/dev/null
 	fi
 
-	echo "[4/4] 检查关键文件..."
-	[ -f "$BINDIR/qsc_switch.sh" ] && echo "  qsc_switch.sh: OK" || echo "  qsc_switch.sh: 缺失"
-	[ -f "$CONF" ] && echo "  config.conf: OK" || echo "  config.conf: 缺失"
-	[ -f "$MODDIR/webroot/index.html" ] && echo "  webroot/index.html: OK" || echo "  webroot/index.html: 未安装"
-	[ -f "$OFF_FLAG" ] && echo "  模块状态: 已关闭 (存在 off_qsc)" || echo "  模块状态: 开启"
-	if [ -f "$DEVICE_PROFILE" ]; then
-		echo "  device.profile: mca=$(qsc_profile_get mca) path=$(qsc_profile_get mca_path)"
-		pref="$(qsc_profile_get preferred_switch)"
-		if [ -n "$pref" ]; then
-			echo "  preferred_switch: $pref"
-		else
-			echo "  preferred_switch: 未实测（可在诊断菜单运行停充开关实测）"
-		fi
+	_ver=$(grep '^version=' "$MODDIR/module.prop" 2>/dev/null | cut -d= -f2-)
+	[ -n "$_ver" ] && echo "版本: $_ver"
+
+	if [ ! -f "$BINDIR/qsc_switch.sh" ]; then
+		echo "模块: 核心脚本缺失"
+	elif [ -f "$MODDIR/disable" ]; then
+		echo "模块: 管理器已禁用"
+	elif [ -f "$OFF_FLAG" ]; then
+		echo "模块: 软关闭"
 	else
-		echo "  device.profile: 尚未生成"
+		echo "模块: 开启"
 	fi
-	[ -f "$BINDIR/diagnose.sh" ] && echo "  diagnose.sh: OK" || echo "  diagnose.sh: 缺失"
-	[ -f "$BINDIR/test_switch.sh" ] && echo "  test_switch.sh: OK" || echo "  test_switch.sh: 缺失"
-	[ -f "$BINDIR/testing.sh" ] && echo "  testing.sh: 已安装（调试）" || echo "  testing.sh: 未打包（正式包正常）"
-	[ -f "$BINDIR/diag2.sh" ] && echo "  diag2.sh: 已安装（调试）" || echo "  diag2.sh: 未打包（正式包正常）"
-	echo "----------------------------------------"
-	echo " 刷新完成"
+
+	_cap=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null | tr -d ' \r\n')
+	_temp_raw=$(cat /sys/class/power_supply/battery/temp 2>/dev/null | tr -d ' \r\n')
+	_batt_st=$(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d ' \r\n')
+	_usb=$(cat /sys/class/power_supply/usb/online 2>/dev/null | tr -d ' \r\n')
+	_curr=$(cat /sys/class/power_supply/battery/current_now 2>/dev/null | tr -d ' \r\n')
+
+	_live=""
+	_temp_c=""
+	[ -n "$_cap" ] && _live="电量 ${_cap}%"
+	if [ -n "$_temp_raw" ]; then
+		case "$_temp_raw" in
+			*[!0-9-]*) ;;
+			*)
+				_temp_c=$((_temp_raw / 10))
+				_live="${_live}${_live:+ · }${_temp_c}°C"
+				;;
+		esac
+	fi
+	[ -n "$_batt_st" ] && _live="${_live}${_live:+ · }${_batt_st}"
+	[ -n "$_live" ] && echo "电池: $_live"
+	[ "$_usb" = "1" ] && echo "USB: 已连接"
+	if [ -n "$_curr" ]; then
+		case "$_curr" in
+			*[!0-9-]*) ;;
+			*) echo "电流: $((_curr / 1000)) mA" ;;
+		esac
+	fi
+
+	qsc_battery_info_echo
+
+	if [ -f "$DATADIR/power_switch" ]; then
+		_why=""
+		[ -f "$DATADIR/battery_switch" ] && _why="电量"
+		if [ -f "$DATADIR/temp_switch" ]; then
+			[ -n "$_why" ] && _why="${_why}+温度" || _why="温度"
+		fi
+		[ -n "$_why" ] && echo "停充态: 是（$_why）" || echo "停充态: 是"
+	elif [ -f "$OFF_FLAG" ] || [ -f "$MODDIR/disable" ]; then
+		echo "停充态: —"
+	else
+		echo "停充态: 否"
+	fi
+	[ -f "$DATADIR/no_node_logged" ] && echo "警告: 曾无可用停充节点"
+	[ -f "$MODDIR/webroot/index.html" ] || echo "WebUI: 未安装"
+
+	_conf_get() {
+		sed -n "s/^$1=//p" "$CONF" 2>/dev/null | head -n1 | tr -d ' \r'
+	}
+	if [ -f "$CONF" ]; then
+		_ps=$(_conf_get power_stop)
+		_pt=$(_conf_get power_start)
+		_ts=$(_conf_get temperature_switch)
+		_tst=$(_conf_get temperature_switch_stop)
+		_tsr=$(_conf_get temperature_switch_start)
+		_cm=$(_conf_get Compatibility_mode)
+		echo "停充/复充: ${_ps:-?}% / ${_pt:-?}%"
+		if [ "$_ts" = "1" ]; then
+			echo "温度停充: ${_tst:-?}°C → ${_tsr:-?}°C"
+		fi
+		[ "$_cm" = "1" ] && echo "兼容模式: 开"
+	else
+		echo "配置文件缺失"
+	fi
+
+	if [ -f "$CURRENT_CONF" ]; then
+		_cc=$(qsc_jsonc_get "$CURRENT_CONF" current_control 2>/dev/null)
+		[ "$_cc" = "1" ] && echo "电流控制: 开" || echo "电流控制: 关"
+	fi
+
+	if [ -f "$DEVICE_PROFILE" ]; then
+		_mca=$(qsc_profile_get mca 2>/dev/null)
+		_pref=$(qsc_profile_get preferred_switch 2>/dev/null)
+		[ -n "$_mca" ] && echo "MCA: $_mca"
+		[ -n "$_pref" ] && echo "优选开关: .../${_pref##*/}" || echo "优选开关: 未实测"
+	else
+		echo "机型档案: 尚未生成"
+	fi
+
+	battery_level="$_cap"
+	temperature="$_temp_c"
+	[ -f "$OFF_FLAG" ] || [ -f "$MODDIR/disable" ] && off_qsc=1
+	command -v qsc_refresh_module_description >/dev/null 2>&1 && \
+		qsc_refresh_module_description >/dev/null 2>&1
+
+	echo "-------- adb --------"
+	echo "日志: $LOG_FILE"
+	echo "诊断: sh $BINDIR/diagnose.sh"
+	[ -f "$BINDIR/test_switch.sh" ] && echo "停充实测: sh $BINDIR/test_switch.sh"
+	[ -f "$BINDIR/detect_device.sh" ] && echo "重新探测: sh $BINDIR/detect_device.sh"
+	[ -f "$BINDIR/testing.sh" ] && echo "testing: sh $BINDIR/testing.sh"
+	[ -f "$BINDIR/diag2.sh" ] && echo "diag2: sh $BINDIR/diag2.sh"
+	echo "日常设置 / 软开关 → WebUI"
 }
 
-qsc_action_run_script() {
-	local name="$1"
-	local script="$BINDIR/$name"
-	echo "----------------------------------------"
-	echo "[执行] $name"
-	echo "----------------------------------------"
-	if [ ! -f "$script" ]; then
-		echo "[错误] 缺少 $name"
-		echo " 正式包不含写入类调试工具；请安装同版本 debug zip："
-		echo "  QSC-Battery_v<version>-debug.zip"
+qsc_action_diagnose() {
+	echo "-------- 功能诊断 --------"
+	if [ ! -f "$BINDIR/diagnose.sh" ]; then
+		echo "缺少 diagnose.sh"
 		return 1
 	fi
-	chmod 0755 "$script" 2>/dev/null
-	sh "$script"
-	echo "----------------------------------------"
-	echo " $name 执行结束"
+	chmod 0755 "$BINDIR/diagnose.sh" 2>/dev/null
+	echo "正在生成报告 → /sdcard/qsc_diagnose.txt"
+	sh "$BINDIR/diagnose.sh"
 }
 
-qsc_action_redetect() {
-	echo "----------------------------------------"
-	echo "[探测] 本机充电控制节点"
-	echo "----------------------------------------"
-	if [ -f "$BINDIR/detect_device.sh" ]; then
-		chmod 0755 "$BINDIR/detect_device.sh" 2>/dev/null
-		sh "$BINDIR/detect_device.sh"
-	else
-		qsc_detect_and_write_profile
-	fi
-	echo " 已写入: $DEVICE_PROFILE"
-	echo "----------------------------------------"
-}
-
-# 逐项：音量上=执行，音量下=跳过，超时=跳过
-qsc_action_ask() {
-	local title="$1"
-	echo ""
-	echo "----------------------------------------"
-	echo " $title"
-	echo " 音量上：执行　　音量下：跳过"
-	echo " 提示出现约 1 秒后再按；仅「按下」有效；本轮 20 秒未选择则跳过"
-	echo "----------------------------------------"
-	qsc_volume_choice 20
-	case "$?" in
-		0) return 0 ;;
-		1) echo " 已跳过"; return 1 ;;
-		*) echo " 本轮选择超时，已跳过"; return 1 ;;
-	esac
-}
-
-qsc_action_diag_menu() {
-	echo ""
-	echo "========================================"
-	echo " 诊断菜单"
-	echo " 逐项询问：上=执行，下=跳过"
-	echo "========================================"
-
-	if [ -f "$BINDIR/diagnose.sh" ]; then
-		if qsc_action_ask "是否运行 diagnose（只读节点诊断）？"; then
-			qsc_action_run_script diagnose.sh
-		else
-			echo " 已跳过 diagnose"
-		fi
-	fi
-
-	if [ -f "$BINDIR/test_switch.sh" ]; then
-		if qsc_action_ask "是否实测停充开关（需插电；测完自动恢复）？"; then
-			echo "注意: 将逐条写入候选停充节点并验证，结束后恢复充电"
-			qsc_action_run_script test_switch.sh
-		else
-			echo " 已跳过停充开关实测"
-		fi
-	fi
-
-	if [ -f "$BINDIR/testing.sh" ]; then
-		if qsc_action_ask "是否运行 testing（适配检测，调试包）？"; then
-			qsc_action_run_script testing.sh
-		else
-			echo " 已跳过 testing"
-		fi
-	fi
-
-	if [ -f "$BINDIR/diag2.sh" ]; then
-		if qsc_action_ask "是否运行 diag2（写入测试，调试包）？"; then
-			echo "注意: diag2 会尝试写入部分充电节点做测试"
-			qsc_action_run_script diag2.sh
-		else
-			echo " 已跳过 diag2"
-		fi
-	fi
-
-	if qsc_action_ask "是否重新探测设备配置？"; then
-		qsc_action_redetect
-	else
-		echo " 已跳过重新探测"
-	fi
-}
-
-# 第一级：上=刷新（默认），下=诊断菜单，超时=刷新
-echo ""
-echo "========================================"
-echo " 请选择"
-echo " 音量上：刷新权限与状态（默认）"
-echo " 音量下：进入诊断菜单"
-echo " 提示出现约 1 秒后再按；仅「按下」有效；本轮 20 秒未选择将执行刷新"
-echo "========================================"
-qsc_volume_choice 20
-case "$?" in
+case "$_vol_rc" in
 	1)
-		echo "已选择：诊断菜单"
-		qsc_action_diag_menu
+		echo "→ 功能诊断"
+		qsc_action_diagnose
 		;;
-	2)
-		echo "本轮选择超时，执行刷新"
+	0)
+		echo "→ 刷新状态"
 		qsc_action_refresh
 		;;
 	*)
-		echo "已选择：刷新权限"
+		echo "→ 超时，自动刷新状态"
 		qsc_action_refresh
 		;;
 esac
 
-echo "========================================"
-echo " Action 结束"
-echo "========================================"
+echo "======== 结束 ========"

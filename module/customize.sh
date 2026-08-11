@@ -22,6 +22,12 @@ if [ -f "$MODPATH/bin/common.sh" ]; then
 else
 	qsc_abort "缺少 bin/common.sh，安装包不完整"
 fi
+if [ -f "$LIBDIR/keys.sh" ]; then
+	# shellcheck disable=SC1090
+	. "$LIBDIR/keys.sh"
+else
+	qsc_abort "缺少 bin/lib/keys.sh，安装包不完整"
+fi
 
 qsc_conf_value() {
 	local file="$1"

@@ -155,6 +155,36 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
         </div>
       </section>
 
+      <div class="section-head">
+        <p class="title">电池信息</p>
+      </div>
+      <section class="card">
+        <div class="mini-grid">
+          <div class="mini">
+            <div class="mv">
+              {{
+                [store.status.health !== "--" ? store.status.health : "", store.status.soh !== "--" ? `SOH ${store.status.soh}%` : ""]
+                  .filter(Boolean)
+                  .join(" · ") || "--"
+              }}
+            </div>
+            <div class="ml">健康</div>
+          </div>
+          <div class="mini">
+            <div class="mv">{{ store.status.cycleCount }}</div>
+            <div class="ml">循环</div>
+          </div>
+          <div class="mini">
+            <div class="mv">{{ store.status.designMah === "--" ? "--" : store.status.designMah }}</div>
+            <div class="ml">设计 mAh</div>
+          </div>
+          <div class="mini">
+            <div class="mv">{{ store.status.fullMah === "--" ? "--" : store.status.fullMah }}</div>
+            <div class="ml">真实 mAh</div>
+          </div>
+        </div>
+      </section>
+
       <section class="tips card">
         <p><b>过夜</b>：停止 80–90%，恢复间隔 5–10%。</p>
         <p><b>游戏 / 导航</b>：开启温控，高温自动停充。</p>

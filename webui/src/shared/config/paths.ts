@@ -3,6 +3,7 @@
   CONF: "/data/adb/modules/QSC_Battery/config/config.conf",
   CURRENT_CONF: "/data/adb/modules/QSC_Battery/config/current.json",
   CURRENT_LIB: "/data/adb/modules/QSC_Battery/bin/lib/current.sh",
+  BATTERY_INFO: "/data/adb/modules/QSC_Battery/bin/lib/battery_info.sh",
   DATADIR: "/data/adb/modules/QSC_Battery/data",
   OFF_FLAG: "/data/adb/modules/QSC_Battery/data/off_qsc",
   LOG_FILE: "/data/adb/modules/QSC_Battery/data/log.log",

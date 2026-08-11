@@ -32,6 +32,11 @@ const status = reactive<StatusState>({
   version: "--",
   updatedAt: "--",
   moduleOn: true,
+  health: "--",
+  soh: "--",
+  designMah: "--",
+  fullMah: "--",
+  cycleCount: "--",
 });
 const logText = ref("暂无日志");
 const logLines = ref(0);
@@ -194,7 +199,7 @@ export function useAppStore() {
       return;
     }
 
-    const [capR, tempR, offR, switchR, descR, statusR, voltR, currR, verR] =
+    const [capR, tempR, offR, switchR, descR, statusR, voltR, currR, verR, battR] =
       await Promise.all([
         api.exec(
           `cat /sys/class/power_supply/battery/capacity 2>/dev/null || cat /sys/class/power_supply/bms/capacity 2>/dev/null`,
@@ -215,6 +220,7 @@ export function useAppStore() {
         api.exec(
           `grep '^version=' '${PATHS.MODDIR}/module.prop' 2>/dev/null | cut -d= -f2-`,
         ),
+        api.exec(`sh '${PATHS.BATTERY_INFO}' 2>/dev/null`),
       ]);
 
     if (capR.errno === -2 || tempR.errno === -2) {
@@ -290,6 +296,19 @@ export function useAppStore() {
       : String(Math.round(Math.abs(currRaw) > 10000 ? currRaw / 1000 : currRaw));
 
     status.version = verR.stdout.trim() || "--";
+
+    const battMap: Record<string, string> = {};
+    for (const line of battR.stdout.split("\n")) {
+      const i = line.indexOf("=");
+      if (i <= 0) continue;
+      battMap[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+    }
+    status.health = battMap.health || "--";
+    status.soh = battMap.soh || "--";
+    status.designMah = battMap.design_mah || "--";
+    status.fullMah = battMap.full_mah || "--";
+    status.cycleCount = battMap.cycle_count || "--";
+
     const now = new Date();
     status.updatedAt = [
       String(now.getHours()).padStart(2, "0"),
