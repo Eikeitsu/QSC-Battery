@@ -48,6 +48,7 @@ const BIN_LIB_FILES = [
   "status.sh",
   "jsonc.sh",
   "current.sh",
+  "battery_info.sh",
 ];
 
 const includeDebug = process.argv.includes("--debug");

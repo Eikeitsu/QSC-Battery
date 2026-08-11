@@ -163,7 +163,10 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
           <div class="mini">
             <div class="mv">
               {{
-                [store.status.health !== "--" ? store.status.health : "", store.status.soh !== "--" ? `SOH ${store.status.soh}%` : ""]
+                [
+                  store.status.health !== "--" ? store.status.health : "",
+                  store.status.soh !== "--" ? `SOH ${store.status.soh}%` : "",
+                ]
                   .filter(Boolean)
                   .join(" · ") || "--"
               }}
@@ -175,11 +178,15 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
             <div class="ml">循环</div>
           </div>
           <div class="mini">
-            <div class="mv">{{ store.status.designMah === "--" ? "--" : store.status.designMah }}</div>
+            <div class="mv">
+              {{ store.status.designMah === "--" ? "--" : store.status.designMah }}
+            </div>
             <div class="ml">设计 mAh</div>
           </div>
           <div class="mini">
-            <div class="mv">{{ store.status.fullMah === "--" ? "--" : store.status.fullMah }}</div>
+            <div class="mv">
+              {{ store.status.fullMah === "--" ? "--" : store.status.fullMah }}
+            </div>
             <div class="ml">真实 mAh</div>
           </div>
         </div>

@@ -26,7 +26,9 @@ const healthText = computed(() => {
     </div>
     <div class="miuix-detail__row">
       <span>设计容量</span>
-      <b>{{ store.status.designMah === "--" ? "--" : `${store.status.designMah} mAh` }}</b>
+      <b>{{
+        store.status.designMah === "--" ? "--" : `${store.status.designMah} mAh`
+      }}</b>
     </div>
     <div class="miuix-detail__row">
       <span>真实容量</span>
