@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- 修复 Action 在音量键等待时被 SukiSU/KernelSU 管理器杀掉；保活仅在 Action 启用且改为极简 `.`，安装脚本保持安静
+- 修复 Action 第二次音量键等待被管理器提前结束：弃用 timeout 包 getevent（改后台强杀）、整段等待并行保活，避免输入设备残留导致二次阻塞
 
 ## 2026.08.10
 
