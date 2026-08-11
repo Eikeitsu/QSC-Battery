@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import ThemeSwitch from "@/shared/ui/ThemeSwitch.vue";
+import BatteryGlyph from "@/shared/ui/BatteryGlyph.vue";
+import { isChargingLabel } from "@/shared/lib/batteryDisplay";
 import { useAppStore } from "@/stores";
 
 const store = useAppStore();
@@ -20,8 +22,16 @@ const store = useAppStore();
     </div>
 
     <div class="miuix-inset-grid">
-      <div class="miuix-inset">
-        <div class="miuix-inset__v">{{ store.status.level }}%</div>
+      <div class="miuix-inset miuix-inset--batt">
+        <div class="miuix-inset__batt">
+          <BatteryGlyph
+            :level="store.status.level"
+            :charging="isChargingLabel(store.status.chargeLabel)"
+            :size="30"
+            variant="miuix"
+          />
+          <div class="miuix-inset__v">{{ store.status.level }}%</div>
+        </div>
         <div class="miuix-inset__l">电量</div>
       </div>
       <div class="miuix-inset">
@@ -84,12 +94,20 @@ const store = useAppStore();
   padding: 12px 10px;
 }
 
+.miuix-inset__batt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .miuix-inset__v {
   font-size: 16px;
   font-weight: 650;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .miuix-inset__l {

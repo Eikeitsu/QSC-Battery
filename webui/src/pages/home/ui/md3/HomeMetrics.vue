@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import BatteryGlyph from "@/shared/ui/BatteryGlyph.vue";
+import { isChargingLabel } from "@/shared/lib/batteryDisplay";
 import { useAppStore } from "@/stores";
 
 const store = useAppStore();
@@ -7,11 +9,19 @@ const store = useAppStore();
 <template>
   <div class="md3-metrics">
     <section class="md3-tonal md3-metric">
+      <div class="md3-metric__top">
+        <BatteryGlyph
+          :level="store.status.level"
+          :charging="isChargingLabel(store.status.chargeLabel)"
+          :size="26"
+          variant="md3"
+        />
+      </div>
       <div class="md3-metric__value">{{ store.status.level }}</div>
       <div class="md3-metric__label">电量 %</div>
     </section>
     <section class="md3-tonal md3-metric">
-      <div class="md3-metric__value">{{ store.status.temp }}</div>
+      <div class="md3-metric__value md3-metric__value--solo">{{ store.status.temp }}</div>
       <div class="md3-metric__label">温度 °C</div>
     </section>
   </div>
@@ -25,7 +35,12 @@ const store = useAppStore();
 }
 
 .md3-metric {
-  padding: 16px 14px;
+  padding: 14px 14px 16px;
+}
+
+.md3-metric__top {
+  margin-bottom: 8px;
+  min-height: 16px;
 }
 
 .md3-metric__value {
@@ -34,6 +49,10 @@ const store = useAppStore();
   letter-spacing: -0.5px;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
+
+  &--solo {
+    margin-top: 24px;
+  }
 }
 
 .md3-metric__label {

@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { inject } from "vue";
+import { computed, inject } from "vue";
 import ThemeSwitch from "@/shared/ui/ThemeSwitch.vue";
+import BatteryGlyph from "@/shared/ui/BatteryGlyph.vue";
+import { formatMah, healthLabel, isChargingLabel } from "@/shared/lib/batteryDisplay";
 import { useAppStore, useTheme } from "@/stores";
 import type { TabName } from "@/shared/types";
 import Md3HomeStatus from "./ui/md3/HomeStatus.vue";
 import Md3HomeMetrics from "./ui/md3/HomeMetrics.vue";
 import Md3HomeStrategy from "./ui/md3/HomeStrategy.vue";
+import Md3HomeBattery from "./ui/md3/HomeBattery.vue";
 import Md3HomeInfo from "./ui/md3/HomeInfo.vue";
 import MiuixHomeOverview from "./ui/miuix/HomeOverview.vue";
 import MiuixHomeStrategy from "./ui/miuix/HomeStrategy.vue";
 import MiuixHomeDetail from "./ui/miuix/HomeDetail.vue";
+import MiuixHomeBattery from "./ui/miuix/HomeBattery.vue";
 
 defineProps<{
   refreshing?: boolean;
@@ -21,6 +25,8 @@ defineEmits<{
 const store = useAppStore();
 const theme = useTheme();
 const setTab = inject<(name: TabName) => void>("setTab");
+
+const charging = computed(() => isChargingLabel(store.status.chargeLabel));
 
 function goConfig() {
   setTab?.("config");
@@ -40,12 +46,14 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
     :success-duration="0"
     @refresh="$emit('refresh')"
   >
-    <!-- MD3：tonal 状态 + 并排指标 + List 策略 -->
+    <!-- MD3：tonal 状态 + 并排指标 + 电池健康 + 运行详情 -->
     <div v-if="theme.themePack === 'md3'" class="page page-md3">
       <div class="md3-stack">
         <Md3HomeStatus />
         <Md3HomeMetrics />
         <Md3HomeStrategy @open-config="goConfig" />
+        <div class="md3-label">电池健康</div>
+        <Md3HomeBattery />
         <div class="md3-label">运行详情</div>
         <Md3HomeInfo />
         <section class="md3-tonal md3-tips">
@@ -55,7 +63,7 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
       </div>
     </div>
 
-    <!-- MIUIX：单卡总览 + 设置行策略 -->
+    <!-- MIUIX：总览 + 策略 + 运行参数 + 独立电池 -->
     <div v-else-if="theme.themePack === 'miuix'" class="page page-miuix">
       <div class="miuix-label">总览</div>
       <MiuixHomeOverview />
@@ -63,18 +71,28 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
       <MiuixHomeStrategy @open-config="goConfig" />
       <div class="miuix-label">更多</div>
       <MiuixHomeDetail />
+      <div class="miuix-label">电池</div>
+      <MiuixHomeBattery />
       <section class="miuix-card miuix-tips">
         <p>过夜建议停止 80–90%；游戏导航请开温控。</p>
       </section>
     </div>
 
-    <!-- 默认：现有布局 -->
+    <!-- 默认：Hero 电池动画 + 口语化「电池本钱」 -->
     <div v-else class="page page-default">
       <section class="hero card">
         <div class="hero-glow"></div>
         <div class="metrics">
-          <div class="metric">
-            <div class="value">{{ store.status.level }}</div>
+          <div class="metric metric--batt">
+            <div class="metric__batt-row">
+              <BatteryGlyph
+                :level="store.status.level"
+                :charging="charging"
+                :size="52"
+                variant="hero"
+              />
+              <div class="value">{{ store.status.level }}</div>
+            </div>
             <div class="label">电量 %</div>
           </div>
           <div class="divider"></div>
@@ -156,38 +174,36 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
       </section>
 
       <div class="section-head">
-        <p class="title">电池信息</p>
+        <p class="title">电池本钱</p>
+        <p class="hint">健康与容量，心里有数</p>
       </div>
-      <section class="card">
+      <section class="card stake-card">
         <div class="mini-grid">
           <div class="mini">
-            <div class="mv">
-              {{
-                [
-                  store.status.health !== "--" ? store.status.health : "",
-                  store.status.soh !== "--" ? `SOH ${store.status.soh}%` : "",
-                ]
-                  .filter(Boolean)
-                  .join(" · ") || "--"
-              }}
-            </div>
+            <div class="mv">{{ healthLabel(store.status.health) }}</div>
             <div class="ml">健康</div>
           </div>
           <div class="mini">
+            <div class="mv">
+              {{
+                store.status.soh === "--" || !store.status.soh
+                  ? "--"
+                  : `${store.status.soh}%`
+              }}
+            </div>
+            <div class="ml">还剩几成</div>
+          </div>
+          <div class="mini">
+            <div class="mv">{{ formatMah(store.status.fullMah) }}</div>
+            <div class="ml">满充容量</div>
+          </div>
+          <div class="mini">
+            <div class="mv">{{ formatMah(store.status.designMah) }}</div>
+            <div class="ml">出厂容量</div>
+          </div>
+          <div class="mini mini--wide">
             <div class="mv">{{ store.status.cycleCount }}</div>
-            <div class="ml">循环</div>
-          </div>
-          <div class="mini">
-            <div class="mv">
-              {{ store.status.designMah === "--" ? "--" : store.status.designMah }}
-            </div>
-            <div class="ml">设计 mAh</div>
-          </div>
-          <div class="mini">
-            <div class="mv">
-              {{ store.status.fullMah === "--" ? "--" : store.status.fullMah }}
-            </div>
-            <div class="ml">真实 mAh</div>
+            <div class="ml">已循环</div>
           </div>
         </div>
       </section>
@@ -314,6 +330,13 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
   flex: 1;
 }
 
+.metric__batt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .metric .value {
   font-size: 40px;
   font-weight: 760;
@@ -394,15 +417,26 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
   padding: 16px;
 }
 
+.stake-card .mini--wide {
+  grid-column: 1 / -1;
+}
+
 .mini .mv {
   font-size: 18px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .mini .ml {
   font-size: 11px;
   color: var(--qsc-text-3);
   margin-top: 2px;
+}
+
+.section-head .hint {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--qsc-text-3);
 }
 
 .tips {
