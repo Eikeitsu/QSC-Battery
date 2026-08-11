@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 修复 Action 在音量键等待时被 SukiSU/KernelSU 管理器杀掉；保活仅在 Action 启用且改为极简 `.`，安装脚本保持安静
+
 ## 2026.08.10
 
 - WebUI 体验优化
