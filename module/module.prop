@@ -1,7 +1,7 @@
 id=QSC_Battery
 name=充电控制
-version=2026.08.10
-versionCode=2026081001
+version=2026.08.12
+versionCode=2026081201
 author=top大佬, 许小墨
 description=[🔎启动中 | 等待开机就绪] 电量/温度停充；电流控制为安装时可选。配置：config/config.conf，日志：data/log.log。
 updateJson=https://eikeitsu.github.io/QSC-Battery/update.json
