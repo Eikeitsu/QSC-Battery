@@ -63,7 +63,8 @@ export const useAppStore = defineStore("app", () => {
     if (!Number(current.current_control)) return "已关闭";
     const parts = ["已开启"];
     if (Number(current.bypass_enable)) {
-      if (Number(current.battery_stop) <= 100) parts.push(`旁路≥${current.battery_stop}%`);
+      if (Number(current.battery_stop) <= 100)
+        parts.push(`旁路≥${current.battery_stop}%`);
       if (Number(current.bypass_temp) <= 100) parts.push(`旁路≥${current.bypass_temp}°C`);
       if ((current.bypass_schedule || []).length) parts.push("旁路时段");
     }

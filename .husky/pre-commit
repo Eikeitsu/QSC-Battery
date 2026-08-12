@@ -1,1 +1,18 @@
+#!/usr/bin/env sh
+# 提交前：只检查暂存文件（eslint / stylelint / prettier / markdown）
+set -e
+root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+cd "$root" || exit 1
+
+if [ "${HUSKY-}" = "0" ]; then
+  echo "husky: HUSKY=0 会跳过检查；本地请勿设置，否则坏格式仍会进仓库" >&2
+fi
+
+if [ ! -d node_modules/lint-staged ]; then
+  echo "husky: 缺少 node_modules，请先在仓库根目录执行 npm install" >&2
+  exit 1
+fi
+
+echo "husky pre-commit → lint-staged"
 npx --no -- lint-staged
+echo "husky pre-commit ✓"

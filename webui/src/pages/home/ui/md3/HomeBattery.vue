@@ -1,24 +1,17 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import BatteryGlyph from "@/shared/ui/BatteryGlyph.vue";
-import {
-  capacityRetention,
-  formatMah,
-  healthLabel,
-  isChargingLabel,
-  parsePercent,
-} from "@/shared/lib/batteryDisplay";
-import { useAppStore } from "@/stores";
+import { useBatteryInfo } from "@/composables";
 
-const store = useAppStore();
-
-const soh = computed(() => parsePercent(store.status.soh));
-const retention = computed(() =>
-  capacityRetention(store.status.fullMah, store.status.designMah),
-);
-const barPct = computed(() => soh.value ?? retention.value ?? 0);
-const hasBar = computed(() => soh.value !== null || retention.value !== null);
-const sohText = computed(() => (soh.value !== null ? `${soh.value}%` : "--"));
+const {
+  store,
+  charging,
+  healthText,
+  designMahText,
+  fullMahText,
+  sohText,
+  barPct,
+  hasBar,
+} = useBatteryInfo();
 </script>
 
 <template>
@@ -27,7 +20,7 @@ const sohText = computed(() => (soh.value !== null ? `${soh.value}%` : "--"));
       <div class="md3-batt__title-row">
         <BatteryGlyph
           :level="store.status.level"
-          :charging="isChargingLabel(store.status.chargeLabel)"
+          :charging="charging"
           :size="28"
           variant="md3"
         />
@@ -46,15 +39,15 @@ const sohText = computed(() => (soh.value !== null ? `${soh.value}%` : "--"));
     <div class="md3-batt__meta">
       <div class="md3-batt__chip">
         <div class="md3-batt__k">状态</div>
-        <div class="md3-batt__v">{{ healthLabel(store.status.health) }}</div>
+        <div class="md3-batt__v">{{ healthText }}</div>
       </div>
       <div class="md3-batt__chip">
         <div class="md3-batt__k">额定容量</div>
-        <div class="md3-batt__v">{{ formatMah(store.status.designMah) }}</div>
+        <div class="md3-batt__v">{{ designMahText }}</div>
       </div>
       <div class="md3-batt__chip">
         <div class="md3-batt__k">满充容量</div>
-        <div class="md3-batt__v">{{ formatMah(store.status.fullMah) }}</div>
+        <div class="md3-batt__v">{{ fullMahText }}</div>
       </div>
       <div class="md3-batt__chip">
         <div class="md3-batt__k">循环计数</div>

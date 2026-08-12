@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, inject } from "vue";
+import { inject } from "vue";
 import ThemeSwitch from "@/shared/ui/ThemeSwitch.vue";
 import BatteryGlyph from "@/shared/ui/BatteryGlyph.vue";
-import { formatMah, healthLabel, isChargingLabel } from "@/shared/lib/batteryDisplay";
+import { useBatteryInfo } from "@/composables";
 import { useAppStore, useTheme } from "@/stores";
 import type { TabName } from "@/shared/types";
 import Md3HomeStatus from "./ui/md3/HomeStatus.vue";
@@ -24,19 +24,12 @@ defineEmits<{
 
 const store = useAppStore();
 const theme = useTheme();
+const { charging, healthText, designMahText, fullMahText, sohText, badgeType } =
+  useBatteryInfo();
 const setTab = inject<(name: TabName) => void>("setTab");
-
-const charging = computed(() => isChargingLabel(store.status.chargeLabel));
 
 function goConfig() {
   setTab?.("config");
-}
-
-function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
-  if (t === "success" || t === "warning" || t === "danger" || t === "primary") {
-    return t;
-  }
-  return "primary";
 }
 </script>
 
@@ -102,7 +95,7 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
           </div>
         </div>
         <div class="status-row">
-          <van-tag round :type="badgeType(store.status.badgeType)">
+          <van-tag round :type="badgeType(String(store.status.badgeType))">
             {{ store.status.badge }}
           </van-tag>
           <span class="updated">{{ store.status.updatedAt }}</span>
@@ -180,25 +173,19 @@ function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
       <section class="card stake-card">
         <div class="mini-grid">
           <div class="mini">
-            <div class="mv">{{ healthLabel(store.status.health) }}</div>
+            <div class="mv">{{ healthText }}</div>
             <div class="ml">健康</div>
           </div>
           <div class="mini">
-            <div class="mv">
-              {{
-                store.status.soh === "--" || !store.status.soh
-                  ? "--"
-                  : `${store.status.soh}%`
-              }}
-            </div>
+            <div class="mv">{{ sohText }}</div>
             <div class="ml">还剩几成</div>
           </div>
           <div class="mini">
-            <div class="mv">{{ formatMah(store.status.fullMah) }}</div>
+            <div class="mv">{{ fullMahText }}</div>
             <div class="ml">满充容量</div>
           </div>
           <div class="mini">
-            <div class="mv">{{ formatMah(store.status.designMah) }}</div>
+            <div class="mv">{{ designMahText }}</div>
             <div class="ml">出厂容量</div>
           </div>
           <div class="mini mini--wide">

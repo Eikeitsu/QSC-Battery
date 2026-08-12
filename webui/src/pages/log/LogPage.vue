@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { showConfirmDialog } from "vant";
-import { useAppStore, useTheme } from "@/stores";
+import { useThemePackClass } from "@/composables";
+import { useAppStore } from "@/stores";
 
 const store = useAppStore();
-const theme = useTheme();
+const { theme, packClass } = useThemePackClass();
 const pullLoading = ref(false);
 
 async function doRefresh(showTip: boolean) {
@@ -44,13 +45,7 @@ async function onClear() {
 
 <template>
   <van-pull-refresh v-model="pullLoading" :success-duration="0" @refresh="onPullRefresh">
-    <div
-      class="page"
-      :class="{
-        'page-md3': theme.themePack === 'md3',
-        'page-miuix': theme.themePack === 'miuix',
-      }"
-    >
+    <div class="page" :class="packClass">
       <!-- MD3 -->
       <template v-if="theme.themePack === 'md3'">
         <section class="md3-tonal log-md3-meta">

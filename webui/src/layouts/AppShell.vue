@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, provide, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useAppStore, useTheme } from "@/stores";
+import { useThemePackClass } from "@/composables";
+import { useAppStore } from "@/stores";
 import { TABS, dockIconsForPack } from "@/shared/config/navigation";
 import { isTabName } from "@/router/routes";
 import { slideDir } from "@/router";
 import type { TabName } from "@/shared/types";
 
 const store = useAppStore();
-const theme = useTheme();
+const { theme, packClass: shellClass } = useThemePackClass("shell");
 const route = useRoute();
 const router = useRouter();
 
@@ -16,12 +17,6 @@ const base = import.meta.env.BASE_URL;
 const refreshing = ref(false);
 
 const tab = computed<TabName>(() => (isTabName(route.name) ? route.name : "home"));
-
-const shellClass = computed(() => ({
-  "shell-md3": theme.themePack === "md3",
-  "shell-miuix": theme.themePack === "miuix",
-  "shell-default": theme.themePack === "default",
-}));
 
 const dockIcons = computed(() => dockIconsForPack(theme.themePack));
 

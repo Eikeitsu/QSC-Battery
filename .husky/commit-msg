@@ -1,1 +1,12 @@
+#!/usr/bin/env sh
+# Conventional Commits
+set -e
+root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+cd "$root" || exit 1
+
+if [ ! -d node_modules/@commitlint ]; then
+  echo "husky: 缺少 commitlint，请先 npm install" >&2
+  exit 1
+fi
+
 npx --no -- commitlint --edit "$1"

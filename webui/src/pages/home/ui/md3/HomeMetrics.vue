@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import BatteryGlyph from "@/shared/ui/BatteryGlyph.vue";
-import { isChargingLabel } from "@/shared/lib/batteryDisplay";
-import { useAppStore } from "@/stores";
+import { useBatteryInfo } from "@/composables";
 
-const store = useAppStore();
+const { store, charging } = useBatteryInfo();
 </script>
 
 <template>
@@ -12,7 +11,7 @@ const store = useAppStore();
       <div class="md3-metric__top">
         <BatteryGlyph
           :level="store.status.level"
-          :charging="isChargingLabel(store.status.chargeLabel)"
+          :charging="charging"
           :size="26"
           variant="md3"
         />

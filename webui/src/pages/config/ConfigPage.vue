@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
 import ChipGroup from "@/shared/ui/ChipGroup.vue";
 import PresetValue from "@/shared/ui/PresetValue.vue";
 import ScheduleEditor from "@/shared/ui/ScheduleEditor.vue";
@@ -9,169 +8,41 @@ import {
   BYPASS_TEMP_PRESETS,
   DEFAULT_CURRENT_PRESETS,
   LEVEL_PRESETS,
-  LIMITS,
   ONE_LIMIT_CURRENT_PRESETS,
   POWER_START_PRESETS,
   POWER_STOP_PRESETS,
   SMALL_CURRENT_PRESETS,
   TEMP_START_PRESETS,
   TEMP_STOP_PRESETS,
-  clampLevelOrOff,
-  clampUa,
-  type ConfigKey,
-  type CurrentConfig,
 } from "@/shared";
-import { useAppStore, useTheme } from "@/stores";
-import { showToast } from "vant";
+import { useConfigForm, useThemePackClass } from "@/composables";
 
-const COLLAPSE_KEY = "qsc_current_collapse";
-
-const store = useAppStore();
-const theme = useTheme();
-const showApps = ref(false);
-
-/** 仅缓存电流控制折叠面板展开状态 */
-function loadCollapse(): string[] {
-  try {
-    return localStorage.getItem(COLLAPSE_KEY) === "0" ? [] : ["1"];
-  } catch {
-    return ["1"];
-  }
-}
-const currentOpen = ref<string[]>(loadCollapse());
-watch(
+const { theme, packClass } = useThemePackClass();
+const {
+  store,
+  showApps,
   currentOpen,
-  (v) => {
-    try {
-      localStorage.setItem(COLLAPSE_KEY, v.includes("1") ? "1" : "0");
-    } catch {
-      /* ignore */
-    }
-  },
-  { deep: true },
-);
-
-const appListValue = computed(() => {
-  const n = store.current.app_list?.length || 0;
-  return n ? `${n} 个` : "未选";
-});
-
-const appListLabel = computed(() => {
-  const n = store.current.app_list?.length || 0;
-  if (!n) return "点此选择需要限流的前台应用";
-  return "已选应用会在列表顶部优先显示";
-});
-
-const bypassOn = computed(() => !!Number(store.current.bypass_enable));
-const tempCurrentOn = computed(() => !!Number(store.current.temperature_current));
-const appLimitOn = computed(() => !!Number(store.current.app_limit));
-
-async function setPower(key: ConfigKey, id: string | number) {
-  store.settings[key] = String(id);
-  await store.saveSettings();
-}
-
-async function setTemp(key: ConfigKey, id: string | number) {
-  store.settings[key] = String(id);
-  await store.saveSettings();
-}
-
-async function onSwitch(key: ConfigKey, on: boolean) {
-  store.settings[key] = on ? "1" : "0";
-  await store.saveSettings();
-}
-
-async function onCurrentSwitch(
-  key: keyof Pick<
-    CurrentConfig,
-    "current_control" | "bypass_enable" | "temperature_current" | "app_limit"
-  >,
-  on: boolean,
-) {
-  store.current[key] = on ? 1 : 0;
-  await store.saveCurrent();
-}
-
-async function setCurrentLevel(
-  key: keyof Pick<CurrentConfig, "battery_stop" | "slow_charge" | "bypass_temp">,
-  id: string | number,
-) {
-  const next = clampLevelOrOff(id, Number(store.current[key]));
-  if (next !== Number(id)) showToast("电量/温度阈值已限制在 1–100 或 110=关闭");
-  store.current[key] = next;
-  await store.saveCurrent();
-}
-
-async function setCurrentUa(
-  key: keyof Pick<
-    CurrentConfig,
-    | "default_current_max"
-    | "default_current_max_limit"
-    | "constant_current_max"
-    | "app_current_max"
-  >,
-  id: string | number,
-  small = false,
-) {
-  const maxUa: number = small ? LIMITS.uaSmallMax : LIMITS.uaMax;
-  const next = clampUa(id, Number(store.current[key]), maxUa);
-  if (next !== Number(id)) {
-    showToast(small ? "电流已限制在 100mA–3A" : "电流已限制在 100mA–10A");
-  }
-  store.current[key] = next;
-  await store.saveCurrent();
-}
-
-async function onBypass(mode: string | number) {
-  store.current.bypass_mode = mode === "auto" ? "auto" : "sim";
-  await store.saveCurrent();
-}
-
-async function onSafetyTemp() {
-  const n = Number(store.current.safety_temp_max);
-  const next = Math.min(
-    LIMITS.safetyTempMax,
-    Math.max(LIMITS.safetyTempMin, Number.isFinite(n) ? Math.round(n) : 48),
-  );
-  if (next !== n)
-    showToast(`旁路安全温度已限制在 ${LIMITS.safetyTempMin}–${LIMITS.safetyTempMax}°C`);
-  store.current.safety_temp_max = next;
-  await store.saveCurrent();
-}
-
-async function onCurrentTemp(key: "default_current_limit" | "temperature_current_limit") {
-  const n = Number(store.current[key]);
-  const next = Math.min(
-    LIMITS.currentTempMax,
-    Math.max(
-      LIMITS.currentTempMin,
-      Number.isFinite(n) ? Math.round(n) : store.current[key],
-    ),
-  );
-  if (next !== n)
-    showToast(`温度阈值已限制在 ${LIMITS.currentTempMin}–${LIMITS.currentTempMax}°C`);
-  store.current[key] = next;
-  await store.saveCurrent();
-}
-
-async function onAppsSaved() {
-  await store.saveCurrent();
-}
-
-async function saveSchedule() {
-  await store.saveCurrent();
-}
+  appListValue,
+  appListLabel,
+  bypassOn,
+  tempCurrentOn,
+  appLimitOn,
+  setPower,
+  setTemp,
+  onSwitch,
+  onCurrentSwitch,
+  setCurrentLevel,
+  setCurrentUa,
+  onBypass,
+  onSafetyTemp,
+  onCurrentTemp,
+  onAppsSaved,
+  saveSchedule,
+} = useConfigForm();
 </script>
 
 <template>
-  <div
-    class="page"
-    :class="{
-      'page-md3': theme.themePack === 'md3',
-      'page-miuix': theme.themePack === 'miuix',
-      'page-default': theme.themePack === 'default',
-    }"
-  >
+  <div class="page" :class="packClass">
     <div class="section-head" :class="{ 'miuix-sec': theme.themePack === 'miuix' }">
       <p class="title">电量停充</p>
       <p class="hint">到达阈值后停止充电，掉到恢复值再继续</p>

@@ -9,5 +9,5 @@
   ],
   "*.vue": ["stylelint --fix --allow-empty-input"],
   "*.{json,html,yml,yaml,md}": ["prettier --write --ignore-unknown"],
-  "*.md": ["markdownlint-cli2"]
+  "*.md": ["markdownlint-cli2 --fix"]
 }

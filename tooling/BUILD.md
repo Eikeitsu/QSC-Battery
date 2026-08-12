@@ -7,7 +7,8 @@
 ```text
 webui/                  # WebUI 源码（Vue 3 + Vite + Vant + TypeScript，样式 Sass）
   src/bridge/           # ksu 桥接、配置、应用列表
-  src/stores/           # 电池状态 / 主题
+  src/stores/           # 电池状态 / 主题（Pinia）
+  src/composables/      # useBatteryInfo / useConfigForm / useThemePackClass
   src/shared/           # 路径、默认值、预设、类型
   src/features/         # 应用选择器等功能模块
   src/pages/            # 概览 / 策略 / 日志 / 我的
@@ -49,8 +50,14 @@ npm run build:docs        # 构建文档站点
 | `lint:shell`       | `module/**/*.sh`（shellcheck；本机未安装则跳过，CI 强制） |
 | husky `commit-msg` | Conventional Commits（commitlint）                        |
 | husky `pre-commit` | lint-staged（改动文件的 eslint/stylelint/prettier/md）    |
+| husky `pre-push`   | `npm run check`（与 CI Lint 对齐：typecheck + lint + prettier） |
 
-**不需要** pnpm monorepo：本仓是「Magisk 模块 + 单一 WebUI + 文档」单体，只有一个 `package.json` 与一套依赖；拆 workspace 会增加 CI/路径复杂度而几乎没有包复用收益。继续用 npm 即可。
+提交被拦或 CI 红了时：
+
+1. 不要用 `git commit --no-verify` / `git push --no-verify` 绕过
+2. 不要设环境变量 `HUSKY=0`
+3. 本地先：`npm run format` → `npm run check`
+4. 钩子未生效时：在仓库根目录 `npm run prepare`，确认 `git config core.hooksPath` 为 `.husky/_`
 
 ## Web 构建
 

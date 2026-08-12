@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+# 推送前：对齐 CI Lint 门禁，拦住跳过 pre-commit / --no-verify 的提交
+set -e
+root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+cd "$root" || exit 1
+
+if [ ! -f package.json ]; then
+  echo "husky: 未找到 package.json" >&2
+  exit 1
+fi
+
+echo "husky pre-push → npm run check（typecheck + lint + prettier）"
+npm run check
+echo "husky pre-push ✓"

@@ -1,21 +1,14 @@
 <script setup lang="ts">
-import { formatMah, healthLabel, parsePercent } from "@/shared/lib/batteryDisplay";
-import { useAppStore } from "@/stores";
-import { computed } from "vue";
+import { useBatteryInfo } from "@/composables";
 
-const store = useAppStore();
-
-const sohText = computed(() => {
-  const n = parsePercent(store.status.soh);
-  return n !== null ? `${n}%` : "--";
-});
+const { store, healthText, designMahText, fullMahText, sohText } = useBatteryInfo();
 </script>
 
 <template>
   <section class="miuix-card miuix-batt">
     <div class="miuix-batt__row">
       <span>电池健康</span>
-      <b>{{ healthLabel(store.status.health) }}</b>
+      <b>{{ healthText }}</b>
     </div>
     <div class="miuix-batt__row">
       <span>预估健康度</span>
@@ -23,11 +16,11 @@ const sohText = computed(() => {
     </div>
     <div class="miuix-batt__row">
       <span>设计容量</span>
-      <b>{{ formatMah(store.status.designMah) }}</b>
+      <b>{{ designMahText }}</b>
     </div>
     <div class="miuix-batt__row">
       <span>当前满充</span>
-      <b>{{ formatMah(store.status.fullMah) }}</b>
+      <b>{{ fullMahText }}</b>
     </div>
     <div class="miuix-batt__row">
       <span>循环次数</span>
