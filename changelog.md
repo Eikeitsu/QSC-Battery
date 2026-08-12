@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- 文档：增加 WebUI 文档
+- 文档：增加 WebUI 文档与WebUI截图
+- WebUI：Tab 切换改用 `replace`，侧滑/虚拟返回可直接退出而非回退上一 Tab
 
 ## 2026.08.12
 

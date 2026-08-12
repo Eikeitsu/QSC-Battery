@@ -22,11 +22,11 @@
 
 |                   概览                   |                  策略                  |
 | :--------------------------------------: | :------------------------------------: |
-| ![概览](/screenshots/webui-overview.svg) | ![策略](/screenshots/webui-config.svg) |
+| ![概览](/screenshots/webui-overview.png) | ![策略](/screenshots/webui-config.png) |
 
 |                日志                 |                 我的                 |
 | :---------------------------------: | :----------------------------------: |
-| ![日志](/screenshots/webui-log.svg) | ![我的](/screenshots/webui-more.svg) |
+| ![日志](/screenshots/webui-log.png) | ![我的](/screenshots/webui-more.png) |
 
 ### 显示相关
 

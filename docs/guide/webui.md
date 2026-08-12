@@ -6,13 +6,13 @@
 
 |                   概览                   |                  策略                  |
 | :--------------------------------------: | :------------------------------------: |
-| ![概览](/screenshots/webui-overview.svg) | ![策略](/screenshots/webui-config.svg) |
+| ![概览](/screenshots/webui-overview.png) | ![策略](/screenshots/webui-config.png) |
 
 |                日志                 |                 我的                 |
 | :---------------------------------: | :----------------------------------: |
-| ![日志](/screenshots/webui-log.svg) | ![我的](/screenshots/webui-more.svg) |
+| ![日志](/screenshots/webui-log.png) | ![我的](/screenshots/webui-more.png) |
 
-示意图为结构示意；真机截图可在发版时替换 `docs/public/screenshots/` 下同名文件。
+真机截图来自默认主题 WebUI；可按需替换 `docs/public/screenshots/` 下同名 PNG。
 
 ## 打开方式
 

@@ -12,11 +12,11 @@
 
 |                        概览                         |                       策略                        |
 | :-------------------------------------------------: | :-----------------------------------------------: |
-| ![概览](docs/public/screenshots/webui-overview.svg) | ![策略](docs/public/screenshots/webui-config.svg) |
+| ![概览](docs/public/screenshots/webui-overview.png) | ![策略](docs/public/screenshots/webui-config.png) |
 
 |                      日志                      |                      我的                       |
 | :--------------------------------------------: | :---------------------------------------------: |
-| ![日志](docs/public/screenshots/webui-log.svg) | ![我的](docs/public/screenshots/webui-more.svg) |
+| ![日志](docs/public/screenshots/webui-log.png) | ![我的](docs/public/screenshots/webui-more.png) |
 
 ## 功能概览
 

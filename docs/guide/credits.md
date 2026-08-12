@@ -12,4 +12,4 @@
 
 可通过模块 WebUI「更多」里的「投币捐赠」「打赏」分别支持原作者与维护者。
 
-![我的页](/screenshots/webui-more.svg)
+![我的页](/screenshots/webui-more.png)

@@ -19,7 +19,7 @@
 
 WebUI 概览页示意：
 
-![概览](/screenshots/webui-overview.svg)
+![概览](/screenshots/webui-overview.png)
 
 ## 更新当前版本
 

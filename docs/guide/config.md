@@ -97,4 +97,4 @@ WebUI 游戏列表：可「加载应用列表」后搜索应用名 / 包名并�
 
 策略页示意（更多交互见 [WebUI 使用说明](/guide/webui#策略)）：
 
-![策略页](/screenshots/webui-config.svg)
+![策略页](/screenshots/webui-config.png)
