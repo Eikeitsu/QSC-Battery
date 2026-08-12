@@ -142,9 +142,15 @@ html.pack-miuix.monet-on[data-theme="light"] {
     --md-sys-color-on-surface-variant,
     var(--onSurfaceVariant, rgba(0, 0, 0, 0.6))
   );
+  --qsc-text-3: rgba(0, 0, 0, 0.4);
   --qsc-hero-glow: color-mix(in srgb, var(--qsc-primary) 12%, transparent);
 }
 
+/*
+ * 深色 + 莫奈：只取宿主主色，背景/正文用自研深色板。
+ * 勿直接映射 --background / --md-sys-color-background：
+ * 部分管理器会注入浅色 token，叠加白色正文会导致整页洗白、无对比度。
+ */
 html.pack-miuix.monet-on[data-theme="dark"] {
   --qsc-primary: var(--md-sys-color-primary, var(--primary, #5b9bff));
   --qsc-primary-soft: color-mix(
@@ -171,18 +177,7 @@ html.pack-miuix.monet-on[data-theme="dark"] {
   --qsc-text: #fff;
   --qsc-text-2: rgba(255, 255, 255, 0.65);
   --qsc-text-3: rgba(255, 255, 255, 0.4);
+  --qsc-hairline: rgba(255, 255, 255, 0.08);
+  --qsc-chip-bg: rgba(255, 255, 255, 0.08);
   --qsc-hero-glow: color-mix(in srgb, var(--qsc-primary) 16%, transparent);
-}
-
-@supports (color: color-mix(in srgb, red, blue)) {
-  html.pack-miuix.monet-on[data-theme="dark"] {
-    --qsc-bg: var(
-      --md-sys-color-background,
-      var(--background, color-mix(in srgb, var(--primary, #d0bcff) 12%, #000))
-    );
-    --qsc-surface: var(
-      --md-sys-color-surface-container,
-      var(--surfaceContainer, color-mix(in srgb, var(--primary, #d0bcff) 10%, #1c1b22))
-    );
-  }
 }

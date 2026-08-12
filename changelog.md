@@ -2,10 +2,14 @@
 
 ## Unreleased
 
+## 2026.08.12
+
 - Action：重新设计Action功能，保证脚本不会被提前终止
 - WebUI：增加电池信息展示(健康度，设计容量，真实容量，循环次数)
+- WebUI：设计电池图标与充电动画
 - WebUI：引入 Pinia，`useAppStore` / `useTheme` 改为 setup store
 - WebUI：抽离 `useBatteryInfo` / `useConfigForm` / `useThemePackClass` composable
+- 修复 MIUIX 深色 + 莫奈：宿主浅色 `--background` 洗白页面导致文字无对比度
 
 ## 2026.08.10
 
