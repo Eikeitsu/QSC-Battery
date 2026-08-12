@@ -95,6 +95,6 @@ WebUI 游戏列表：可「加载应用列表」后搜索应用名 / 包名并�
 - 显示相关选项保存在本机 WebUI 本地存储，**不会**写入配置文件
 - 顶栏 / 底栏按 WebUI-X insets 做沉浸，与状态栏、虚拟按键栏底色衔接
 
-配置页示意：
+策略页示意（更多交互见 [WebUI 使用说明](/guide/webui#策略)）：
 
-![配置页](/screenshots/webui-config.png)
+![策略页](/screenshots/webui-config.svg)

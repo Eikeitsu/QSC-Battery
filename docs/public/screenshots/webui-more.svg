@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="780" viewBox="0 0 360 780" role="img" aria-label="WebUI More">
+  <rect width="360" height="780" rx="28" fill="#faf6f0"/>
+  <rect x="16" y="52" width="328" height="640" rx="20" fill="#ffffff" stroke="#e8e0d4"/>
+  <text x="180" y="88" text-anchor="middle" font-family="system-ui,sans-serif" font-size="16" font-weight="600" fill="#1c1917">More</text>
+  <text x="32" y="118" font-family="system-ui,sans-serif" font-size="12" font-weight="600" fill="#44403c">Display</text>
+  <rect x="32" y="132" width="296" height="48" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="48" y="162" font-family="system-ui,sans-serif" font-size="13" fill="#1c1917">Theme pack</text>
+  <rect x="48" y="188" width="48" height="22" rx="6" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="72" y="204" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" fill="#b45309">Default</text>
+  <rect x="104" y="188" width="48" height="22" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="128" y="204" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" fill="#78716c">MD3</text>
+  <rect x="152" y="188" width="56" height="22" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="180" y="204" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" fill="#78716c">MIUIX</text>
+  <rect x="32" y="228" width="296" height="48" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="48" y="258" font-family="system-ui,sans-serif" font-size="13" fill="#1c1917">Light / dark, follow system</text>
+  <rect x="32" y="276" width="296" height="48" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="48" y="304" font-family="system-ui,sans-serif" font-size="13" fill="#1c1917">Custom appearance</text>
+  <rect x="292" y="290" width="28" height="16" rx="8" fill="#d97706"/>
+  <text x="32" y="348" font-family="system-ui,sans-serif" font-size="12" font-weight="600" fill="#44403c">Config</text>
+  <rect x="32" y="362" width="296" height="44" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="48" y="388" font-family="system-ui,sans-serif" font-size="12" fill="#334155">Reset to defaults</text>
+  <text x="32" y="428" font-family="system-ui,sans-serif" font-size="12" font-weight="600" fill="#44403c">About</text>
+  <rect x="32" y="442" width="296" height="96" rx="12" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="48" y="476" font-family="system-ui,sans-serif" font-size="13" font-weight="600" fill="#c2410c">QSC Battery</text>
+  <text x="48" y="500" font-family="system-ui,sans-serif" font-size="11" fill="#78716c">2026.08.10, Vue 3 WebUI</text>
+  <text x="48" y="520" font-family="system-ui,sans-serif" font-size="11" fill="#d97706">GitHub / Docs</text>
+  <rect x="0" y="708" width="360" height="72" fill="#ffffff" stroke="#e8e0d4"/>
+  <text x="45" y="752" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#a8a29e">Overview</text>
+  <text x="135" y="752" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#a8a29e">Strategy</text>
+  <text x="225" y="752" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#a8a29e">Log</text>
+  <text x="315" y="752" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#d97706">More</text>
+</svg>

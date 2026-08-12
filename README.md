@@ -10,13 +10,13 @@
 
 ## WebUI 预览
 
-|                        概览                         |                       配置                        |
+|                        概览                         |                       策略                        |
 | :-------------------------------------------------: | :-----------------------------------------------: |
-| ![概览](docs/public/screenshots/webui-overview.png) | ![配置](docs/public/screenshots/webui-config.png) |
+| ![概览](docs/public/screenshots/webui-overview.svg) | ![策略](docs/public/screenshots/webui-config.svg) |
 
-|                      日志                      |                      更多                       |
+|                      日志                      |                      我的                       |
 | :--------------------------------------------: | :---------------------------------------------: |
-| ![日志](docs/public/screenshots/webui-log.png) | ![更多](docs/public/screenshots/webui-more.png) |
+| ![日志](docs/public/screenshots/webui-log.svg) | ![我的](docs/public/screenshots/webui-more.svg) |
 
 ## 功能概览
 

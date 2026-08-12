@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 文档：增加 WebUI 文档
+
 ## 2026.08.12
 
 - Action：重新设计Action功能，保证脚本不会被提前终止

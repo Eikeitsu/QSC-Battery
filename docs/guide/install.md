@@ -13,13 +13,13 @@
 4. 按音量键选择是否安装 **WebUI**；20 秒未选择时默认安装
 5. 按音量键选择是否安装 **电流控制** 组件；20 秒未选择时默认安装（装入后总开关仍默认关闭）
 6. 重启手机
-7. 若已安装 WebUI，可进入模块页按需调整阈值（「更多 → 显示」可切换主题、莫奈取色、悬浮分页等）
+7. 若已安装 WebUI，可进入模块页按需调整阈值；详见 [WebUI 使用说明](/guide/webui)
 
 支持 Magisk / KernelSU 的模块在线更新：`module.prop` 已配置 `updateJson`，管理器会拉取仓库根目录的 `update.json`。
 
 WebUI 概览页示意：
 
-![概览](/screenshots/webui-overview.png)
+![概览](/screenshots/webui-overview.svg)
 
 ## 更新当前版本
 
