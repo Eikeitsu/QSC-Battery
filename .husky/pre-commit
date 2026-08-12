@@ -1,11 +1,12 @@
 #!/usr/bin/env sh
-# 提交前：只检查暂存文件（eslint / stylelint / prettier / markdown）
+# 提交前：只处理暂存文件（eslint / stylelint / prettier）
 set -e
 root="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 cd "$root" || exit 1
 
 if [ "${HUSKY-}" = "0" ]; then
   echo "husky: HUSKY=0 会跳过检查；本地请勿设置，否则坏格式仍会进仓库" >&2
+  exit 1
 fi
 
 if [ ! -d node_modules/lint-staged ]; then

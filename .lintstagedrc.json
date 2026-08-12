@@ -8,6 +8,6 @@
     "prettier --write --ignore-unknown"
   ],
   "*.vue": ["stylelint --fix --allow-empty-input"],
-  "*.{json,html,yml,yaml,md}": ["prettier --write --ignore-unknown"],
-  "*.md": ["markdownlint-cli2 --fix"]
+  "*.md": ["prettier --write --ignore-unknown"],
+  "*.{json,html,yml,yaml}": ["prettier --write --ignore-unknown"]
 }

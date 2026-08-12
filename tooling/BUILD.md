@@ -42,15 +42,15 @@ npm run build:docs        # 构建文档站点
 
 ### Lint 矩阵
 
-| 命令               | 覆盖                                                      |
-| ------------------ | --------------------------------------------------------- |
-| `lint:js`          | `webui` Vue/TS、`tooling` 脚本、VitePress 配置            |
-| `lint:style`       | `webui` SCSS / Vue `<style>`（Stylelint）                 |
-| `lint:md`          | Markdown（markdownlint-cli2）                             |
-| `lint:shell`       | `module/**/*.sh`（shellcheck；本机未安装则跳过，CI 强制） |
-| husky `commit-msg` | Conventional Commits（commitlint）                        |
-| husky `pre-commit` | lint-staged（改动文件的 eslint/stylelint/prettier/md）    |
-| husky `pre-push`   | `npm run check`（与 CI Lint 对齐：typecheck + lint + prettier） |
+| 命令               | 覆盖                                                             |
+| ------------------ | ---------------------------------------------------------------- |
+| `lint:js`          | `webui` Vue/TS、`tooling` 脚本、VitePress 配置                   |
+| `lint:style`       | `webui` SCSS / Vue `<style>`（Stylelint）                        |
+| `lint:md`          | Markdown（markdownlint-cli2）                                    |
+| `lint:shell`       | `module/**/*.sh`（shellcheck；本机未安装则跳过，CI 强制）        |
+| husky `commit-msg` | Conventional Commits（commitlint）                               |
+| husky `pre-commit` | lint-staged：只处理**暂存文件**（eslint / stylelint / prettier） |
+| husky `pre-push`   | `npm run check`（全量；部分 GUI / `--no-verify` 不会跑）         |
 
 提交被拦或 CI 红了时：
 
