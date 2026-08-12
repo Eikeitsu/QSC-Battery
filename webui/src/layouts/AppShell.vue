@@ -22,8 +22,9 @@ const dockIcons = computed(() => dockIconsForPack(theme.themePack));
 
 function setTab(name: string | number) {
   const next = String(name);
-  if (!isTabName(next)) return;
-  void router.push({ name: next }).then(() => {
+  if (!isTabName(next) || next === tab.value) return;
+  // replace：Tab 不入历史栈，侧滑/虚拟返回可直接退出 WebUI
+  void router.replace({ name: next }).then(() => {
     requestAnimationFrame(() => theme.syncStatusBar());
   });
 }
