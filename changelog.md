@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2026.08.13
+
 - 文档：增加 WebUI 文档与WebUI截图
 - WebUI：Tab 切换改用 `replace`，侧滑/虚拟返回可直接退出而非回退上一 Tab
 - 支持 `power_switch` 自定义供电开关（config.conf / WebUI）；扩充停充与电流节点兜底列表

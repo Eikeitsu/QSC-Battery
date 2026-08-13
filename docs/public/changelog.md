@@ -1,5 +1,15 @@
 ﻿# 更新日志
 
+## 2026.08.13
+
+- 文档：增加 WebUI 文档与WebUI截图
+- WebUI：Tab 切换改用 `replace`，侧滑/虚拟返回可直接退出而非回退上一 Tab
+- 支持 `power_switch` 自定义供电开关（config.conf / WebUI）；扩充停充与电流节点兜底列表
+- 适配 Android 16：`dumpsys` 电量取首个行首 `level:`；补 `night_charging` / `charging_suspend_battery` / OPPO一加 `mmi_charging_enable`；`list_switch` 扫描失败时保留旧列表
+- WebUI：拆分策略 / 我的 / 日志 / 概览默认主题为独立组件，抽离表单与外观逻辑
+- WebUI：Tab/主题/旁路等改为 TS `enum`；链接、存储键与主题预设集中配置
+- WebUI：Vant 改为按需引入样式，去掉全量 `index.css`
+
 ## 2026.08.12
 
 - Action：重新设计Action功能，保证脚本不会被提前终止
