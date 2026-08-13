@@ -2,12 +2,12 @@
 
 文档与 README 引用本目录下的界面截图：
 
-| 文件 | 对应页面 |
-| --- | --- |
-| `webui-overview.png` | 概览 |
-| `webui-config.png` | 策略 |
-| `webui-log.png` | 日志 |
-| `webui-more.png` | 我的 |
+| 文件                 | 对应页面 |
+| -------------------- | -------- |
+| `webui-overview.png` | 概览     |
+| `webui-config.png`   | 策略     |
+| `webui-log.png`      | 日志     |
+| `webui-more.png`     | 我的     |
 
 当前为真机 WebUI 截图（默认主题）。替换时保持同名，并确认 `docs/guide/*.md` 与根 `README.md` 扩展名一致。
 

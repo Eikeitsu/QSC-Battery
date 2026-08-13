@@ -207,6 +207,8 @@ const entries = verifyUnixZip(zipPath, [
   "module.prop",
   "webroot/index.html",
 ]);
-log(`created ${zipPath} (${(statSync(zipPath).size / 1024).toFixed(1)} KB, ${entries.length} files)`);
+log(
+  `created ${zipPath} (${(statSync(zipPath).size / 1024).toFixed(1)} KB, ${entries.length} files)`,
+);
 rmSync(staging, { recursive: true, force: true });
 log("done");

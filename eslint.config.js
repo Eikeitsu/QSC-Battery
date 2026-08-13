@@ -39,10 +39,7 @@ export default tseslint.config(
     },
     rules: {
       "vue/multi-word-component-names": "off",
-      "vue/no-undef-components": [
-        "error",
-        { ignorePatterns: ["^Van[A-Z].*"] },
-      ],
+      "vue/no-undef-components": ["error", { ignorePatterns: ["^Van[A-Z].*"] }],
       "vue/html-self-closing": [
         "error",
         {

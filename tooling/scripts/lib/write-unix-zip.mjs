@@ -159,7 +159,7 @@ export function verifyUnixZip(zipPath, requiredNames) {
     const payload = buf.subarray(dataStart, dataStart + comp);
     const raw = method === 0 ? payload : inflateRawSync(payload);
     if (raw.length !== uncomp) throw new Error(`size mismatch: ${name}`);
-    if ((crc32(raw) >>> 0) !== crc) throw new Error(`crc mismatch: ${name}`);
+    if (crc32(raw) >>> 0 !== crc) throw new Error(`crc mismatch: ${name}`);
 
     p += 46 + nameLen + extraLen + commentLen;
   }
