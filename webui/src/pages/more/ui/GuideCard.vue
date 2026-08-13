@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import SectionHead from "@/shared/ui/SectionHead.vue";
-import ThemedCard from "@/shared/ui/ThemedCard.vue";
 import { PATHS } from "@/shared";
 </script>
 
 <template>
   <SectionHead title="使用说明" hint="路径与常见用法" />
-  <ThemedCard extra-class="guide">
+  <section class="card guide">
     <p>
       配置目录：
       <code>{{ PATHS.MODDIR }}/config/</code>
@@ -17,26 +16,26 @@ import { PATHS } from "@/shared";
     </p>
     <p>过夜建议停止 80–90%；与其它限流模块同装时开启兼容模式。</p>
     <p>详细说明见在线文档。</p>
-  </ThemedCard>
+  </section>
 </template>
 
 <style scoped lang="scss">
-:deep(.guide) {
+.guide {
   padding: 14px 16px;
   font-size: 13px;
   color: var(--qsc-text-2);
   line-height: 1.55;
 }
 
-:deep(.guide p) {
+.guide p {
   margin: 0 0 8px;
 }
 
-:deep(.guide p:last-child) {
+.guide p:last-child {
   margin-bottom: 0;
 }
 
-:deep(.guide code) {
+.guide code {
   font-size: 11px;
   word-break: break-all;
   color: var(--qsc-text);
