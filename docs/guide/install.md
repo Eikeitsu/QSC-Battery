@@ -14,6 +14,7 @@
 5. 按音量键选择是否安装 **电流控制** 组件；20 秒未选择时默认安装（装入后总开关仍默认关闭）
 6. 重启手机
 7. 若已安装 WebUI，可进入模块页按需调整阈值；详见 [WebUI 使用说明](/guide/webui)
+8. 模块管理器中的 **Action**：音量上（或 5 秒未按）刷新状态；音量下生成只读诊断报告 `/sdcard/qsc_diagnose.txt`。停充开关实测不在 Action 内，需插电后执行 `bin/test_switch.sh`
 
 支持 Magisk / KernelSU 的模块在线更新：`module.prop` 已配置 `updateJson`，管理器会拉取仓库根目录的 `update.json`。
 

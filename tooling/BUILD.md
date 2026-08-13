@@ -31,8 +31,8 @@ npm install
 npm run prepare           # 启用 husky（install 后一般会自动跑）
 npm run dev:web           # Vite 开发预览 webui/
 npm run build:web         # Vite 构建 → .build/webroot，并同步到 module/webroot
-npm run package:module    # 打 Magisk zip（需先 build:web）
-npm run build:module      # build:web + package:module
+npm run package:module    # 打 Magisk zip（webroot 缺失或过期会先 build:web）
+npm run build:module      # 强制 build:web + package:module
 npm run check             # typecheck + 全量 lint + prettier check
 npm run lint              # eslint + stylelint + markdownlint + shellcheck
 npm run format            # prettier 写回
@@ -61,12 +61,14 @@ npm run build:docs        # 构建文档站点
 
 ## Web 构建
 
-- **源码**：`webui/`（Vue 3 + TypeScript + Vant；结构见上；样式 `src/styles/`）
+- **源码**：`webui/`（Vue 3 + TypeScript + Vant 按需样式；结构见上；样式 `src/styles/`）
+- **Vant**：`unplugin-vue-components` + `VantResolver` 按需打组件与样式；Toast / Dialog 函数 API 的样式在 `webui/src/app/plugins/vant.ts` 手动引入
 - **类型检查**：`npm run typecheck:web`
 - **Lint / 格式化**：见上表；CI 工作流 `Lint` 全量门禁，`Build Web` 仍跑 `npm run lint` + typecheck
 - **一键检查**：`npm run check`
 - **产物**：`.build/webroot/`，并同步覆盖 `module/webroot/`
-- **模块 zip 只打入产物**（`.build/webroot`）
+- **模块 zip 只打入产物**（`.build/webroot`）；JS/CSS 带 content hash，避免管理器 WebView 吃到旧缓存
+- zip 由 Node 写出 Unix 权限（`.sh` / `update-binary` 为 0755），Windows 不再使用 `Compress-Archive`
 - 旧版原生源码见 `archives/webroot-vanilla-202607/`，勿当构建输入
 
 ## 工作流职责
@@ -76,7 +78,7 @@ npm run build:docs        # 构建文档站点
 | `Lint`           | push / PR                         | ESLint、Stylelint、Markdown、Shellcheck、typecheck、Prettier、Commitlint（PR） |
 | `Build Web`      | `webui/**`、web 构建脚本、package | Vite 构建 Web，上传 Artifact，推送 `dist-web`                                  |
 | `Build Docs`     | `docs/**`                         | 构建并部署 GitHub Pages                                                        |
-| `Package Module` | `module/**`、打包脚本             | 仅构建 Magisk zip 并上传 Artifact（不发 Release）                              |
+| `Package Module` | `webui/**`、`module/**`、打包脚本 | 构建 Magisk zip 并上传 Artifact（不发 Release）                                |
 | `Release Module` | **手动触发** / 推送 `v*` 标签     | 构建 zip + 创建 GitHub Release                                                 |
 
 各工作流互不串联，只按路径变更自行触发。
@@ -135,7 +137,7 @@ npm run package:module:debug   # 调试包（文件名带 -debug）
 | ------------------------- | ---------------------------------- |
 | `common.sh`               | 路径初始化并加载 `lib/*`           |
 | `lib/util.sh`             | 安全读节点、温度换算               |
-| `lib/keys.sh`             | 音量键选择                         |
+| `lib/keys.sh`             | 音量键选择（安装与 Action）        |
 | `lib/battery_info.sh`     | 电池健康/容量/循环（Action/WebUI） |
 | `lib/profile.sh`          | 本机 MCA 探测与 `device.profile`   |
 | `lib/charge.sh`           | 停充/恢复写入与节点列表            |

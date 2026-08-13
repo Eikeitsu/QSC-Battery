@@ -50,7 +50,7 @@ export default defineConfig({
       },
     ],
     footer: {
-      message: "基于 top大佬 原作 QSC 定量停充 · 模块显示名：充电控制",
+      message: "基于 top大佬 的 QSC 定量停充 · 模块显示名：充电控制",
       copyright: "WebUI 版由许小墨维护",
     },
   },

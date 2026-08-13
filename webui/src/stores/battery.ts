@@ -8,7 +8,8 @@ import {
   PATHS,
   STATUS_INTERVAL,
   sanitizeSettings,
-  type BadgeType,
+  BadgeType,
+  BinaryFlag,
   type ConfigKey,
   type CurrentConfig,
   type Settings,
@@ -19,6 +20,8 @@ import * as api from "@/shared/api";
 export const useAppStore = defineStore("app", () => {
   const settings = reactive<Settings>({ ...DEFAULTS });
   const current = reactive<CurrentConfig>({ ...CURRENT_DEFAULTS });
+  /** 自定义供电开关：每行「路径 start=X stop=Y」 */
+  const powerSwitches = ref<string[]>([]);
   const currentFeature = ref(false);
   const bridgeOk = ref(false);
   const deviceName = ref("加载中…");
@@ -26,7 +29,7 @@ export const useAppStore = defineStore("app", () => {
     level: "--",
     temp: "--",
     badge: "状态加载中…",
-    badgeType: "default",
+    badgeType: BadgeType.Default,
     desc: "电量/温度停充；若安装了电流控制，可在配置页调节。",
     chargeLabel: "--",
     voltage: "--",
@@ -54,7 +57,7 @@ export const useAppStore = defineStore("app", () => {
   });
 
   const tempPlan = computed(() => {
-    if (settings.temperature_switch === "0") return "已关闭";
+    if (settings.temperature_switch === BinaryFlag.Off) return "已关闭";
     return `停充 ≥${settings.temperature_switch_stop}°C · 恢复 ≤${settings.temperature_switch_start}°C`;
   });
 
@@ -74,10 +77,14 @@ export const useAppStore = defineStore("app", () => {
     return parts.join(" · ");
   });
 
-  const fullPlan = computed(() => (settings.charge_full === "1" ? "已开启" : "已关闭"));
-  const resetPlan = computed(() => (settings.power_reset === "1" ? "已开启" : "已关闭"));
+  const fullPlan = computed(() =>
+    settings.charge_full === BinaryFlag.On ? "已开启" : "已关闭",
+  );
+  const resetPlan = computed(() =>
+    settings.power_reset === BinaryFlag.On ? "已开启" : "已关闭",
+  );
   const compatPlan = computed(() =>
-    settings.Compatibility_mode === "1" ? "已开启" : "已关闭",
+    settings.Compatibility_mode === BinaryFlag.On ? "已开启" : "已关闭",
   );
 
   async function loadDeviceInfo(): Promise<void> {
@@ -101,6 +108,7 @@ export const useAppStore = defineStore("app", () => {
       const value = await api.getConf(key);
       settings[key] = value || DEFAULTS[key];
     }
+    powerSwitches.value = await api.loadPowerSwitches();
   }
 
   async function loadCurrentConfig(): Promise<void> {
@@ -130,7 +138,7 @@ export const useAppStore = defineStore("app", () => {
       return false;
     }
     if (
-      settings.temperature_switch !== "0" &&
+      settings.temperature_switch !== BinaryFlag.Off &&
       !Number.isNaN(tempStop) &&
       !Number.isNaN(tempStart) &&
       tempStop <= tempStart
@@ -141,10 +149,26 @@ export const useAppStore = defineStore("app", () => {
     for (const key of CONFIG_KEYS) {
       await api.setConf(key, settings[key]);
     }
+    const swOk = await api.savePowerSwitches(powerSwitches.value);
+    if (!swOk) {
+      showToast("自定义供电开关保存失败");
+      return false;
+    }
     if (toast) {
       if (result.fixed) showToast("已自动修正超范围配置并保存");
       else showSuccessToast("配置已保存");
     }
+    return true;
+  }
+
+  async function savePowerSwitchText(toast = true): Promise<boolean> {
+    const ok = await api.savePowerSwitches(powerSwitches.value);
+    if (!ok) {
+      showToast("自定义供电开关保存失败");
+      return false;
+    }
+    powerSwitches.value = await api.loadPowerSwitches();
+    if (toast) showSuccessToast("供电开关已保存");
     return true;
   }
 
@@ -180,6 +204,8 @@ export const useAppStore = defineStore("app", () => {
       await api.setConf(key, value);
       settings[key] = value;
     }
+    powerSwitches.value = [];
+    await api.savePowerSwitches([]);
     if (currentFeature.value) {
       Object.assign(current, { ...CURRENT_DEFAULTS });
       const saved = await api.saveCurrentJsonc(current);
@@ -194,7 +220,7 @@ export const useAppStore = defineStore("app", () => {
       bridgeOk.value = false;
       deviceName.value = "未检测到 WebUI 桥接";
       status.badge = "请用 KernelSU 等支持 WebUI 的管理器打开";
-      status.badgeType = "danger";
+      status.badgeType = BadgeType.Danger;
       return;
     }
 
@@ -224,7 +250,7 @@ export const useAppStore = defineStore("app", () => {
 
     if (capR.errno === -2 || tempR.errno === -2) {
       status.badge = "状态读取超时，下拉重试";
-      status.badgeType = "warning";
+      status.badgeType = BadgeType.Warning;
       if (showTip) showToast("状态读取超时");
       return;
     }
@@ -237,8 +263,8 @@ export const useAppStore = defineStore("app", () => {
       : rawTemp > 200
         ? Math.round(rawTemp / 10)
         : rawTemp;
-    const moduleOff = offR.stdout.trim() === "1";
-    const chargingStopped = switchR.stdout.trim() === "1";
+    const moduleOff = offR.stdout.trim() === BinaryFlag.On;
+    const chargingStopped = switchR.stdout.trim() === BinaryFlag.On;
     const chargeStatus = statusR.stdout.trim();
 
     status.level = level || "--";
@@ -255,19 +281,19 @@ export const useAppStore = defineStore("app", () => {
     const bits = [innerDesc, restDesc].filter(Boolean);
     if (bits.length) status.desc = bits.join(" · ");
 
-    let badgeType: BadgeType = "primary";
+    let badgeType: BadgeType = BadgeType.Primary;
     if (moduleOff) {
       status.badge = majorDesc || "模块已关闭";
-      badgeType = "danger";
+      badgeType = BadgeType.Danger;
     } else if (chargingStopped) {
       status.badge = majorDesc || "已停充，等待恢复";
-      badgeType = "warning";
+      badgeType = BadgeType.Warning;
     } else if (chargeStatus === "Charging" || chargeStatus === "Full") {
       status.badge = majorDesc || "充电中";
-      badgeType = "success";
+      badgeType = BadgeType.Success;
     } else {
       status.badge = majorDesc || "未充电";
-      badgeType = "primary";
+      badgeType = BadgeType.Primary;
     }
     status.badgeType = badgeType;
 
@@ -347,7 +373,7 @@ export const useAppStore = defineStore("app", () => {
       bridgeOk.value = false;
       deviceName.value = "未检测到 WebUI 桥接";
       status.badge = "当前环境无法执行 shell";
-      status.badgeType = "danger";
+      status.badgeType = BadgeType.Danger;
       showToast("请使用支持 WebUI 的管理器打开");
       return;
     }
@@ -367,6 +393,7 @@ export const useAppStore = defineStore("app", () => {
   return {
     settings,
     current,
+    powerSwitches,
     currentFeature,
     bridgeOk,
     deviceName,
@@ -382,6 +409,7 @@ export const useAppStore = defineStore("app", () => {
     compatPlan,
     init,
     saveSettings,
+    savePowerSwitchText,
     saveCurrent,
     toggleModule,
     resetDefaults,

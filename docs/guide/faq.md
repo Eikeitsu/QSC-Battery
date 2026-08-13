@@ -6,7 +6,7 @@
 2. WebUI 中确认模块总开关已打开
 3. 查看 `data/log.log` 是否有「未找到有效充电控制节点」
 4. 红米 K90U（骁龙8至尊版）等 MCA 机型：安装/启动后查看 `data/device.profile` 应为 `mca=1` 且含 `handle_state` 路径；日志停充条目含 `MCA`。建议 `power_stop` 与 `power_start` 间隔至少 10
-5. 若机型较新或停充无效，可在模块管理器打开 **Action**：音量上刷新权限，音量下进入诊断菜单（逐项上=执行 / 下=跳过），运行 `diagnose`；**插电后**建议再运行「停充开关实测」（`test_switch`），将有效节点写入 `device.profile` 的 `preferred_switch`。也可手动执行：
+5. 若机型较新或停充无效，可在模块管理器打开 **Action**：音量上（或 5 秒未按）刷新状态，音量下生成只读诊断报告 `/sdcard/qsc_diagnose.txt`。**插电后**用 adb 运行「停充开关实测」（`test_switch`），将有效节点写入 `device.profile` 的 `preferred_switch`。也可在 WebUI「策略 → 自定义供电开关」或 `config.conf` 填写 `power_switch`（酷安「QSC定量停充」话题评论区常有各机节点）。手动执行：
 
 ```bash
 sh /data/adb/modules/QSC_Battery/bin/diagnose.sh
@@ -14,7 +14,7 @@ sh /data/adb/modules/QSC_Battery/bin/diagnose.sh
 sh /data/adb/modules/QSC_Battery/bin/test_switch.sh
 ```
 
-报告在 `/sdcard/qsc_diagnose.txt`，可反馈给维护者适配。诊断菜单还可「重新探测设备配置」。含写入测试的 `testing` / `diag2` 仅在调试包 `QSC-Battery_v*-debug.zip` 中提供；正式包已含受控的 `test_switch`（测完必恢复充电）。
+报告在 `/sdcard/qsc_diagnose.txt`，可反馈给维护者适配。重新探测机型可执行 `bin/detect_device.sh`。含写入测试的 `testing` / `diag2` 仅在调试包 `QSC-Battery_v*-debug.zip` 中提供；正式包已含受控的 `test_switch`（测完必恢复充电）。
 
 ## WebUI 打不开？
 
@@ -28,7 +28,7 @@ sh /data/adb/modules/QSC_Battery/bin/test_switch.sh
 
 更新同 ID 的 `QSC_Battery` 时，安装脚本会询问是否保留原有配置：音量上保留 `config.conf`（以及已有的 `current.json`），音量下使用新版默认值；20 秒未选择时默认保留。旧版 `QSC定量停充` / `QSC定量停充_独立开关版` 会自动卸载且**不迁移**配置。
 
-## 主题 / 莫奈 / 分页设置丢了？
+## 主题 / 莫奈 / 底栏设置丢了？
 
 这些选项保存在 WebView 的 `localStorage`，清应用数据或换管理器打开后可能重置，与配置文件无关。
 

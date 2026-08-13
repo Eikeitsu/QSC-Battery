@@ -19,7 +19,8 @@ dumpsys_battery="$(cat "$DATADIR/.dumpsys_tmp" 2>/dev/null)"
 qsc_debug_step 3
 rm -f "$DATADIR/.dumpsys_tmp"
 
-battery_level="$(echo "$dumpsys_battery" | egrep '^[ ]*level: ' | sed -n 's/.*level: //g;$p')"
+# Android 16+ dumpsys 可能多处含 level:，取首个行首字段，避免 sed $p 取到错误值
+battery_level="$(qsc_dumpsys_level "$dumpsys_battery")"
 battery_powered="$(echo "$dumpsys_battery" | egrep 'powered: true')"
 battery_status="$(echo "$dumpsys_battery" | egrep 'status: ' | sed -n 's/.*status: //g;$p')"
 qsc_debug_step 4
@@ -244,7 +245,7 @@ if [ -n "$battery_powered" ]; then
 			fi
 		elif [ "$first_stop" = "1" ]; then
 			if [ ! -f "$DATADIR/no_node_logged" ]; then
-				echo "$(date +%F_%T) 电量$battery_level 未找到有效充电控制节点！请插电后在模块 Action 运行停充开关实测，或执行 bin/diagnose.sh" >> "$LOG_FILE"
+				echo "$(date +%F_%T) 电量$battery_level 未找到有效充电控制节点！请插电后执行 bin/test_switch.sh，或 Action 音量下生成诊断报告" >> "$LOG_FILE"
 				touch "$DATADIR/no_node_logged"
 			fi
 		fi

@@ -115,15 +115,3 @@ export function deriveFromSeed(
     container: hslToHex(h, sat * 0.35, 0.92),
   };
 }
-
-export const DEFAULT_ACCENTS: Record<
-  string,
-  { label: string; light: string; dark: string }
-> = {
-  teal: { label: "电弧青", light: "#0D9488", dark: "#2DD4BF" },
-  ocean: { label: "海蓝", light: "#0284C7", dark: "#38BDF8" },
-  violet: { label: "雾紫", light: "#7C3AED", dark: "#A78BFA" },
-  amber: { label: "琥珀", light: "#D97706", dark: "#FBBF24" },
-  rose: { label: "玫红", light: "#E11D48", dark: "#FB7185" },
-  forest: { label: "森绿", light: "#059669", dark: "#34D399" },
-};

@@ -38,6 +38,11 @@ qsc_normalize_temperature() {
 	echo "$normalized"
 }
 
+# dumpsys battery 取电量：仅匹配行首 level:，取首条（适配 Android 16 多字段）
+qsc_dumpsys_level() {
+	echo "$1" | awk '/^[[:space:]]*level:[[:space:]]+/ { print $2; exit }'
+}
+
 # 整数钳位：qsc_clamp_int 值 最小 最大 默认
 qsc_clamp_int() {
 	local v="$1" lo="$2" hi="$3" def="$4"

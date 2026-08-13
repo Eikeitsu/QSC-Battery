@@ -40,7 +40,7 @@ if [ -f "$MODDIR/t_module" -a "$(cat "$MODDIR/module.prop" | egrep '^# ##' | sed
 	chmod 0644 "$MODDIR/module.prop"
 fi
 
-rm -f "$LIST_SWITCH"
+# 不预先删除 list_switch：由 list_switch.sh 写入临时文件，成功后再替换（失败保留旧列表）
 "$BINDIR/list_switch.sh" > /dev/null 2>&1
 # 插电后电流节点探测（未在充则跳过，主循环会重试）
 if [ -f "$BINDIR/list_curr.sh" ]; then

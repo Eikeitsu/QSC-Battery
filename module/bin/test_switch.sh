@@ -1,7 +1,7 @@
 #!/system/bin/sh
 # 停充开关实测（保守）：逐条测可逆有效节点，写入 device.profile
-# 用法：sh bin/test_switch.sh
-# 要求：已插入充电器；测完必恢复充电。
+# 用法（adb，须插电）：sh /data/adb/modules/QSC_Battery/bin/test_switch.sh
+# 不在 Action 音量菜单内；测完必恢复充电。
 
 . "${0%/*}/common.sh"
 

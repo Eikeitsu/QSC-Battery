@@ -72,6 +72,7 @@ qsc_list_curr_collect_primary() {
 qsc_list_curr_collect_aux() {
 	local f tmp="$DATADIR/.ch_curr_aux_build"
 	: >"$tmp"
+	# 常见电池侧电流节点（排除 usb）
 	for f in \
 		/sys/class/power_supply/main/constant_charge_current \
 		/sys/class/power_supply/battery/constant_charge_current \
@@ -81,11 +82,17 @@ qsc_list_curr_collect_aux() {
 		/sys/class/power_supply/main/current_max \
 		/sys/class/qcom-battery/restrict_cur \
 		/sys/class/qcom-battery/restrict_current \
+		/sys/class/qcom-battery/batt_tune_chg_limit_cur \
+		/sys/class/qcom-battery/batt_tune_chg_limit_current \
+		/sys/class/qcom-battery/batt_tune_fast_chg_cur \
+		/sys/class/qcom-battery/batt_tune_fcc_cur \
+		/sys/class/qcom-battery/siop_input_current \
+		/sys/class/qcom-battery/siop_level \
 		; do
 		[ -f "$f" ] && echo "$f" >>"$tmp"
 	done
 	find /sys/class/qcom-battery/ /sys/class/power_supply/battery/ /sys/class/power_supply/main/ \
-		-maxdepth 2 -type f -name '*restrict*_cur*' 2>/dev/null >>"$tmp"
+		-maxdepth 2 -type f \( -name '*restrict*_cur*' -o -name 'batt_tune_*cur*' \) 2>/dev/null >>"$tmp"
 	find /sys/ -name '*restrict*_cur*' 2>/dev/null \
 		| egrep -i -v 'usb|qc_usb|wireless|pc_port' >>"$tmp" 2>/dev/null
 	sort -u "$tmp"

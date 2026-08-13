@@ -4,9 +4,11 @@ on:
   push:
     branches: [main, master]
     paths:
+      - "webui/**"
       - "module/**"
       - "tooling/scripts/build-web.mjs"
       - "tooling/scripts/package-module.mjs"
+      - "tooling/scripts/lib/**"
       - "package.json"
       - "package-lock.json"
       - ".github/actions/setup-node-npm/**"
@@ -14,9 +16,11 @@ on:
   pull_request:
     branches: [main, master]
     paths:
+      - "webui/**"
       - "module/**"
       - "tooling/scripts/build-web.mjs"
       - "tooling/scripts/package-module.mjs"
+      - "tooling/scripts/lib/**"
       - "package.json"
       - "package-lock.json"
       - ".github/actions/setup-node-npm/**"

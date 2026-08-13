@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { THEME_SWITCH_CLASS, THEME_SWITCH_SIZE } from "@/shared";
 import { useTheme } from "@/stores";
 
 const props = withDefaults(
@@ -19,18 +20,10 @@ defineEmits<{
 
 const theme = useTheme();
 
-const packClass = computed(() => {
-  if (theme.themePack === "md3") return "ts-md3";
-  if (theme.themePack === "miuix") return "ts-miuix";
-  return "ts-default";
-});
+const packClass = computed(() => THEME_SWITCH_CLASS[theme.themePack]);
 
 /** size 仅作兜底；实际尺寸由 packs/*.scss 控制 */
-const size = computed(() => {
-  if (theme.themePack === "md3") return "32px";
-  if (theme.themePack === "miuix") return "28px";
-  return "22px";
-});
+const size = computed(() => THEME_SWITCH_SIZE[theme.themePack]);
 </script>
 
 <template>

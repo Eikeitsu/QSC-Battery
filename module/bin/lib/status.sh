@@ -86,7 +86,7 @@ qsc_refresh_module_description() {
 	if [ -f "$DATADIR/no_node_logged" ] && [ ! -f "$DATADIR/power_switch" ]; then
 		if [ ! -s "$LIST_SWITCH" ]; then
 			qsc_write_module_description "❗异常" "无可用停充节点" \
-				"请插电后在模块 Action 运行停充开关实测，或执行 bin/diagnose.sh"
+				"请插电后执行 bin/test_switch.sh，或 Action 音量下生成诊断报告"
 			return 0
 		fi
 	fi

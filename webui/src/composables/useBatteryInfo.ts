@@ -6,8 +6,20 @@ import {
   isChargingLabel,
   parsePercent,
 } from "@/shared/lib/batteryDisplay";
-import type { BadgeType } from "@/shared/types";
+import { BadgeType } from "@/shared";
 import { useAppStore } from "@/stores";
+
+function badgeType(t: string): BadgeType {
+  if (
+    t === BadgeType.Success ||
+    t === BadgeType.Warning ||
+    t === BadgeType.Danger ||
+    t === BadgeType.Primary
+  ) {
+    return t;
+  }
+  return BadgeType.Primary;
+}
 
 export function useBatteryInfo() {
   const store = useAppStore();
@@ -25,14 +37,7 @@ export function useBatteryInfo() {
   const barPct = computed(() => soh.value ?? retention.value ?? 0);
   const hasBar = computed(() => soh.value !== null || retention.value !== null);
 
-  function badgeType(t: string): "primary" | "success" | "warning" | "danger" {
-    if (t === "success" || t === "warning" || t === "danger" || t === "primary") {
-      return t;
-    }
-    return "primary";
-  }
-
-  const statusBadgeType = computed(() => badgeType(store.status.badgeType as BadgeType));
+  const statusBadgeType = computed(() => badgeType(store.status.badgeType));
 
   return {
     store,

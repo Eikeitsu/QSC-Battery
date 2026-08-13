@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# 音量键读取（仅供安装 customize 使用；Action 不再等键）
+# 音量键读取（安装 customize 与 Action 共用）
 # 返回：0=音量上，1=音量下，2=超时或无法读取
 # 可选参数：超时秒数（默认 20）
 #

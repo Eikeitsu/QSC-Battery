@@ -1,5 +1,7 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
+import Components from "unplugin-vue-components/vite";
+import { VantResolver } from "@vant/auto-import-resolver";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,7 +11,13 @@ const repoRoot = resolve(root, "..");
 export default defineConfig({
   root,
   base: "./",
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    Components({
+      dts: "components.d.ts",
+      resolvers: [VantResolver()],
+    }),
+  ],
   resolve: {
     alias: {
       "@": resolve(root, "src"),
@@ -22,11 +30,11 @@ export default defineConfig({
     cssCodeSplit: false,
     rollupOptions: {
       output: {
-        entryFileNames: "js/app.js",
-        chunkFileNames: "js/[name].js",
+        entryFileNames: "js/app-[hash].js",
+        chunkFileNames: "js/[name]-[hash].js",
         assetFileNames: (info) => {
-          if (info.name?.endsWith(".css")) return "css/style.css";
-          return "assets/[name][extname]";
+          if (info.name?.endsWith(".css")) return "css/style-[hash][extname]";
+          return "assets/[name]-[hash][extname]";
         },
       },
     },

@@ -1,15 +1,20 @@
-import { computed, ref, watch } from "vue";
+import { computed, inject, provide, ref, watch, type InjectionKey } from "vue";
 import { showToast } from "vant";
 import {
+  BinaryFlag,
+  BypassMode,
+  CURRENT_DEFAULTS,
   LIMITS,
+  STORAGE_KEYS,
   clampLevelOrOff,
   clampUa,
+  isBypassMode,
+  readStorage,
+  writeStorageFlag,
   type ConfigKey,
   type CurrentConfig,
 } from "@/shared";
 import { useAppStore } from "@/stores";
-
-const COLLAPSE_KEY = "qsc_current_collapse";
 
 type CurrentSwitchKey = keyof Pick<
   CurrentConfig,
@@ -28,11 +33,9 @@ type CurrentUaKey = keyof Pick<
 >;
 
 function loadCollapse(): string[] {
-  try {
-    return localStorage.getItem(COLLAPSE_KEY) === "0" ? [] : ["1"];
-  } catch {
-    return ["1"];
-  }
+  return readStorage(STORAGE_KEYS.currentCollapse) === BinaryFlag.Off
+    ? []
+    : [BinaryFlag.On];
 }
 
 export function useConfigForm() {
@@ -43,11 +46,7 @@ export function useConfigForm() {
   watch(
     currentOpen,
     (v) => {
-      try {
-        localStorage.setItem(COLLAPSE_KEY, v.includes("1") ? "1" : "0");
-      } catch {
-        /* ignore */
-      }
+      writeStorageFlag(STORAGE_KEYS.currentCollapse, v.includes(BinaryFlag.On));
     },
     { deep: true },
   );
@@ -78,7 +77,7 @@ export function useConfigForm() {
   }
 
   async function onSwitch(key: ConfigKey, on: boolean) {
-    store.settings[key] = on ? "1" : "0";
+    store.settings[key] = on ? BinaryFlag.On : BinaryFlag.Off;
     await store.saveSettings();
   }
 
@@ -105,7 +104,7 @@ export function useConfigForm() {
   }
 
   async function onBypass(mode: string | number) {
-    store.current.bypass_mode = mode === "auto" ? "auto" : "sim";
+    store.current.bypass_mode = isBypassMode(mode) ? mode : BypassMode.Sim;
     await store.saveCurrent();
   }
 
@@ -113,7 +112,10 @@ export function useConfigForm() {
     const n = Number(store.current.safety_temp_max);
     const next = Math.min(
       LIMITS.safetyTempMax,
-      Math.max(LIMITS.safetyTempMin, Number.isFinite(n) ? Math.round(n) : 48),
+      Math.max(
+        LIMITS.safetyTempMin,
+        Number.isFinite(n) ? Math.round(n) : CURRENT_DEFAULTS.safety_temp_max,
+      ),
     );
     if (next !== n)
       showToast(`旁路安全温度已限制在 ${LIMITS.safetyTempMin}–${LIMITS.safetyTempMax}°C`);
@@ -146,6 +148,20 @@ export function useConfigForm() {
     await store.saveCurrent();
   }
 
+  const powerSwitchText = computed({
+    get: () => (store.powerSwitches || []).join("\n"),
+    set: (v: string) => {
+      store.powerSwitches = String(v || "")
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+    },
+  });
+
+  async function savePowerSwitches() {
+    await store.savePowerSwitchText();
+  }
+
   return {
     store,
     showApps,
@@ -155,6 +171,7 @@ export function useConfigForm() {
     bypassOn,
     tempCurrentOn,
     appLimitOn,
+    powerSwitchText,
     setPower,
     setTemp,
     onSwitch,
@@ -166,5 +183,21 @@ export function useConfigForm() {
     onCurrentTemp,
     onAppsSaved,
     saveSchedule,
+    savePowerSwitches,
   };
+}
+
+export type ConfigFormApi = ReturnType<typeof useConfigForm>;
+export const CONFIG_FORM_KEY: InjectionKey<ConfigFormApi> = Symbol("qsc-config-form");
+
+export function provideConfigForm() {
+  const api = useConfigForm();
+  provide(CONFIG_FORM_KEY, api);
+  return api;
+}
+
+export function useConfigFormContext() {
+  const api = inject(CONFIG_FORM_KEY);
+  if (!api) throw new Error("useConfigFormContext() 需在 ConfigPage 内使用");
+  return api;
 }

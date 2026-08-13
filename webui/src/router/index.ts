@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from "vue-router";
 import { ref } from "vue";
+import { STORAGE_KEYS, removeStorage } from "@/shared";
 import { routes, isTabName } from "./routes";
 
 /** 与原先 App.vue slideDir 行为一致，供 AppShell Transition 使用 */
@@ -21,10 +22,6 @@ router.beforeEach((to, from) => {
   return true;
 });
 
-try {
-  localStorage.removeItem("qsc_dock_page");
-} catch {
-  /* ignore */
-}
+removeStorage(STORAGE_KEYS.legacyDockPage);
 
 export default router;

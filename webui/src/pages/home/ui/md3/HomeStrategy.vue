@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { useAppStore } from "@/stores";
+import { useStrategyRows } from "@/composables";
 
 defineEmits<{
   openConfig: [];
 }>();
 
-const store = useAppStore();
+const rows = useStrategyRows();
 </script>
 
 <template>
@@ -15,25 +15,9 @@ const store = useAppStore();
       <span class="md3-strategy__go">调整</span>
     </div>
     <div class="md3-list">
-      <div class="md3-list__row">
-        <span class="md3-list__k">电量停充</span>
-        <span class="md3-list__v">{{ store.powerPlan }}</span>
-      </div>
-      <div class="md3-list__row">
-        <span class="md3-list__k">温控停充</span>
-        <span class="md3-list__v">{{ store.tempPlan }}</span>
-      </div>
-      <div class="md3-list__row">
-        <span class="md3-list__k">充满再停</span>
-        <span class="md3-list__v">{{ store.fullPlan }}</span>
-      </div>
-      <div class="md3-list__row">
-        <span class="md3-list__k">兼容模式</span>
-        <span class="md3-list__v">{{ store.compatPlan }}</span>
-      </div>
-      <div v-if="store.currentFeature" class="md3-list__row">
-        <span class="md3-list__k">电流控制</span>
-        <span class="md3-list__v">{{ store.currentPlan }}</span>
+      <div v-for="row in rows" :key="row.id" class="md3-list__row">
+        <span class="md3-list__k">{{ row.label }}</span>
+        <span class="md3-list__v">{{ row.value }}</span>
       </div>
     </div>
   </section>

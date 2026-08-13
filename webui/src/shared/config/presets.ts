@@ -1,4 +1,5 @@
 import type { ChipOption } from "@/shared/types";
+import { BypassMode } from "./enums";
 
 export const POWER_STOP_PRESETS: ChipOption[] = [
   { id: "80", l: "80%" },
@@ -64,6 +65,11 @@ export const ONE_LIMIT_CURRENT_PRESETS: ChipOption[] = [
   { id: "1500000", l: "1.5A" },
   { id: "2000000", l: "2A" },
   { id: "3000000", l: "3A" },
+];
+
+export const BYPASS_MODE_PRESETS: ChipOption[] = [
+  { id: BypassMode.Sim, l: "模拟写电流" },
+  { id: BypassMode.Auto, l: "自动节点" },
 ];
 
 export const SMALL_CURRENT_PRESETS: ChipOption[] = [

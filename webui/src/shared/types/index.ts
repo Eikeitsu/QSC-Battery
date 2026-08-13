@@ -1,3 +1,5 @@
+import type { BypassMode, BadgeType } from "@/shared/config/enums";
+
 export type ConfigKey =
   | "power_stop"
   | "power_start"
@@ -28,7 +30,7 @@ export interface CurrentConfig {
   app_limit: number;
   app_current_max: number;
   app_list: string[];
-  bypass_mode: "sim" | "auto";
+  bypass_mode: BypassMode;
   safety_temp_max: number;
   battery_current: unknown[];
   /** 可选；`"路径 value=值"`；空则跳过 */
@@ -39,8 +41,6 @@ export interface ChipOption {
   id: string;
   l: string;
 }
-
-export type BadgeType = "default" | "primary" | "success" | "warning" | "danger";
 
 export interface StatusState {
   level: string;
@@ -74,9 +74,3 @@ export interface ExecResult {
   stdout: string;
   stderr: string;
 }
-
-export type TabName = "home" | "config" | "log" | "more";
-
-export type ThemePack = "default" | "md3" | "miuix";
-
-export type ThemeMode = "light" | "dark" | "system";

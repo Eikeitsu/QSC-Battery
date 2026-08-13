@@ -165,7 +165,7 @@ fi
 if [ -n "$DATADIR" ] && [ -f "$DATADIR/switch_test_result" ]; then
   echo "  最近开关实测: $(cat "$DATADIR/switch_test_result" 2>/dev/null)" >> "$OUT"
 else
-  echo "  最近开关实测: 无（可在 Action 诊断菜单运行 test_switch）" >> "$OUT"
+  echo "  最近开关实测: 无（请插电后执行 bin/test_switch.sh）" >> "$OUT"
 fi
 if [ -n "$CONF" ] && [ -f "$CONF" ]; then
   echo "  Compatibility_mode=$(grep '^Compatibility_mode=' "$CONF" 2>/dev/null | sed 's/.*=//' | tr -d '\r')" >> "$OUT"
@@ -226,14 +226,14 @@ fi
 if [ -n "$LIST_SWITCH" ] && [ -s "$LIST_SWITCH" ]; then
   echo "  list_switch 行数: $(wc -l <"$LIST_SWITCH" | tr -d ' ')" >> "$OUT"
 else
-  echo "  list_switch: 空或不存在（无可用扫描结果时请跑 Action 开关实测 / list_switch）" >> "$OUT"
+  echo "  list_switch: 空或不存在（可执行 bin/list_switch.sh，或插电后跑 bin/test_switch.sh）" >> "$OUT"
 fi
 
 echo "" >> "$OUT"
 echo "========================================" >> "$OUT"
 echo "报告完成。请将此文件内容发给开发者。" >> "$OUT"
 echo "文件位置: $OUT" >> "$OUT"
-echo "若停充不稳，请插电后于模块 Action 运行「停充开关实测」。" >> "$OUT"
+echo "若停充不稳，请插电后执行: sh $BINDIR/test_switch.sh" >> "$OUT"
 echo "========================================" >> "$OUT"
 
 echo "诊断完成！报告保存到: $OUT"

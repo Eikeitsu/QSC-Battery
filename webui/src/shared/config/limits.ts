@@ -1,4 +1,5 @@
 import { CURRENT_DEFAULTS, DEFAULTS } from "@/shared/config/defaults";
+import { BinaryFlag, BypassMode, isBypassMode } from "@/shared/config/enums";
 import type { CurrentConfig, Settings } from "@/shared/types";
 
 /** 统一数值范围（前后端口径一致） */
@@ -162,10 +163,12 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   if (String(stopTime) !== String(input.power_stop_time)) mark(true);
   next.power_stop_time = String(stopTime);
 
-  next.charge_full = next.charge_full === "1" ? "1" : "0";
-  next.power_reset = next.power_reset === "1" ? "1" : "0";
-  next.Compatibility_mode = next.Compatibility_mode === "1" ? "1" : "0";
-  next.temperature_switch = next.temperature_switch === "0" ? "0" : "1";
+  next.charge_full = next.charge_full === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
+  next.power_reset = next.power_reset === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
+  next.Compatibility_mode =
+    next.Compatibility_mode === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
+  next.temperature_switch =
+    next.temperature_switch === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
 
   const tempStop = clampInt(
     next.temperature_switch_stop,
@@ -290,7 +293,7 @@ export function sanitizeCurrentConfig(
       app_limit: Number(input.app_limit) ? 1 : 0,
       app_current_max: appCur,
       app_list,
-      bypass_mode: input.bypass_mode === "auto" ? "auto" : "sim",
+      bypass_mode: isBypassMode(input.bypass_mode) ? input.bypass_mode : BypassMode.Sim,
       safety_temp_max: safety,
       battery_current,
       restricted,

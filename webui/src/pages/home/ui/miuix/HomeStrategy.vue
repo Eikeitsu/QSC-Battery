@@ -1,47 +1,19 @@
 <script setup lang="ts">
-import { useAppStore } from "@/stores";
+import { useStrategyRows } from "@/composables";
 
 defineEmits<{
   openConfig: [];
 }>();
 
-const store = useAppStore();
+const rows = useStrategyRows();
 </script>
 
 <template>
   <section class="miuix-card miuix-strategy" @click="$emit('openConfig')">
-    <div class="miuix-pref">
+    <div v-for="row in rows" :key="row.id" class="miuix-pref">
       <div class="miuix-pref__body">
-        <div class="miuix-pref__title">电量停充</div>
-        <div class="miuix-pref__desc">{{ store.powerPlan }}</div>
-      </div>
-      <span class="miuix-pref__arrow">›</span>
-    </div>
-    <div class="miuix-pref">
-      <div class="miuix-pref__body">
-        <div class="miuix-pref__title">温控停充</div>
-        <div class="miuix-pref__desc">{{ store.tempPlan }}</div>
-      </div>
-      <span class="miuix-pref__arrow">›</span>
-    </div>
-    <div class="miuix-pref">
-      <div class="miuix-pref__body">
-        <div class="miuix-pref__title">充满再停</div>
-        <div class="miuix-pref__desc">{{ store.fullPlan }}</div>
-      </div>
-      <span class="miuix-pref__arrow">›</span>
-    </div>
-    <div class="miuix-pref">
-      <div class="miuix-pref__body">
-        <div class="miuix-pref__title">兼容模式</div>
-        <div class="miuix-pref__desc">{{ store.compatPlan }}</div>
-      </div>
-      <span class="miuix-pref__arrow">›</span>
-    </div>
-    <div v-if="store.currentFeature" class="miuix-pref">
-      <div class="miuix-pref__body">
-        <div class="miuix-pref__title">电流控制</div>
-        <div class="miuix-pref__desc">{{ store.currentPlan }}</div>
+        <div class="miuix-pref__title">{{ row.label }}</div>
+        <div class="miuix-pref__desc">{{ row.value }}</div>
       </div>
       <span class="miuix-pref__arrow">›</span>
     </div>

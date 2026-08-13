@@ -187,7 +187,7 @@ esac
 # 旧版模块 id；检测到则自动卸载，不再做文件迁移
 # 完整版 QuantitativeStopCharging（QSC定量停充）
 # 独立开关版 QuantitativeStopCharging_switch（QSC定量停充_独立开关版）
-# 原作无 uninstall.sh，也不做充电节点兜底：安装后需重启，内核会复位 sysfs
+# 旧模块无 uninstall.sh，也不做充电节点兜底：安装后需重启，内核会复位 sysfs
 OLD_MODULE_IDS="QuantitativeStopCharging QuantitativeStopCharging_switch"
 OLD_FOUND=0
 OLD_REMOVED_NAMES=""
@@ -299,7 +299,7 @@ fi
 ui_print " 配置: config/config.conf "
 [ "$INSTALL_CURRENT" = "1" ] && ui_print " 电流控制: config/current.json "
 ui_print " 日志: data/log.log "
-ui_print " Action: 上=刷新 / 下=诊断 "
+ui_print " Action: 上=刷新状态 / 下=只读诊断 "
 ui_print "--------------------------------"
 ui_print " 安装完成，请重启设备 "
 ui_print "********************************"

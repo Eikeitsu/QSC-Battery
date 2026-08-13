@@ -1,4 +1,5 @@
 import type { ConfigKey, CurrentConfig, Settings } from "@/shared/types";
+import { BinaryFlag, BypassMode } from "./enums";
 
 export const CONFIG_KEYS: readonly ConfigKey[] = [
   "power_stop",
@@ -16,10 +17,10 @@ export const DEFAULTS: Settings = {
   power_stop: "100",
   power_start: "95",
   power_stop_time: "3",
-  charge_full: "0",
-  power_reset: "0",
-  Compatibility_mode: "0",
-  temperature_switch: "1",
+  charge_full: BinaryFlag.Off,
+  power_reset: BinaryFlag.Off,
+  Compatibility_mode: BinaryFlag.Off,
+  temperature_switch: BinaryFlag.On,
   temperature_switch_stop: "60",
   temperature_switch_start: "50",
 };
@@ -45,13 +46,14 @@ export const CURRENT_DEFAULTS: CurrentConfig = {
     "com.miHoYo.Yuanshen",
     "com.tencent.lolm",
   ],
-  bypass_mode: "sim",
+  bypass_mode: BypassMode.Sim,
   safety_temp_max: 48,
   battery_current: [
     "/sys/class/power_supply/battery/fast_charge_current",
     "/sys/class/power_supply/battery/current_max",
     "/sys/class/power_supply/battery/constant_charge_current",
     "/sys/class/power_supply/battery/constant_charge_current_max",
+    "/sys/class/power_supply/main/constant_charge_current_max",
   ],
   restricted: [
     "/sys/class/qcom-battery/restrict_chg value=1",

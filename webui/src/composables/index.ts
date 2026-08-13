@@ -1,3 +1,4 @@
 export { useBatteryInfo } from "./useBatteryInfo";
-export { useConfigForm } from "./useConfigForm";
+export { useStrategyRows } from "./useStrategyRows";
+export { useConfigForm, provideConfigForm, useConfigFormContext } from "./useConfigForm";
 export { useThemePackClass } from "./useThemePackClass";
