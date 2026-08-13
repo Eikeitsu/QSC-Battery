@@ -56,3 +56,14 @@ export enum BinaryFlag {
   Off = "0",
   On = "1",
 }
+
+export enum LogLevel {
+  Info = "info",
+  Warn = "warn",
+  Error = "error",
+  Debug = "debug",
+}
+
+export function isLogLevel(v: unknown): v is LogLevel {
+  return Object.values(LogLevel).includes(v as LogLevel);
+}

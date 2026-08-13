@@ -205,7 +205,7 @@ if [ -n "$BEST_ENTRY" ]; then
 	echo "  start=$ENTRY_START stop=$ENTRY_STOP"
 	echo " 已写入 device.profile (preferred_switch)"
 	echo "ok path=$ENTRY_PATH" >"$DATADIR/switch_test_result"
-	echo "$(date +%F_%T) 首选开关 $ENTRY_PATH start=$ENTRY_START stop=$ENTRY_STOP" >>"$LOG_FILE"
+	qsc_log info "首选开关 $ENTRY_PATH start=$ENTRY_START stop=$ENTRY_STOP"
 else
 	echo " 未找到可逆有效开关"
 	echo " 将继续使用多节点兜底；可查看 $OUT"

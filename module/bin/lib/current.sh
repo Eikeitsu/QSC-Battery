@@ -174,7 +174,7 @@ qsc_current_sync_conf_guard() {
 		rm -f "$DATADIR/.ch_curr_session_fail" "$DATADIR/current_prep_done"
 		rm -f "$DATADIR/current_node_note" "$DATADIR/current_mode_tag" "$DATADIR/current_reached"
 		rm -f "$DATADIR/current_reaffirm_ts" "$DATADIR/current_drift_streak"
-		echo "$(date +%F_%T) 电流控制：检测到 current.json 变更，已重置节点缓存" >>"$LOG_FILE"
+		qsc_log info "电流控制：检测到 current.json 变更，已重置节点缓存"
 	fi
 	printf '%s\n' "$new" >"$meta_file"
 }
@@ -373,7 +373,7 @@ qsc_current_build_nodes() {
 
 	if [ -z "$(echo "$QSC_CURR_ENTRIES" | tr -d ' ')" ]; then
 		if [ "$(cat "$DATADIR/current_mode_tag" 2>/dev/null)" != "无可用节点" ]; then
-			echo "$(date +%F_%T) 电流控制：无可用电流节点（请插电后让模块探测）" >>"$LOG_FILE"
+			qsc_log error "电流控制：无可用电流节点（请插电后让模块探测）"
 			echo "无可用节点" >"$DATADIR/current_mode_tag"
 		fi
 		return 1
@@ -381,7 +381,7 @@ qsc_current_build_nodes() {
 
 	note="entries:$QSC_CURR_ENTRIES"
 	if [ "$(cat "$DATADIR/current_node_note" 2>/dev/null)" != "$note" ]; then
-		echo "$(date +%F_%T) 电流控制：写入节点 $(qsc_nodes_short "$QSC_CURRENT_NODES")" >>"$LOG_FILE"
+		qsc_log debug "电流控制：写入节点 $(qsc_nodes_short "$QSC_CURRENT_NODES")"
 		echo "$note" >"$DATADIR/current_node_note"
 	fi
 	return 0
@@ -1038,7 +1038,7 @@ qsc_apply_current_control() {
 		reason="${mode_tag}:hw"
 		if [ "$(cat "$DATADIR/current_mode_tag" 2>/dev/null)" != "$reason" ]; then
 			now_c="$(qsc_current_now_ua)"
-			echo "$(date +%F_%T) 电量$battery_level ${log_name}：节点$QSC_BYPASS_NODE 实时电流${now_c} 温度${temperature}" >>"$LOG_FILE"
+			qsc_log info "电量$battery_level ${log_name}：节点$QSC_BYPASS_NODE 实时电流${now_c} 温度${temperature}"
 			echo "$reason" >"$DATADIR/current_mode_tag"
 		fi
 		return 0
@@ -1061,7 +1061,7 @@ qsc_apply_current_control() {
 
 	if ! qsc_current_write_target "$target"; then
 		if [ "$prev_tag" != "fail:$reason" ]; then
-			echo "$(date +%F_%T) 电量$battery_level 电流写入未生效：${log_name} 目标$(qsc_fmt_ma "$target") 节点=${QSC_CW_NODE:-?} scale=${QSC_CW_SCALE:-?} 读回=${QSC_CW_RB:-?}" >>"$LOG_FILE"
+			qsc_log error "电量$battery_level 电流写入未生效：${log_name} 目标$(qsc_fmt_ma "$target") 节点=${QSC_CW_NODE:-?} scale=${QSC_CW_SCALE:-?} 读回=${QSC_CW_RB:-?}"
 			echo "fail:$reason" >"$DATADIR/current_mode_tag"
 		fi
 		return 0
@@ -1074,7 +1074,7 @@ qsc_apply_current_control() {
 		_extra=""
 		[ "${QSC_CW_FORCE_REASON:-}" = "drift" ] && _extra=" 漂移重申"
 		[ "${QSC_CW_FORCE_REASON:-}" = "periodic" ] && [ "${QSC_CW_DID_WRITE:-0}" = "1" ] && _extra=" 周期重申"
-		echo "$(date +%F_%T) 电量$battery_level ${log_name}：限制电流$(qsc_fmt_ma "$target") 节点=$(qsc_node_short "${QSC_CW_NODE}") scale=${QSC_CW_SCALE} 读回=${QSC_CW_RB} 实时${now_c} 温度${temperature}${_extra}" >>"$LOG_FILE"
+		qsc_log info "电量$battery_level ${log_name}：限制电流$(qsc_fmt_ma "$target") 节点=$(qsc_node_short "${QSC_CW_NODE}") scale=${QSC_CW_SCALE} 读回=${QSC_CW_RB} 实时${now_c} 温度${temperature}${_extra}"
 	fi
 	echo "$reason" >"$DATADIR/current_mode_tag"
 	if [ "${QSC_CW_STEPPING:-0}" = "1" ]; then

@@ -1,9 +1,19 @@
 <script setup lang="ts">
+import type { LogEntry } from "@/shared";
 import { useAppStore } from "@/stores";
+import LogFilter from "./LogFilter.vue";
+import LogLines from "./LogLines.vue";
+
+defineProps<{
+  lines: LogEntry[];
+  levelFilter: string;
+  filterActive: boolean;
+}>();
 
 defineEmits<{
   refresh: [];
   clear: [];
+  "update:levelFilter": [v: string];
 }>();
 
 const store = useAppStore();
@@ -20,6 +30,12 @@ const store = useAppStore();
       <span>文件大小</span>
       <b>{{ store.logSize }}</b>
     </div>
+    <div class="miuix-filter">
+      <LogFilter
+        :model-value="levelFilter"
+        @update:model-value="$emit('update:levelFilter', $event)"
+      />
+    </div>
     <div class="miuix-actions">
       <button type="button" class="miuix-btn" @click="$emit('refresh')">刷新</button>
       <button type="button" class="miuix-btn danger" @click="$emit('clear')">清空</button>
@@ -27,22 +43,11 @@ const store = useAppStore();
   </section>
   <div class="miuix-label">内容</div>
   <section class="miuix-card log-miuix-body">
-    <pre class="log">{{ store.logText }}</pre>
+    <LogLines :lines="lines" :filtered="filterActive" />
   </section>
 </template>
 
 <style scoped lang="scss">
-.log {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-all;
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--qsc-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  min-height: 42vh;
-}
-
 .miuix-label {
   margin: 12px 10px 8px;
   font-size: 13px;
@@ -65,6 +70,11 @@ const store = useAppStore();
     font-weight: 550;
     color: var(--qsc-text-2);
   }
+}
+
+.miuix-filter {
+  padding: 4px 14px 0;
+  border-bottom: 1px solid var(--qsc-hairline);
 }
 
 .miuix-actions {

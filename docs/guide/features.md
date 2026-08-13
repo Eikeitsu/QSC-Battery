@@ -65,3 +65,5 @@
 ```text
 /data/adb/modules/QSC_Battery/data/log.log
 ```
+
+行格式：`YYYY-MM-DD_HH:MM:SS [INFO|WARN|ERROR|DEBUG] 内容`。无等级标记的旧日志在 WebUI 中按 INFO 显示。

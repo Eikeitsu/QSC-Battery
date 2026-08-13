@@ -77,6 +77,30 @@ qsc_clamp_level_or_off() {
 	fi
 }
 
+# 运行日志：YYYY-MM-DD_HH:MM:SS [LEVEL] 内容
+# LEVEL: info | warn | error | debug
+qsc_log() {
+	_qsc_log_write "$@" >>"$LOG_FILE"
+}
+
+# 覆盖写入（重建 log.log）
+qsc_log_new() {
+	_qsc_log_write "$@" >"$LOG_FILE"
+}
+
+_qsc_log_write() {
+	local lvl="${1:-info}"
+	shift
+	case "$lvl" in
+		info|INFO) lvl=INFO ;;
+		warn|WARN) lvl=WARN ;;
+		error|ERROR) lvl=ERROR ;;
+		debug|DEBUG) lvl=DEBUG ;;
+		*) lvl=INFO ;;
+	esac
+	echo "$(date +%F_%T) [$lvl] $*"
+}
+
 # 兼容旧名
 _debug_step() { qsc_debug_step "$@"; }
 _safe_cat() { qsc_safe_cat "$@"; }

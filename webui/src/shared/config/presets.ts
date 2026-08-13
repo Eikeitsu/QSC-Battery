@@ -1,5 +1,5 @@
 import type { ChipOption } from "@/shared/types";
-import { BypassMode } from "./enums";
+import { BypassMode, LogLevel } from "./enums";
 
 export const POWER_STOP_PRESETS: ChipOption[] = [
   { id: "80", l: "80%" },
@@ -70,6 +70,15 @@ export const ONE_LIMIT_CURRENT_PRESETS: ChipOption[] = [
 export const BYPASS_MODE_PRESETS: ChipOption[] = [
   { id: BypassMode.Sim, l: "模拟写电流" },
   { id: BypassMode.Auto, l: "自动节点" },
+];
+
+/** id 为空表示不过滤（全部） */
+export const LOG_LEVEL_PRESETS: ChipOption[] = [
+  { id: "", l: "全部" },
+  { id: LogLevel.Info, l: "Info" },
+  { id: LogLevel.Warn, l: "Warn" },
+  { id: LogLevel.Error, l: "Error" },
+  { id: LogLevel.Debug, l: "Debug" },
 ];
 
 export const SMALL_CURRENT_PRESETS: ChipOption[] = [

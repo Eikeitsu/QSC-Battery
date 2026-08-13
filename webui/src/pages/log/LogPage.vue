@@ -5,8 +5,17 @@ import LogMd3 from "./ui/LogMd3.vue";
 import LogMiuix from "./ui/LogMiuix.vue";
 import LogDefault from "./ui/LogDefault.vue";
 
-const { theme, packClass, pullLoading, onPullRefresh, onButtonRefresh, onClear } =
-  useLogPage();
+const {
+  theme,
+  packClass,
+  pullLoading,
+  levelFilter,
+  visibleLogLines,
+  filterActive,
+  onPullRefresh,
+  onButtonRefresh,
+  onClear,
+} = useLogPage();
 </script>
 
 <template>
@@ -14,15 +23,31 @@ const { theme, packClass, pullLoading, onPullRefresh, onButtonRefresh, onClear }
     <div class="page" :class="packClass">
       <LogMd3
         v-if="theme.themePack === ThemePack.Md3"
+        :lines="visibleLogLines"
+        :level-filter="levelFilter"
+        :filter-active="filterActive"
+        @update:level-filter="levelFilter = $event"
         @refresh="onButtonRefresh"
         @clear="onClear"
       />
       <LogMiuix
         v-else-if="theme.themePack === ThemePack.Miuix"
+        :lines="visibleLogLines"
+        :level-filter="levelFilter"
+        :filter-active="filterActive"
+        @update:level-filter="levelFilter = $event"
         @refresh="onButtonRefresh"
         @clear="onClear"
       />
-      <LogDefault v-else @refresh="onButtonRefresh" @clear="onClear" />
+      <LogDefault
+        v-else
+        :lines="visibleLogLines"
+        :level-filter="levelFilter"
+        :filter-active="filterActive"
+        @update:level-filter="levelFilter = $event"
+        @refresh="onButtonRefresh"
+        @clear="onClear"
+      />
     </div>
   </van-pull-refresh>
 </template>

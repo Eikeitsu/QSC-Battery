@@ -97,7 +97,7 @@ if [ -n "$battery_level" ]; then
 fi
 if [ ! -n "$battery_level" ]; then
 	if [ ! -f "$DATADIR/no_battery_logged" ]; then
-		echo "$(date +%F_%T) 无法获取电池电量！dumpsys 超时且 sysfs 也读取失败" >> "$LOG_FILE"
+		qsc_log error "无法获取电池电量！dumpsys 超时且 sysfs 也读取失败"
 		touch "$DATADIR/no_battery_logged"
 	fi
 	qsc_refresh_module_description
@@ -119,7 +119,7 @@ if [ -n "$temperature" ]; then
 fi
 if [ ! -n "$temperature" ]; then
 	if [ ! -f "$DATADIR/no_temp_logged" ]; then
-		echo "$(date +%F_%T) 无法获取电池温度！dumpsys 超时且 sysfs 也读取失败" >> "$LOG_FILE"
+		qsc_log error "无法获取电池温度！dumpsys 超时且 sysfs 也读取失败"
 		touch "$DATADIR/no_temp_logged"
 	fi
 	qsc_refresh_module_description
@@ -153,11 +153,11 @@ if [ ! -f "$LIST_SWITCH" ]; then
 	if [ -f "$BINDIR/list_switch.sh" ]; then
 		chmod 0755 "$BINDIR/list_switch.sh"
 		"$BINDIR/list_switch.sh" > /dev/null 2>&1
-		echo "$(date +%F_%T) 缺少列表文件，正在创建，请稍等" > "$LOG_FILE"
+		qsc_log_new warn "缺少列表文件，正在创建，请稍等"
 		qsc_write_module_description "🔎启动中" "生成开关列表" "$DESC_INTRO"
 		exit 0
 	fi
-	echo "$(date +%F_%T) list_switch.sh文件不存在，请重新安装模块重启" > "$LOG_FILE"
+	qsc_log_new error "list_switch.sh文件不存在，请重新安装模块重启"
 	qsc_write_module_description "⚠️异常" "缺少开关列表" "请重新安装模块并重启"
 	exit 0
 fi
@@ -169,7 +169,7 @@ qsc_charge_full() {
 		now_current="$(qsc_safe_cat /sys/class/power_supply/battery/current_now)"
 		if [ "$battery_status" = "5" ]; then
 			rm -f "$DATADIR/now_c"
-			echo "$(date +%F_%T) 电量$battery_level 触发充满再停功能 当前已充满" >> "$LOG_FILE"
+			qsc_log info "电量$battery_level 触发充满再停功能 当前已充满"
 		else
 			full_log=1
 			if [ -n "$now_current" ]; then
@@ -183,7 +183,7 @@ qsc_charge_full() {
 				if [ "$now_current_n" -ge "3" ]; then
 					full_log=0
 					rm -f "$DATADIR/now_c"
-					echo "$(date +%F_%T) 电量$battery_level 触发充满再停功能 当前电流$now_current" >> "$LOG_FILE"
+					qsc_log debug "电量$battery_level 触发充满再停功能 当前电流$now_current"
 				fi
 			fi
 		fi
@@ -224,7 +224,7 @@ if [ -n "$battery_powered" ]; then
 			power_stop_time="$(echo "$config_conf" | egrep '^power_stop_time=' | sed -n 's/power_stop_time=//g;$p')"
 			power_stop_time="$(qsc_clamp_int "$power_stop_time" 1 120 3)"
 			if [ "$power_stop_time" -gt "0" ]; then
-				echo "$(date +%F_%T) 电量$battery_level 延时功能 继续充电$power_stop_time秒 倒计时中" >> "$LOG_FILE"
+				qsc_log debug "电量$battery_level 延时功能 继续充电$power_stop_time秒 倒计时中"
 				sleep "$power_stop_time"
 			fi
 		fi
@@ -238,14 +238,14 @@ if [ -n "$battery_powered" ]; then
 			fi
 			if [ "$first_stop" = "1" -a "$log_log" = "1" ]; then
 				if [ "$cpu_log" = "1" ]; then
-					echo "$(date +%F_%T) 电量$battery_level 触发开关温控：停止充电 温度$temperature [$stop_nodes]" >> "$LOG_FILE"
+					qsc_log info "电量$battery_level 触发开关温控：停止充电 温度$temperature [$stop_nodes]"
 				else
-					echo "$(date +%F_%T) 电量$battery_level 停止充电 [$stop_nodes]" >> "$LOG_FILE"
+					qsc_log info "电量$battery_level 停止充电 [$stop_nodes]"
 				fi
 			fi
 		elif [ "$first_stop" = "1" ]; then
 			if [ ! -f "$DATADIR/no_node_logged" ]; then
-				echo "$(date +%F_%T) 电量$battery_level 未找到有效充电控制节点！请插电后执行 bin/test_switch.sh，或 Action 音量下生成诊断报告" >> "$LOG_FILE"
+				qsc_log error "电量$battery_level 未找到有效充电控制节点！请插电后执行 bin/test_switch.sh，或 Action 音量下生成诊断报告"
 				touch "$DATADIR/no_node_logged"
 			fi
 		fi
@@ -260,7 +260,7 @@ if [ -n "$battery_powered" ]; then
 		touch "$DATADIR/power_on"
 		if [ "$power_reset" = "1" -a "$reset_log" = "1" ]; then
 			qsc_power_reset
-			echo "$(date +%F_%T) 电量$battery_level 触发自动拔插功能" >> "$LOG_FILE"
+			qsc_log info "电量$battery_level 触发自动拔插功能"
 		fi
 	fi
 else
@@ -296,9 +296,9 @@ if [ -f "$DATADIR/power_switch" ]; then
 		fi
 		if [ "$log_log2" = "1" ]; then
 			if [ "$cpu_log2" = "1" ]; then
-				echo "$(date +%F_%T) 电量$battery_level 触发开关温控：恢复充电 温度$temperature [$start_node <- $start_val]" >> "$LOG_FILE"
+				qsc_log info "电量$battery_level 触发开关温控：恢复充电 温度$temperature [$start_node <- $start_val]"
 			else
-				echo "$(date +%F_%T) 电量$battery_level 恢复充电 [$start_node <- $start_val]" >> "$LOG_FILE"
+				qsc_log info "电量$battery_level 恢复充电 [$start_node <- $start_val]"
 			fi
 		fi
 	fi

@@ -1,9 +1,19 @@
 <script setup lang="ts">
+import type { LogEntry } from "@/shared";
 import { useAppStore } from "@/stores";
+import LogFilter from "./LogFilter.vue";
+import LogLines from "./LogLines.vue";
+
+defineProps<{
+  lines: LogEntry[];
+  levelFilter: string;
+  filterActive: boolean;
+}>();
 
 defineEmits<{
   refresh: [];
   clear: [];
+  "update:levelFilter": [v: string];
 }>();
 
 const store = useAppStore();
@@ -27,26 +37,19 @@ const store = useAppStore();
         </van-button>
       </div>
     </div>
+    <LogFilter
+      :model-value="levelFilter"
+      @update:model-value="$emit('update:levelFilter', $event)"
+    />
   </section>
   <section class="md3-tonal log-md3-body">
-    <pre class="log">{{ store.logText }}</pre>
+    <LogLines :lines="lines" :filtered="filterActive" />
   </section>
 </template>
 
 <style scoped lang="scss">
-.log {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-all;
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--qsc-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  min-height: 42vh;
-}
-
 .log-md3-meta {
-  padding: 16px 18px;
+  padding: 16px 18px 8px;
   margin-bottom: 12px;
 }
 

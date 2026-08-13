@@ -24,7 +24,7 @@ const theme = useTheme();
   <div class="chip-row" :data-pack="theme.themePack">
     <button
       v-for="opt in options"
-      :key="opt.id"
+      :key="opt.id === '' ? '__all' : opt.id"
       type="button"
       class="chip"
       :class="{ active: String(modelValue) === String(opt.id) }"

@@ -1,10 +1,20 @@
 <script setup lang="ts">
 import SectionHead from "@/shared/ui/SectionHead.vue";
+import type { LogEntry } from "@/shared";
 import { useAppStore } from "@/stores";
+import LogFilter from "./LogFilter.vue";
+import LogLines from "./LogLines.vue";
+
+defineProps<{
+  lines: LogEntry[];
+  levelFilter: string;
+  filterActive: boolean;
+}>();
 
 defineEmits<{
   refresh: [];
   clear: [];
+  "update:levelFilter": [v: string];
 }>();
 
 const store = useAppStore();
@@ -17,6 +27,10 @@ const store = useAppStore();
       <span>最近 {{ store.logLines }} 行</span>
       <span>{{ store.logSize }}</span>
     </div>
+    <LogFilter
+      :model-value="levelFilter"
+      @update:model-value="$emit('update:levelFilter', $event)"
+    />
     <div class="actions">
       <van-button size="small" type="primary" plain @click="$emit('refresh')">
         刷新
@@ -27,7 +41,7 @@ const store = useAppStore();
     </div>
   </section>
   <section class="card log-card">
-    <pre class="log">{{ store.logText }}</pre>
+    <LogLines :lines="lines" :filtered="filterActive" />
   </section>
 </template>
 
@@ -42,7 +56,7 @@ const store = useAppStore();
   justify-content: space-between;
   font-size: 13px;
   color: var(--qsc-text-2);
-  margin-bottom: 12px;
+  margin-bottom: 4px;
 }
 
 .actions {
@@ -53,16 +67,5 @@ const store = useAppStore();
 .log-card {
   padding: 14px;
   background: var(--qsc-surface-2);
-}
-
-.log {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-all;
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--qsc-text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  min-height: 42vh;
 }
 </style>

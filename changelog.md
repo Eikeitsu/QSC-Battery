@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 运行日志增加 INFO/WARN/ERROR/DEBUG 等级；日志页按等级着色，并支持筛选（默认全部）
+
 ## 2026.08.13
 
 - 文档：增加 WebUI 文档与WebUI截图

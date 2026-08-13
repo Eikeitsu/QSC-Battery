@@ -170,7 +170,7 @@ if [ -s "$tmp_out" ]; then
 	n="$(wc -l <"$CH_CURR_CTRL" | tr -d ' ')"
 	echo "[QSC] list_curr.sh: 探测到 $n 个电流节点 → $CH_CURR_CTRL" >&2
 	if [ -n "${LOG_FILE:-}" ]; then
-		echo "$(date +%F_%T) 电流控制：节点探测完成，$n 个节点" >>"$LOG_FILE"
+		qsc_log debug "电流控制：节点探测完成，$n 个节点"
 	fi
 else
 	if [ ! -s "$CH_CURR_CTRL" ]; then
