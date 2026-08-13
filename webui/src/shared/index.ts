@@ -13,3 +13,4 @@ export * from "./config/limits";
 export * from "./config/navigation";
 export * from "./lib/color";
 export * from "./lib/log";
+export * from "./lib/highlightPowerSwitch";
