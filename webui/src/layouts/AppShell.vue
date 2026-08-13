@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { RouterView } from "vue-router";
 import { slideDir } from "@/router";
 import { useAppShell } from "./composables/useAppShell";
 import AppTopbar from "./ui/AppTopbar.vue";
