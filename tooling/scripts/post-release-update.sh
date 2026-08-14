@@ -85,14 +85,16 @@ if [ ! -f "release/${ZIP}" ]; then
   ls -la release/ >&2 || true
   exit 1
 fi
+# Pages 只保留本次 zip，避免历史包堆在仓库里
+find docs/public/releases -maxdepth 1 -type f -name '*.zip' ! -name "${ZIP}" -print -delete || true
 cp "release/${ZIP}" "docs/public/releases/${ZIP}"
 
 python3 tooling/scripts/promote-changelog.py --export-docs changelog.md \
   docs/public/changelog.md docs/guide/changelog.md
 
 git add update.json docs/public/update.json docs/public/changelog.md \
-  "docs/public/releases/${ZIP}" docs/guide/changelog.md \
-  module/module.prop changelog.md
+  docs/guide/changelog.md module/module.prop changelog.md
+git add -A -- docs/public/releases
 if git diff --cached --quiet; then
   echo "No changes to commit"
   exit 0
