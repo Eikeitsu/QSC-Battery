@@ -5,8 +5,10 @@ import {
   CONFIG_KEYS,
   CURRENT_DEFAULTS,
   DEFAULTS,
+  DEVICE_INFO_SHELL,
   PATHS,
   STATUS_INTERVAL,
+  formatDeviceLabel,
   sanitizeSettings,
   BadgeType,
   BinaryFlag,
@@ -92,15 +94,8 @@ export const useAppStore = defineStore("app", () => {
       deviceName.value = "WebUI 桥接不可用";
       return;
     }
-    const model = await api.exec(
-      `getprop ro.product.marketname 2>/dev/null || getprop ro.product.model 2>/dev/null`,
-    );
-    const os = await api.exec(
-      `getprop ro.mi.os.version.incremental 2>/dev/null | sed 's/^OS//'`,
-    );
-    const modelName = model.stdout.trim() || "Android";
-    const osName = os.stdout.trim();
-    deviceName.value = osName ? `${modelName} · HyperOS ${osName}` : modelName;
+    const info = await api.exec(DEVICE_INFO_SHELL);
+    deviceName.value = formatDeviceLabel(info.stdout);
   }
 
   async function loadConfig(): Promise<void> {
