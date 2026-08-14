@@ -15,6 +15,8 @@ export const STORAGE_KEYS = {
   uiCustom: "qsc_ui_custom",
   fontScale: "qsc_font_scale",
   currentCollapse: "qsc_current_collapse",
+  logLevelFilter: "qsc_log_level_filter",
+  codeEditorWrap: "qsc_code_editor_wrap",
   legacyDockPage: "qsc_dock_page",
 } as const;
 

@@ -73,7 +73,7 @@ const store = useAppStore();
 }
 
 .miuix-filter {
-  padding: 4px 14px 0;
+  padding: 10px 14px 8px;
   border-bottom: 1px solid var(--qsc-hairline);
 }
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { readStorageFlag, STORAGE_KEYS, writeStorageFlag } from "@/shared";
 
 const props = withDefaults(
   defineProps<{
@@ -29,42 +30,141 @@ const emit = defineEmits<{
 
 const LINE_H = 22;
 
+type GutterItem = { key: string; kind: "num" | "wrap"; n: number };
+
 const draft = ref("");
+const wrapOn = ref(readStorageFlag(STORAGE_KEYS.codeEditorWrap, false));
 const taRef = ref<HTMLTextAreaElement | null>(null);
 const hlRef = ref<HTMLElement | null>(null);
 const gutterRef = ref<HTMLElement | null>(null);
+const paneRef = ref<HTMLElement | null>(null);
+const measureRef = ref<HTMLElement | null>(null);
 const caretLine = ref(1);
 const caretCol = ref(1);
 const scrollTop = ref(0);
+/** 自动换行时每逻辑行的视觉行数 */
+const wrapRows = ref<number[]>([]);
+const wrapHeights = ref<number[]>([]);
 
-const lineNos = computed(() => {
-  const n = Math.max(1, draft.value.split("\n").length);
-  return Array.from({ length: n }, (_, i) => i + 1);
+const draftLines = computed(() => {
+  const parts = draft.value.split("\n");
+  return parts.length ? parts : [""];
+});
+
+const lineNos = computed(() => draftLines.value.map((_, i) => i + 1));
+
+const gutterItems = computed((): GutterItem[] => {
+  const nos = lineNos.value;
+  if (!wrapOn.value) {
+    return nos.map((n) => ({ key: `n-${n}`, kind: "num" as const, n }));
+  }
+  const items: GutterItem[] = [];
+  nos.forEach((n, i) => {
+    const rows = wrapRows.value[i] ?? 1;
+    items.push({ key: `n-${n}`, kind: "num", n });
+    for (let r = 1; r < rows; r++) {
+      items.push({ key: `w-${n}-${r}`, kind: "wrap", n });
+    }
+  });
+  return items;
 });
 
 const hlHtml = computed(() => props.highlight(draft.value, { eol: props.showEol }));
 
 const status = computed(() => {
-  const lines = Math.max(1, draft.value.split("\n").length);
+  const lines = Math.max(1, draftLines.value.length);
   return `${caretLine.value}:${caretCol.value} · ${lines} 行`;
 });
 
-const currentTop = computed(
-  () => `${10 + (caretLine.value - 1) * LINE_H - scrollTop.value}px`,
-);
+const currentStyle = computed(() => {
+  const pad = 10;
+  if (!wrapOn.value || wrapHeights.value.length === 0) {
+    return {
+      top: `${pad + (caretLine.value - 1) * LINE_H - scrollTop.value}px`,
+      height: `${LINE_H}px`,
+    };
+  }
+  let top = pad;
+  for (let i = 0; i < caretLine.value - 1; i++) {
+    top += wrapHeights.value[i] ?? LINE_H;
+  }
+  return {
+    top: `${top - scrollTop.value}px`,
+    height: `${wrapHeights.value[caretLine.value - 1] ?? LINE_H}px`,
+  };
+});
+
+let resizeObs: ResizeObserver | null = null;
 
 watch(
   () => props.show,
   async (v) => {
-    if (!v) return;
+    if (!v) {
+      resizeObs?.disconnect();
+      resizeObs = null;
+      return;
+    }
     draft.value = props.text || "";
     caretLine.value = 1;
     caretCol.value = 1;
     await nextTick();
     taRef.value?.focus();
+    bindResize();
+    await relayout();
     syncCaret();
   },
 );
+
+watch([draft, wrapOn], () => {
+  if (!props.show) return;
+  void relayout();
+});
+
+onBeforeUnmount(() => {
+  resizeObs?.disconnect();
+});
+
+function bindResize() {
+  resizeObs?.disconnect();
+  if (!paneRef.value || typeof ResizeObserver === "undefined") return;
+  resizeObs = new ResizeObserver(() => {
+    void relayout();
+  });
+  resizeObs.observe(paneRef.value);
+}
+
+function measureWrap() {
+  if (!wrapOn.value) {
+    wrapRows.value = [];
+    wrapHeights.value = [];
+    return;
+  }
+  const root = measureRef.value;
+  if (!root) return;
+  const nodes = root.querySelectorAll<HTMLElement>(".ml");
+  const rows: number[] = [];
+  const heights: number[] = [];
+  nodes.forEach((el) => {
+    const h = el.offsetHeight || LINE_H;
+    const r = Math.max(1, Math.round(h / LINE_H));
+    rows.push(r);
+    heights.push(r * LINE_H);
+  });
+  wrapRows.value = rows;
+  wrapHeights.value = heights;
+}
+
+async function relayout() {
+  await nextTick();
+  measureWrap();
+  if (wrapOn.value && taRef.value) taRef.value.scrollLeft = 0;
+  syncScroll();
+}
+
+function toggleWrap() {
+  wrapOn.value = !wrapOn.value;
+  writeStorageFlag(STORAGE_KEYS.codeEditorWrap, wrapOn.value);
+}
 
 function close() {
   emit("update:show", false);
@@ -81,7 +181,7 @@ function syncScroll() {
   scrollTop.value = ta.scrollTop;
   if (hlRef.value) {
     hlRef.value.scrollTop = ta.scrollTop;
-    hlRef.value.scrollLeft = ta.scrollLeft;
+    hlRef.value.scrollLeft = wrapOn.value ? 0 : ta.scrollLeft;
   }
   if (gutterRef.value) gutterRef.value.scrollTop = ta.scrollTop;
 }
@@ -109,7 +209,7 @@ function syncCaret() {
     teleport="body"
     @update:show="(v: boolean) => emit('update:show', v)"
   >
-    <div class="ed">
+    <div class="ed" :class="{ 'wrap-on': wrapOn }">
       <header class="ed-head">
         <button type="button" class="link" @click="close">取消</button>
         <div class="titles">
@@ -122,17 +222,19 @@ function syncCaret() {
       <div class="ed-body">
         <div ref="gutterRef" class="gutter" aria-hidden="true">
           <span
-            v-for="n in lineNos"
-            :key="n"
+            v-for="item in gutterItems"
+            :key="item.key"
             class="gutter-n"
-            :class="{ on: n === caretLine }"
-            v-text="n"
-          ></span>
+            :class="{ on: item.kind === 'num' && item.n === caretLine, wrap: item.kind === 'wrap' }"
+          >{{ item.kind === "wrap" ? "↳" : item.n }}</span>
         </div>
-        <div class="pane">
-          <div class="cur" :style="{ top: currentTop }"></div>
+        <div ref="paneRef" class="pane">
+          <div class="cur" :style="currentStyle"></div>
+          <div v-show="wrapOn" ref="measureRef" class="measure" aria-hidden="true">
+            <div v-for="(line, i) in draftLines" :key="i" class="ml">{{ line || "\u00a0" }}</div>
+          </div>
           <!-- eslint-disable-next-line vue/no-v-html -->
-          <pre ref="hlRef" class="hl qsc-code" v-html="hlHtml"></pre>
+          <pre ref="hlRef" class="hl qsc-code" :class="{ 'is-wrap': wrapOn }" v-html="hlHtml"></pre>
           <textarea
             ref="taRef"
             v-model="draft"
@@ -141,7 +243,7 @@ function syncCaret() {
             autocapitalize="off"
             autocorrect="off"
             autocomplete="off"
-            wrap="off"
+            :wrap="wrapOn ? 'soft' : 'off'"
             enterkeyhint="enter"
             @scroll="syncScroll"
             @keyup="syncCaret"
@@ -154,7 +256,15 @@ function syncCaret() {
 
       <footer class="ed-foot">
         <span>{{ status }}</span>
-        <span class="foot-hint">↵ 换行 · 左右滑动</span>
+        <button
+          type="button"
+          class="wrap-toggle"
+          :class="{ on: wrapOn }"
+          :aria-pressed="wrapOn"
+          @click="toggleWrap"
+        >
+          自动换行
+        </button>
       </footer>
     </div>
   </van-popup>
@@ -255,6 +365,12 @@ function syncCaret() {
     color: var(--qsc-primary);
     font-weight: 650;
   }
+
+  &.wrap {
+    color: color-mix(in srgb, var(--qsc-text-3) 78%, var(--qsc-primary));
+    font-weight: 400;
+    font-variant-numeric: normal;
+  }
 }
 
 .pane {
@@ -274,6 +390,31 @@ function syncCaret() {
   z-index: 0;
 }
 
+.measure {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  box-sizing: border-box;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--ed-font);
+  line-height: var(--ed-line);
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  visibility: hidden;
+  pointer-events: none;
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+
+.ml {
+  min-height: var(--ed-line);
+  line-height: var(--ed-line);
+}
+
 .hl,
 .ta {
   position: absolute;
@@ -288,6 +429,7 @@ function syncCaret() {
   white-space: pre;
   overflow: auto;
   box-sizing: border-box;
+  scrollbar-gutter: stable;
 }
 
 .hl {
@@ -312,6 +454,14 @@ function syncCaret() {
   }
 }
 
+.wrap-on .hl,
+.wrap-on .ta {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  overflow-x: hidden;
+}
+
 .ed-foot {
   display: flex;
   justify-content: space-between;
@@ -324,8 +474,28 @@ function syncCaret() {
   color: var(--qsc-text-3);
 }
 
-.foot-hint {
-  opacity: 0.85;
+.wrap-toggle {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--qsc-text-2);
+  background: var(--qsc-chip-bg);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+
+  &:active {
+    opacity: 0.88;
+  }
+
+  &.on {
+    color: var(--qsc-primary);
+    background: var(--qsc-primary-soft);
+    font-weight: 650;
+  }
 }
 </style>
 
@@ -363,6 +533,18 @@ html.float-dock .code-editor-popup.van-popup--bottom {
     font-size: 0.9em;
     user-select: none;
     pointer-events: none;
+  }
+
+  &.is-wrap .tok-line {
+    height: auto;
+    min-height: 22px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+  }
+
+  &.is-wrap .tok-line.has-eol::after {
+    display: none;
   }
 
   .tok-path {
