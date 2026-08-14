@@ -11,10 +11,10 @@ const editorOpen = ref(false);
 
 const previewHtml = computed(() => highlightPowerSwitch(powerSwitchText.value));
 const empty = computed(() => !String(powerSwitchText.value || "").trim());
-const tapY = 0;
+const tapY = ref(0);
 
 function onPreviewClick(e: MouseEvent) {
-  if (Math.abs(e.clientY - tapY) > 8) return;
+  if (Math.abs(e.clientY - tapY.value) > 8) return;
   editorOpen.value = true;
 }
 
