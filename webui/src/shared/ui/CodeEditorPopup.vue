@@ -225,7 +225,10 @@ function syncCaret() {
             v-for="item in gutterItems"
             :key="item.key"
             class="gutter-n"
-            :class="{ on: item.kind === 'num' && item.n === caretLine, wrap: item.kind === 'wrap' }"
+            :class="{
+              on: item.kind === 'num' && item.n === caretLine,
+              wrap: item.kind === 'wrap',
+            }"
             v-text="item.kind === 'wrap' ? '↳' : item.n"
           ></span>
         </div>
@@ -236,8 +239,14 @@ function syncCaret() {
               {{ line || "\u00a0" }}
             </div>
           </div>
-          <!-- eslint-disable-next-line vue/no-v-html -->
-          <pre ref="hlRef" class="hl qsc-code" :class="{ 'is-wrap': wrapOn }" v-html="hlHtml"></pre>
+          <!-- eslint-disable vue/no-v-html -->
+          <pre
+            ref="hlRef"
+            class="hl qsc-code"
+            :class="{ 'is-wrap': wrapOn }"
+            v-html="hlHtml"
+          ></pre>
+          <!-- eslint-enable vue/no-v-html -->
           <textarea
             ref="taRef"
             v-model="draft"
