@@ -83,7 +83,7 @@ const TONE: Record<string, string> = {
   height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: currentColor;
+  background: currentcolor;
   opacity: 0.45;
 }
 
@@ -94,15 +94,19 @@ const TONE: Record<string, string> = {
 .tone-all .dot {
   background: var(--qsc-text-3);
 }
+
 .tone-info .dot {
   background: var(--qsc-success);
 }
+
 .tone-warn .dot {
   background: var(--qsc-warn);
 }
+
 .tone-error .dot {
   background: var(--qsc-danger);
 }
+
 .tone-debug .dot {
   background: var(--qsc-text-3);
 }
@@ -134,15 +138,19 @@ const TONE: Record<string, string> = {
 .log-filter[data-pack="default"] .seg.active.tone-info {
   color: var(--qsc-success);
 }
+
 .log-filter[data-pack="default"] .seg.active.tone-warn {
   color: var(--qsc-warn);
 }
+
 .log-filter[data-pack="default"] .seg.active.tone-error {
   color: var(--qsc-danger);
 }
+
 .log-filter[data-pack="default"] .seg.active.tone-debug {
   color: var(--qsc-text-2);
 }
+
 .log-filter[data-pack="default"] .seg.active.tone-all {
   color: var(--qsc-primary);
 }
@@ -216,15 +224,19 @@ const TONE: Record<string, string> = {
 .log-filter[data-pack="miuix"] .seg.active.tone-all {
   color: var(--qsc-primary);
 }
+
 .log-filter[data-pack="miuix"] .seg.active.tone-info {
   color: var(--qsc-success);
 }
+
 .log-filter[data-pack="miuix"] .seg.active.tone-warn {
   color: var(--qsc-warn);
 }
+
 .log-filter[data-pack="miuix"] .seg.active.tone-error {
   color: var(--qsc-danger);
 }
+
 .log-filter[data-pack="miuix"] .seg.active.tone-debug {
   color: var(--qsc-text-2);
 }
