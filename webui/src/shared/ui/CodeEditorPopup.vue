@@ -225,16 +225,27 @@ function syncCaret() {
             v-for="item in gutterItems"
             :key="item.key"
             class="gutter-n"
-            :class="{ on: item.kind === 'num' && item.n === caretLine, wrap: item.kind === 'wrap' }"
-          >{{ item.kind === "wrap" ? "↳" : item.n }}</span>
+            :class="{
+              on: item.kind === 'num' && item.n === caretLine,
+              wrap: item.kind === 'wrap',
+            }"
+            >{{ item.kind === "wrap" ? "↳" : item.n }}</span
+          >
         </div>
         <div ref="paneRef" class="pane">
           <div class="cur" :style="currentStyle"></div>
           <div v-show="wrapOn" ref="measureRef" class="measure" aria-hidden="true">
-            <div v-for="(line, i) in draftLines" :key="i" class="ml">{{ line || "\u00a0" }}</div>
+            <div v-for="(line, i) in draftLines" :key="i" class="ml">
+              {{ line || "\u00a0" }}
+            </div>
           </div>
           <!-- eslint-disable-next-line vue/no-v-html -->
-          <pre ref="hlRef" class="hl qsc-code" :class="{ 'is-wrap': wrapOn }" v-html="hlHtml"></pre>
+          <pre
+            ref="hlRef"
+            class="hl qsc-code"
+            :class="{ 'is-wrap': wrapOn }"
+            v-html="hlHtml"
+          ></pre>
           <textarea
             ref="taRef"
             v-model="draft"

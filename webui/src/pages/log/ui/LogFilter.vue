@@ -22,7 +22,12 @@ const TONE: Record<string, string> = {
 </script>
 
 <template>
-  <div class="log-filter" :data-pack="theme.themePack" role="radiogroup" aria-label="日志等级">
+  <div
+    class="log-filter"
+    :data-pack="theme.themePack"
+    role="radiogroup"
+    aria-label="日志等级"
+  >
     <button
       v-for="opt in LOG_LEVEL_PRESETS"
       :key="opt.id === '' ? '__all' : opt.id"
