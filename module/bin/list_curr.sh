@@ -133,9 +133,12 @@ qsc_list_curr_emit_line() {
 
 if [ "$FORCE" != "1" ] && ! qsc_list_curr_is_charging; then
 	if [ -s "$CH_CURR_CTRL" ]; then
-		echo "[QSC] list_curr.sh: 未在充电，保留已有探测结果 ($(wc -l <"$CH_CURR_CTRL" | tr -d ' ') 条)" >&2
+		n="$(wc -l <"$CH_CURR_CTRL" | tr -d ' ')"
+		echo "[QSC] list_curr.sh: 未在充电，保留已有探测结果 ($n 条)" >&2
+		qsc_log_once curr_skip debug "未在充电，保留已有电流节点列表（$n 条）"
 	else
 		echo "[QSC] list_curr.sh: 未在充电且无历史列表，跳过探测（插电后重试）" >&2
+		qsc_log_once curr_skip debug "未在充电且无历史电流节点，跳过探测"
 	fi
 	exit 0
 fi
@@ -177,6 +180,7 @@ else
 		: >"$CH_CURR_CTRL"
 	fi
 	echo "[QSC] list_curr.sh: 本轮未找到可用电流节点" >&2
+	qsc_log warn "电流控制：本轮未找到可用电流节点（请插电后重试）"
 fi
 rm -f "$tmp_out"
 exit 0

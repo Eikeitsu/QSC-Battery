@@ -346,7 +346,7 @@ export const useAppStore = defineStore("app", () => {
 
   async function refreshLog(showTip = false): Promise<void> {
     const [logR, sizeR] = await Promise.all([
-      api.exec(`tail -n 50 '${PATHS.LOG_FILE}' 2>/dev/null`),
+      api.exec(`tail -n 80 '${PATHS.LOG_FILE}' 2>/dev/null`),
       api.exec(`wc -c < '${PATHS.LOG_FILE}' 2>/dev/null`),
     ]);
     const text = logR.stdout.trim();

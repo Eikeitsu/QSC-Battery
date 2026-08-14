@@ -88,6 +88,25 @@ qsc_log_new() {
 	_qsc_log_write "$@" >"$LOG_FILE"
 }
 
+# 仅当 KEY 对应内容变化时写入，避免 3 秒主循环刷屏
+qsc_log_once() {
+	_qsc_okey="$1"
+	_qsc_olvl="$2"
+	shift 2
+	_qsc_omsg="$*"
+	_qsc_of="$DATADIR/.log_once_${_qsc_okey}"
+	mkdir -p "$DATADIR" 2>/dev/null
+	if [ -f "$_qsc_of" ] && [ "$(cat "$_qsc_of" 2>/dev/null)" = "$_qsc_omsg" ]; then
+		return 0
+	fi
+	printf '%s\n' "$_qsc_omsg" >"$_qsc_of"
+	qsc_log "$_qsc_olvl" "$_qsc_omsg"
+}
+
+qsc_log_once_clear() {
+	rm -f "$DATADIR/.log_once_$1"
+}
+
 _qsc_log_write() {
 	local lvl="${1:-info}"
 	shift

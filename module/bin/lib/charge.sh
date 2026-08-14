@@ -84,8 +84,13 @@ QSC_USER_SWITCHES=""
 qsc_write_node() {
 	local node="$1"
 	local val="$2"
+	local key
 	chmod 0644 "$node" 2>/dev/null
-	echo "$val" > "$node" 2>/dev/null
+	if ! echo "$val" > "$node" 2>/dev/null; then
+		key="$(echo "$node" | tr / _)"
+		qsc_log_once "wn_$key" warn "写入节点失败 $node ← $val"
+		return 1
+	fi
 }
 
 # 将一行配置规范为 path,start=X,stop=Y（兼容 [] 与 :: 空格写法）
@@ -129,14 +134,22 @@ qsc_load_user_switches() {
 	local line entry
 	QSC_USER_SWITCHES=""
 	[ -f "$CONF" ] || return 0
+	local n=0
 	while IFS= read -r line || [ -n "$line" ]; do
 		case "$line" in
 			power_switch=*)
-				entry="$(qsc_normalize_power_switch_entry "$line")" || continue
+				entry="$(qsc_normalize_power_switch_entry "$line")" || {
+					qsc_log_once "psw_bad_$n" warn "忽略无效 power_switch 行"
+					continue
+				}
 				QSC_USER_SWITCHES="$QSC_USER_SWITCHES $entry"
+				n=$((n + 1))
 				;;
 		esac
 	done <"$CONF"
+	if [ "$n" -gt 0 ]; then
+		qsc_log_once user_sw debug "已加载 ${n} 条自定义供电开关"
+	fi
 }
 
 # 按列表写停充/恢复；ok_var 为 stop_ok 或 start_ok

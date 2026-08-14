@@ -91,6 +91,7 @@ echo " 日志: $OUT"
 if ! qsc_is_plugged; then
 	echo "[错误] 请先插入充电器再测试"
 	echo "not_plugged" >"$DATADIR/switch_test_result"
+	qsc_log error "停充开关实测失败：未插充电器"
 	exit 1
 fi
 
@@ -210,6 +211,7 @@ else
 	echo " 未找到可逆有效开关"
 	echo " 将继续使用多节点兜底；可查看 $OUT"
 	echo "none" >"$DATADIR/switch_test_result"
+	qsc_log warn "停充开关实测未找到可逆有效节点，继续多节点兜底"
 	qsc_clear_preferred_switch
 fi
 echo " 有效=$ok_n 无效/跳过=$fail_n"

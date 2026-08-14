@@ -7,13 +7,16 @@ const props = withDefaults(
     title?: string;
     hint?: string;
     text?: string;
-    highlight?: (text: string) => string;
+    /** 行尾 ↵；默认开 */
+    showEol?: boolean;
+    highlight?: (text: string, opts?: { eol?: boolean }) => string;
   }>(),
   {
     show: false,
     title: "编辑",
     hint: "",
     text: "",
+    showEol: true,
     highlight: (t: string) =>
       t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
   },
@@ -39,7 +42,7 @@ const lineNos = computed(() => {
   return Array.from({ length: n }, (_, i) => i + 1);
 });
 
-const hlHtml = computed(() => props.highlight(draft.value));
+const hlHtml = computed(() => props.highlight(draft.value, { eol: props.showEol }));
 
 const status = computed(() => {
   const lines = Math.max(1, draft.value.split("\n").length);
@@ -151,7 +154,7 @@ function syncCaret() {
 
       <footer class="ed-foot">
         <span>{{ status }}</span>
-        <span class="foot-hint">不换行 · 左右滑动</span>
+        <span class="foot-hint">↵ 换行 · 左右滑动</span>
       </footer>
     </div>
   </van-popup>
@@ -161,6 +164,7 @@ function syncCaret() {
 .ed {
   --ed-line: 22px;
   --ed-font: 13px;
+
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -345,17 +349,48 @@ html.float-dock .code-editor-popup.van-popup--bottom {
 }
 
 .qsc-code {
+  .tok-line {
+    display: block;
+    height: 22px;
+    line-height: 22px;
+    white-space: pre;
+  }
+
+  .tok-line.has-eol::after {
+    content: "↵";
+    margin-left: 3px;
+    color: color-mix(in srgb, var(--qsc-text-3) 72%, transparent);
+    font-size: 0.9em;
+    user-select: none;
+    pointer-events: none;
+  }
+
   .tok-path {
     color: var(--qsc-primary);
   }
 
-  .tok-key {
-    color: #7c5cbf;
+  .tok-pref {
+    color: var(--qsc-text-2);
+    font-weight: 600;
+  }
+
+  .tok-start {
+    color: #0d9488;
     font-weight: 650;
   }
 
-  .tok-val {
+  .tok-stop {
+    color: #c2410c;
+    font-weight: 650;
+  }
+
+  .tok-num {
     color: var(--qsc-success);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tok-val {
+    color: #2563eb;
   }
 
   .tok-eq,
@@ -363,13 +398,44 @@ html.float-dock .code-editor-popup.van-popup--bottom {
     color: var(--qsc-text-3);
   }
 
+  .tok-bracket {
+    color: #a16207;
+    font-weight: 650;
+  }
+
   .tok-cmt {
     color: var(--qsc-text-3);
     font-style: italic;
   }
+
+  .tok-bad {
+    color: var(--qsc-danger);
+    text-decoration: underline wavy color-mix(in srgb, var(--qsc-danger) 55%, transparent);
+    text-underline-offset: 2px;
+  }
+
+  .tok-line-warn {
+    border-radius: 3px;
+    box-decoration-break: clone;
+    background: color-mix(in srgb, var(--qsc-warn) 12%, transparent);
+  }
 }
 
-html[data-theme="dark"] .qsc-code .tok-key {
-  color: #d4b8ff;
+html[data-theme="dark"] .qsc-code {
+  .tok-start {
+    color: #2dd4bf;
+  }
+
+  .tok-stop {
+    color: #fb923c;
+  }
+
+  .tok-val {
+    color: #93c5fd;
+  }
+
+  .tok-bracket {
+    color: #fbbf24;
+  }
 }
 </style>

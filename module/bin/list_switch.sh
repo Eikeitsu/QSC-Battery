@@ -234,9 +234,16 @@ if [ -f "$LIST_SWITCH" ]; then
 fi
 if [ -s "$LIST_SWITCH" ]; then
 	mv -f "$LIST_SWITCH" "$_QSC_LIST_SWITCH_FINAL"
+	n="$(wc -l <"$_QSC_LIST_SWITCH_FINAL" | tr -d ' ')"
 	echo "[QSC] list_switch.sh 执行完毕，已生成节点列表: $_QSC_LIST_SWITCH_FINAL" >&2
+	qsc_log debug "开关扫描完成，$n 条节点"
 else
 	rm -f "$LIST_SWITCH"
 	echo "[QSC] list_switch.sh 扫描结果为空，保留原列表: $_QSC_LIST_SWITCH_FINAL" >&2
+	if [ -s "$_QSC_LIST_SWITCH_FINAL" ]; then
+		qsc_log warn "开关扫描结果为空，已保留旧列表"
+	else
+		qsc_log error "开关扫描结果为空且无旧列表"
+	fi
 fi
 # ##

@@ -4,6 +4,7 @@ MODDIR=${0%/*}
 . "$MODDIR/bin/common.sh"
 
 until [ -f "$BINDIR/qsc_switch.sh" ]; do
+	qsc_log_once no_core error "核心脚本 qsc_switch.sh 丢失，请重新安装模块"
 	qsc_write_module_description "⚠️异常" "核心脚本丢失" "请重新安装模块并重启"
 	sleep 5
 done
@@ -52,6 +53,7 @@ if [ -f "$BINDIR/detect_device.sh" ]; then
 	"$BINDIR/detect_device.sh" > /dev/null 2>&1
 else
 	qsc_detect_and_write_profile > /dev/null 2>&1 || true
+	qsc_log warn "缺少 detect_device.sh，使用内置机型探测"
 fi
 rm -f "$DATADIR/now_c"
 rm -f "$DATADIR/off_d"

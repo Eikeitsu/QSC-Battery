@@ -8,12 +8,23 @@ qsc_debug_step 1
 config_conf="$(cat "$CONF" | egrep -v '^#')"
 qsc_debug_step 2
 
+if [ ! -f "$CONF" ]; then
+	qsc_log_once no_conf error "找不到 config.conf"
+fi
+
 dumpsys battery > "$DATADIR/.dumpsys_tmp" 2>/dev/null &
 dumpsys_pid=$!
 for wait_i in 1 2 3 4 5; do
 	if [ ! -d "/proc/$dumpsys_pid" ]; then break; fi
 	sleep 1
 done
+if [ -d "/proc/$dumpsys_pid" ]; then
+	qsc_log_once dumpsys_to warn "dumpsys battery 超时，改用 sysfs"
+	qsc_log_once_clear dumpsys_ok
+else
+	qsc_log_once dumpsys_ok debug "dumpsys battery 读取成功"
+	qsc_log_once_clear dumpsys_to
+fi
 kill $dumpsys_pid 2>/dev/null
 dumpsys_battery="$(cat "$DATADIR/.dumpsys_tmp" 2>/dev/null)"
 qsc_debug_step 3
@@ -28,6 +39,7 @@ qsc_debug_step 4
 if [ ! -n "$battery_powered" ] || [ ! -n "$battery_status" ]; then
 	sysfs_status="$(qsc_safe_cat /sys/class/power_supply/battery/status)"
 	if [ -n "$sysfs_status" ]; then
+		qsc_log_once batt_st debug "充电状态来自 sysfs status=$sysfs_status"
 		case "$sysfs_status" in
 			Charging) battery_status="2"; battery_powered="powered: true" ;;
 			Full) battery_status="5"; battery_powered="powered: true" ;;
@@ -41,6 +53,7 @@ if [ ! -n "$battery_powered" ]; then
 		if [ -f "$usb_online" ] && [ "$(qsc_safe_cat "$usb_online")" = "1" ]; then
 			battery_powered="powered: true"
 			battery_status="${battery_status:-2}"
+			qsc_log_once usb_on debug "插电状态来自 $usb_online=1"
 			break
 		fi
 	done
@@ -56,6 +69,11 @@ power_start="$(echo "$config_conf" | egrep '^power_start=' | sed -n 's/power_sta
 temperature_switch="$(echo "$config_conf" | egrep '^temperature_switch=' | sed -n 's/temperature_switch=//g;$p')"
 temperature_switch_stop="$(echo "$config_conf" | egrep '^temperature_switch_stop=' | sed -n 's/temperature_switch_stop=//g;$p')"
 temperature_switch_start="$(echo "$config_conf" | egrep '^temperature_switch_start=' | sed -n 's/temperature_switch_start=//g;$p')"
+
+_raw_power_stop="$power_stop"
+_raw_power_start="$power_start"
+_raw_temp_stop="$temperature_switch_stop"
+_raw_temp_start="$temperature_switch_start"
 
 # 配置兜底：拒非法/天文数字，避免误伤设备
 charge_full="$(qsc_clamp_int "$charge_full" 0 1 0)"
@@ -80,6 +98,12 @@ if [ "$temperature_switch_stop" -le "$temperature_switch_start" ] 2>/dev/null; t
 		temperature_switch_start=25
 	fi
 fi
+if [ "$power_stop" != "$_raw_power_stop" ] || [ "$power_start" != "$_raw_power_start" ]; then
+	qsc_log_once cfg_pwr warn "电量阈值已纠正 ${_raw_power_stop}/${_raw_power_start} → 停充${power_stop}% 恢复${power_start}%"
+fi
+if [ "$temperature_switch_stop" != "$_raw_temp_stop" ] || [ "$temperature_switch_start" != "$_raw_temp_start" ]; then
+	qsc_log_once cfg_temp warn "温控阈值已纠正 ${_raw_temp_stop}/${_raw_temp_start} → 停充${temperature_switch_stop}°C 恢复${temperature_switch_start}°C"
+fi
 off_qsc=0
 qsc_debug_step 5
 
@@ -87,7 +111,10 @@ if [ ! -n "$battery_level" ]; then
 	for sysfs_cap in /sys/class/power_supply/battery/capacity /sys/class/power_supply/bms/capacity /sys/class/power_supply/battery/soc; do
 		if [ -f "$sysfs_cap" ] && [ -r "$sysfs_cap" ]; then
 			battery_level="$(qsc_safe_cat "$sysfs_cap")"
-			if [ -n "$battery_level" ]; then break; fi
+			if [ -n "$battery_level" ]; then
+				qsc_log_once batt_src debug "电量来自 sysfs $sysfs_cap=$battery_level"
+				break
+			fi
 		fi
 	done
 fi
@@ -109,7 +136,10 @@ if [ ! -n "$temperature" ]; then
 		if [ -f "$sysfs_temp" ] && [ -r "$sysfs_temp" ]; then
 			temperature_raw="$(qsc_safe_cat "$sysfs_temp")"
 			temperature="$(qsc_normalize_temperature "$temperature_raw")"
-			if [ -n "$temperature" ]; then break; fi
+			if [ -n "$temperature" ]; then
+				qsc_log_once temp_src debug "温度来自 sysfs $sysfs_temp=${temperature}°C"
+				break
+			fi
 		fi
 	done
 fi
@@ -128,6 +158,7 @@ fi
 
 if [ -f "$OFF_FLAG" -o -f "$MODDIR/disable" ]; then
 	off_qsc=1
+	qsc_log_once mod_off warn "充电控制已关闭，跳过停充与电流控制"
 	power_stop="110"
 	power_start="105"
 	temperature_switch="0"
@@ -137,6 +168,7 @@ if [ -f "$OFF_FLAG" -o -f "$MODDIR/disable" ]; then
 	fi
 else
 	rm -f "$DATADIR/off_d"
+	qsc_log_once_clear mod_off
 fi
 
 battery_status_data=0
@@ -198,8 +230,8 @@ fi
 if [ -n "$battery_powered" ]; then
 	if [ -f "$LOG_FILE" ]; then
 		log_n="$(cat "$LOG_FILE" | wc -l)"
-		if [ "$log_n" -gt "30" ]; then
-			sed -i '1,5d' "$LOG_FILE"
+		if [ "$log_n" -gt "80" ]; then
+			sed -i '1,10d' "$LOG_FILE"
 		fi
 	fi
 	if [ "$temperature_switch" = "1" ]; then
@@ -309,12 +341,14 @@ Compatibility_mode="$(echo "$config_conf" | egrep '^Compatibility_mode=' | sed -
 [ -n "$Compatibility_mode" ] || Compatibility_mode=0
 if [ -n "$battery_powered" ] && [ ! -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
 	if [ "$Compatibility_mode" = "1" ]; then
+		qsc_log_once compat warn "兼容模式开启，已跳过电流控制"
 		rm -f "$DATADIR/current_mode_tag"
 		rm -f "$DATADIR/current_reaffirm_ts" "$DATADIR/current_drift_streak"
 		if type qsc_bypass_hw_off >/dev/null 2>&1; then
 			qsc_bypass_hw_off
 		fi
 	elif type qsc_apply_current_control >/dev/null 2>&1; then
+		qsc_log_once_clear compat
 		# 电流控制开启且探测列表为空时，充电中重探测
 		_cc="$(qsc_current_conf_get current_control 2>/dev/null)"
 		if [ "$_cc" = "1" ] \
@@ -325,6 +359,8 @@ if [ -n "$battery_powered" ] && [ ! -f "$DATADIR/power_switch" ] && [ "$off_qsc"
 			qsc_current_probe_ctrl_files
 		fi
 		qsc_apply_current_control
+	elif [ -f "$CURRENT_CONF" ]; then
+		qsc_log_once no_cc error "存在 current.json 但缺少 current.sh，请重新安装并勾选电流控制"
 	fi
 elif [ ! -n "$battery_powered" ]; then
 	rm -f "$DATADIR/current_mode_tag"

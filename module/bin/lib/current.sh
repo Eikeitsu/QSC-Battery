@@ -174,7 +174,7 @@ qsc_current_sync_conf_guard() {
 		rm -f "$DATADIR/.ch_curr_session_fail" "$DATADIR/current_prep_done"
 		rm -f "$DATADIR/current_node_note" "$DATADIR/current_mode_tag" "$DATADIR/current_reached"
 		rm -f "$DATADIR/current_reaffirm_ts" "$DATADIR/current_drift_streak"
-		qsc_log info "电流控制：检测到 current.json 变更，已重置节点缓存"
+		qsc_log debug "电流控制：检测到 current.json 变更，已重置节点缓存"
 	fi
 	printf '%s\n' "$new" >"$meta_file"
 }
@@ -866,9 +866,11 @@ qsc_apply_current_control() {
 	[ -f "$CURRENT_CONF" ] || return 0
 	enable="$(qsc_current_conf_get current_control)"
 	[ "$enable" = "1" ] || {
+		qsc_log_once cc_off debug "电流控制未开启，跳过限流"
 		qsc_bypass_hw_off
 		return 0
 	}
+	qsc_log_once_clear cc_off
 
 	qsc_current_build_nodes || return 0
 	[ -n "$(echo "$QSC_CURRENT_NODES" | tr -d ' ')" ] || return 0
@@ -1028,6 +1030,7 @@ qsc_apply_current_control() {
 			log_name="节点旁路"
 			target=0
 		else
+			qsc_log_once bypass_hw warn "硬件旁路节点不可用，回退模拟旁路"
 			qsc_bypass_hw_off
 		fi
 	else
@@ -1074,7 +1077,11 @@ qsc_apply_current_control() {
 		_extra=""
 		[ "${QSC_CW_FORCE_REASON:-}" = "drift" ] && _extra=" 漂移重申"
 		[ "${QSC_CW_FORCE_REASON:-}" = "periodic" ] && [ "${QSC_CW_DID_WRITE:-0}" = "1" ] && _extra=" 周期重申"
-		qsc_log info "电量$battery_level ${log_name}：限制电流$(qsc_fmt_ma "$target") 节点=$(qsc_node_short "${QSC_CW_NODE}") scale=${QSC_CW_SCALE} 读回=${QSC_CW_RB} 实时${now_c} 温度${temperature}${_extra}"
+		if [ -n "$_extra" ]; then
+			qsc_log debug "电量$battery_level ${log_name}：限制电流$(qsc_fmt_ma "$target") 节点=$(qsc_node_short "${QSC_CW_NODE}") scale=${QSC_CW_SCALE} 读回=${QSC_CW_RB} 实时${now_c} 温度${temperature}${_extra}"
+		else
+			qsc_log info "电量$battery_level ${log_name}：限制电流$(qsc_fmt_ma "$target") 节点=$(qsc_node_short "${QSC_CW_NODE}") scale=${QSC_CW_SCALE} 读回=${QSC_CW_RB} 实时${now_c} 温度${temperature}"
+		fi
 	fi
 	echo "$reason" >"$DATADIR/current_mode_tag"
 	if [ "${QSC_CW_STEPPING:-0}" = "1" ]; then
