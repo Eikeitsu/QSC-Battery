@@ -1,5 +1,14 @@
 ﻿# 更新日志
 
+## 2026.08.25
+
+- 修复部分机型充电几分钟后反复断电又恢复：停充需同时「插电」且 `status` 为充电中/已满，停充后不再每轮全量盲写开关
+- 修复魅族等机型息屏「回充亮屏 → 再断电」死循环：新增 `stop_hold_wakelock`（默认 `auto`，魅族/Flyme 或检测到 MCA 时自动持锁；恢复充电、关闭模块或卸载时释放）
+- 改善小米 17、红米 K90 等停充不生效：实时探测 MCA `handle_state`（优先 `mca_business_charger`），直接 echo 且不 `chmod`；补充 `stop_handle_charge`
+- 停充更稳：优先写首个成功节点并记录 `active_switch` 单点重申，降低与系统充电服务互抢
+- 电流墙与端口 `input_suspend` 改为末位兜底；`night_charging` / `cool_mode` / `mi_charge_enable` 等保留在主列表
+- 关闭模块时不再维持停充与持锁；卸载时同步恢复充电并释放 wakelock
+
 ## 2026.08.14
 
 - 运行日志：日志增加 INFO/WARN/ERROR/DEBUG 等级；日志页按等级着色，并支持筛选（默认 Info，记住上次选择）
