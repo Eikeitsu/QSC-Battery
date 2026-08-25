@@ -162,6 +162,8 @@ if [ -f "$OFF_FLAG" -o -f "$MODDIR/disable" ]; then
 	power_stop="110"
 	power_start="105"
 	temperature_switch="0"
+	qsc_stop_wakelock_release
+	qsc_clear_active_switch
 	if [ ! -f "$DATADIR/off_d" ]; then
 		touch "$DATADIR/off_d"
 		rm -f "$DATADIR/now_c" "$DATADIR/power_on" "$DATADIR/power_off" "$DATADIR/current_mode_tag"
@@ -223,11 +225,13 @@ qsc_charge_full() {
 }
 
 qsc_debug_step 8
+# 必须同时「插电」且 status 为充电中(2)/已满(5)
+# 仅凭 usb/online 会在停充后仍判为供电，导致每轮全量重写开关，小米上易与系统互抢闪充
 if [ "$battery_status" = "2" -o "$battery_status" = "5" ]; then
 	battery_status_data=1
 fi
 
-if [ -n "$battery_powered" ]; then
+if [ -n "$battery_powered" -a "$battery_status_data" = "1" ]; then
 	if [ -f "$LOG_FILE" ]; then
 		log_n="$(cat "$LOG_FILE" | wc -l)"
 		if [ "$log_n" -gt "80" ]; then
@@ -261,10 +265,15 @@ if [ -n "$battery_powered" ]; then
 			fi
 		fi
 		sleep 3
-		# 条件仍满足时每轮重申；MCA 机型依赖此逻辑对抗系统改回
-		qsc_power_stop
+		# 首次全量探测；之后只重申已生效单节点（防小米多节点互抢 / 魅族息屏回充）
+		if [ "$first_stop" = "1" ]; then
+			qsc_power_stop
+		else
+			qsc_reaffirm_active_stop || qsc_power_stop
+		fi
 		if [ "$stop_ok" = "1" ]; then
 			touch "$DATADIR/power_switch"
+			qsc_stop_wakelock_acquire
 			if [ "$battery_stop_reason" = "1" ]; then
 				touch "$DATADIR/battery_switch"
 			fi
@@ -296,13 +305,19 @@ if [ -n "$battery_powered" ]; then
 		fi
 	fi
 else
+	# 已停充：插电期间单节点重申 + 按需持锁（模块关闭时不维持停充）
+	if [ -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
+		qsc_maintain_stop_while_plugged
+	else
+		qsc_stop_wakelock_release
+	fi
 	if [ ! -f "$DATADIR/power_off" -a "$off_qsc" != "1" ]; then
 		rm -f "$DATADIR/now_c" "$DATADIR/power_on"
 		touch "$DATADIR/power_off"
 	fi
 fi
 
-if [ -f "$DATADIR/power_switch" ]; then
+if [ -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
 	temp_ready=1
 	battery_ready=1
 	if [ -f "$DATADIR/temp_switch" ]; then
@@ -325,6 +340,8 @@ if [ -f "$DATADIR/power_switch" ]; then
 		qsc_power_start
 		if [ "$start_ok" = "1" ]; then
 			rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" "$DATADIR/battery_switch"
+			qsc_clear_active_switch
+			qsc_stop_wakelock_release
 		fi
 		if [ "$log_log2" = "1" ]; then
 			if [ "$cpu_log2" = "1" ]; then
@@ -337,9 +354,10 @@ if [ -f "$DATADIR/power_switch" ]; then
 fi
 
 # 供电开关未停充时，若已安装电流控制组件则应用策略（兼容模式跳过，避免与其它限流模块抢写）
+# 同样要求 status=充电中，避免停充后仍写电流节点与小米充电服务互抢
 Compatibility_mode="$(echo "$config_conf" | egrep '^Compatibility_mode=' | sed -n 's/Compatibility_mode=//g;$p')"
 [ -n "$Compatibility_mode" ] || Compatibility_mode=0
-if [ -n "$battery_powered" ] && [ ! -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
+if [ -n "$battery_powered" ] && [ "$battery_status_data" = "1" ] && [ ! -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
 	if [ "$Compatibility_mode" = "1" ]; then
 		qsc_log_once compat warn "兼容模式开启，已跳过电流控制"
 		rm -f "$DATADIR/current_mode_tag"
@@ -362,7 +380,7 @@ if [ -n "$battery_powered" ] && [ ! -f "$DATADIR/power_switch" ] && [ "$off_qsc"
 	elif [ -f "$CURRENT_CONF" ]; then
 		qsc_log_once no_cc error "存在 current.json 但缺少 current.sh，请重新安装并勾选电流控制"
 	fi
-elif [ ! -n "$battery_powered" ]; then
+elif [ ! -n "$battery_powered" ] || [ "$battery_status_data" != "1" ]; then
 	rm -f "$DATADIR/current_mode_tag"
 	rm -f "$DATADIR/current_reaffirm_ts" "$DATADIR/current_drift_streak"
 	if type qsc_bypass_hw_off >/dev/null 2>&1; then

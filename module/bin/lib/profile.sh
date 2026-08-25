@@ -1,6 +1,7 @@
 #!/system/bin/sh
 # 本机充电能力探测 → data/device.profile（按节点存在动态启用，不绑机型名）
 
+# 优先 business_charger（小米17 等），再 mca_charger（K90 等）
 QSC_MCA_CANDIDATES="\
 /sys/devices/platform/soc/soc:mca_business_charger/handle_state \
 /sys/devices/platform/soc/soc:mca_charger/handle_state \
@@ -13,6 +14,15 @@ QSC_MCA_CANDIDATES="\
 /sys/class/power_supply/mca-battery/handle_state \
 /sys/class/power_supply/mca_battery/handle_state"
 
+# 部分机型另有 stop_handle_charge（极性同 handle_state：停=1 开=0）
+QSC_MCA_STOP_HANDLE_CANDIDATES="\
+/sys/devices/platform/soc/soc:mca_business_charger/stop_handle_charge \
+/sys/devices/platform/soc/soc:mca_charger/stop_handle_charge \
+/sys/devices/platform/soc/soc@0:mca_business_charger/stop_handle_charge \
+/sys/devices/platform/soc/soc@0:mca_charger/stop_handle_charge \
+/sys/devices/platform/soc/mca_business_charger/stop_handle_charge \
+/sys/devices/platform/soc/mca_charger/stop_handle_charge"
+
 qsc_find_mca_path() {
 	local path
 	for path in $QSC_MCA_CANDIDATES; do
@@ -21,7 +31,18 @@ qsc_find_mca_path() {
 			return 0
 		fi
 	done
-	path="$(find /sys/devices/platform/ -maxdepth 8 -type f -name 'handle_state' \( -path '*mca*' -o -path '*charg*' \) 2>/dev/null | head -n 1)"
+	# 优先含 mca_business，再任意 mca/charg 的 handle_state
+	path="$(find /sys/devices/platform/ -maxdepth 8 -type f -name 'handle_state' -path '*mca_business*' 2>/dev/null | head -n 1)"
+	if [ -n "$path" ] && [ -f "$path" ]; then
+		echo "$path"
+		return 0
+	fi
+	path="$(find /sys/devices/platform/ -maxdepth 8 -type f -name 'handle_state' -path '*mca*' 2>/dev/null | head -n 1)"
+	if [ -n "$path" ] && [ -f "$path" ]; then
+		echo "$path"
+		return 0
+	fi
+	path="$(find /sys/devices/platform/ -maxdepth 8 -type f -name 'handle_state' -path '*charg*' 2>/dev/null | head -n 1)"
 	if [ -n "$path" ] && [ -f "$path" ]; then
 		echo "$path"
 		return 0
@@ -158,20 +179,19 @@ qsc_load_device_profile() {
 		QSC_PREF_START=""
 		QSC_PREF_STOP=""
 	fi
-	if [ "$QSC_MCA" = "1" ] && [ -n "$QSC_MCA_PATH" ] && [ ! -f "$QSC_MCA_PATH" ]; then
-		qsc_detect_and_write_profile >/dev/null 2>&1 || true
-		QSC_MCA="$(qsc_profile_get mca)"
-		QSC_MCA_PATH="$(qsc_profile_get mca_path)"
-		QSC_REASSERT="$(qsc_profile_get reassert)"
-		QSC_PREF_PATH="$(qsc_profile_get preferred_switch)"
-		QSC_PREF_START="$(qsc_profile_get preferred_start)"
-		QSC_PREF_STOP="$(qsc_profile_get preferred_stop)"
-		case "$QSC_MCA" in 1) ;; *) QSC_MCA=0 ;; esac
-		case "$QSC_REASSERT" in 1) ;; *) QSC_REASSERT=0 ;; esac
-		if [ -n "$QSC_PREF_PATH" ] && [ ! -f "$QSC_PREF_PATH" ]; then
-			QSC_PREF_PATH=""
-			QSC_PREF_START=""
-			QSC_PREF_STOP=""
+	# 路径失效或开机早期未就绪：实时重探（小米17 等 MCA 常晚于 service 启动出现）
+	if [ -z "$QSC_MCA_PATH" ] || [ ! -f "$QSC_MCA_PATH" ]; then
+		_live="$(qsc_find_mca_path 2>/dev/null)" || _live=""
+		if [ -n "$_live" ] && [ -f "$_live" ]; then
+			QSC_MCA=1
+			QSC_MCA_PATH="$_live"
+			QSC_MCA_STOP=1
+			QSC_MCA_START=0
+			QSC_REASSERT=1
+			qsc_write_device_profile "$_live" >/dev/null 2>&1 || true
+		else
+			QSC_MCA=0
+			QSC_MCA_PATH=""
 		fi
 	fi
 	return 0

@@ -7,6 +7,7 @@ _QSC_LIST_SWITCH_FINAL="$LIST_SWITCH"
 LIST_SWITCH="$DATADIR/.list_switch_build"
 rm -f "$LIST_SWITCH"
 # suspend / disable 类：停充写 1，恢复写 0
+# 排除 usb/qc_usb 等输入口 input_suspend（改由末位兜底，避免与快充协商互抢）
 find /sys/*/* -type f \( \
 	-iname "*input_suspend" -o -iname "*battery_input_suspend" -o \
 	-iname "*disable*_charge*" -o -iname "*charge*_disable*" -o \
@@ -15,12 +16,12 @@ find /sys/*/* -type f \( \
 	-iname "*batt_slate_mode" -o -iname "*store_mode" -o \
 	-iname "*night_charging" -o -iname "*force_disable_charging" -o \
 	-iname "*op_disable_charge" -o -iname "*charge_disable" -o \
-	-iname "*cool_mode" -o -iname "*batt_protect*" -o \
+	-iname "*cool_mode" -o \
 	-iname "*charging_suspend*" -o -iname "*charger_limit_en" -o \
 	-iname "*force_charger_suspend" -o -iname "*force_usb_suspend" -o \
 	-iname "*bypass_charger" \
 	\) 2>/dev/null \
-	| egrep -i -v 'limit_max|float|step|reverse|/battery_|bq2597x|/cpu/|firmware|charge_control_limit' \
+	| egrep -i -v 'limit_max|float|step|reverse|/battery_|bq2597x|/cpu/|firmware|charge_control_limit|/power_supply/usb/|/power_supply/qc_usb/|/power_supply/dc/|/power_supply/wireless/|/power_supply/pc_port/|batt_protect' \
 	| sed -n 's/$/,start=0,stop=1/g;p' >"$LIST_SWITCH"
 
 # enable 类：停充写 0，恢复写 1
@@ -67,7 +68,7 @@ find /sys/class/qcom-battery/ -maxdepth 1 -type f \( \
 find /sys/class/qcom-battery/ -maxdepth 1 -type f \( \
 	-iname "*input_suspend" -o -iname "*charge_disable" -o \
 	-iname "*disable_charging" -o -iname "*night_charging" -o \
-	-iname "*cool_mode" -o -iname "*batt_protect*" -o \
+	-iname "*cool_mode" -o \
 	-iname "*charging_suspend*" \
 	\) 2>/dev/null | sed -n 's/$/,start=0,stop=1/g;p' >>"$LIST_SWITCH"
 
@@ -110,31 +111,22 @@ find /sys/kernel/debug/google_charger/ -maxdepth 1 -type f \( \
 find /sys/kernel/debug/google_charger/ -maxdepth 1 -type f -iname "chg_mode" 2>/dev/null \
 	| sed -n 's/$/,start=1,stop=0/g;p' >>"$LIST_SWITCH"
 
-# MCA / 骁龙商务充
+# MCA / 骁龙商务充（小米17: mca_business_charger；K90: mca_charger）
+find /sys/devices/platform/soc/ -maxdepth 5 -type f -name "handle_state" -path "*mca_business*" 2>/dev/null \
+	| sed -n 's/$/,start=0,stop=1/g;p' >>"$LIST_SWITCH"
 find /sys/devices/platform/soc/ -maxdepth 5 -type f -name "handle_state" -path "*mca*" 2>/dev/null \
 	| sed -n 's/$/,start=0,stop=1/g;p' >>"$LIST_SWITCH"
 find /sys/devices/platform/soc/ -maxdepth 5 -type f -name "handle_state" -path "*charg*" 2>/dev/null \
 	| sed -n 's/$/,start=0,stop=1/g;p' >>"$LIST_SWITCH"
-find /sys/devices/platform/ -maxdepth 6 -type f -name "handle_state" 2>/dev/null \
+find /sys/devices/platform/ -maxdepth 6 -type f -name "handle_state" \( -path "*mca*" -o -path "*charg*" \) 2>/dev/null \
+	| sed -n 's/$/,start=0,stop=1/g;p' >>"$LIST_SWITCH"
+find /sys/devices/platform/soc/ -maxdepth 5 -type f -name "stop_handle_charge" -path "*mca*" 2>/dev/null \
 	| sed -n 's/$/,start=0,stop=1/g;p' >>"$LIST_SWITCH"
 find /sys/devices/platform/soc/ -maxdepth 5 -type f \( \
 	-iname "force_charging" -o -iname "enable_charging" -o -iname "charge_control" \
 	\) -path "*mca*" 2>/dev/null | sed -n 's/$/,start=1,stop=0/g;p' >>"$LIST_SWITCH"
 
-# 电流墙型「伪开关」（无专用开关时的兜底）
-find /sys/class/power_supply/ -maxdepth 2 -type f \( \
-	-iname "constant_charge_current_max" -o -iname "current_max" -o \
-	-iname "input_current_max" -o -iname "charge_current" -o \
-	-iname "fast_charge_current_max" \
-	\) 2>/dev/null | sed -n 's/$/,start=3000000,stop=0/g;p' >>"$LIST_SWITCH"
-
-find /sys/class/power_supply/battery/ -maxdepth 1 -type f -iname "charge_type" 2>/dev/null \
-	| sed -n 's/$/,start=Fast,stop=None/g;p' >>"$LIST_SWITCH"
-find /sys/class/power_supply/ -maxdepth 2 -type f -iname "*charge_control_enabled" 2>/dev/null \
-	| sed -n 's/$/,start=1,stop=0/g;p' >>"$LIST_SWITCH"
-find /sys/class/power_supply/usb/ /sys/class/power_supply/qc_usb/ /sys/class/power_supply/dc/ \
-	/sys/class/power_supply/wireless/ /sys/class/power_supply/pc_port/ -maxdepth 1 \
-	-type f -iname "input_suspend" 2>/dev/null | sed -n 's/$/,start=0,stop=1/g;p' >>"$LIST_SWITCH"
+# 电流墙 / 端口 suspend / charge_type 不入主列表（运行时作末位兜底，见 charge.sh）
 
 # charging_state：enabled / disabled（ACC）
 find /sys/devices/ -maxdepth 6 -type f -iname "charging_state" 2>/dev/null \
@@ -152,7 +144,7 @@ if [ -f "${0%/*}/list_curr.sh" ]; then
 	"${0%/*}/list_curr.sh" >/dev/null 2>&1 || true
 fi
 
-# 硬编码兜底：常见路径（存在才写）
+# 硬编码兜底：常见路径 + MCA（运行时存在才写）；电流墙/端口 suspend 见 charge.sh 末位兜底
 cat >>"$LIST_SWITCH" << 'EOF'
 /sys/class/power_supply/battery/charging_enabled,start=1,stop=0
 /sys/class/power_supply/battery/battery_charging_enabled,start=1,stop=0
@@ -174,7 +166,6 @@ cat >>"$LIST_SWITCH" << 'EOF'
 /sys/class/power_supply/battery/force_disable_charging,start=0,stop=1
 /sys/class/power_supply/battery/charge_control_enabled,start=1,stop=0
 /sys/class/power_supply/battery/mi_charge_enable,start=1,stop=0
-/sys/class/power_supply/battery_ext/smart_charging_interruption,start=0,stop=1
 /sys/class/power_supply/main/adapter_cc_mode,start=0,stop=1
 /sys/class/power_supply/main/cool_mode,start=0,stop=1
 /sys/class/power_supply/charger/charge_disable,start=0,stop=1
@@ -191,7 +182,6 @@ cat >>"$LIST_SWITCH" << 'EOF'
 /sys/class/qcom-battery/charging_suspend_battery,start=0,stop=1
 /sys/class/qcom-battery/night_charging,start=0,stop=1
 /sys/class/qcom-battery/cool_mode,start=0,stop=1
-/sys/class/qcom-battery/batt_protect_en,start=0,stop=1
 /sys/class/asuslib/charger_limit_en,start=0,stop=1
 /sys/class/asuslib/charging_suspend_en,start=0,stop=1
 /sys/class/hw_power/charger/charge_data/enable_charger,start=1,stop=0
@@ -209,24 +199,21 @@ cat >>"$LIST_SWITCH" << 'EOF'
 /sys/kernel/debug/google_charger/chg_mode,start=1,stop=0
 /sys/kernel/nubia_charge/charger_bypass,start=off,stop=on
 /sys/module/qpnp_adaptive_charge/parameters/blocking,start=0,stop=1
-/sys/class/power_supply/usb/input_suspend,start=0,stop=1
-/sys/class/power_supply/qc_usb/input_suspend,start=0,stop=1
-/sys/class/power_supply/dc/input_suspend,start=0,stop=1
-/sys/class/power_supply/wireless/input_suspend,start=0,stop=1
-/sys/class/power_supply/pc_port/input_suspend,start=0,stop=1
 /sys/class/power_supply/ac/device/power_supply/usb/power_switch,start=1,stop=0
-/sys/class/power_supply/ac/device/power_supply/usb/input_suspend,start=0,stop=1
-/sys/class/power_supply/battery/constant_charge_current_max,start=3000000,stop=0
-/sys/class/power_supply/battery/current_max,start=3000000,stop=0
-/sys/class/power_supply/battery/input_current_max,start=3000000,stop=0
-/sys/class/power_supply/battery/charge_current,start=3000000,stop=0
-/sys/class/power_supply/battery/fast_charge_current_max,start=3000000,stop=0
-/sys/class/power_supply/battery/charge_control_end_threshold,start=100,stop=0
-/sys/class/power_supply/battery/charge_type,start=Fast,stop=None
 /proc/driver/charger_limit_enable,start=0,stop=1
 /proc/driver/charger_limit,start=100,stop=1
 /proc/mtk_battery_cmd/current_cmd,start=0_0,stop=0_1
 /proc/mtk_battery_cmd/en_power_path,start=1,stop=0
+/sys/devices/platform/soc/soc:mca_business_charger/handle_state,start=0,stop=1
+/sys/devices/platform/soc/soc:mca_charger/handle_state,start=0,stop=1
+/sys/devices/platform/soc/soc@0:mca_business_charger/handle_state,start=0,stop=1
+/sys/devices/platform/soc/soc@0:mca_charger/handle_state,start=0,stop=1
+/sys/devices/platform/soc/mca_business_charger/handle_state,start=0,stop=1
+/sys/devices/platform/soc/mca_charger/handle_state,start=0,stop=1
+/sys/class/power_supply/mca-charger/handle_state,start=0,stop=1
+/sys/class/power_supply/mca_charger/handle_state,start=0,stop=1
+/sys/devices/platform/soc/soc:mca_business_charger/stop_handle_charge,start=0,stop=1
+/sys/devices/platform/soc/soc:mca_charger/stop_handle_charge,start=0,stop=1
 EOF
 
 if [ -f "$LIST_SWITCH" ]; then
