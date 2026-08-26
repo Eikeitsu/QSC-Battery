@@ -364,6 +364,16 @@ detect_summary="$(qsc_detect_and_write_profile)"
 ui_print " $detect_summary"
 ui_print " 已写入 data/device.profile"
 
+# 更新时保留运行数据（list / 历史 / 关闭标记等）
+if [ -f "$LIBDIR/hot_update.sh" ]; then
+	# shellcheck disable=SC1090
+	. "$LIBDIR/hot_update.sh"
+	hot_update_preserve_paths "$CURRENT_MODULE" "$MODPATH" \
+		data/list_switch data/list_charge_current data/ch_curr_ctrl_files \
+		data/device.profile data/charge_history.csv data/off_qsc \
+		data/compat_hint
+fi
+
 ui_print "--------------------------------"
 ui_print " 目录结构: "
 ui_print "  bin/     核心脚本 "
@@ -379,10 +389,8 @@ fi
 ui_print " 配置: config/config.conf "
 [ "$INSTALL_CURRENT" = "1" ] && ui_print " 电流控制: config/current.json "
 ui_print " 日志: data/log.log "
-	ui_print " Action: 上=刷新 / 下=插电测开关(未插电则诊断) "
+ui_print " Action: 上=刷新 / 下=插电测开关(未插电则诊断) "
 ui_print "--------------------------------"
-ui_print " 安装完成，请重启设备 "
-ui_print "********************************"
 
 set_perm_recursive "$MODPATH/bin" root root 0755 0755
 set_perm_recursive "$MODPATH/config" root root 0755 0644
@@ -393,3 +401,16 @@ set_perm "$MODPATH/service.sh" root root 0755
 set_perm "$MODPATH/uninstall.sh" root root 0755
 set_perm "$MODPATH/action.sh" root root 0755
 set_perm "$MODPATH/customize.sh" root root 0755
+set_perm "$MODPATH/hotinstall.sh" root root 0755
+
+# 非首次：本模块无 system/sepolicy 等开机挂载，更新默认可免重启
+ui_print "--------------------------------"
+if [ -f "$LIBDIR/hot_update.sh" ]; then
+	# 无「必须重启」路径 → 空参数列表；仅首次/禁用时会要求重启
+	if hot_update_try QSC_Battery; then
+		ui_print " 热更新将重启充电控制服务 "
+	fi
+else
+	ui_print " 安装完成，请重启设备 "
+fi
+ui_print "********************************"

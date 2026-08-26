@@ -16,6 +16,7 @@
 - 新增 `power_stop_schedule`：仅在设定时段内触发电量停充（温度停充不受限）
 - 通知细化：`notify_charge_kinds`（停充 / 恢复 / 失败可分控）、`notify_quiet_schedule`（勿扰时段；失败仍通知）
 - 新增循环/维持间隔、停充校验等待、`wireless_policy`（same/ignore）、按 App 停充、充放电历史采样等配置项
+- 非首次更新支持免重启热更新：无开机挂载类变更时切换模块目录并重拉 `service.sh`；支持管理器热更新接口时优先走该路径
 
 ### WebUI / Action
 
