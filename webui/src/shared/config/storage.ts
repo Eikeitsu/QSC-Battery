@@ -16,8 +16,14 @@ export const STORAGE_KEYS = {
   fontScale: "qsc_font_scale",
   currentCollapse: "qsc_current_collapse",
   logLevelFilter: "qsc_log_level_filter",
+  logViewMode: "qsc_log_view_mode",
   codeEditorWrap: "qsc_code_editor_wrap",
   legacyDockPage: "qsc_dock_page",
+  /** 本机自建预制档 */
+  devicePresetsUser: "qsc_device_presets_user",
+  /** 从仓库拉取后的本地缓存 */
+  devicePresetsRepo: "qsc_device_presets_repo",
+  devicePresetsRepoMeta: "qsc_device_presets_repo_meta",
 } as const;
 
 /** @deprecated 使用 STORAGE_KEYS.fontScale */

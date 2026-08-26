@@ -1,1 +1,0 @@
-import{g as s,k as e}from"./app-Dr-nYsRO.js";import{a as c}from"./_plugin-vue_export-helper-DgwAKB0B.js";function h(t="page"){const a=c(),m=s(()=>({[`${t}-${e.Md3}`]:a.themePack===e.Md3,[`${t}-${e.Miuix}`]:a.themePack===e.Miuix,[`${t}-${e.Default}`]:a.themePack===e.Default}));return{theme:a,packClass:m}}export{h as u};

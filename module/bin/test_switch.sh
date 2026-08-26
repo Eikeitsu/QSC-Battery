@@ -8,6 +8,7 @@
 OUT="${DATADIR}/switch_test.log"
 mkdir -p "$DATADIR" 2>/dev/null
 : >"$OUT"
+echo "running ts=$(date +%s)" >"$DATADIR/switch_test_status"
 
 qsc_abs_ua() {
 	local c
@@ -91,6 +92,7 @@ echo " 日志: $OUT"
 if ! qsc_is_plugged; then
 	echo "[错误] 请先插入充电器再测试"
 	echo "not_plugged" >"$DATADIR/switch_test_result"
+	echo "error not_plugged ts=$(date +%s)" >"$DATADIR/switch_test_status"
 	qsc_log error "停充开关实测失败：未插充电器"
 	exit 1
 fi
@@ -121,8 +123,21 @@ done
 rm -f "$SEEN_FILE"
 
 cand_n="$(wc -l <"$CAND_FILE" 2>/dev/null | tr -d ' ')"
+# Action 快速模式：QSC_TEST_MAX=N 只测前 N 条
+if [ -n "${QSC_TEST_MAX:-}" ]; then
+	case "$QSC_TEST_MAX" in
+		*[!0-9]*|"") ;;
+		*)
+			if [ "$QSC_TEST_MAX" -gt 0 ] 2>/dev/null && [ "${cand_n:-0}" -gt "$QSC_TEST_MAX" ] 2>/dev/null; then
+				head -n "$QSC_TEST_MAX" "$CAND_FILE" >"${CAND_FILE}.max" 2>/dev/null && mv -f "${CAND_FILE}.max" "$CAND_FILE"
+				cand_n="$QSC_TEST_MAX"
+				echo " 快速模式: 仅测前 ${cand_n} 条（完整测试勿设 QSC_TEST_MAX）"
+			fi
+			;;
+	esac
+fi
 echo " 候选开关: ${cand_n:-0} 条（已排除电流墙类节点）"
-echo "候选数=$cand_n 时间=$(date +%F_%T)" >>"$OUT"
+echo "候选数=$cand_n 时间=$(date +%F_%T) max=${QSC_TEST_MAX:-all}" >>"$OUT"
 
 BEST_ENTRY=""
 BEST_PATH=""
@@ -206,14 +221,17 @@ if [ -n "$BEST_ENTRY" ]; then
 	echo "  start=$ENTRY_START stop=$ENTRY_STOP"
 	echo " 已写入 device.profile (preferred_switch)"
 	echo "ok path=$ENTRY_PATH" >"$DATADIR/switch_test_result"
+	echo "done ok path=$ENTRY_PATH ts=$(date +%s)" >"$DATADIR/switch_test_status"
 	qsc_log info "首选开关 $ENTRY_PATH start=$ENTRY_START stop=$ENTRY_STOP"
 else
 	echo " 未找到可逆有效开关"
 	echo " 将继续使用多节点兜底；可查看 $OUT"
 	echo "none" >"$DATADIR/switch_test_result"
+	echo "done none ts=$(date +%s)" >"$DATADIR/switch_test_status"
 	qsc_log warn "停充开关实测未找到可逆有效节点，继续多节点兜底"
 	qsc_clear_preferred_switch
 fi
 echo " 有效=$ok_n 无效/跳过=$fail_n"
 echo "========================================"
 echo " 测试结束（已尝试恢复充电）"
+rm -f "$DATADIR/switch_test_pid" 2>/dev/null

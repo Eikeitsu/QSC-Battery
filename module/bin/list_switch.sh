@@ -7,21 +7,21 @@ _QSC_LIST_SWITCH_FINAL="$LIST_SWITCH"
 LIST_SWITCH="$DATADIR/.list_switch_build"
 rm -f "$LIST_SWITCH"
 # suspend / disable 类：停充写 1，恢复写 0
-# 排除 usb/qc_usb 等输入口 input_suspend（改由末位兜底，避免与快充协商互抢）
+# 排除策略类：night_charging / cool_mode / batt_protect（非供电开关，易与系统互抢）
+# 排除 usb/qc_usb 等输入口 input_suspend（改由末位兜底）
 find /sys/*/* -type f \( \
 	-iname "*input_suspend" -o -iname "*battery_input_suspend" -o \
 	-iname "*disable*_charge*" -o -iname "*charge*_disable*" -o \
 	-iname "*disable*_charging*" -o -iname "*stop_charge*" -o \
 	-iname "*stop_charging*" -o -iname "*stop_handle_charge" -o \
 	-iname "*batt_slate_mode" -o -iname "*store_mode" -o \
-	-iname "*night_charging" -o -iname "*force_disable_charging" -o \
+	-iname "*force_disable_charging" -o \
 	-iname "*op_disable_charge" -o -iname "*charge_disable" -o \
-	-iname "*cool_mode" -o \
 	-iname "*charging_suspend*" -o -iname "*charger_limit_en" -o \
 	-iname "*force_charger_suspend" -o -iname "*force_usb_suspend" -o \
 	-iname "*bypass_charger" \
 	\) 2>/dev/null \
-	| egrep -i -v 'limit_max|float|step|reverse|/battery_|bq2597x|/cpu/|firmware|charge_control_limit|/power_supply/usb/|/power_supply/qc_usb/|/power_supply/dc/|/power_supply/wireless/|/power_supply/pc_port/|batt_protect' \
+	| egrep -i -v 'limit_max|float|step|reverse|/battery_|bq2597x|/cpu/|firmware|charge_control_limit|/power_supply/usb/|/power_supply/qc_usb/|/power_supply/dc/|/power_supply/wireless/|/power_supply/pc_port/|night_charging|cool_mode|batt_protect|smart_charging|adapter_cc_mode|step_charging|restrict_chg|restricted_charging' \
 	| sed -n 's/$/,start=0,stop=1/g;p' >"$LIST_SWITCH"
 
 # enable 类：停充写 0，恢复写 1
@@ -67,8 +67,7 @@ find /sys/class/qcom-battery/ -maxdepth 1 -type f \( \
 	\) 2>/dev/null | sed -n 's/$/,start=1,stop=0/g;p' >>"$LIST_SWITCH"
 find /sys/class/qcom-battery/ -maxdepth 1 -type f \( \
 	-iname "*input_suspend" -o -iname "*charge_disable" -o \
-	-iname "*disable_charging" -o -iname "*night_charging" -o \
-	-iname "*cool_mode" -o \
+	-iname "*disable_charging" -o \
 	-iname "*charging_suspend*" \
 	\) 2>/dev/null | sed -n 's/$/,start=0,stop=1/g;p' >>"$LIST_SWITCH"
 
@@ -155,7 +154,6 @@ cat >>"$LIST_SWITCH" << 'EOF'
 /sys/class/power_supply/battery/store_mode,start=0,stop=1
 /sys/class/power_supply/battery/input_suspend,start=0,stop=1
 /sys/class/power_supply/battery/battery_input_suspend,start=0,stop=1
-/sys/class/power_supply/battery/night_charging,start=0,stop=1
 /sys/class/power_supply/battery/charge_disable,start=0,stop=1
 /sys/class/power_supply/battery/disable_charging,start=0,stop=1
 /sys/class/power_supply/battery/stop_charging,start=0,stop=1
@@ -166,8 +164,6 @@ cat >>"$LIST_SWITCH" << 'EOF'
 /sys/class/power_supply/battery/force_disable_charging,start=0,stop=1
 /sys/class/power_supply/battery/charge_control_enabled,start=1,stop=0
 /sys/class/power_supply/battery/mi_charge_enable,start=1,stop=0
-/sys/class/power_supply/main/adapter_cc_mode,start=0,stop=1
-/sys/class/power_supply/main/cool_mode,start=0,stop=1
 /sys/class/power_supply/charger/charge_disable,start=0,stop=1
 /sys/class/power_supply/bms/charge_disable,start=0,stop=1
 /sys/class/power_supply/bms/charging_enabled,start=1,stop=0
@@ -180,8 +176,6 @@ cat >>"$LIST_SWITCH" << 'EOF'
 /sys/class/qcom-battery/input_suspend,start=0,stop=1
 /sys/class/qcom-battery/battery_charging_enabled,start=1,stop=0
 /sys/class/qcom-battery/charging_suspend_battery,start=0,stop=1
-/sys/class/qcom-battery/night_charging,start=0,stop=1
-/sys/class/qcom-battery/cool_mode,start=0,stop=1
 /sys/class/asuslib/charger_limit_en,start=0,stop=1
 /sys/class/asuslib/charging_suspend_en,start=0,stop=1
 /sys/class/hw_power/charger/charge_data/enable_charger,start=1,stop=0

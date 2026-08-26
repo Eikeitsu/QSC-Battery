@@ -10,7 +10,6 @@ QSC_FALLBACK_SWITCHES="\
 /sys/class/power_supply/battery/store_mode,start=0,stop=1 \
 /sys/class/power_supply/battery/input_suspend,start=0,stop=1 \
 /sys/class/power_supply/battery/battery_input_suspend,start=0,stop=1 \
-/sys/class/power_supply/battery/night_charging,start=0,stop=1 \
 /sys/class/power_supply/battery/charging_enabled,start=1,stop=0 \
 /sys/class/power_supply/battery/battery_charging_enabled,start=1,stop=0 \
 /sys/class/power_supply/battery/batt_charging_enabled,start=1,stop=0 \
@@ -24,8 +23,6 @@ QSC_FALLBACK_SWITCHES="\
 /sys/class/power_supply/battery/force_disable_charging,start=0,stop=1 \
 /sys/class/power_supply/battery/charge_control_enabled,start=1,stop=0 \
 /sys/class/power_supply/battery/mi_charge_enable,start=1,stop=0 \
-/sys/class/power_supply/main/adapter_cc_mode,start=0,stop=1 \
-/sys/class/power_supply/main/cool_mode,start=0,stop=1 \
 /sys/class/power_supply/charger/charge_disable,start=0,stop=1 \
 /sys/class/power_supply/bms/charge_disable,start=0,stop=1 \
 /sys/class/power_supply/bms/charging_enabled,start=1,stop=0 \
@@ -37,8 +34,6 @@ QSC_FALLBACK_SWITCHES="\
 /sys/class/qcom-battery/input_suspend,start=0,stop=1 \
 /sys/class/qcom-battery/battery_charging_enabled,start=1,stop=0 \
 /sys/class/qcom-battery/charging_suspend_battery,start=0,stop=1 \
-/sys/class/qcom-battery/night_charging,start=0,stop=1 \
-/sys/class/qcom-battery/cool_mode,start=0,stop=1 \
 /sys/class/asuslib/charger_limit_en,start=0,stop=1 \
 /sys/class/asuslib/charging_suspend_en,start=0,stop=1 \
 /sys/class/hw_power/charger/charge_data/enable_charger,start=1,stop=0 \
@@ -169,23 +164,52 @@ qsc_load_user_switches() {
 	fi
 }
 
-# 按列表写停充/恢复。stop 且 third=first 时：首次写入成功即停，并记下 active_switch
+# 策略/温控类节点：不是可靠供电开关，自动扫描与盲写一律跳过（用户显式 power_switch 仍可用）
+# night_charging / cool_mode / batt_protect
+qsc_is_policy_switch_node() {
+	case "$1" in
+		*night_charging*|*cool_mode*|*batt_protect*|*smart_charging*|*adapter_cc_mode*|\
+		*step_charging*|*restrict_chg*|*restricted_charging*|*charge_control_end*|\
+		*charge_control_start*|*charge_control_limit*|*thermal_input*)
+			return 0
+			;;
+	esac
+	return 1
+}
+
+# 按列表写停充/恢复。
+# stop + first/verify：逐个尝试；verify 时写入后检查是否真停充
 qsc_write_switch_list() {
 	local mode="$1"
 	local list="$2"
 	local first_only="${3:-}"
-	local i route val
+	local allow_policy="${4:-}"
+	local i route val start_val
 	for i in $list; do
 		route="$(echo "$i" | sed -n 's/,start=.*//g;$p')"
 		[ -f "$route" ] || continue
+		if [ "$allow_policy" != "1" ] && qsc_is_policy_switch_node "$route"; then
+			continue
+		fi
 		if [ "$mode" = "stop" ]; then
 			val="$(echo "$i" | sed -n 's/.*,stop=//g;s/_/ /g;$p')"
 			if qsc_write_node "$route" "$val"; then
+				if [ "$first_only" = "verify" ]; then
+					sleep 1
+					if ! qsc_charge_looks_stopped; then
+						start_val="$(echo "$i" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
+						qsc_write_node "$route" "$start_val" 2>/dev/null || true
+						qsc_log_once "sw_ineff_${route##*/}" warn "节点写入成功但未停充，已跳过 $route"
+						continue
+					fi
+				fi
 				stop_nodes="$stop_nodes $route=$val"
 				log_log=1
 				stop_ok=1
 				qsc_save_active_switch "$i"
-				[ "$first_only" = "first" ] && return 0
+				if [ "$first_only" = "first" ] || [ "$first_only" = "verify" ]; then
+					return 0
+				fi
 			fi
 		else
 			val="$(echo "$i" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
@@ -212,7 +236,23 @@ qsc_clear_active_switch() {
 	rm -f "$DATADIR/active_switch" 2>/dev/null
 }
 
-# 仅重写 data/active_switch，避免全量盲写；MCA 节点不加 chmod
+# 粗判是否已停充（供 verify；MCA 写入后可能短暂仍显示 Charging，故 MCA 路径不依赖此函数）
+qsc_charge_looks_stopped() {
+	local st cur
+	st="$(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d '\r\n')"
+	case "$st" in
+		"Not charging"|Discharging|Full) return 0 ;;
+	esac
+	cur="$(cat /sys/class/power_supply/battery/current_now 2>/dev/null | tr -d ' \r\n-')"
+	case "$cur" in
+		""|*[!0-9]*) return 1 ;;
+	esac
+	# |current_now| < 80mA 视为几乎无充电电流
+	[ "$cur" -lt 80000 ] 2>/dev/null && return 0
+	return 1
+}
+
+# 仅重写 data/active_switch；MCA 节点不加 chmod
 qsc_reaffirm_active_stop() {
 	local entry route val
 	[ -f "$DATADIR/active_switch" ] || return 1
@@ -285,34 +325,38 @@ qsc_stop_wakelock_release() {
 	return 0
 }
 
-# 插电且处于停充态：单节点重申 + 按需持锁
+# 插电且处于停充态：仅 MCA/preferred 持续重申（非 MCA 停充成功后不再写节点，避免小米 OS2 闪充）
 qsc_maintain_stop_while_plugged() {
+	local online
 	[ -f "$DATADIR/power_switch" ] || {
 		qsc_stop_wakelock_release
 		return 1
 	}
+	# 小米等停充后 dumpsys 可能短暂无 powered:true，改用 usb/online 判断仍插电
+	if [ -z "$battery_powered" ]; then
+		for online in /sys/class/power_supply/usb/online /sys/class/power_supply/qc_usb/online \
+			/sys/class/power_supply/wireless/online; do
+			if [ -f "$online" ] && [ "$(cat "$online" 2>/dev/null | tr -d ' \r\n')" = "1" ]; then
+				battery_powered="powered: true"
+				break
+			fi
+		done
+	fi
 	[ -n "$battery_powered" ] || {
 		qsc_stop_wakelock_release
 		return 1
 	}
 	qsc_stop_wakelock_acquire
-	qsc_reaffirm_active_stop || {
-		# active 丢失时回退 MCA/preferred/user，仍避免全量列表
-		qsc_load_device_profile 2>/dev/null || true
-		if [ "$QSC_MCA" = "1" ] && qsc_mca_write stop; then
-			qsc_save_active_switch "${QSC_MCA_PATH},start=${QSC_MCA_START},stop=${QSC_MCA_STOP}"
-			return 0
-		fi
-		if qsc_pref_write stop; then
-			qsc_save_active_switch "${QSC_PREF_PATH},start=${QSC_PREF_START},stop=${QSC_PREF_STOP}"
-			return 0
-		fi
-		if [ -n "$QSC_USER_SWITCHES" ]; then
-			qsc_write_switch_list stop "$QSC_USER_SWITCHES" first
-			[ "$stop_ok" = "1" ] && return 0
-		fi
-		return 1
-	}
+	# MCA：系统会改回 handle_state，必须每轮重申
+	if qsc_mca_write stop; then
+		return 0
+	fi
+	# 用户实测 preferred 且标记 reassert 时才重申
+	qsc_load_device_profile 2>/dev/null || true
+	if [ "${QSC_REASSERT:-0}" = "1" ] && [ -n "$QSC_PREF_PATH" ] && [ -f "$QSC_PREF_PATH" ]; then
+		qsc_pref_write stop && return 0
+	fi
+	# 通用节点：停充后静默，不写 active_switch
 	return 0
 }
 
@@ -325,13 +369,15 @@ qsc_build_switch_list() {
 }
 
 # 实时探测并写入 MCA（不依赖过期 profile；不 chmod）
-# label=stop|start；成功则更新 QSC_MCA* 并记 active_switch
+# 用法：qsc_mca_write stop | qsc_mca_write start
 qsc_mca_write() {
-	local val="$1"
-	local label="$2"
-	local path="" cand
-	[ "$label" = "stop" ] && val=1
-	[ "$label" = "start" ] && val=0
+	local label="$1"
+	local val="" path="" cand
+	case "$label" in
+		stop) val=1 ;;
+		start) val=0 ;;
+		*) return 1 ;;
+	esac
 
 	qsc_load_device_profile 2>/dev/null || true
 
@@ -425,7 +471,7 @@ qsc_pref_write() {
 qsc_power_stop() {
 	stop_ok=0
 	stop_nodes=""
-	# MCA 最先：直接 echo，不走全量列表（小米17/K90）
+	# MCA 最先：直接 echo 1，不走全量列表（小米17/K90）
 	if qsc_mca_write stop; then
 		return
 	fi
@@ -433,19 +479,20 @@ qsc_power_stop() {
 		return
 	fi
 	if [ -n "$QSC_USER_SWITCHES" ]; then
-		qsc_write_switch_list stop "$QSC_USER_SWITCHES" first
+		# 用户显式配置允许策略类节点
+		qsc_write_switch_list stop "$QSC_USER_SWITCHES" verify 1
 		if [ "$stop_ok" = "1" ]; then
 			stop_nodes="$stop_nodes (user)"
 			return
 		fi
 	fi
-	# 常规开关：只取第一个可写成功的节点
-	qsc_write_switch_list stop "$switch_list" first
+	# 常规开关：写入后校验是否真停充，避免「写成功但无效」导致闪充
+	qsc_write_switch_list stop "$switch_list" verify
 	if [ "$stop_ok" = "1" ]; then
 		return
 	fi
-	# 末位兜底：电流墙 / 端口 suspend
-	qsc_write_switch_list stop "$QSC_LAST_RESORT_SWITCHES" first
+	# 末位兜底：电流墙 / 端口 suspend（仍做校验）
+	qsc_write_switch_list stop "$QSC_LAST_RESORT_SWITCHES" verify
 }
 
 qsc_power_start() {
@@ -463,7 +510,7 @@ qsc_power_start() {
 		return
 	fi
 	if [ -n "$QSC_USER_SWITCHES" ]; then
-		qsc_write_switch_list start "$QSC_USER_SWITCHES"
+		qsc_write_switch_list start "$QSC_USER_SWITCHES" "" 1
 		if [ "$start_ok" = "1" ]; then
 			qsc_clear_active_switch
 			qsc_stop_wakelock_release

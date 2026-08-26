@@ -4,9 +4,13 @@ import { computed, ref } from "vue";
 const props = withDefaults(
   defineProps<{
     modelValue?: string[];
+    addTitle?: string;
+    editTitle?: string;
   }>(),
   {
     modelValue: () => [],
+    addTitle: "添加旁路时段",
+    editTitle: "编辑旁路时段",
   },
 );
 
@@ -95,7 +99,7 @@ function onCancel() {
 
     <van-popup v-model:show="show" position="bottom" round>
       <van-picker-group
-        :title="editIndex >= 0 ? '编辑旁路时段' : '添加旁路时段'"
+        :title="editIndex >= 0 ? props.editTitle : props.addTitle"
         :tabs="['开始', '结束']"
         next-step-text="下一步"
         @confirm="onConfirm"

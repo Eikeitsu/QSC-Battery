@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import type { LogEntry } from "@/shared";
+import type { LogEntry, LogSession } from "@/shared";
 import { useAppStore } from "@/stores";
 import LogFilter from "./LogFilter.vue";
 import LogLines from "./LogLines.vue";
+import LogSessions from "./LogSessions.vue";
+import LogViewToggle from "./LogViewToggle.vue";
 
 defineProps<{
   lines: LogEntry[];
+  sessions: LogSession[];
+  viewMode: "flat" | "session";
   levelFilter: string;
   filterActive: boolean;
 }>();
@@ -14,6 +18,7 @@ defineEmits<{
   refresh: [];
   clear: [];
   "update:levelFilter": [v: string];
+  "update:viewMode": [v: "flat" | "session"];
 }>();
 
 const store = useAppStore();
@@ -29,6 +34,10 @@ const store = useAppStore();
         </div>
       </div>
       <div class="log-md3-meta__actions">
+        <LogViewToggle
+          :model-value="viewMode"
+          @update:model-value="$emit('update:viewMode', $event)"
+        />
         <van-button size="small" round type="primary" @click="$emit('refresh')">
           刷新
         </van-button>
@@ -43,7 +52,12 @@ const store = useAppStore();
     />
   </section>
   <section class="md3-tonal log-md3-body">
-    <LogLines :lines="lines" :filtered="filterActive" />
+    <LogSessions
+      v-if="viewMode === 'session'"
+      :sessions="sessions"
+      :filtered="filterActive"
+    />
+    <LogLines v-else :lines="lines" :filtered="filterActive" />
   </section>
 </template>
 
@@ -75,6 +89,8 @@ const store = useAppStore();
   display: flex;
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .log-md3-body {

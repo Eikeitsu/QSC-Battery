@@ -89,6 +89,7 @@ export default tseslint.config(
       "stylelint.config.js",
       "commitlint.config.js",
       "webui/vite.config.ts",
+      "webui/vitest.config.ts",
     ],
     languageOptions: {
       parser: tseslint.parser,

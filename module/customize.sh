@@ -29,6 +29,7 @@ else
 	qsc_abort "缺少 bin/lib/keys.sh，安装包不完整"
 fi
 
+# 纯数字配置项
 qsc_conf_value() {
 	local file="$1"
 	local key="$2"
@@ -40,6 +41,20 @@ qsc_conf_value() {
 	echo "$value"
 }
 
+# 允许 0/1/auto 等简短标记（非纯数字）
+qsc_conf_token() {
+	local file="$1"
+	local key="$2"
+	local count value
+	count="$(grep -c "^${key}=" "$file" 2>/dev/null)"
+	[ "$count" = "1" ] || return 1
+	value="$(sed -n "s/^${key}=//p" "$file" | tr -d ' \r\n')"
+	case "$value" in
+		""|*[!0-9A-Za-z._:-]*) return 1 ;;
+	esac
+	echo "$value"
+}
+
 qsc_merge_config() {
 	local source="$1"
 	local target="$2"
@@ -48,9 +63,11 @@ qsc_merge_config() {
 	local default_charge_full default_power_reset default_compatibility_mode
 	local default_temperature_switch
 	local default_temperature_stop default_temperature_start
+	local default_stop_hold default_notify
 	local power_stop power_start power_stop_time charge_full power_reset
 	local Compatibility_mode
-	local temperature_switch temperature_stop temperature_start value
+	local temperature_switch temperature_stop temperature_start
+	local stop_hold_wakelock notify_charge_event notify_kinds value _kinds
 
 	default_power_stop="$(qsc_conf_value "$target" power_stop)" || return 1
 	default_power_start="$(qsc_conf_value "$target" power_start)" || return 1
@@ -61,6 +78,10 @@ qsc_merge_config() {
 	default_temperature_switch="$(qsc_conf_value "$target" temperature_switch)" || return 1
 	default_temperature_stop="$(qsc_conf_value "$target" temperature_switch_stop)" || return 1
 	default_temperature_start="$(qsc_conf_value "$target" temperature_switch_start)" || return 1
+	default_stop_hold="$(qsc_conf_token "$target" stop_hold_wakelock)" || default_stop_hold=auto
+	default_notify="$(qsc_conf_value "$target" notify_charge_event)" || default_notify=0
+	notify_kinds="$(sed -n 's/^notify_charge_kinds=//p' "$target" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+	[ -n "$notify_kinds" ] || notify_kinds="stop,resume,fail"
 
 	power_stop="$default_power_stop"
 	power_start="$default_power_start"
@@ -71,6 +92,8 @@ qsc_merge_config() {
 	temperature_switch="$default_temperature_switch"
 	temperature_stop="$default_temperature_stop"
 	temperature_start="$default_temperature_start"
+	stop_hold_wakelock="$default_stop_hold"
+	notify_charge_event="$default_notify"
 
 	value="$(qsc_conf_value "$source" power_stop)" && [ "$value" -ge 1 -a "$value" -le 110 ] && power_stop="$value"
 	value="$(qsc_conf_value "$source" power_start)" && [ "$value" -ge 0 -a "$value" -le 109 ] && power_start="$value"
@@ -81,6 +104,16 @@ qsc_merge_config() {
 	value="$(qsc_conf_value "$source" temperature_switch)" && [ "$value" -le 1 ] && temperature_switch="$value"
 	value="$(qsc_conf_value "$source" temperature_switch_stop)" && [ "$value" -le 100 ] && temperature_stop="$value"
 	value="$(qsc_conf_value "$source" temperature_switch_start)" && [ "$value" -le 100 ] && temperature_start="$value"
+	value="$(qsc_conf_token "$source" stop_hold_wakelock)" && case "$value" in 0|1|auto) stop_hold_wakelock="$value" ;; esac
+	value="$(qsc_conf_value "$source" notify_charge_event)" && [ "$value" -le 1 ] && notify_charge_event="$value"
+	# notify_charge_kinds 允许逗号列表
+	_kinds="$(sed -n 's/^notify_charge_kinds=//p' "$source" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+	case "$_kinds" in
+		""|*[^a-z,]*) ;;
+		*)
+			notify_kinds="$_kinds"
+			;;
+	esac
 
 	if [ "$power_stop" != "110" ] && [ "$power_stop" -le "$power_start" ]; then
 		power_stop="$default_power_stop"
@@ -101,6 +134,9 @@ qsc_merge_config() {
 		-e "s/^charge_full=.*/charge_full=$charge_full/" \
 		-e "s/^power_reset=.*/power_reset=$power_reset/" \
 		-e "s/^Compatibility_mode=.*/Compatibility_mode=$Compatibility_mode/" \
+		-e "s/^stop_hold_wakelock=.*/stop_hold_wakelock=$stop_hold_wakelock/" \
+		-e "s/^notify_charge_event=.*/notify_charge_event=$notify_charge_event/" \
+		-e "s/^notify_charge_kinds=.*/notify_charge_kinds=$notify_kinds/" \
 		-e "s/^temperature_switch=.*/temperature_switch=$temperature_switch/" \
 		-e "s/^temperature_switch_stop=.*/temperature_switch_stop=$temperature_stop/" \
 		-e "s/^temperature_switch_start=.*/temperature_switch_start=$temperature_start/" \
@@ -108,6 +144,39 @@ qsc_merge_config() {
 		rm -f "$merged"
 		return 1
 	}
+	# 迁移用户自定义供电开关与停充时段（多行）；跳过策略类节点以免闪充
+	sed -i -e '/^power_switch=/d' -e '/^power_stop_schedule=/d' -e '/^notify_quiet_schedule=/d' "$merged" 2>/dev/null
+	if grep -q '^power_switch=' "$source" 2>/dev/null; then
+		kept_ps=0
+		skip_ps=0
+		while IFS= read -r _ps_line || [ -n "$_ps_line" ]; do
+			[ -n "$_ps_line" ] || continue
+			case "$_ps_line" in
+				*night_charging*|*cool_mode*|*batt_protect*|*smart_charging*|*adapter_cc_mode*|*step_charging*|*restrict_chg*|*restricted_charging*|*charge_control_*)
+					skip_ps=$((skip_ps + 1))
+					continue
+					;;
+			esac
+			echo "$_ps_line" >>"$merged"
+			kept_ps=$((kept_ps + 1))
+		done <<EOF
+$(grep '^power_switch=' "$source" 2>/dev/null)
+EOF
+		if [ "$kept_ps" -gt 0 ]; then
+			ui_print "- 已迁移自定义 power_switch（${kept_ps} 条）"
+		fi
+		if [ "$skip_ps" -gt 0 ]; then
+			ui_print "- 已跳过 ${skip_ps} 条策略类 power_switch（易导致闪充）"
+		fi
+	fi
+	if grep -q '^power_stop_schedule=' "$source" 2>/dev/null; then
+		grep '^power_stop_schedule=' "$source" >>"$merged" 2>/dev/null
+		ui_print "- 已迁移停充时段 power_stop_schedule"
+	fi
+	if grep -q '^notify_quiet_schedule=' "$source" 2>/dev/null; then
+		grep '^notify_quiet_schedule=' "$source" >>"$merged" 2>/dev/null
+		ui_print "- 已迁移通知勿扰时段"
+	fi
 	mv -f "$merged" "$target"
 }
 
@@ -299,7 +368,7 @@ fi
 ui_print " 配置: config/config.conf "
 [ "$INSTALL_CURRENT" = "1" ] && ui_print " 电流控制: config/current.json "
 ui_print " 日志: data/log.log "
-ui_print " Action: 上=刷新状态 / 下=只读诊断 "
+	ui_print " Action: 上=刷新 / 下=插电测开关(未插电则诊断) "
 ui_print "--------------------------------"
 ui_print " 安装完成，请重启设备 "
 ui_print "********************************"

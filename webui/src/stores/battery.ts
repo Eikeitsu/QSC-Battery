@@ -24,6 +24,10 @@ export const useAppStore = defineStore("app", () => {
   const current = reactive<CurrentConfig>({ ...CURRENT_DEFAULTS });
   /** 自定义供电开关：每行「路径 start=X stop=Y」 */
   const powerSwitches = ref<string[]>([]);
+  /** 电量停充时段 HH:MM-HH:MM，空=全天 */
+  const powerStopSchedule = ref<string[]>([]);
+  /** 通知勿扰时段 */
+  const notifyQuietSchedule = ref<string[]>([]);
   const currentFeature = ref(false);
   const bridgeOk = ref(false);
   const deviceName = ref("加载中…");
@@ -104,6 +108,8 @@ export const useAppStore = defineStore("app", () => {
       settings[key] = value || DEFAULTS[key];
     }
     powerSwitches.value = await api.loadPowerSwitches();
+    powerStopSchedule.value = await api.loadPowerStopSchedule();
+    notifyQuietSchedule.value = await api.loadNotifyQuietSchedule();
   }
 
   async function loadCurrentConfig(): Promise<void> {
@@ -149,10 +155,42 @@ export const useAppStore = defineStore("app", () => {
       showToast("自定义供电开关保存失败");
       return false;
     }
+    const schOk = await api.savePowerStopSchedule(powerStopSchedule.value);
+    if (!schOk) {
+      showToast("停充时段保存失败");
+      return false;
+    }
+    const quietOk = await api.saveNotifyQuietSchedule(notifyQuietSchedule.value);
+    if (!quietOk) {
+      showToast("通知勿扰时段保存失败");
+      return false;
+    }
     if (toast) {
       if (result.fixed) showToast("已自动修正超范围配置并保存");
       else showSuccessToast("配置已保存");
     }
+    return true;
+  }
+
+  async function savePowerStopSchedule(toast = true): Promise<boolean> {
+    const ok = await api.savePowerStopSchedule(powerStopSchedule.value);
+    if (!ok) {
+      showToast("停充时段保存失败");
+      return false;
+    }
+    powerStopSchedule.value = await api.loadPowerStopSchedule();
+    if (toast) showSuccessToast("停充时段已保存");
+    return true;
+  }
+
+  async function saveNotifyQuietSchedule(toast = true): Promise<boolean> {
+    const ok = await api.saveNotifyQuietSchedule(notifyQuietSchedule.value);
+    if (!ok) {
+      showToast("通知勿扰时段保存失败");
+      return false;
+    }
+    notifyQuietSchedule.value = await api.loadNotifyQuietSchedule();
+    if (toast) showSuccessToast("勿扰时段已保存");
     return true;
   }
 
@@ -200,7 +238,11 @@ export const useAppStore = defineStore("app", () => {
       settings[key] = value;
     }
     powerSwitches.value = [];
+    powerStopSchedule.value = [];
+    notifyQuietSchedule.value = [];
     await api.savePowerSwitches([]);
+    await api.savePowerStopSchedule([]);
+    await api.saveNotifyQuietSchedule([]);
     if (currentFeature.value) {
       Object.assign(current, { ...CURRENT_DEFAULTS });
       const saved = await api.saveCurrentJsonc(current);
@@ -208,6 +250,62 @@ export const useAppStore = defineStore("app", () => {
     }
     showSuccessToast("已恢复默认配置");
     await refreshStatus();
+  }
+
+  function snapshotBundle(): api.ConfigBundle {
+    return {
+      version: 1,
+      settings: { ...settings },
+      power_switches: [...powerSwitches.value],
+      power_stop_schedule: [...powerStopSchedule.value],
+      current: currentFeature.value ? { ...current } : null,
+      device_profile: null,
+    };
+  }
+
+  async function snapshotBundleAsync(): Promise<api.ConfigBundle> {
+    const bundle = snapshotBundle();
+    bundle.device_profile = await api.loadDeviceProfileExport();
+    return bundle;
+  }
+
+  async function applyBundle(bundle: api.ConfigBundle, toast = true): Promise<boolean> {
+    Object.assign(settings, { ...DEFAULTS, ...bundle.settings });
+    powerSwitches.value = [...(bundle.power_switches || [])];
+    powerStopSchedule.value = [...(bundle.power_stop_schedule || [])];
+    const ok = await saveSettings(false);
+    if (!ok) return false;
+    if (currentFeature.value && bundle.current) {
+      Object.assign(current, bundle.current);
+      const saved = await api.saveCurrentJsonc(current);
+      if (!saved.ok) {
+        showToast("电流配置导入失败");
+        return false;
+      }
+      Object.assign(current, saved.value);
+    }
+    if (bundle.device_profile) {
+      await api.applyDeviceProfileExport(bundle.device_profile);
+    }
+    if (toast) showSuccessToast("配置已应用");
+    await refreshStatus();
+    return true;
+  }
+
+  async function exportConfig(): Promise<boolean> {
+    const ok = await api.exportConfigBundle(await snapshotBundleAsync());
+    if (ok) showSuccessToast("已导出到 Download/qsc_battery_config.json");
+    else showToast("导出失败");
+    return ok;
+  }
+
+  async function importConfig(): Promise<boolean> {
+    const bundle = await api.importConfigBundle();
+    if (!bundle) {
+      showToast("未找到 Download/qsc_battery_config.json");
+      return false;
+    }
+    return applyBundle(bundle);
   }
 
   async function refreshStatus(showTip = false): Promise<void> {
@@ -219,7 +317,7 @@ export const useAppStore = defineStore("app", () => {
       return;
     }
 
-    const [capR, tempR, offR, switchR, descR, statusR, voltR, currR, verR, battR] =
+    const [capR, tempR, offR, switchR, descR, statusR, voltR, currR, verR, battR, failR] =
       await Promise.all([
         api.exec(
           `cat /sys/class/power_supply/battery/capacity 2>/dev/null || cat /sys/class/power_supply/bms/capacity 2>/dev/null`,
@@ -241,6 +339,9 @@ export const useAppStore = defineStore("app", () => {
           `grep '^version=' '${PATHS.MODDIR}/module.prop' 2>/dev/null | cut -d= -f2-`,
         ),
         api.exec(`sh '${PATHS.BATTERY_INFO}' 2>/dev/null`),
+        api.exec(
+          `[ -f '${PATHS.STOP_FAIL_HINT}' ] || [ -f '${PATHS.NO_NODE_LOGGED}' ] && echo 1 || echo 0`,
+        ),
       ]);
 
     if (capR.errno === -2 || tempR.errno === -2) {
@@ -283,6 +384,10 @@ export const useAppStore = defineStore("app", () => {
     } else if (chargingStopped) {
       status.badge = majorDesc || "已停充，等待恢复";
       badgeType = BadgeType.Warning;
+    } else if (failR.stdout.trim() === BinaryFlag.On) {
+      status.badge = majorDesc || "停充可能未生效";
+      badgeType = BadgeType.Warning;
+      status.desc = "请插电后 Action 音量下测开关，或到「我的」清除开关缓存后重启";
     } else if (chargeStatus === "Charging" || chargeStatus === "Full") {
       status.badge = majorDesc || "充电中";
       badgeType = BadgeType.Success;
@@ -389,6 +494,8 @@ export const useAppStore = defineStore("app", () => {
     settings,
     current,
     powerSwitches,
+    powerStopSchedule,
+    notifyQuietSchedule,
     currentFeature,
     bridgeOk,
     deviceName,
@@ -405,9 +512,16 @@ export const useAppStore = defineStore("app", () => {
     init,
     saveSettings,
     savePowerSwitchText,
+    savePowerStopSchedule,
+    saveNotifyQuietSchedule,
     saveCurrent,
     toggleModule,
     resetDefaults,
+    snapshotBundle,
+    snapshotBundleAsync,
+    applyBundle,
+    exportConfig,
+    importConfig,
     refreshStatus,
     refreshLog,
     clearLog,

@@ -23,6 +23,12 @@ export const LIMITS = {
   appListMax: 64,
   scheduleMax: 16,
   pathListMax: 32,
+  reaffirmSecMin: 0,
+  reaffirmSecMax: 300,
+  driftUaMin: 0,
+  driftUaMax: 2_000_000,
+  stepUaMin: 0,
+  stepUaMax: 2_000_000,
 };
 
 export function clampInt(n: unknown, min: number, max: number, fallback: number): number {
@@ -92,6 +98,11 @@ function sanitizeScheduleList(list: unknown): string[] {
     if (out.length >= LIMITS.scheduleMax) break;
   }
   return out;
+}
+
+/** 电量停充时段 HH:MM-HH:MM */
+export function sanitizePowerStopSchedule(list: unknown): string[] {
+  return sanitizeScheduleList(list);
 }
 
 function sanitizeSysPaths(list: unknown, fallback: string[]): string[] {
@@ -167,6 +178,24 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   next.power_reset = next.power_reset === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
   next.Compatibility_mode =
     next.Compatibility_mode === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
+  const hold = String(next.stop_hold_wakelock || "auto");
+  next.stop_hold_wakelock =
+    hold === "0" || hold === "1" || hold === "auto" ? hold : "auto";
+  if (next.stop_hold_wakelock !== String(input.stop_hold_wakelock || "auto")) mark(true);
+  next.notify_charge_event =
+    next.notify_charge_event === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
+  {
+    const raw = String(next.notify_charge_kinds || "stop,resume,fail")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s === "stop" || s === "resume" || s === "fail");
+    const uniq = [...new Set(raw.length ? raw : ["stop", "resume", "fail"])];
+    next.notify_charge_kinds = uniq.join(",");
+    if (
+      next.notify_charge_kinds !== String(input.notify_charge_kinds || "stop,resume,fail")
+    )
+      mark(true);
+  }
   next.temperature_switch =
     next.temperature_switch === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
 
@@ -275,6 +304,28 @@ export function sanitizeCurrentConfig(
   if (app_list.length !== (input.app_list?.length || 0)) mark(true);
   if (bypass_schedule.length !== (input.bypass_schedule?.length || 0)) mark(true);
 
+  const reaffirm = clampInt(
+    input.current_reaffirm_sec,
+    LIMITS.reaffirmSecMin,
+    LIMITS.reaffirmSecMax,
+    d.current_reaffirm_sec,
+  );
+  const drift = clampInt(
+    input.current_drift_ua,
+    LIMITS.driftUaMin,
+    LIMITS.driftUaMax,
+    d.current_drift_ua,
+  );
+  const step = clampInt(
+    input.current_step_ua,
+    LIMITS.stepUaMin,
+    LIMITS.stepUaMax,
+    d.current_step_ua,
+  );
+  mark(reaffirm !== Number(input.current_reaffirm_sec ?? d.current_reaffirm_sec));
+  mark(drift !== Number(input.current_drift_ua ?? d.current_drift_ua));
+  mark(step !== Number(input.current_step_ua ?? d.current_step_ua));
+
   return {
     fixed,
     value: {
@@ -297,6 +348,9 @@ export function sanitizeCurrentConfig(
       safety_temp_max: safety,
       battery_current,
       restricted,
+      current_reaffirm_sec: reaffirm,
+      current_drift_ua: drift,
+      current_step_ua: step,
     },
   };
 }

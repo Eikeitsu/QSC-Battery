@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { showConfirmDialog } from "vant";
 import SectionHead from "@/shared/ui/SectionHead.vue";
 import ThemedCard from "@/shared/ui/ThemedCard.vue";
 import CodeEditorPopup from "@/shared/ui/CodeEditorPopup.vue";
 import { highlightPowerSwitch } from "@/shared";
+import { looksLikePolicySwitch } from "@/shared/lib/policySwitch";
 import { useConfigFormContext } from "@/composables";
 
 const { powerSwitchText, savePowerSwitches } = useConfigFormContext();
@@ -12,6 +14,11 @@ const editorOpen = ref(false);
 const previewHtml = computed(() => highlightPowerSwitch(powerSwitchText.value));
 const empty = computed(() => !String(powerSwitchText.value || "").trim());
 const tapY = ref(0);
+const policyWarn = computed(() =>
+  String(powerSwitchText.value || "")
+    .split(/\r?\n/)
+    .some((l) => looksLikePolicySwitch(l)),
+);
 
 function onPreviewClick(e: MouseEvent) {
   if (Math.abs(e.clientY - tapY.value) > 8) return;
@@ -19,6 +26,20 @@ function onPreviewClick(e: MouseEvent) {
 }
 
 async function onConfirm(text: string) {
+  const hasPolicy = String(text || "")
+    .split(/\r?\n/)
+    .some((l) => looksLikePolicySwitch(l));
+  if (hasPolicy) {
+    try {
+      await showConfirmDialog({
+        title: "策略类节点警告",
+        message:
+          "内容含 night_charging / cool_mode 等策略节点，小米等机型易闪充。确认仍要保存？",
+      });
+    } catch {
+      return;
+    }
+  }
   powerSwitchText.value = text;
   await savePowerSwitches();
 }
@@ -43,6 +64,12 @@ async function onConfirm(text: string) {
     <p class="field-hint pad-x">
       格式：路径 start=开值 stop=关值。空格可用
       ::。保存后优先于全量扫描；留空则仅用自动探测。
+    </p>
+    <p v-if="policyWarn" class="field-hint pad-x warn">
+      当前含策略类节点，可能引起闪充；优先用「首选停充开关」或测开关结果。
+    </p>
+    <p class="field-hint pad-x warn">
+      升级后若闪充或停充无效：到「我的」清除开关缓存并重启，或插电后 Action 音量下测开关。
     </p>
   </ThemedCard>
 
@@ -101,6 +128,10 @@ async function onConfirm(text: string) {
   font-size: 12px;
   color: var(--qsc-text-3);
   line-height: 1.4;
+}
+
+.field-hint.warn {
+  color: var(--van-warning-color, #ff976a);
 }
 
 .pad-x {

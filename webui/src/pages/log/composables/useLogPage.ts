@@ -4,6 +4,7 @@ import { useThemePackClass } from "@/composables";
 import {
   STORAGE_KEYS,
   filterLogEntries,
+  groupLogSessions,
   isLogLevel,
   LogLevel,
   parseLogText,
@@ -20,21 +21,28 @@ function readLevelFilter(): string {
   return isLogLevel(raw) ? raw : LogLevel.Info;
 }
 
+function readViewMode(): "flat" | "session" {
+  return readStorage(STORAGE_KEYS.logViewMode) === "session" ? "session" : "flat";
+}
+
 export function useLogPage() {
   const store = useAppStore();
   const { theme, packClass } = useThemePackClass();
   const pullLoading = ref(false);
   const levelFilter = ref(readLevelFilter());
+  const viewMode = ref<"flat" | "session">(readViewMode());
 
   const logEntries = computed(() => parseLogText(store.logText));
   const visibleLogLines = computed(() =>
     filterLogEntries(logEntries.value, levelFilter.value),
   );
+  const logSessions = computed(() => groupLogSessions(visibleLogLines.value));
   const filterActive = computed(
     () => Boolean(levelFilter.value) && logEntries.value.length > 0,
   );
 
   watch(levelFilter, (v) => writeStorage(STORAGE_KEYS.logLevelFilter, v));
+  watch(viewMode, (v) => writeStorage(STORAGE_KEYS.logViewMode, v));
 
   async function doRefresh(showTip: boolean) {
     await store.refreshLog(showTip);
@@ -75,7 +83,9 @@ export function useLogPage() {
     packClass,
     pullLoading,
     levelFilter,
+    viewMode,
     visibleLogLines,
+    logSessions,
     filterActive,
     onPullRefresh,
     onButtonRefresh,

@@ -245,10 +245,13 @@ if [ -n "$battery_powered" -a "$battery_status_data" = "1" ]; then
 		fi
 	fi
 	if [ "$power_stop" -gt "$power_start" -a "$battery_level" -ge "$power_stop" ]; then
-		qsc_charge_full
-		if [ "$full_log" = "0" ]; then
-			switch_stop_mode=1
-			battery_stop_reason=1
+		# 配置了停充时段时，仅时段内触发电量停充
+		if qsc_power_stop_schedule_active; then
+			qsc_charge_full
+			if [ "$full_log" = "0" ]; then
+				switch_stop_mode=1
+				battery_stop_reason=1
+			fi
 		fi
 	fi
 	if [ "$switch_stop_mode" = "1" -o "$cpu_log" = "1" ]; then
@@ -265,29 +268,42 @@ if [ -n "$battery_powered" -a "$battery_status_data" = "1" ]; then
 			fi
 		fi
 		sleep 3
-		# 首次全量探测；之后只重申已生效单节点（防小米多节点互抢 / 魅族息屏回充）
+		# 首次停充；若 status 仍为充电中说明未粘住，仅对 MCA/preferred 或首次后再试写
 		if [ "$first_stop" = "1" ]; then
 			qsc_power_stop
 		else
-			qsc_reaffirm_active_stop || qsc_power_stop
+			# status 仍 Charging：系统改回了节点。MCA/preferred 重申；通用节点再写一次 active
+			if ! qsc_mca_write stop; then
+				qsc_load_device_profile 2>/dev/null || true
+				if [ "${QSC_REASSERT:-0}" = "1" ] && qsc_pref_write stop; then
+					:
+				else
+					qsc_reaffirm_active_stop || qsc_power_stop
+				fi
+			fi
 		fi
 		if [ "$stop_ok" = "1" ]; then
 			touch "$DATADIR/power_switch"
 			qsc_stop_wakelock_acquire
+			rm -f "$DATADIR/no_node_logged" "$DATADIR/stop_fail_hint"
 			if [ "$battery_stop_reason" = "1" ]; then
 				touch "$DATADIR/battery_switch"
 			fi
 			if [ "$first_stop" = "1" -a "$log_log" = "1" ]; then
 				if [ "$cpu_log" = "1" ]; then
 					qsc_log info "电量$battery_level 触发开关温控：停止充电 温度$temperature [$stop_nodes]"
+					qsc_notify qsc_stop "充电控制" "温度停充 ${temperature}°C · 电量 ${battery_level}%"
 				else
 					qsc_log info "电量$battery_level 停止充电 [$stop_nodes]"
+					qsc_notify qsc_stop "充电控制" "已停充 · 电量 ${battery_level}%"
 				fi
 			fi
 		elif [ "$first_stop" = "1" ]; then
 			if [ ! -f "$DATADIR/no_node_logged" ]; then
-				qsc_log error "电量$battery_level 未找到有效充电控制节点！请插电后执行 bin/test_switch.sh，或 Action 音量下生成诊断报告"
+				qsc_log error "电量$battery_level 未找到有效充电控制节点！请插电后在 Action 测开关，或执行 bin/test_switch.sh"
 				touch "$DATADIR/no_node_logged"
+				touch "$DATADIR/stop_fail_hint"
+				qsc_notify qsc_fail "充电控制" "停充失败：未找到有效节点，请插电测开关"
 			fi
 		fi
 		if [ -f "$DATADIR/power_switch" -a "$battery_stop_reason" = "1" ]; then
@@ -329,11 +345,16 @@ if [ -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
 	fi
 	if [ -f "$DATADIR/battery_switch" ]; then
 		if [ "$power_stop" -le "100" -a "$power_stop" -gt "$power_start" -a "$battery_level" -gt "$power_start" ]; then
-			battery_ready=0
+			# 仍高于恢复电量：仅在停充时段内继续维持；时段外允许恢复
+			if qsc_power_stop_schedule_active; then
+				battery_ready=0
+			fi
 		fi
 	elif [ "$power_stop" -le "100" -a "$power_stop" -gt "$power_start" -a "$battery_level" -gt "$power_start" ]; then
 		# 无原因标记的旧状态保守按电量停充处理，避免升级后在高电量误恢复
-		battery_ready=0
+		if qsc_power_stop_schedule_active; then
+			battery_ready=0
+		fi
 	fi
 	if [ "$temp_ready" = "1" -a "$battery_ready" = "1" ]; then
 		sleep 3
@@ -346,8 +367,10 @@ if [ -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
 		if [ "$log_log2" = "1" ]; then
 			if [ "$cpu_log2" = "1" ]; then
 				qsc_log info "电量$battery_level 触发开关温控：恢复充电 温度$temperature [$start_node <- $start_val]"
+				qsc_notify qsc_resume "充电控制" "温度恢复充电 ${temperature}°C · 电量 ${battery_level}%"
 			else
 				qsc_log info "电量$battery_level 恢复充电 [$start_node <- $start_val]"
+				qsc_notify qsc_resume "充电控制" "已恢复充电 · 电量 ${battery_level}%"
 			fi
 		fi
 	fi

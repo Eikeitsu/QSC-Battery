@@ -2,6 +2,7 @@
 import { provideConfigForm, useThemePackClass } from "@/composables";
 import PowerStopCard from "./ui/PowerStopCard.vue";
 import TempStopCard from "./ui/TempStopCard.vue";
+import PreferredCard from "./ui/PreferredCard.vue";
 import PowerSwitchCard from "./ui/PowerSwitchCard.vue";
 import CurrentControlCard from "./ui/CurrentControlCard.vue";
 
@@ -13,6 +14,7 @@ provideConfigForm();
   <div class="page" :class="packClass">
     <PowerStopCard />
     <TempStopCard />
+    <PreferredCard />
     <PowerSwitchCard />
     <CurrentControlCard />
   </div>

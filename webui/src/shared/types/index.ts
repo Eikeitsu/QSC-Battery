@@ -7,6 +7,9 @@ export type ConfigKey =
   | "charge_full"
   | "power_reset"
   | "Compatibility_mode"
+  | "stop_hold_wakelock"
+  | "notify_charge_event"
+  | "notify_charge_kinds"
   | "temperature_switch"
   | "temperature_switch_stop"
   | "temperature_switch_start";
@@ -35,6 +38,12 @@ export interface CurrentConfig {
   battery_current: unknown[];
   /** 可选；`"路径 value=值"`；空则跳过 */
   restricted: string[];
+  /** 偏高时周期重申间隔（秒）；0=关 */
+  current_reaffirm_sec: number;
+  /** 偏高裕量（微安） */
+  current_drift_ua: number;
+  /** 降流台阶（微安）；0=直接写目标 */
+  current_step_ua: number;
 }
 
 export interface ChipOption {

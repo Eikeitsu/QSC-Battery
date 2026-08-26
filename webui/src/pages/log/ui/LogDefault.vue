@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import SectionHead from "@/shared/ui/SectionHead.vue";
-import type { LogEntry } from "@/shared";
+import type { LogEntry, LogSession } from "@/shared";
 import { useAppStore } from "@/stores";
 import LogFilter from "./LogFilter.vue";
 import LogLines from "./LogLines.vue";
+import LogSessions from "./LogSessions.vue";
+import LogViewToggle from "./LogViewToggle.vue";
 
 defineProps<{
   lines: LogEntry[];
+  sessions: LogSession[];
+  viewMode: "flat" | "session";
   levelFilter: string;
   filterActive: boolean;
 }>();
@@ -15,6 +19,7 @@ defineEmits<{
   refresh: [];
   clear: [];
   "update:levelFilter": [v: string];
+  "update:viewMode": [v: "flat" | "session"];
 }>();
 
 const store = useAppStore();
@@ -25,6 +30,10 @@ const store = useAppStore();
   <section class="card meta">
     <div class="row">
       <span>最近 {{ store.logLines }} 行</span>
+      <LogViewToggle
+        :model-value="viewMode"
+        @update:model-value="$emit('update:viewMode', $event)"
+      />
       <span>{{ store.logSize }}</span>
     </div>
     <LogFilter
@@ -41,7 +50,12 @@ const store = useAppStore();
     </div>
   </section>
   <section class="card log-card">
-    <LogLines :lines="lines" :filtered="filterActive" />
+    <LogSessions
+      v-if="viewMode === 'session'"
+      :sessions="sessions"
+      :filtered="filterActive"
+    />
+    <LogLines v-else :lines="lines" :filtered="filterActive" />
   </section>
 </template>
 
@@ -54,6 +68,8 @@ const store = useAppStore();
 .row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 8px;
   font-size: 13px;
   color: var(--qsc-text-2);
   margin-bottom: 4px;

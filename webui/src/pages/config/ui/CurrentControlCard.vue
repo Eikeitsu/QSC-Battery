@@ -10,6 +10,7 @@ import BypassBlock from "./current/BypassBlock.vue";
 import SlowChargeBlock from "./current/SlowChargeBlock.vue";
 import TempCurrentBlock from "./current/TempCurrentBlock.vue";
 import AppLimitBlock from "./current/AppLimitBlock.vue";
+import AdvancedBlock from "./current/AdvancedBlock.vue";
 
 const { store, currentOpen, showApps, onCurrentSwitch, onAppsSaved } =
   useConfigFormContext();
@@ -33,6 +34,7 @@ const { store, currentOpen, showApps, onCurrentSwitch, onAppsSaved } =
               <SlowChargeBlock />
               <TempCurrentBlock />
               <AppLimitBlock />
+              <AdvancedBlock />
             </ConfigBlock>
           </van-collapse-item>
         </van-collapse>

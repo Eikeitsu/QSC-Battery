@@ -1,9 +1,10 @@
 import { CURRENT_DEFAULTS } from "@/shared/config/defaults";
 import { BinaryFlag } from "@/shared/config/enums";
 import { PATHS } from "@/shared/config/paths";
-import { sanitizeCurrentConfig } from "@/shared/config/limits";
-import type { CurrentConfig } from "@/shared/types";
+import { sanitizeCurrentConfig, sanitizePowerStopSchedule } from "@/shared/config/limits";
+import type { CurrentConfig, Settings } from "@/shared/types";
 import { exec } from "./ksu";
+import type { DeviceProfileExport } from "./deviceProfile";
 
 export async function getConf(key: string): Promise<string> {
   const result = await exec(
@@ -14,7 +15,7 @@ export async function getConf(key: string): Promise<string> {
 
 export async function setConf(key: string, value: string | number): Promise<void> {
   const safeKey = String(key).replace(/[^a-zA-Z0-9_]/g, "");
-  const safeVal = String(value).replace(/[^0-9A-Za-z._:-]/g, "");
+  const safeVal = String(value).replace(/[^0-9A-Za-z._:,-]/g, "");
   await exec(
     `sed -i '/^${safeKey}=/d' '${PATHS.CONF}' 2>/dev/null; echo '${safeKey}=${safeVal}' >> '${PATHS.CONF}'`,
   );
@@ -33,7 +34,6 @@ export async function loadPowerSwitches(): Promise<string[]> {
     if (body.startsWith("[") && body.endsWith("]")) body = body.slice(1, -1);
     body = body.replace(/::/g, " ").trim();
     if (!body) continue;
-    // 内部逗号格式 → 空格格式便于编辑
     const m = body.match(/^(.+),start=([^,]+),stop=(.+)$/);
     if (m) {
       out.push(`${m[1]} start=${m[2]} stop=${m[3]}`);
@@ -76,7 +76,6 @@ export async function savePowerSwitches(entries: string[]): Promise<boolean> {
       stop = m[3];
     }
     if (!path.startsWith("/") || !start || !stop) continue;
-    // 空格值写回时用 ::
     const startOut = start.includes(" ") ? start.replace(/ /g, "::") : start;
     const stopOut = stop.includes(" ") ? stop.replace(/ /g, "::") : stop;
     normalized.push(`power_switch=[${path} start=${startOut} stop=${stopOut}]`);
@@ -85,6 +84,66 @@ export async function savePowerSwitches(entries: string[]): Promise<boolean> {
   const b64 = btoa(unescape(encodeURIComponent(payload)));
   const script = [
     `sed -i '/^power_switch=/d' '${PATHS.CONF}' 2>/dev/null`,
+    payload
+      ? `echo '${b64}' | base64 -d >> '${PATHS.CONF}' 2>/dev/null || echo '${b64}' | base64 --decode >> '${PATHS.CONF}'`
+      : `true`,
+  ].join("; ");
+  const result = await exec(script);
+  return result.errno === 0;
+}
+
+export async function loadPowerStopSchedule(): Promise<string[]> {
+  const result = await exec(`grep '^power_stop_schedule=' '${PATHS.CONF}' 2>/dev/null`);
+  const raw = result.stdout
+    .split(/\r?\n/)
+    .map((l) =>
+      l
+        .replace(/^power_stop_schedule=/, "")
+        .replace(/^\[/, "")
+        .replace(/\]$/, "")
+        .trim(),
+    )
+    .filter(Boolean);
+  return sanitizePowerStopSchedule(raw);
+}
+
+export async function savePowerStopSchedule(ranges: string[]): Promise<boolean> {
+  const list = sanitizePowerStopSchedule(ranges);
+  const lines = list.map((r) => `power_stop_schedule=${r}`);
+  const payload = lines.join("\n");
+  const b64 = btoa(unescape(encodeURIComponent(payload)));
+  const script = [
+    `sed -i '/^power_stop_schedule=/d' '${PATHS.CONF}' 2>/dev/null`,
+    payload
+      ? `echo '${b64}' | base64 -d >> '${PATHS.CONF}' 2>/dev/null || echo '${b64}' | base64 --decode >> '${PATHS.CONF}'`
+      : `true`,
+  ].join("; ");
+  const result = await exec(script);
+  return result.errno === 0;
+}
+
+export async function loadNotifyQuietSchedule(): Promise<string[]> {
+  const result = await exec(`grep '^notify_quiet_schedule=' '${PATHS.CONF}' 2>/dev/null`);
+  const raw = result.stdout
+    .split(/\r?\n/)
+    .map((l) =>
+      l
+        .replace(/^notify_quiet_schedule=/, "")
+        .replace(/^\[/, "")
+        .replace(/\]$/, "")
+        .trim(),
+    )
+    .filter(Boolean);
+  return sanitizePowerStopSchedule(raw);
+}
+
+export async function saveNotifyQuietSchedule(ranges: string[]): Promise<boolean> {
+  const list = sanitizePowerStopSchedule(ranges);
+  const lines = list.map((r) => `notify_quiet_schedule=${r}`);
+  const payload = lines.join("\n");
+  const b64 = btoa(unescape(encodeURIComponent(payload)));
+  const script = [
+    `sed -i '/^notify_quiet_schedule=/d' '${PATHS.CONF}' 2>/dev/null`,
     payload
       ? `echo '${b64}' | base64 -d >> '${PATHS.CONF}' 2>/dev/null || echo '${b64}' | base64 --decode >> '${PATHS.CONF}'`
       : `true`,
@@ -127,7 +186,6 @@ export async function loadCurrentJsonc(): Promise<CurrentConfig> {
   if (!result.stdout.trim()) return { ...CURRENT_DEFAULTS };
   try {
     const parsed = parseJsonc(result.stdout) as Partial<CurrentConfig>;
-    // 旧配置无 bypass_enable：已配置触发条件则视为开启，否则关
     if (!Object.prototype.hasOwnProperty.call(parsed, "bypass_enable")) {
       const bs = Number(parsed.battery_stop ?? 110);
       const bt = Number(parsed.bypass_temp ?? 110);
@@ -158,4 +216,106 @@ export async function saveCurrentJsonc(
     `echo '${b64}' | base64 -d > '${PATHS.CURRENT_CONF}' 2>/dev/null || echo '${b64}' | base64 --decode > '${PATHS.CURRENT_CONF}' 2>/dev/null`,
   );
   return { ok: result.errno === 0, fixed, value };
+}
+
+export type { DeviceProfileExport } from "./deviceProfile";
+
+export interface ConfigBundle {
+  version: 1;
+  settings: Settings;
+  power_switches: string[];
+  power_stop_schedule: string[];
+  current?: CurrentConfig | null;
+  device_profile?: DeviceProfileExport | null;
+}
+
+export interface NamedProfile extends ConfigBundle {
+  id: string;
+  name: string;
+}
+
+export {
+  loadDeviceProfileExport,
+  applyDeviceProfileExport,
+  savePreferredSwitch,
+  clearPreferredSwitch,
+} from "./deviceProfile";
+
+export {
+  loadSwitchTestSummary,
+  runTestSwitch,
+  getSwitchTestStatus,
+  waitSwitchTestDone,
+} from "./switchTest";
+
+export async function loadProfiles(): Promise<NamedProfile[]> {
+  const result = await exec(`cat '${PATHS.PROFILES}' 2>/dev/null`);
+  if (!result.stdout.trim()) return [];
+  try {
+    const parsed = JSON.parse(result.stdout) as { profiles?: NamedProfile[] };
+    const list = Array.isArray(parsed.profiles) ? parsed.profiles : [];
+    return list
+      .filter((p) => p && typeof p.name === "string" && p.settings)
+      .map((p) => ({
+        ...p,
+        id: String(p.id || p.name),
+        version: 1 as const,
+        power_switches: Array.isArray(p.power_switches) ? p.power_switches : [],
+        power_stop_schedule: sanitizePowerStopSchedule(p.power_stop_schedule),
+        device_profile: p.device_profile ?? null,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+export async function saveProfiles(profiles: NamedProfile[]): Promise<boolean> {
+  const json = JSON.stringify({ profiles }, null, 2);
+  const b64 = btoa(unescape(encodeURIComponent(json)));
+  const result = await exec(
+    `echo '${b64}' | base64 -d > '${PATHS.PROFILES}' 2>/dev/null || echo '${b64}' | base64 --decode > '${PATHS.PROFILES}' 2>/dev/null`,
+  );
+  return result.errno === 0;
+}
+
+export async function exportConfigBundle(
+  bundle: ConfigBundle,
+  dest = "/sdcard/Download/qsc_battery_config.json",
+): Promise<boolean> {
+  const json = JSON.stringify(bundle, null, 2);
+  const b64 = btoa(unescape(encodeURIComponent(json)));
+  const safeDest = dest.replace(/'/g, "");
+  const result = await exec(
+    `mkdir -p "$(dirname '${safeDest}')" 2>/dev/null; echo '${b64}' | base64 -d > '${safeDest}' 2>/dev/null || echo '${b64}' | base64 --decode > '${safeDest}' 2>/dev/null`,
+  );
+  return result.errno === 0;
+}
+
+export async function importConfigBundle(
+  src = "/sdcard/Download/qsc_battery_config.json",
+): Promise<ConfigBundle | null> {
+  const safeSrc = src.replace(/'/g, "");
+  const result = await exec(`cat '${safeSrc}' 2>/dev/null`);
+  if (!result.stdout.trim()) return null;
+  try {
+    const parsed = JSON.parse(result.stdout) as Partial<ConfigBundle>;
+    if (!parsed.settings) return null;
+    return {
+      version: 1,
+      settings: parsed.settings as Settings,
+      power_switches: Array.isArray(parsed.power_switches) ? parsed.power_switches : [],
+      power_stop_schedule: sanitizePowerStopSchedule(parsed.power_stop_schedule),
+      current: parsed.current ?? null,
+      device_profile: parsed.device_profile ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function clearSwitchCache(): Promise<boolean> {
+  const result = await exec(
+    `rm -f '${PATHS.LIST_SWITCH}' '${PATHS.DEVICE_PROFILE}' '${PATHS.DATADIR}/active_switch' '${PATHS.NO_NODE_LOGGED}' '${PATHS.STOP_FAIL_HINT}' 2>/dev/null; echo 1`,
+  );
+  return result.stdout.trim() === "1";
 }

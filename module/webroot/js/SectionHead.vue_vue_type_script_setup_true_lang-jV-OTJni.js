@@ -1,1 +1,0 @@
-import{d as n,o as e,a as s,b as o,t as a,f as c}from"./app-Dr-nYsRO.js";const i={class:"section-head"},d={class:"title"},l={key:0,class:"hint"},m=n({__name:"SectionHead",props:{title:{},hint:{default:""}},setup(t){return(r,h)=>(e(),s("div",i,[o("p",d,a(t.title),1),t.hint?(e(),s("p",l,a(t.hint),1)):c("",!0)]))}});export{m as _};

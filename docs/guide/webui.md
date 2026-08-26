@@ -92,7 +92,7 @@
 - 每行格式：`日期时间 [等级] 内容`，等级为 `INFO` / `WARN` / `ERROR` / `DEBUG`
 - 页面按等级着色；筛选项默认「全部」，可只看某一等级
 - **下拉刷新** / 按钮 **刷新** / **清空**（清空不影响配置）
-- 排查异常时可搜索 `stop`、`resume`、`preferred_switch`、`current`
+- 排查异常时可搜索 `stop`、`resume`、`preferred_switch`、`current`；日志页可切换「会话」视图按停充→恢复折叠
 
 ---
 

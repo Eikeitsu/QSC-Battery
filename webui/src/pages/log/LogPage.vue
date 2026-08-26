@@ -10,7 +10,9 @@ const {
   packClass,
   pullLoading,
   levelFilter,
+  viewMode,
   visibleLogLines,
+  logSessions,
   filterActive,
   onPullRefresh,
   onButtonRefresh,
@@ -24,27 +26,36 @@ const {
       <LogMd3
         v-if="theme.themePack === ThemePack.Md3"
         :lines="visibleLogLines"
+        :sessions="logSessions"
+        :view-mode="viewMode"
         :level-filter="levelFilter"
         :filter-active="filterActive"
         @update:level-filter="levelFilter = $event"
+        @update:view-mode="viewMode = $event"
         @refresh="onButtonRefresh"
         @clear="onClear"
       />
       <LogMiuix
         v-else-if="theme.themePack === ThemePack.Miuix"
         :lines="visibleLogLines"
+        :sessions="logSessions"
+        :view-mode="viewMode"
         :level-filter="levelFilter"
         :filter-active="filterActive"
         @update:level-filter="levelFilter = $event"
+        @update:view-mode="viewMode = $event"
         @refresh="onButtonRefresh"
         @clear="onClear"
       />
       <LogDefault
         v-else
         :lines="visibleLogLines"
+        :sessions="logSessions"
+        :view-mode="viewMode"
         :level-filter="levelFilter"
         :filter-active="filterActive"
         @update:level-filter="levelFilter = $event"
+        @update:view-mode="viewMode = $event"
         @refresh="onButtonRefresh"
         @clear="onClear"
       />

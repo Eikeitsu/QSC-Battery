@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import type { LogEntry } from "@/shared";
+import type { LogEntry, LogSession } from "@/shared";
 import { useAppStore } from "@/stores";
 import LogFilter from "./LogFilter.vue";
 import LogLines from "./LogLines.vue";
+import LogSessions from "./LogSessions.vue";
+import LogViewToggle from "./LogViewToggle.vue";
 
 defineProps<{
   lines: LogEntry[];
+  sessions: LogSession[];
+  viewMode: "flat" | "session";
   levelFilter: string;
   filterActive: boolean;
 }>();
@@ -14,6 +18,7 @@ defineEmits<{
   refresh: [];
   clear: [];
   "update:levelFilter": [v: string];
+  "update:viewMode": [v: "flat" | "session"];
 }>();
 
 const store = useAppStore();
@@ -30,6 +35,13 @@ const store = useAppStore();
       <span>文件大小</span>
       <b>{{ store.logSize }}</b>
     </div>
+    <div class="miuix-pref-static">
+      <span>视图</span>
+      <LogViewToggle
+        :model-value="viewMode"
+        @update:model-value="$emit('update:viewMode', $event)"
+      />
+    </div>
     <div class="miuix-filter">
       <LogFilter
         :model-value="levelFilter"
@@ -43,7 +55,12 @@ const store = useAppStore();
   </section>
   <div class="miuix-label">内容</div>
   <section class="miuix-card log-miuix-body">
-    <LogLines :lines="lines" :filtered="filterActive" />
+    <LogSessions
+      v-if="viewMode === 'session'"
+      :sessions="sessions"
+      :filtered="filterActive"
+    />
+    <LogLines v-else :lines="lines" :filtered="filterActive" />
   </section>
 </template>
 
@@ -62,6 +79,7 @@ const store = useAppStore();
 .miuix-pref-static {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 13px 14px;
   font-size: 15px;
   border-bottom: 1px solid var(--qsc-hairline);

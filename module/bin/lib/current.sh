@@ -793,40 +793,7 @@ qsc_current_game_hit() {
 	return 1
 }
 
-# HH:MM → 当日分钟数（0–1439）；非法返回空
-qsc_hm_to_min() {
-	local hm="$1" h m
-	hm="$(printf '%s' "$hm" | tr -d ' \r\n')"
-	case "$hm" in
-		[0-1][0-9]:[0-5][0-9] | 2[0-3]:[0-5][0-9]) ;;
-		*) return 1 ;;
-	esac
-	h="${hm%%:*}"
-	m="${hm##*:}"
-	# 去前导零，避免 08 被部分 shell 当八进制
-	h="${h#0}"
-	m="${m#0}"
-	[ -n "$h" ] || h=0
-	[ -n "$m" ] || m=0
-	echo $((h * 60 + m))
-}
-
-# 当前时刻是否落在 start-end（支持跨天：22:00-08:00）
-qsc_time_in_range() {
-	local start="$1" end="$2" now_hm now_m start_m end_m
-	now_hm="$(date +%H:%M 2>/dev/null)" || return 1
-	now_m="$(qsc_hm_to_min "$now_hm")" || return 1
-	start_m="$(qsc_hm_to_min "$start")" || return 1
-	end_m="$(qsc_hm_to_min "$end")" || return 1
-	if [ "$start_m" -le "$end_m" ]; then
-		[ "$now_m" -ge "$start_m" ] && [ "$now_m" -lt "$end_m" ]
-	else
-		# 跨天：now >= start 或 now < end
-		[ "$now_m" -ge "$start_m" ] || [ "$now_m" -lt "$end_m" ]
-	fi
-}
-
-# bypass_schedule 字符串数组任一段命中则返回 0
+# bypass_schedule 字符串数组任一段命中则返回 0（时间函数见 util.sh）
 qsc_bypass_schedule_hit() {
 	local range start end list_file
 	list_file="$DATADIR/.bypass_sched_tmp"

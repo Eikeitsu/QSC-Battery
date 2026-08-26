@@ -84,11 +84,15 @@ qsc_refresh_module_description() {
 	fi
 
 	if [ -f "$DATADIR/no_node_logged" ] && [ ! -f "$DATADIR/power_switch" ]; then
-		if [ ! -s "$LIST_SWITCH" ]; then
-			qsc_write_module_description "❗异常" "无可用停充节点" \
-				"请插电后执行 bin/test_switch.sh，或 Action 音量下生成诊断报告"
-			return 0
-		fi
+		qsc_write_module_description "❗异常" "停充节点无效" \
+			"请插电后 Action 音量下测开关，或删除 data/list_switch 后重启重扫"
+		return 0
+	fi
+
+	if [ -f "$DATADIR/stop_fail_hint" ] && [ ! -f "$DATADIR/power_switch" ]; then
+		qsc_write_module_description "⚠️提示" "停充可能未生效" \
+			"节点写入后仍在充电：请插电测开关，或删 data/list_switch 与 device.profile 后重启"
+		return 0
 	fi
 
 	# 已停充：区分原因

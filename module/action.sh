@@ -1,9 +1,9 @@
 #!/system/bin/sh
 # Action：开头一轮音量二选一；超时默认刷新状态。
 #   音量上 / 超时 → 短状态刷新
-#   音量下       → 只读诊断（/sdcard/qsc_diagnose.txt）
-# Magisk / 官方 KSU / APatch 通常可跑完；SukiSU 约 10s 总时长，故只保留一轮。
-# 改阈值 / 软开关 → WebUI；停充实测等 → adb。
+#   音量下       → 已插电：测停充开关；未插电：只读诊断
+# Magisk / 官方 KSU / APatch 通常可跑完；SukiSU 约 10s 总时长，故测开关走快速模式。
+# 改阈值 / 软开关 → WebUI。
 
 MODDIR=${0%/*}
 
@@ -25,11 +25,25 @@ fi
 . "$LIBDIR/keys.sh"
 
 echo "音量上：刷新状态"
-echo "音量下：功能诊断 → /sdcard/qsc_diagnose.txt"
+echo "音量下：插电测开关（未插电 → 诊断报告）"
 echo "5 秒内未按键 → 自动刷新状态"
 
 qsc_volume_choice 5
 _vol_rc=$?
+
+qsc_action_is_plugged() {
+	local s o
+	s="$(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d ' \r\n')"
+	case "$s" in
+		Charging|Full) return 0 ;;
+	esac
+	for o in /sys/class/power_supply/usb/online \
+		/sys/class/power_supply/qc_usb/online \
+		/sys/class/power_supply/wireless/online; do
+		[ -f "$o" ] && [ "$(cat "$o" 2>/dev/null | tr -d ' \r\n')" = "1" ] && return 0
+	done
+	return 1
+}
 
 qsc_action_refresh() {
 	echo "-------- 状态 --------"
@@ -99,6 +113,7 @@ qsc_action_refresh() {
 		echo "停充态: 否"
 	fi
 	[ -f "$DATADIR/no_node_logged" ] && echo "警告: 曾无可用停充节点"
+	[ -f "$DATADIR/stop_fail_hint" ] && echo "提示: 停充可能未真正生效，请插电测开关"
 	[ -f "$MODDIR/webroot/index.html" ] || echo "WebUI: 未安装"
 
 	_conf_get() {
@@ -111,11 +126,13 @@ qsc_action_refresh() {
 		_tst=$(_conf_get temperature_switch_stop)
 		_tsr=$(_conf_get temperature_switch_start)
 		_cm=$(_conf_get Compatibility_mode)
+		_wl=$(_conf_get stop_hold_wakelock)
 		echo "停充/复充: ${_ps:-?}% / ${_pt:-?}%"
 		if [ "$_ts" = "1" ]; then
 			echo "温度停充: ${_tst:-?}°C → ${_tsr:-?}°C"
 		fi
 		[ "$_cm" = "1" ] && echo "兼容模式: 开"
+		[ -n "$_wl" ] && echo "停充持锁: $_wl"
 	else
 		echo "配置文件缺失"
 	fi
@@ -140,13 +157,12 @@ qsc_action_refresh() {
 	command -v qsc_refresh_module_description >/dev/null 2>&1 && \
 		qsc_refresh_module_description >/dev/null 2>&1
 
-	echo "-------- adb --------"
+	echo "-------- 说明 --------"
 	echo "日志: $LOG_FILE"
 	echo "诊断: sh $BINDIR/diagnose.sh"
-	[ -f "$BINDIR/test_switch.sh" ] && echo "停充实测: sh $BINDIR/test_switch.sh"
+	[ -f "$BINDIR/test_switch.sh" ] && echo "完整测开关: sh $BINDIR/test_switch.sh"
 	[ -f "$BINDIR/detect_device.sh" ] && echo "重新探测: sh $BINDIR/detect_device.sh"
-	[ -f "$BINDIR/testing.sh" ] && echo "testing: sh $BINDIR/testing.sh"
-	[ -f "$BINDIR/diag2.sh" ] && echo "diag2: sh $BINDIR/diag2.sh"
+	echo "升级后闪充/无效：可删 data/list_switch 与 device.profile 后重启"
 	echo "日常设置 / 软开关 → WebUI"
 }
 
@@ -161,10 +177,32 @@ qsc_action_diagnose() {
 	sh "$BINDIR/diagnose.sh"
 }
 
+qsc_action_test_switch() {
+	echo "-------- 停充开关实测 --------"
+	if [ ! -f "$BINDIR/test_switch.sh" ]; then
+		echo "缺少 test_switch.sh"
+		return 1
+	fi
+	if ! qsc_action_is_plugged; then
+		echo "未检测到充电器，改为生成诊断报告"
+		qsc_action_diagnose
+		return $?
+	fi
+	chmod 0755 "$BINDIR/test_switch.sh" 2>/dev/null
+	# Action 快速模式后台跑，避免管理器超时杀进程
+	echo "已插电：后台快速测开关（最多约 12 条）…"
+	echo "状态: $DATADIR/switch_test_status · 日志: $DATADIR/switch_test.log"
+	echo "完整测试: sh $BINDIR/test_switch.sh 或 WebUI「完整测开关」"
+	QSC_TEST_MAX=12 sh "$BINDIR/test_switch_bg.sh"
+	sleep 1
+	[ -f "$DATADIR/switch_test_status" ] && echo "当前: $(cat "$DATADIR/switch_test_status" 2>/dev/null)"
+	return 0
+}
+
 case "$_vol_rc" in
 	1)
-		echo "→ 功能诊断"
-		qsc_action_diagnose
+		echo "→ 测开关 / 诊断"
+		qsc_action_test_switch
 		;;
 	0)
 		echo "→ 刷新状态"
