@@ -27,6 +27,7 @@ const ROOT_FILES = [
   "customize.sh",
   "action.sh",
   "uninstall.sh",
+  "hotinstall.sh",
   "icon.png",
 ];
 /** 正式包：核心 + 只读诊断（不含 testing/diag2） */
@@ -205,6 +206,8 @@ writeUnixZip(staging, zipPath);
 const entries = verifyUnixZip(zipPath, [
   "META-INF/com/google/android/update-binary",
   "module.prop",
+  "hotinstall.sh",
+  "bin/lib/hot_update.sh",
   "webroot/index.html",
 ]);
 log(
