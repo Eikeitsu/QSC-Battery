@@ -103,33 +103,28 @@ hot_update_request() {
 		return 0
 	fi
 
+	# Magisk / 普通 KSU·APatch：
+	# 禁止「先删旧目录再 mv + 在 modules_update 留 prop 占位」——占位会被管理器二次套用，
+	# 把已更新的完整模块盖成只剩 module.prop 的空壳。
 	(
-		sleep 4
+		sleep 5
 		OLD="/data/adb/modules/$_modid"
 		NEW="/data/adb/modules_update/$_modid"
 		[ -d "$NEW" ] || exit 0
 		[ -d "$OLD" ] || exit 0
 		[ -f "$OLD/disable" ] && exit 0
 		[ -f "$OLD/remove" ] && exit 0
+		[ -f "$NEW/module.prop" ] || exit 0
 
-		if command -v busybox >/dev/null 2>&1; then
-			busybox rm -rf "$OLD"
-			busybox mv "$NEW" "$OLD"
-		else
-			rm -rf "$OLD"
-			mv "$NEW" "$OLD"
-		fi
-
-		mkdir -p "$NEW"
-		cp -f "$OLD/module.prop" "$NEW/module.prop" 2>/dev/null || true
+		# 就地覆盖到现行目录，全程不出现空模块窗口
+		cp -a "$NEW"/. "$OLD"/ || exit 1
+		# 立刻清掉 update 侧，避免被再次 apply
+		rm -rf "$NEW"
 		rm -f "$OLD/update" "$OLD/remove" 2>/dev/null
 
 		if [ -f "$OLD/$_script" ]; then
 			sh "$OLD/$_script" >/dev/null 2>&1 || true
 		fi
-
-		sleep 2
-		rm -rf "$NEW" 2>/dev/null
 	) >/dev/null 2>&1 &
 
 	ui_print "- 已安排免重启热更新（无需重启）"
