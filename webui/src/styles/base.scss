@@ -43,6 +43,10 @@ body {
 
 .page {
   padding: 12px $space-page 32px;
+
+  > .section-head:first-child {
+    margin-top: 8px;
+  }
 }
 
 html.pack-md3 .page,

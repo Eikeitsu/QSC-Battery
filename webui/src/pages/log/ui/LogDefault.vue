@@ -29,27 +29,29 @@ const store = useAppStore();
   <SectionHead title="运行日志" hint="模块触发停充 / 恢复时写入" />
   <section class="card meta">
     <div class="row">
-      <span>最近 {{ store.logLines }} 行</span>
-      <LogViewToggle
-        :model-value="viewMode"
-        @update:model-value="$emit('update:viewMode', $event)"
-      />
-      <span>{{ store.logSize }}</span>
+      <span>最近 {{ store.logLines }} 行 · {{ store.logSize }}</span>
+      <div class="actions">
+        <van-button size="small" type="primary" plain @click="$emit('refresh')">
+          刷新
+        </van-button>
+        <van-button size="small" type="danger" plain @click="$emit('clear')">
+          清空
+        </van-button>
+      </div>
     </div>
     <LogFilter
       :model-value="levelFilter"
       @update:model-value="$emit('update:levelFilter', $event)"
     />
-    <div class="actions">
-      <van-button size="small" type="primary" plain @click="$emit('refresh')">
-        刷新
-      </van-button>
-      <van-button size="small" type="danger" plain @click="$emit('clear')">
-        清空
-      </van-button>
+    <div class="toolbar">
+      <span class="toolbar-label">内容视图</span>
+      <LogViewToggle
+        :model-value="viewMode"
+        @update:model-value="$emit('update:viewMode', $event)"
+      />
     </div>
   </section>
-  <section class="card log-card">
+  <section class="card log-card" :class="{ session: viewMode === 'session' }">
     <LogSessions
       v-if="viewMode === 'session'"
       :sessions="sessions"
@@ -61,7 +63,7 @@ const store = useAppStore();
 
 <style scoped lang="scss">
 .meta {
-  padding: 14px 16px;
+  padding: 14px var(--qsc-cell-pad-x, 16px);
   margin-bottom: 12px;
 }
 
@@ -78,10 +80,32 @@ const store = useAppStore();
 .actions {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.toolbar-label {
+  font-size: 12px;
+  color: var(--qsc-text-3);
+  white-space: nowrap;
 }
 
 .log-card {
   padding: 14px;
   background: var(--qsc-surface-2);
+}
+
+.log-card.session {
+  padding: 10px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 </style>

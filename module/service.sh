@@ -18,8 +18,8 @@ chmod 0644 "$CONF" 2>/dev/null
 
 sleep 1
 
-echo "rm -f \"$OFF_FLAG\"" > "$MODDIR/打开充电控制.sh"
-echo "touch \"$OFF_FLAG\"" > "$MODDIR/关闭充电控制.sh"
+echo "rm -f \"$OFF_FLAG\"; echo 已打开充电控制" > "$MODDIR/打开充电控制.sh"
+echo "touch \"$OFF_FLAG\"; echo 已关闭充电控制" > "$MODDIR/关闭充电控制.sh"
 chmod 0755 "$MODDIR/打开充电控制.sh"
 chmod 0755 "$MODDIR/关闭充电控制.sh"
 rm -f "$MODDIR/打开定量停充.sh" "$MODDIR/关闭定量停充.sh" 2>/dev/null
@@ -62,7 +62,21 @@ rm -f "$DATADIR/power_off"
 echo "$(date +%F_%T) service.sh 启动，开始循环" > "$DATADIR/service_start.log"
 qsc_write_module_description "🔎启动中" "服务已拉起" "$DESC_INTRO"
 
+# 探测 AccA 等限流模块（提示开兼容模式）
+if type qsc_detect_compat_modules >/dev/null 2>&1; then
+	qsc_detect_compat_modules >/dev/null 2>&1 || true
+fi
+
+# 默认循环间隔；qsc_switch 会按停充态改写 data/loop_sleep
+echo 3 >"$DATADIR/loop_sleep" 2>/dev/null
+
 while true ; do
 	"$BINDIR/qsc_switch.sh" > /dev/null 2>&1
-	sleep 3
+	_sleep="$(cat "$DATADIR/loop_sleep" 2>/dev/null | tr -d ' \r\n')"
+	case "$_sleep" in
+		""|*[!0-9]*) _sleep=3 ;;
+	esac
+	[ "$_sleep" -ge 2 ] 2>/dev/null || _sleep=3
+	[ "$_sleep" -le 60 ] 2>/dev/null || _sleep=60
+	sleep "$_sleep"
 done

@@ -17,6 +17,7 @@ import DefaultHomeStrategy from "./ui/default/HomeStrategy.vue";
 import DefaultHomeDetail from "./ui/default/HomeDetail.vue";
 import DefaultHomeStake from "./ui/default/HomeStake.vue";
 import DefaultHomeTips from "./ui/default/HomeTips.vue";
+import HomeChargeChart from "./ui/HomeChargeChart.vue";
 
 defineProps<{
   refreshing?: boolean;
@@ -43,6 +44,7 @@ function goConfig() {
       <div class="md3-stack">
         <Md3HomeStatus />
         <Md3HomeMetrics />
+        <HomeChargeChart />
         <Md3HomeStrategy @open-config="goConfig" />
         <div class="md3-label">电池健康</div>
         <Md3HomeBattery />
@@ -58,6 +60,8 @@ function goConfig() {
     <div v-else-if="theme.themePack === ThemePack.Miuix" class="page page-miuix">
       <div class="miuix-label">总览</div>
       <MiuixHomeOverview />
+      <div class="miuix-label">曲线</div>
+      <HomeChargeChart />
       <div class="miuix-label">当前策略</div>
       <MiuixHomeStrategy @open-config="goConfig" />
       <div class="miuix-label">更多</div>
@@ -72,6 +76,7 @@ function goConfig() {
     <div v-else class="page page-default">
       <DefaultHomeHero />
       <DefaultHomeSwitch />
+      <HomeChargeChart />
       <DefaultHomeStrategy @open-config="goConfig" />
       <DefaultHomeDetail />
       <DefaultHomeStake />

@@ -12,7 +12,15 @@ export type ConfigKey =
   | "notify_charge_kinds"
   | "temperature_switch"
   | "temperature_switch_stop"
-  | "temperature_switch_start";
+  | "temperature_switch_start"
+  | "loop_interval_sec"
+  | "loop_interval_maintain_sec"
+  | "switch_verify_sec"
+  | "wireless_policy"
+  | "app_stop"
+  | "app_stop_list"
+  | "history_enable"
+  | "history_interval_sec";
 
 export type Settings = Record<ConfigKey, string>;
 

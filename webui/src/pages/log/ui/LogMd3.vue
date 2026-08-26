@@ -34,10 +34,6 @@ const store = useAppStore();
         </div>
       </div>
       <div class="log-md3-meta__actions">
-        <LogViewToggle
-          :model-value="viewMode"
-          @update:model-value="$emit('update:viewMode', $event)"
-        />
         <van-button size="small" round type="primary" @click="$emit('refresh')">
           刷新
         </van-button>
@@ -50,8 +46,15 @@ const store = useAppStore();
       :model-value="levelFilter"
       @update:model-value="$emit('update:levelFilter', $event)"
     />
+    <div class="toolbar">
+      <span class="toolbar-label">内容视图</span>
+      <LogViewToggle
+        :model-value="viewMode"
+        @update:model-value="$emit('update:viewMode', $event)"
+      />
+    </div>
   </section>
-  <section class="md3-tonal log-md3-body">
+  <section class="md3-tonal log-md3-body" :class="{ session: viewMode === 'session' }">
     <LogSessions
       v-if="viewMode === 'session'"
       :sessions="sessions"
@@ -63,7 +66,7 @@ const store = useAppStore();
 
 <style scoped lang="scss">
 .log-md3-meta {
-  padding: 16px 18px 8px;
+  padding: 16px 18px 12px;
   margin-bottom: 12px;
 }
 
@@ -89,11 +92,28 @@ const store = useAppStore();
   display: flex;
   gap: 8px;
   flex-shrink: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.toolbar-label {
+  font-size: 12px;
+  color: var(--qsc-text-3);
+  white-space: nowrap;
 }
 
 .log-md3-body {
   padding: 14px 16px;
+}
+
+.log-md3-body.session {
+  padding: 8px;
+  background: transparent;
 }
 </style>

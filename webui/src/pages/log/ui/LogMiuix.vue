@@ -35,17 +35,17 @@ const store = useAppStore();
       <span>文件大小</span>
       <b>{{ store.logSize }}</b>
     </div>
-    <div class="miuix-pref-static">
-      <span>视图</span>
-      <LogViewToggle
-        :model-value="viewMode"
-        @update:model-value="$emit('update:viewMode', $event)"
-      />
-    </div>
     <div class="miuix-filter">
       <LogFilter
         :model-value="levelFilter"
         @update:model-value="$emit('update:levelFilter', $event)"
+      />
+    </div>
+    <div class="miuix-view">
+      <span class="miuix-view__label">内容视图</span>
+      <LogViewToggle
+        :model-value="viewMode"
+        @update:model-value="$emit('update:viewMode', $event)"
       />
     </div>
     <div class="miuix-actions">
@@ -53,8 +53,8 @@ const store = useAppStore();
       <button type="button" class="miuix-btn danger" @click="$emit('clear')">清空</button>
     </div>
   </section>
-  <div class="miuix-label">内容</div>
-  <section class="miuix-card log-miuix-body">
+  <div class="miuix-label">{{ viewMode === "session" ? "会话" : "内容" }}</div>
+  <section class="miuix-card log-miuix-body" :class="{ session: viewMode === 'session' }">
     <LogSessions
       v-if="viewMode === 'session'"
       :sessions="sessions"
@@ -95,6 +95,21 @@ const store = useAppStore();
   border-bottom: 1px solid var(--qsc-hairline);
 }
 
+.miuix-view {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--qsc-hairline);
+}
+
+.miuix-view__label {
+  font-size: 15px;
+  color: var(--qsc-text);
+  white-space: nowrap;
+}
+
 .miuix-actions {
   display: flex;
   gap: 10px;
@@ -122,5 +137,10 @@ const store = useAppStore();
 
 .log-miuix-body {
   padding: 12px;
+}
+
+.log-miuix-body.session {
+  padding: 8px;
+  background: transparent;
 }
 </style>

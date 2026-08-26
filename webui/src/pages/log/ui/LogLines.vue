@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import type { LogEntry } from "@/shared";
 
-defineProps<{
-  lines: LogEntry[];
-  filtered?: boolean;
-}>();
+withDefaults(
+  defineProps<{
+    lines: LogEntry[];
+    filtered?: boolean;
+    dense?: boolean;
+  }>(),
+  { filtered: false, dense: false },
+);
 </script>
 
 <template>
-  <div v-if="lines.length" class="log">
+  <div v-if="lines.length" class="log" :class="{ dense }">
     <span
       v-for="(line, i) in lines"
       :key="i"
@@ -31,10 +35,23 @@ defineProps<{
   min-height: 42vh;
 }
 
+.log.dense {
+  min-height: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
 .log-line {
   display: block;
   white-space: pre-wrap;
   word-break: break-all;
+  padding: 1px 0;
+}
+
+.log.dense .log-line + .log-line {
+  border-top: 1px solid color-mix(in srgb, var(--qsc-text) 5%, transparent);
+  padding-top: 4px;
+  margin-top: 3px;
 }
 
 .lv-info {

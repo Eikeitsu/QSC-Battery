@@ -195,7 +195,9 @@ qsc_write_switch_list() {
 			val="$(echo "$i" | sed -n 's/.*,stop=//g;s/_/ /g;$p')"
 			if qsc_write_node "$route" "$val"; then
 				if [ "$first_only" = "verify" ]; then
-					sleep 1
+					_vd="$(echo "$config_conf" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
+					_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
+					[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
 					if ! qsc_charge_looks_stopped; then
 						start_val="$(echo "$i" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
 						qsc_write_node "$route" "$start_val" 2>/dev/null || true
@@ -433,6 +435,15 @@ qsc_mca_write() {
 		log_log=1
 		stop_ok=1
 		qsc_save_active_switch "${path},start=0,stop=1"
+		# 软复核：MCA 常延迟生效，仅打日志不回滚
+		_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
+		_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
+		if [ "$_vd" -gt 0 ] 2>/dev/null; then
+			sleep "$_vd"
+			if ! qsc_charge_looks_stopped; then
+				qsc_log_once mca_verify_soft debug "MCA 写入后瞬时仍显示充电中（常见，已保持停充写入）"
+			fi
+		fi
 	else
 		start_node="$path"
 		start_val="$val"

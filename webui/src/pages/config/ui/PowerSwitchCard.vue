@@ -69,7 +69,8 @@ async function onConfirm(text: string) {
       当前含策略类节点，可能引起闪充；优先用「首选停充开关」或测开关结果。
     </p>
     <p class="field-hint pad-x warn">
-      升级后若闪充或停充无效：到「我的」清除开关缓存并重启，或插电后 Action 音量下测开关。
+      升级后若闪充或停充无效：到下方「测开关与缓存」清除并重启，或插电后 Action
+      音量下测开关。
     </p>
   </ThemedCard>
 

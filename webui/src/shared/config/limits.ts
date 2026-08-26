@@ -220,6 +220,54 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   next.temperature_switch_stop = String(tempStop);
   next.temperature_switch_start = String(tempStart);
 
+  const loopN = clampInt(
+    next.loop_interval_sec,
+    2,
+    30,
+    Number(DEFAULTS.loop_interval_sec),
+  );
+  if (String(loopN) !== String(input.loop_interval_sec)) mark(true);
+  next.loop_interval_sec = String(loopN);
+  const loopM = clampInt(
+    next.loop_interval_maintain_sec,
+    3,
+    60,
+    Number(DEFAULTS.loop_interval_maintain_sec),
+  );
+  if (String(loopM) !== String(input.loop_interval_maintain_sec)) mark(true);
+  next.loop_interval_maintain_sec = String(loopM);
+  const verify = clampInt(
+    next.switch_verify_sec,
+    0,
+    5,
+    Number(DEFAULTS.switch_verify_sec),
+  );
+  if (String(verify) !== String(input.switch_verify_sec)) mark(true);
+  next.switch_verify_sec = String(verify);
+  const wp = String(next.wireless_policy || "same");
+  next.wireless_policy = wp === "ignore" ? "ignore" : "same";
+  if (next.wireless_policy !== String(input.wireless_policy || "same")) mark(true);
+  next.app_stop = next.app_stop === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
+  {
+    const pkgs = String(next.app_stop_list || "")
+      .split(/[,;\s]+/)
+      .map((s) => s.trim())
+      .filter((s) => PKG_RE.test(s))
+      .slice(0, LIMITS.appListMax);
+    next.app_stop_list = [...new Set(pkgs)].join(",");
+    if (next.app_stop_list !== String(input.app_stop_list || "")) mark(true);
+  }
+  next.history_enable =
+    next.history_enable === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
+  const histI = clampInt(
+    next.history_interval_sec,
+    15,
+    600,
+    Number(DEFAULTS.history_interval_sec),
+  );
+  if (String(histI) !== String(input.history_interval_sec)) mark(true);
+  next.history_interval_sec = String(histI);
+
   return { value: next, fixed };
 }
 

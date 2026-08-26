@@ -127,7 +127,7 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .hint {
-  margin: 4px 16px 8px;
+  margin: 4px var(--qsc-cell-pad-x, 16px) 8px;
   font-size: 12px;
   color: var(--qsc-text-3);
   word-break: break-all;
@@ -138,6 +138,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 8px 16px 14px;
+  padding: 8px var(--qsc-cell-pad-x, 16px) 14px;
 }
 </style>

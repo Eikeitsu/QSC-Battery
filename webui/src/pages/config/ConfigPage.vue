@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { provideConfigForm, useThemePackClass } from "@/composables";
 import PowerStopCard from "./ui/PowerStopCard.vue";
+import StopBehaviorCard from "./ui/StopBehaviorCard.vue";
 import TempStopCard from "./ui/TempStopCard.vue";
+import CurrentControlCard from "./ui/CurrentControlCard.vue";
+import AdvancedRuntimeCard from "./ui/AdvancedRuntimeCard.vue";
 import PreferredCard from "./ui/PreferredCard.vue";
 import PowerSwitchCard from "./ui/PowerSwitchCard.vue";
-import CurrentControlCard from "./ui/CurrentControlCard.vue";
+import SwitchToolsCard from "./ui/SwitchToolsCard.vue";
 
 const { packClass } = useThemePackClass();
 provideConfigForm();
@@ -13,38 +16,12 @@ provideConfigForm();
 <template>
   <div class="page" :class="packClass">
     <PowerStopCard />
+    <StopBehaviorCard />
     <TempStopCard />
+    <CurrentControlCard />
     <PreferredCard />
     <PowerSwitchCard />
-    <CurrentControlCard />
+    <SwitchToolsCard />
+    <AdvancedRuntimeCard />
   </div>
 </template>
-
-<style scoped lang="scss">
-.page-md3 {
-  :deep(.section-head) {
-    margin: 20px 4px 12px;
-  }
-
-  :deep(.section-head .title) {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--qsc-text-2);
-    letter-spacing: 0.02em;
-  }
-
-  :deep(.card) {
-    margin-bottom: 4px;
-  }
-}
-
-.page-miuix {
-  :deep(.section-head) {
-    margin: 16px 10px 8px;
-  }
-
-  :deep(.section-head .title) {
-    font-size: 13px;
-  }
-}
-</style>

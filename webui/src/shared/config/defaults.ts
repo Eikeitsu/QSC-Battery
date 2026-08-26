@@ -14,6 +14,14 @@ export const CONFIG_KEYS: readonly ConfigKey[] = [
   "temperature_switch",
   "temperature_switch_stop",
   "temperature_switch_start",
+  "loop_interval_sec",
+  "loop_interval_maintain_sec",
+  "switch_verify_sec",
+  "wireless_policy",
+  "app_stop",
+  "app_stop_list",
+  "history_enable",
+  "history_interval_sec",
 ] as const;
 
 export const DEFAULTS: Settings = {
@@ -29,6 +37,14 @@ export const DEFAULTS: Settings = {
   temperature_switch: BinaryFlag.On,
   temperature_switch_stop: "60",
   temperature_switch_start: "50",
+  loop_interval_sec: "3",
+  loop_interval_maintain_sec: "8",
+  switch_verify_sec: "1",
+  wireless_policy: "same",
+  app_stop: BinaryFlag.Off,
+  app_stop_list: "",
+  history_enable: BinaryFlag.On,
+  history_interval_sec: "60",
 };
 
 export const CURRENT_DEFAULTS: CurrentConfig = {

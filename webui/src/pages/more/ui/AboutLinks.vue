@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SectionHead from "@/shared/ui/SectionHead.vue";
 import ThemedCard from "@/shared/ui/ThemedCard.vue";
 import { ABOUT_NAV_LINKS } from "@/shared";
 import { useAboutActions } from "../composables/useAboutActions";
@@ -8,6 +9,7 @@ const base = import.meta.env.BASE_URL;
 </script>
 
 <template>
+  <SectionHead title="链接与打赏" hint="文档、仓库与支持原作者" />
   <ThemedCard>
     <van-cell
       v-for="item in ABOUT_NAV_LINKS"
@@ -40,7 +42,7 @@ const base = import.meta.env.BASE_URL;
 .tip-box {
   display: flex;
   justify-content: center;
-  padding: 4px 16px 16px;
+  padding: 4px var(--qsc-cell-pad-x, 16px) 16px;
 }
 
 .tip-qr {

@@ -144,6 +144,17 @@ qsc_merge_config() {
 		rm -f "$merged"
 		return 1
 	}
+	# 迁移新增标量键（有则覆盖模板默认）
+	for _nk in loop_interval_sec loop_interval_maintain_sec switch_verify_sec \
+		wireless_policy history_enable history_interval_sec app_stop app_stop_list; do
+		_nv="$(sed -n "s/^${_nk}=//p" "$source" 2>/dev/null | head -n1 | tr -d '\r')"
+		[ -n "$_nv" ] || continue
+		if grep -q "^${_nk}=" "$merged" 2>/dev/null; then
+			sed -i "s|^${_nk}=.*|${_nk}=${_nv}|" "$merged"
+		else
+			echo "${_nk}=${_nv}" >>"$merged"
+		fi
+	done
 	# 迁移用户自定义供电开关与停充时段（多行）；跳过策略类节点以免闪充
 	sed -i -e '/^power_switch=/d' -e '/^power_stop_schedule=/d' -e '/^notify_quiet_schedule=/d' "$merged" 2>/dev/null
 	if grep -q '^power_switch=' "$source" 2>/dev/null; then

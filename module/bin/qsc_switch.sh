@@ -49,7 +49,9 @@ if [ ! -n "$battery_powered" ] || [ ! -n "$battery_status" ]; then
 	fi
 fi
 if [ ! -n "$battery_powered" ]; then
-	for usb_online in /sys/class/power_supply/usb/online /sys/class/power_supply/qc_usb/online; do
+	for usb_online in /sys/class/power_supply/usb/online /sys/class/power_supply/qc_usb/online \
+		/sys/class/power_supply/ac/online /sys/class/power_supply/dc/online \
+		/sys/class/power_supply/wireless/online; do
 		if [ -f "$usb_online" ] && [ "$(qsc_safe_cat "$usb_online")" = "1" ]; then
 			battery_powered="powered: true"
 			battery_status="${battery_status:-2}"
@@ -58,6 +60,27 @@ if [ ! -n "$battery_powered" ]; then
 		fi
 	done
 fi
+
+charge_source="$(qsc_charge_source 2>/dev/null)"
+wireless_policy="$(echo "$config_conf" | egrep '^wireless_policy=' | sed -n 's/wireless_policy=//g;$p')"
+case "$wireless_policy" in
+	same|ignore) ;;
+	*) wireless_policy=same ;;
+esac
+# ignore：仅无线供电时跳过电量/温控/App 停充触发（已停充仍维持）
+wireless_skip=0
+if [ "$wireless_policy" = "ignore" ] && [ "$charge_source" = "wireless" ]; then
+	wireless_skip=1
+fi
+
+loop_interval_sec="$(echo "$config_conf" | egrep '^loop_interval_sec=' | sed -n 's/loop_interval_sec=//g;$p')"
+loop_interval_maintain_sec="$(echo "$config_conf" | egrep '^loop_interval_maintain_sec=' | sed -n 's/loop_interval_maintain_sec=//g;$p')"
+history_enable="$(echo "$config_conf" | egrep '^history_enable=' | sed -n 's/history_enable=//g;$p')"
+history_interval_sec="$(echo "$config_conf" | egrep '^history_interval_sec=' | sed -n 's/history_interval_sec=//g;$p')"
+app_stop="$(echo "$config_conf" | egrep '^app_stop=' | sed -n 's/app_stop=//g;$p')"
+app_stop_list="$(echo "$config_conf" | egrep '^app_stop_list=' | sed -n 's/app_stop_list=//g;$p')"
+app_stop="$(qsc_clamp_int "${app_stop:-0}" 0 1 0)"
+history_enable="$(qsc_clamp_int "${history_enable:-1}" 0 1 1)"
 
 charge_full="$(echo "$config_conf" | egrep '^charge_full=' | sed -n 's/charge_full=//g;$p')"
 power_reset="$(echo "$config_conf" | egrep '^power_reset=' | sed -n 's/power_reset=//g;$p')"
@@ -231,6 +254,16 @@ if [ "$battery_status" = "2" -o "$battery_status" = "5" ]; then
 	battery_status_data=1
 fi
 
+# 按 App 停充命中（不依赖无线 skip 之外的条件，但仍需在充电中触发）
+app_stop_hit=0
+if [ "$app_stop" = "1" ] && [ -n "$app_stop_list" ]; then
+	qsc_write_pkg_tmp "$app_stop_list" "$DATADIR/.app_stop_list"
+	if qsc_pkg_list_hit "$DATADIR/.app_stop_list"; then
+		app_stop_hit=1
+	fi
+	rm -f "$DATADIR/.app_stop_list"
+fi
+
 if [ -n "$battery_powered" -a "$battery_status_data" = "1" ]; then
 	if [ -f "$LOG_FILE" ]; then
 		log_n="$(cat "$LOG_FILE" | wc -l)"
@@ -238,20 +271,26 @@ if [ -n "$battery_powered" -a "$battery_status_data" = "1" ]; then
 			sed -i '1,10d' "$LOG_FILE"
 		fi
 	fi
-	if [ "$temperature_switch" = "1" ]; then
-		if [ "$temperature_switch_stop" -gt "$temperature_switch_start" -a "$temperature" -ge "$temperature_switch_stop" ]; then
-			touch "$DATADIR/temp_switch"
-			cpu_log=1
-		fi
-	fi
-	if [ "$power_stop" -gt "$power_start" -a "$battery_level" -ge "$power_stop" ]; then
-		# 配置了停充时段时，仅时段内触发电量停充
-		if qsc_power_stop_schedule_active; then
-			qsc_charge_full
-			if [ "$full_log" = "0" ]; then
-				switch_stop_mode=1
-				battery_stop_reason=1
+	if [ "$wireless_skip" != "1" ]; then
+		if [ "$temperature_switch" = "1" ]; then
+			if [ "$temperature_switch_stop" -gt "$temperature_switch_start" -a "$temperature" -ge "$temperature_switch_stop" ]; then
+				touch "$DATADIR/temp_switch"
+				cpu_log=1
 			fi
+		fi
+		if [ "$power_stop" -gt "$power_start" -a "$battery_level" -ge "$power_stop" ]; then
+			# 配置了停充时段时，仅时段内触发电量停充
+			if qsc_power_stop_schedule_active; then
+				qsc_charge_full
+				if [ "$full_log" = "0" ]; then
+					switch_stop_mode=1
+					battery_stop_reason=1
+				fi
+			fi
+		fi
+		if [ "$app_stop_hit" = "1" ]; then
+			switch_stop_mode=1
+			touch "$DATADIR/app_stop_flag"
 		fi
 	fi
 	if [ "$switch_stop_mode" = "1" -o "$cpu_log" = "1" ]; then
@@ -293,6 +332,9 @@ if [ -n "$battery_powered" -a "$battery_status_data" = "1" ]; then
 				if [ "$cpu_log" = "1" ]; then
 					qsc_log info "电量$battery_level 触发开关温控：停止充电 温度$temperature [$stop_nodes]"
 					qsc_notify qsc_stop "充电控制" "温度停充 ${temperature}°C · 电量 ${battery_level}%"
+				elif [ -f "$DATADIR/app_stop_flag" ] && [ "$battery_stop_reason" != "1" ]; then
+					qsc_log info "电量$battery_level 按 App 停充 [$stop_nodes]"
+					qsc_notify qsc_stop "充电控制" "前台应用触发停充 · 电量 ${battery_level}%"
 				else
 					qsc_log info "电量$battery_level 停止充电 [$stop_nodes]"
 					qsc_notify qsc_stop "充电控制" "已停充 · 电量 ${battery_level}%"
@@ -336,6 +378,7 @@ fi
 if [ -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
 	temp_ready=1
 	battery_ready=1
+	app_ready=1
 	if [ -f "$DATADIR/temp_switch" ]; then
 		if [ "$temperature_switch" = "1" -a -n "$temperature_switch_start" -a "$temperature" -gt "$temperature_switch_start" ]; then
 			temp_ready=0
@@ -356,11 +399,16 @@ if [ -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
 			battery_ready=0
 		fi
 	fi
-	if [ "$temp_ready" = "1" -a "$battery_ready" = "1" ]; then
+	if [ -f "$DATADIR/app_stop_flag" ]; then
+		if [ "$app_stop" = "1" ] && [ "$app_stop_hit" = "1" ]; then
+			app_ready=0
+		fi
+	fi
+	if [ "$temp_ready" = "1" -a "$battery_ready" = "1" -a "$app_ready" = "1" ]; then
 		sleep 3
 		qsc_power_start
 		if [ "$start_ok" = "1" ]; then
-			rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" "$DATADIR/battery_switch"
+			rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" "$DATADIR/battery_switch" "$DATADIR/app_stop_flag"
 			qsc_clear_active_switch
 			qsc_stop_wakelock_release
 		fi
@@ -380,6 +428,10 @@ fi
 # 同样要求 status=充电中，避免停充后仍写电流节点与小米充电服务互抢
 Compatibility_mode="$(echo "$config_conf" | egrep '^Compatibility_mode=' | sed -n 's/Compatibility_mode=//g;$p')"
 [ -n "$Compatibility_mode" ] || Compatibility_mode=0
+if [ -f "$DATADIR/compat_hint" ] && [ "$Compatibility_mode" != "1" ]; then
+	_ch="$(cat "$DATADIR/compat_hint" 2>/dev/null | tr -d '\r\n')"
+	[ -n "$_ch" ] && qsc_log_once compat_mod warn "检测到其它充电/限流模块($_ch)，建议开启兼容模式"
+fi
 if [ -n "$battery_powered" ] && [ "$battery_status_data" = "1" ] && [ ! -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
 	if [ "$Compatibility_mode" = "1" ]; then
 		qsc_log_once compat warn "兼容模式开启，已跳过电流控制"
@@ -409,6 +461,14 @@ elif [ ! -n "$battery_powered" ] || [ "$battery_status_data" != "1" ]; then
 	if type qsc_bypass_hw_off >/dev/null 2>&1; then
 		qsc_bypass_hw_off
 	fi
+fi
+
+# 历史采样 + 循环间隔
+if type qsc_history_sample >/dev/null 2>&1; then
+	qsc_history_sample "$history_enable" "$history_interval_sec" "$battery_level" "$temperature"
+fi
+if type qsc_write_loop_sleep >/dev/null 2>&1; then
+	qsc_write_loop_sleep "$loop_interval_sec" "$loop_interval_maintain_sec"
 fi
 
 qsc_refresh_module_description

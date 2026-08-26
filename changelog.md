@@ -7,6 +7,7 @@
 - 缓解小米 OS2 反复充断电：非 MCA 停充成功后不再每轮重写通用节点（仅 MCA / 标记 `reassert` 的 preferred 维持重申）
 - 修复小米 17 停充无效：`qsc_mca_write` 参数错位，未向 `handle_state` 写入停充值
 - 加强 MCA 维持：停充期间每轮优先重申 `handle_state`；dumpsys 无 `powered` 时改用 `usb/online` 判断仍插电
+- MCA 停充写入后软复核（可配等待秒数，不回滚）
 - 自动跳过策略类节点（`night_charging` / `cool_mode` / `batt_protect` / `adapter_cc_mode` 等），不再扫描与盲写；用户显式 `power_switch` 仍可用（WebUI 手填时增加警告）
 
 ### 配置与安装
@@ -14,6 +15,7 @@
 - 安装保留配置：迁移 `stop_hold_wakelock`（含 `auto`）、`power_switch`、`power_stop_schedule`、通知相关键
 - 新增 `power_stop_schedule`：仅在设定时段内触发电量停充（温度停充不受限）
 - 通知细化：`notify_charge_kinds`（停充 / 恢复 / 失败可分控）、`notify_quiet_schedule`（勿扰时段；失败仍通知）
+- 新增循环/维持间隔、停充校验等待、`wireless_policy`（same/ignore）、按 App 停充、充放电历史采样等配置项
 
 ### WebUI / Action
 
@@ -22,6 +24,8 @@
 - 日志页支持「会话」视图（按停充→恢复折叠）
 - 机型节点社区分享：复制/粘贴分享文本；本机预制档与仓库预制档双入口；可从仓库同步到本地缓存（`device-presets.json`，不必发模块版）
 - 测开关改为后台执行并轮询结果，降低管理器超时掐断；Action 音量下：插电快速测开关，未插电则诊断
+- 概览充放电历史曲线（`data/charge_history.csv` + SVG）；AccA 等冲突提示；快捷开关路径说明
+- 冷门项（循环间隔、无线忽略、按 App 硬停充等）默认收起，避免抢主路径
 
 ### 工程
 

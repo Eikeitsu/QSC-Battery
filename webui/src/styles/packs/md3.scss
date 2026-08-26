@@ -29,11 +29,19 @@ html.pack-md3 {
     box-shadow: none;
   }
 
+  .section-head {
+    margin: 20px 4px 12px;
+  }
+
   .section-head .title {
     font-size: 13px;
     font-weight: 600;
     letter-spacing: 0.02em;
     color: var(--qsc-text-2);
+  }
+
+  .page-md3 .card {
+    margin-bottom: 4px;
   }
 
   .van-cell {

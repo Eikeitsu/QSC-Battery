@@ -19,6 +19,8 @@ export const PATHS = {
   STOP_FAIL_HINT: `${ROOT}/data/stop_fail_hint`,
   NO_NODE_LOGGED: `${ROOT}/data/no_node_logged`,
   SWITCH_TEST_STATUS: `${ROOT}/data/switch_test_status`,
+  CHARGE_HISTORY: `${ROOT}/data/charge_history.csv`,
+  COMPAT_HINT: `${ROOT}/data/compat_hint`,
 } as const;
 
 export const STATUS_INTERVAL = STATUS_INTERVAL_MS;

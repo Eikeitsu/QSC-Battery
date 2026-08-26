@@ -294,8 +294,8 @@ onMounted(async () => {
 
 <template>
   <SectionHead
-    title="机型节点社区分享"
-    hint="分享文本互通；预制档分本机 / 仓库，可从仓库同步到本地缓存（不必发模块版）"
+    title="机型节点分享"
+    hint="复制/粘贴 preferred · MCA 档案；可保存为本机预制档"
   />
   <ThemedCard>
     <van-cell
@@ -304,12 +304,11 @@ onMounted(async () => {
       is-link
       @click="loadCurrentShareText"
     />
-
-    <div class="share">
+    <div class="pad">
       <van-field
         v-model="shareText"
         type="textarea"
-        rows="6"
+        rows="5"
         autosize
         :placeholder="sharePlaceholder"
         input-align="left"
@@ -317,7 +316,6 @@ onMounted(async () => {
       />
       <p v-if="parseError" class="err">{{ parseError }}</p>
     </div>
-
     <div class="actions">
       <van-button
         size="small"
@@ -339,22 +337,21 @@ onMounted(async () => {
         解析并应用
       </van-button>
     </div>
-
-    <div class="save-as">
-      <van-field
-        v-model="presetNameDraft"
-        label="本机名称"
-        placeholder="如：小米共享 · 稳定停充"
-        input-align="right"
-        :disabled="shareLoading"
-      />
-      <van-field
-        :model-value="modelMatchDraft"
-        label="机型匹配"
-        placeholder="来自分享文本 model"
-        input-align="right"
-        disabled
-      />
+    <van-field
+      v-model="presetNameDraft"
+      label="本机名称"
+      placeholder="如：小米共享 · 稳定停充"
+      input-align="right"
+      :disabled="shareLoading"
+    />
+    <van-field
+      :model-value="modelMatchDraft"
+      label="机型匹配"
+      placeholder="来自分享文本 model"
+      input-align="right"
+      disabled
+    />
+    <div class="actions actions-last">
       <van-button
         size="small"
         plain
@@ -368,13 +365,11 @@ onMounted(async () => {
     </div>
   </ThemedCard>
 
-  <div class="section"></div>
-
+  <SectionHead
+    title="仓库预制档"
+    hint="维护在 docs/public/device-presets.json；Pages 更新即可，不必发模块版"
+  />
   <ThemedCard>
-    <SectionHead
-      title="仓库预制档"
-      hint="维护在 docs/public/device-presets.json，Pages 发布即可"
-    />
     <van-cell
       title="从仓库更新到本地缓存"
       :label="repoStatusLabel"
@@ -397,13 +392,8 @@ onMounted(async () => {
     />
   </ThemedCard>
 
-  <div class="section"></div>
-
+  <SectionHead title="本机预制档" hint="仅保存在本机 WebUI；与仓库缓存互不影响" />
   <ThemedCard>
-    <SectionHead
-      title="本机预制档"
-      hint="仅保存在本机 WebUI；可删可改，与仓库缓存互不影响"
-    />
     <van-cell
       v-if="matchingLocal.length === 0"
       title="暂无匹配本机预制档"
@@ -425,12 +415,12 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
-.share {
-  margin-top: 8px;
+.pad {
+  padding: 4px 0 0;
 }
 
 .err {
-  margin: 6px 0 0;
+  margin: 6px var(--qsc-cell-pad-x, 16px) 0;
   color: var(--van-danger-color, #ee0a24);
   font-size: 12px;
 }
@@ -438,17 +428,12 @@ onMounted(async () => {
 .actions {
   display: grid;
   gap: 8px;
-  margin-top: 10px;
+  padding: 10px var(--qsc-cell-pad-x, 16px) 12px;
 }
 
-.save-as {
-  margin-top: 14px;
-  display: grid;
-  gap: 10px;
-}
-
-.section {
-  height: 12px;
+.actions-last {
+  padding-top: 4px;
+  padding-bottom: 14px;
 }
 
 .del {
