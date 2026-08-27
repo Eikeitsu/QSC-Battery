@@ -184,6 +184,16 @@ if [ -n "$DATADIR" ]; then
   echo "    data/power_switch(本模块停充中) = $([ -f "$DATADIR/power_switch" ] && echo yes || echo no)" >> "$OUT"
   echo "    data/active_switch = $(cat "$DATADIR/active_switch" 2>/dev/null | tr -d ' \r\n')" >> "$OUT"
 fi
+echo "  免重启热更新:" >> "$OUT"
+echo "    modules_update 残留 = $([ -d /data/adb/modules_update/QSC_Battery ] && echo yes || echo no)" >> "$OUT"
+echo "    模块目录 update 标记 = $([ -f /data/adb/modules/QSC_Battery/update ] && echo yes || echo no)" >> "$OUT"
+if [ -n "$DATADIR" ] && [ -f "$DATADIR/hot_update.log" ]; then
+  tail -n 5 "$DATADIR/hot_update.log" 2>/dev/null | while IFS= read -r line; do
+    echo "    $line" >> "$OUT"
+  done
+else
+  echo "    hot_update.log: 无（未走过热更新，或作业未启动）" >> "$OUT"
+fi
 echo "  电流控制组件: $([ -f "$BINDIR/lib/current.sh" ] && echo 已安装 || echo 未安装)" >> "$OUT"
 echo "  电流节点可写性:" >> "$OUT"
 for node in \
