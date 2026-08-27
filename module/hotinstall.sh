@@ -1,7 +1,21 @@
 #!/system/bin/sh
-# 热更新后立即拉起服务
+# 热更新后立即拉起服务，并把模块简介从「等待开机」改成热更新状态
 PATH=/data/adb/ap/bin:/data/adb/ksu/bin:/data/adb/magisk:$PATH
 MODDIR="${0%/*}"
+
+rm -f "$MODDIR/update" 2>/dev/null
+
+# 先给出即时反馈：管理器列表不会停留在「等待开机就绪」
+if [ -f "$MODDIR/bin/common.sh" ]; then
+	# shellcheck disable=SC1090
+	. "$MODDIR/bin/common.sh" 2>/dev/null || true
+fi
+if type qsc_write_module_description >/dev/null 2>&1; then
+	qsc_write_module_description "♻️已热更新" "正在重启服务" \
+		"无需重启；稍后自动显示实时充电状态"
+fi
+mkdir -p "$MODDIR/data" 2>/dev/null
+date '+%Y-%m-%d %H:%M:%S' >"$MODDIR/data/hot_update_at" 2>/dev/null
 
 # 结束旧的 service 循环与单次 switch
 for _pat in \
@@ -14,10 +28,7 @@ do
 done
 sleep 1
 
-# 已开机场景下直接后台跑 service（内部仍会做探测与主循环）
 if [ -f "$MODDIR/service.sh" ]; then
-	# Magisk 标记：避免被误认为未完成更新
-	rm -f "$MODDIR/update" 2>/dev/null
 	nohup sh "$MODDIR/service.sh" >/dev/null 2>&1 &
 fi
 

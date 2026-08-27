@@ -85,6 +85,22 @@ hot_update_preserve_paths() {
 	done
 }
 
+# 热更新时把安装包里的「等待开机」占位简介换成过渡文案
+# 可选环境：HOT_UPDATE_DESC
+hot_update_write_desc() {
+	_prop="$MODPATH/module.prop"
+	[ -n "$HOT_UPDATE_DESC" ] || return 0
+	[ -f "$_prop" ] || return 0
+	_tmp="$_prop.tmp.$$"
+	awk -F= -v desc="$HOT_UPDATE_DESC" '
+		BEGIN { done=0 }
+		$1 == "description" { print "description=" desc; done=1; next }
+		{ print }
+		END { if (!done) print "description=" desc }
+	' "$_prop" >"$_tmp" && mv -f "$_tmp" "$_prop"
+	chmod 0644 "$_prop" 2>/dev/null
+}
+
 hot_update_request() {
 	_modid="$1"
 	_script="${HOT_UPDATE_SCRIPT:-hotinstall.sh}"
@@ -93,6 +109,8 @@ hot_update_request() {
 		ui_print "! 缺少 $_script，无法免重启更新"
 		return 1
 	}
+
+	hot_update_write_desc
 
 	export MODULE_HOT_INSTALL_REQUEST="true"
 	export MODULE_HOT_RUN_SCRIPT="$_script"

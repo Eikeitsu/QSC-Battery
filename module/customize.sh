@@ -406,6 +406,7 @@ set_perm "$MODPATH/hotinstall.sh" root root 0755
 # 非首次：本模块无 system/sepolicy 等开机挂载，更新默认可免重启
 ui_print "--------------------------------"
 if [ -f "$LIBDIR/hot_update.sh" ]; then
+	HOT_UPDATE_DESC="[♻️热更新中 | 正在重启服务] 本次更新无需重启；稍后自动显示实时充电状态"
 	# 无「必须重启」路径 → 空参数列表；仅首次/禁用时会要求重启
 	if hot_update_try QSC_Battery; then
 		ui_print " 热更新将重启充电控制服务 "

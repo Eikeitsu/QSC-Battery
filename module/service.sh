@@ -60,7 +60,13 @@ rm -f "$DATADIR/off_d"
 rm -f "$DATADIR/power_on"
 rm -f "$DATADIR/power_off"
 echo "$(date +%F_%T) service.sh 启动，开始循环" > "$DATADIR/service_start.log"
-qsc_write_module_description "🔎启动中" "服务已拉起" "$DESC_INTRO"
+if [ -f "$DATADIR/hot_update_at" ]; then
+	qsc_write_module_description "♻️已热更新" "服务已重启" \
+		"本次更新无需重启；实时状态将在下一轮刷新"
+	rm -f "$DATADIR/hot_update_at"
+else
+	qsc_write_module_description "🔎启动中" "服务已拉起" "$DESC_INTRO"
+fi
 
 # 探测 AccA 等限流模块（提示开兼容模式）
 if type qsc_detect_compat_modules >/dev/null 2>&1; then
