@@ -65,10 +65,18 @@ function toolchainBin(ndk) {
   return null;
 }
 
-function clangPath(bin, clangPrefix) {
+/**
+ * 取充当链接器的 clang。
+ * 优先带 API 号的 wrapper（r26 及以前的常规做法）；缺失时退回裸 clang，
+ * 并把 --target 作为链接参数补上——NDK r27+ 已移除这批 wrapper。
+ */
+function clangFor(bin, clangPrefix) {
   const exe = process.platform === "win32" ? ".cmd" : "";
-  const candidate = join(bin, `${clangPrefix}${API}-clang${exe}`);
-  return existsSync(candidate) ? candidate : null;
+  const wrapper = join(bin, `${clangPrefix}${API}-clang${exe}`);
+  if (existsSync(wrapper)) return { cc: wrapper, target: null };
+  const plain = join(bin, `clang${process.platform === "win32" ? ".exe" : ""}`);
+  if (existsSync(plain)) return { cc: plain, target: `${clangPrefix}${API}` };
+  return null;
 }
 
 if (!existsSync(join(crateDir, "Cargo.toml"))) skip("native/qscd not found");
@@ -83,15 +91,21 @@ mkdirSync(outDir, { recursive: true });
 let built = 0;
 
 for (const target of TARGETS) {
-  const linker = clangPath(bin, target.clang);
-  if (!linker) skip(`missing NDK clang for ${target.triple} (API ${API})`);
+  const clang = clangFor(bin, target.clang);
+  if (!clang) skip(`missing NDK clang for ${target.triple} (API ${API})`);
 
   const envKey = `CARGO_TARGET_${target.triple.toUpperCase().replace(/-/g, "_")}_LINKER`;
   const env = {
     ...process.env,
-    [envKey]: linker,
-    [`CC_${target.triple.replace(/-/g, "_")}`]: linker,
+    [envKey]: clang.cc,
+    [`CC_${target.triple.replace(/-/g, "_")}`]: clang.cc,
   };
+  // 裸 clang 需要显式目标；linker 环境变量只接受可执行文件，故走 link-arg
+  if (clang.target) {
+    const flag = `-C link-arg=--target=${clang.target}`;
+    env[`CARGO_TARGET_${target.triple.toUpperCase().replace(/-/g, "_")}_RUSTFLAGS`] =
+      flag;
+  }
 
   log(`building ${target.triple} (API ${API})`);
   const args = ["build", "--release", "--target", target.triple];

@@ -29,6 +29,7 @@
     "package:module:all": "node tooling/scripts/package-module.mjs --native=full && node tooling/scripts/package-module.mjs --native=rust && node tooling/scripts/package-module.mjs --native=c && node tooling/scripts/package-module.mjs --native=sh",
     "build:module": "npm run build:web && npm run package:module",
     "build:module:all": "npm run build:web && npm run package:module:all",
+    "verify:zips": "node tooling/scripts/verify-module-zips.mjs",
     "dev:docs": "vitepress dev docs",
     "build:docs": "vitepress build docs",
     "preview:docs": "vitepress preview docs"

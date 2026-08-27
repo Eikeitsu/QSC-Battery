@@ -76,10 +76,18 @@ function toolchainBin(ndk) {
   return null;
 }
 
-function clangPath(bin, clangPrefix) {
+/**
+ * 取交叉编译用的 clang。
+ * 优先带 API 号的 wrapper（r26 及以前的常规做法），缺失时退回
+ * `clang --target=<triple><api>`——NDK r27+ 已移除这批 wrapper。
+ */
+function clangFor(bin, clangPrefix) {
   const exe = process.platform === "win32" ? ".cmd" : "";
-  const candidate = join(bin, `${clangPrefix}${API}-clang${exe}`);
-  return existsSync(candidate) ? candidate : null;
+  const wrapper = join(bin, `${clangPrefix}${API}-clang${exe}`);
+  if (existsSync(wrapper)) return { cc: wrapper, args: [] };
+  const plain = join(bin, `clang${process.platform === "win32" ? ".exe" : ""}`);
+  if (existsSync(plain)) return { cc: plain, args: [`--target=${clangPrefix}${API}`] };
+  return null;
 }
 
 if (!existsSync(srcFile)) skip("native/qscd-c/qscd.c not found");
@@ -93,12 +101,12 @@ mkdirSync(outDir, { recursive: true });
 let built = 0;
 
 for (const target of TARGETS) {
-  const cc = clangPath(bin, target.clang);
-  if (!cc) skip(`missing NDK clang for ${target.clang} (API ${API})`);
+  const clang = clangFor(bin, target.clang);
+  if (!clang) skip(`missing NDK clang for ${target.clang} (API ${API})`);
 
   const dest = join(outDir, target.out);
   log(`building ${target.out} (API ${API})`);
-  const r = spawnSync(cc, [...CFLAGS, srcFile, "-o", dest], {
+  const r = spawnSync(clang.cc, [...clang.args, ...CFLAGS, srcFile, "-o", dest], {
     cwd: srcDir,
     stdio: "inherit",
     shell: true,

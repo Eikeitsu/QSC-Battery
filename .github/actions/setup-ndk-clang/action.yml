@@ -1,0 +1,51 @@
+name: Setup NDK clang
+description: 装好 Android NDK 并确认交叉编译工具链真的可用（修复缓存还原后的悬空符号链接）
+
+inputs:
+  ndk-version:
+    description: NDK 版本
+    required: false
+    default: r26d
+
+outputs:
+  ndk-path:
+    description: NDK 根目录
+    value: ${{ steps.ndk.outputs.ndk-path }}
+
+runs:
+  using: composite
+  steps:
+    # 不要开 local-cache：从缓存还原时 bin/ 下的符号链接会指回
+    # /opt/hostedtoolcache/... 这个已不存在的路径，表现为
+    # `<triple><api>-clang: line 4: .../bin/clang: No such file or directory`（exit 127）
+    - uses: nttld/setup-ndk@v1
+      id: ndk
+      with:
+        ndk-version: ${{ inputs.ndk-version }}
+
+    - name: Verify NDK toolchain
+      shell: bash
+      env:
+        NDK_PATH: ${{ steps.ndk.outputs.ndk-path }}
+      run: |
+        set -euo pipefail
+        BIN="$(find "$NDK_PATH/toolchains/llvm/prebuilt" -maxdepth 2 -type d -name bin | head -n1)"
+        [ -n "$BIN" ] || { echo "NDK toolchain bin not found under $NDK_PATH"; exit 1; }
+        echo "toolchain bin: $BIN"
+
+        # 悬空链接就地修回同目录的同名目标（社区通用修法，缓存未命中时通常无事可做）
+        repaired=0
+        while IFS= read -r link; do
+          [ -e "$link" ] && continue
+          target="$(readlink "$link")"
+          ln -sf "$BIN/$(basename "$target")" "$link"
+          echo "repaired symlink: $(basename "$link") -> $(basename "$target")"
+          repaired=$((repaired + 1))
+        done < <(find "$BIN" -type l)
+        echo "repaired symlinks: $repaired"
+
+        # 这三个缺任何一个都无法交叉编译，早失败比在链接阶段失败好定位
+        for exe in clang aarch64-linux-android24-clang armv7a-linux-androideabi24-clang; do
+          [ -e "$BIN/$exe" ] || { echo "missing $BIN/$exe"; exit 1; }
+        done
+        "$BIN/clang" --version

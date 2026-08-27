@@ -1,0 +1,32 @@
+name: Build native qscd
+description: 装好 Rust Android 目标与 NDK，交叉编译 Rust 与 C 两套事件等待器
+
+inputs:
+  ndk-version:
+    description: NDK 版本
+    required: false
+    default: r26d
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Rust (Android targets)
+      shell: bash
+      run: |
+        rustup toolchain install stable --profile minimal
+        rustup target add aarch64-linux-android armv7-linux-androideabi
+
+    - uses: ./.github/actions/setup-ndk-clang
+      id: ndk
+      with:
+        ndk-version: ${{ inputs.ndk-version }}
+
+    # REQUIRE_NATIVE：CI 里缺依赖必须失败，不能静默产出不带守护的包
+    - name: Build native qscd (Rust + C)
+      shell: bash
+      env:
+        ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
+        REQUIRE_NATIVE: "1"
+      run: |
+        node tooling/scripts/build-native.mjs
+        node tooling/scripts/build-native-c.mjs

@@ -100,6 +100,10 @@ npm run build:docs        # 构建文档站点
 - 后端是 `module/bin/qscd_fetch.sh`（`status` / `install <rust|c>` / `use <rust|c>` / `remove`），输出统一 `KEY=VALUE`，前端 `webui/src/shared/api/daemon.ts` 解析
 - 二进制与 `manifest.json`（含每个文件的 sha256）由 `post-release-update.sh` 发到 Pages 的 `qscd/` 下，文件名 `qscd-<rust|c>-<arm64|arm>`
 - `install` 会先取 manifest、下载、比对 sha256、`chmod 0755`、跑 `probe`，任一步失败即回滚到原文件；成功后写回 `native_impl`、置 `native_daemon=1` 并重拉 `service.sh`（主循环把"等待器不可用"缓存在内存里，不重启不会生效）
+- 两条工作流的原生构建统一走 `.github/actions/build-native`（装 Rust Android 目标 → `setup-ndk-clang` → 编译 Rust 与 C 两套）；换 NDK 版本或加架构只改这一处
+- 包内容断言抽成 `npm run verify:zips`（`tooling/scripts/verify-module-zips.mjs`），打包与发版两条工作流共用，本地全量构建后也能直接跑。它按 `module.prop` 的版本号只挑本次构建的包（`release/` 常年堆着历史发布），顺带用 `verifyUnixZip` 校验 CRC 与本地头。原生二进制的缺失判定沿用 `build-native*.mjs` 的约定：CI 或 `REQUIRE_NATIVE=1` 时缺即失败，本地无 NDK 时只提示
+- CI 装 NDK 走 `.github/actions/setup-ndk-clang`：**不要**给 `nttld/setup-ndk` 开 `local-cache`，从缓存还原时 `toolchains/llvm/prebuilt/*/bin` 下的符号链接会指回已不存在的 `/opt/hostedtoolcache/...`，表现为 `aarch64-linux-android24-clang: line 4: .../bin/clang: No such file or directory`（链接器 exit 127）。该 action 还会修悬空链接并在编译前断言 `clang` 与两个目标 wrapper 都在
+- 两个 `build-native*.mjs` 优先用带 API 号的 wrapper（`aarch64-linux-android24-clang`），缺失时退回 `clang --target=aarch64-linux-android24`；NDK r27+ 已移除这批 wrapper，升级 NDK 不用改脚本
 - `customize.sh` 在包内无候选时也会调用它（`MODDIR=$MODPATH QSCD_NO_RESTART=1`）：装的是 `modules_update` 里的副本、服务还没起来，此时重启只会误杀上一版进程，所以用 `QSCD_NO_RESTART` 跳过。下载结果只影响提示文案，不影响安装成败
 
 ## Web 构建
