@@ -570,6 +570,75 @@ qsc_power_reset() {
 	qsc_power_start
 }
 
+# 停充成功后多久之内不下「拔线」结论（秒）
+QSC_UNPLUG_COOLDOWN=90
+
+# 充电器是不是真被拔了。
+#
+# 不能只看 online 掉 0 或 status 不是 Charging：本模块的停充手段里就有端口
+# suspend 与电流墙，写下去之后 usb/online 会变 0、status 也可能变成
+# Discharging，看起来和拔线一模一样。据此还原节点就会在阈值处反复启停
+# （电量到 100% 停充，下一轮误判成拔线又还原，于是立刻重新充电）。
+#
+# 所以这里只认「线还插着」的正面证据，任何一条成立就判定没拔：
+#   1) present / type / VBUS 电压等物理存在信号
+#   2) status = Not charging，其字面含义就是「有充电器但没在充」，
+#      真拔线时内核约定报 Discharging
+#   3) 距上次停充不足 QSC_UNPLUG_COOLDOWN 秒（停充瞬间信号会抖）
+# 全都不成立才认为拔了。
+qsc_charger_really_gone() {
+	local p v st now last
+	for p in "$PSDIR/usb/present" "$PSDIR/qc_usb/present" \
+		"$PSDIR/wireless/present" "$PSDIR/ac/present"; do
+		[ -f "$p" ] || continue
+		v="$(cat "$p" 2>/dev/null | tr -d ' \r\n')"
+		if [ "$v" = "1" ]; then
+			qsc_log_once unplug_sig debug "$p=1，判定充电器仍在"
+			return 1
+		fi
+	done
+	# 充电口类型：插着线时报 USB_PD / USB_SDP 等，拔了报 Unknown
+	for p in "$PSDIR/usb/real_type" "$PSDIR/usb/type"; do
+		[ -f "$p" ] || continue
+		v="$(cat "$p" 2>/dev/null | tr -d ' \r\n')"
+		case "$v" in
+			""|Unknown|UNKNOWN|None|NONE) ;;
+			*)
+				qsc_log_once unplug_sig debug "$p=$v，判定充电器仍在"
+				return 1
+				;;
+		esac
+	done
+	# VBUS 还有电压说明线在（输入被 suspend 也不影响）
+	v="$(cat "$PSDIR/usb/voltage_now" 2>/dev/null | tr -d ' \r\n-')"
+	case "$v" in
+		""|*[!0-9]*) ;;
+		*)
+			# 单位可能是 µV 或 mV，取 3V 作门槛
+			if [ "$v" -gt 3000000 ] 2>/dev/null || \
+				{ [ "$v" -gt 3000 ] 2>/dev/null && [ "$v" -lt 100000 ] 2>/dev/null; }; then
+				qsc_log_once unplug_sig debug "usb/voltage_now=$v，判定充电器仍在"
+				return 1
+			fi
+			;;
+	esac
+	st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
+	if [ "$st" = "Not charging" ]; then
+		qsc_log_once unplug_sig debug "status=Not charging（有充电器但没在充），判定充电器仍在"
+		return 1
+	fi
+	now="$(date +%s 2>/dev/null)"
+	last="$(cat "$DATADIR/power_stop_ts" 2>/dev/null | tr -d ' \r\n')"
+	case "$last" in ""|*[!0-9]*) last=0 ;; esac
+	if [ -n "$now" ] && [ "$last" -gt 0 ] 2>/dev/null \
+		&& [ "$((now - last))" -lt "$QSC_UNPLUG_COOLDOWN" ] 2>/dev/null; then
+		qsc_log_once unplug_sig debug "距上次停充不足 ${QSC_UNPLUG_COOLDOWN}s，暂不判定拔线"
+		return 1
+	fi
+	qsc_log_once_clear unplug_sig
+	return 0
+}
+
 # 回收「孤儿停充」：节点还停在停充值上，但 data/power_switch 标记已经不在了。
 # 这种状态没有任何常规流程会去管它（恢复流程以 power_switch 存在为前提），
 # 结果就是手机一直充不进电而模块自认为一切正常。可能的来路：

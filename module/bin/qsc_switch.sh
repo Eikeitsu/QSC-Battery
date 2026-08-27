@@ -445,6 +445,9 @@ if [ "$charge_eval" = "1" ]; then
 			# 又能成功停充说明节点是通的，之前那次还原失败的提示不该再挂着
 			rm -f "$DATADIR/resume_fail_hint"
 			qsc_log_once_clear resume_fail
+			# 记下停充时刻：紧接其后的「像是拔线了」大概率是停充自己造成的
+			date +%s >"$DATADIR/power_stop_ts" 2>/dev/null
+			rm -f "$DATADIR/unplug_streak" 2>/dev/null
 			if [ "$battery_stop_reason" = "1" ]; then
 				touch "$DATADIR/battery_switch"
 			fi
@@ -501,7 +504,29 @@ else
 	#      省电模式形同失效；
 	#   3) MCA 机型再插上时 status 仍报 Not charging，而 power_switch 还在，
 	#      charge_eval 进不去，停充直接失灵。
+	#
+	# 但「看起来没在供电」远不等于「线拔了」：本模块的停充手段里有端口 suspend
+	# 与电流墙，写下去之后 online 掉 0、status 也可能变 Discharging，和拔线难以
+	# 区分。曾因此在阈值处反复启停（到 100% 停充，下一轮误判拔线又还原，立刻重充）。
+	# 所以这里要 qsc_charger_really_gone 拿到「线确实不在」的证据，
+	# 且连续两轮都这么判定才动手，避免停充瞬间的信号抖动。
+	unplug_ok=0
 	if [ -z "$battery_powered" ] && [ -f "$DATADIR/power_switch" ]; then
+		if qsc_charger_really_gone; then
+			_us=""
+			qsc_read_node "$DATADIR/unplug_streak" && _us="$QSC_NODE_VAL"
+			case "$_us" in ""|*[!0-9]*) _us=0 ;; esac
+			_us=$((_us + 1))
+			echo "$_us" >"$DATADIR/unplug_streak" 2>/dev/null
+			[ "$_us" -ge 2 ] 2>/dev/null && unplug_ok=1
+		else
+			rm -f "$DATADIR/unplug_streak" 2>/dev/null
+		fi
+	else
+		rm -f "$DATADIR/unplug_streak" 2>/dev/null
+	fi
+	if [ "$unplug_ok" = "1" ]; then
+		rm -f "$DATADIR/unplug_streak" 2>/dev/null
 		qsc_power_start
 		if [ "$start_ok" = "1" ]; then
 			rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" \

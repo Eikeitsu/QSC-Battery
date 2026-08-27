@@ -63,6 +63,8 @@ rm -f "$DATADIR/off_d"
 rm -f "$DATADIR/power_on"
 # 残留停充节点每个开机周期查一次，由 qsc_switch.sh 首轮执行
 rm -f "$DATADIR/.orphan_checked"
+# 拔线防抖计数重新开始，避免拿着重启前的旧计数直接还原
+rm -f "$DATADIR/unplug_streak"
 # 守护可用性每次启动重新判定（可能换了二进制或换了机型）
 rm -f "$DATADIR/qscd_unusable" "$DATADIR/qscd_features"
 rm -f "$DATADIR/power_off"

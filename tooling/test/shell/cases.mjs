@@ -135,14 +135,79 @@ export const cases = [
     },
     config: { ...FAST, power_stop: "80", power_start: "75", temperature_switch: "0" },
     node: { initial: "1", stop: "1", start: "0" },
-    data: { power_switch: "", battery_switch: "" },
+    // unplug_streak=1：拔线判定要连续两轮成立才动手，这里补上前一轮
+    data: { power_switch: "", battery_switch: "", unplug_streak: "1" },
     // 停充成功后模块会记下生效的条目，恢复时优先照它回写
     activeSwitch: true,
     expect: {
       node: "0",
-      files: { power_switch: false, battery_switch: false },
+      files: { power_switch: false, battery_switch: false, unplug_streak: false },
       descIncludes: "未充电",
       logIncludes: "已拔出充电器",
+    },
+  },
+
+  {
+    // 曾经的严重回归：停充手段里的端口 suspend / 电流墙会把 online 打成 0、
+    // status 也变成非充电，和拔线一模一样，于是刚停充就被误判拔线还原，
+    // 到 100% 反复启停。这里断言首轮只累计防抖计数、绝不动节点
+    name: "停充后疑似拔线的第一轮 → 只计数不还原",
+    sysfs: {
+      "battery/capacity": "100",
+      "battery/status": "Discharging",
+      "battery/temp": COOL,
+      "battery/current_now": "0",
+      "usb/online": "0",
+    },
+    config: { ...FAST, power_stop: "100", power_start: "95", temperature_switch: "0" },
+    node: { initial: "1", stop: "1", start: "0" },
+    data: { power_switch: "", battery_switch: "" },
+    activeSwitch: true,
+    expect: {
+      node: "1",
+      files: { power_switch: true, unplug_streak: true },
+    },
+  },
+
+  {
+    // status=Not charging 的字面含义是「有充电器但没在充」，正是停充后的样子，
+    // 不能据此还原，否则停充永远维持不住
+    name: "停充后 status=Not charging 且 online=0 → 不判定拔线",
+    sysfs: {
+      "battery/capacity": "100",
+      "battery/status": "Not charging",
+      "battery/temp": COOL,
+      "battery/current_now": "0",
+      "usb/online": "0",
+    },
+    config: { ...FAST, power_stop: "100", power_start: "95", temperature_switch: "0" },
+    node: { initial: "1", stop: "1", start: "0" },
+    data: { power_switch: "", battery_switch: "", unplug_streak: "1" },
+    activeSwitch: true,
+    expect: {
+      node: "1",
+      files: { power_switch: true, unplug_streak: false },
+    },
+  },
+
+  {
+    // 线还插着时 present 通常仍为 1，即使输入被 suspend
+    name: "停充后 usb/present=1 → 不判定拔线",
+    sysfs: {
+      "battery/capacity": "100",
+      "battery/status": "Discharging",
+      "battery/temp": COOL,
+      "battery/current_now": "0",
+      "usb/online": "0",
+      "usb/present": "1",
+    },
+    config: { ...FAST, power_stop: "100", power_start: "95", temperature_switch: "0" },
+    node: { initial: "1", stop: "1", start: "0" },
+    data: { power_switch: "", battery_switch: "", unplug_streak: "1" },
+    activeSwitch: true,
+    expect: {
+      node: "1",
+      files: { power_switch: true, unplug_streak: false },
     },
   },
 
