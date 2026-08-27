@@ -457,6 +457,28 @@ else
 		rm -f "$DATADIR/now_c" "$DATADIR/power_on"
 		touch "$DATADIR/power_off"
 	fi
+	# 拔掉充电器：没有充电器就无所谓「停充」，此处必须还原节点并清标记。
+	# 之前只有「电量降到恢复阈值以下」才会走 462 行的恢复流程，于是在阈值以上
+	# 拔线后 power_switch 会一直留着，后果有三个：
+	#   1) 模块简介一直停在「⏸️已停充 / 电量降至 X% 后恢复」，跟着的电量温度也不再变；
+	#   2) qsc_ps_can_skip_round 见到 power_switch 就不跳轮，主循环按维持间隔空转，
+	#      省电模式形同失效；
+	#   3) MCA 机型再插上时 status 仍报 Not charging，而 power_switch 还在，
+	#      charge_eval 进不去，停充直接失灵。
+	if [ -z "$battery_powered" ] && [ -f "$DATADIR/power_switch" ]; then
+		qsc_power_start
+		if [ "$start_ok" = "1" ]; then
+			rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" \
+				"$DATADIR/battery_switch" "$DATADIR/app_stop_flag"
+			qsc_clear_active_switch
+			qsc_stop_wakelock_release
+			qsc_log info "已拔出充电器，还原充电节点并清除停充状态 [$start_node <- $start_val]"
+			qsc_log_once_clear unplug_restore
+		else
+			# 还原失败时保留标记，交给恢复流程继续重试，避免节点停在停充态却没人管
+			qsc_log_once unplug_restore warn "拔出充电器后还原充电节点失败，将持续重试"
+		fi
+	fi
 fi
 
 if [ -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then

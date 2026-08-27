@@ -94,10 +94,16 @@ while true ; do
 		qsc_ps_now
 		_now="$QSC_PS_NOW"
 		if qsc_ps_can_skip_round "$_now"; then
+			# 整轮跳过也要刷简介，否则管理器里的电量/温度会停在上一次满轮
+			if type qsc_ps_refresh_desc >/dev/null 2>&1; then
+				qsc_ps_refresh_desc
+			fi
 			qsc_ps_wait "${QSC_PS_IDLE:-30}"
 			continue
 		fi
 		[ "$_now" -gt 0 ] 2>/dev/null && QSC_PS_LAST_FULL="$_now"
+		# 满轮会自己改简介，快路径的缓存指纹随之失效
+		QSC_PS_DESC_SIG=""
 	fi
 
 	"$BINDIR/qsc_switch.sh" > /dev/null 2>&1

@@ -113,6 +113,75 @@ qsc_ps_can_skip_round() {
 	return 0
 }
 
+# 省电快路径下的简介刷新。
+# 跳过整轮时 qsc_switch.sh 不会跑，而简介只在满轮里刷新，未插电时最长要等
+# QSC_PS_FULL_MAX_GAP 才动一次，管理器里看着像电量/温度卡住了。
+# 这里只用内建 read 取两个 sysfs 值，且仅在显示值变化时才真正改写 module.prop，
+# 未插电时电量/温度变化很慢，实际写盘次数很少。
+QSC_PS_DESC_SIG=""
+
+qsc_ps_refresh_desc() {
+	local lv temp digits off sig p
+	type qsc_refresh_module_description >/dev/null 2>&1 || return 0
+
+	lv=""
+	for p in /sys/class/power_supply/battery/capacity \
+		/sys/class/power_supply/bms/capacity \
+		/sys/class/power_supply/battery/soc; do
+		if qsc_ps_read "$p"; then
+			case "$QSC_PS_VAL" in
+				*[!0-9]*) ;;
+				*) lv="$QSC_PS_VAL"; break ;;
+			esac
+		fi
+	done
+
+	temp=""
+	for p in /sys/class/power_supply/battery/temp \
+		/sys/class/power_supply/bms/temp \
+		/sys/class/power_supply/battery/batt_temp; do
+		qsc_ps_read "$p" && { temp="$QSC_PS_VAL"; break; }
+	done
+	if [ -n "$temp" ]; then
+		# 与 qsc_normalize_temperature 同一套换算，但走内建算术以免每轮 fork
+		case "$temp" in
+			""|"-"|*[!0-9-]*) temp="" ;;
+			*)
+				digits="${temp#-}"
+				case "$digits" in
+					""|*[!0-9]*) temp="" ;;
+					*)
+						if [ "$digits" -ge 10000 ]; then
+							temp=$((temp / 1000))
+						elif [ "$digits" -ge 1000 ]; then
+							temp=$((temp / 100))
+						elif [ "$digits" -ge 100 ]; then
+							temp=$((temp / 10))
+						fi
+						[ "$temp" -ge -20 ] && [ "$temp" -le 100 ] || temp=""
+						;;
+				esac
+				;;
+		esac
+	fi
+
+	# 总开关也进指纹：关掉后要马上显示「已关闭」，不能等满轮
+	off=0
+	if [ -f "$OFF_FLAG" ] || [ -f "$MODDIR/disable" ]; then
+		off=1
+	fi
+
+	sig="${off}:${lv}:${temp}"
+	[ "$sig" = "$QSC_PS_DESC_SIG" ] && return 0
+	QSC_PS_DESC_SIG="$sig"
+
+	# 快路径只在未插电且未维持停充时进入，简介必然走「未充电」分支
+	battery_level="$lv"
+	temperature="$temp"
+	battery_powered=""
+	qsc_refresh_module_description
+}
+
 # 等待下一轮。native_daemon=1 且存在 bin/qscd 时交给它阻塞在内核
 # power_supply uevent 上：插拔可立即返回，期间不产生定时唤醒；
 # 开关关闭或缺少该二进制则退化为 sleep。
