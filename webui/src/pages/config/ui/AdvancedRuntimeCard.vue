@@ -85,6 +85,14 @@ onMounted(async () => {
         @change="saveField"
       />
       <van-field
+        v-model="store.settings.loop_interval_plugged_native_sec"
+        type="digit"
+        label="插电间隔·有守护(秒)"
+        placeholder="0–300，0=不放大"
+        input-align="right"
+        @change="saveField"
+      />
+      <van-field
         v-model="store.settings.loop_interval_near_window"
         type="digit"
         label="临近阈值窗口(%)"
@@ -95,7 +103,8 @@ onMounted(async () => {
       <p class="warn">
         装了事件唤醒守护时改用「未插电间隔·有守护」：插电由内核事件立刻叫醒，间隔不再决定插电响应速度，
         代价是模块简介刷新与停充恢复判定最慢等这么久。没有守护时仍按「未插电间隔」，
-        此时最多延迟这么久才会发现插上了充电器；电量进入停充阈值前
+        此时最多延迟这么久才会发现插上了充电器。「插电间隔·有守护」只对 Rust 版守护有效：
+        充电中离阈值还远的那段由它按阈值过滤事件，跨阈值或拔线仍立即返回；电量进入停充阈值前
         {{ store.settings.loop_interval_near_window || 3 }}% 后自动切回
         {{ store.settings.loop_interval_sec || 3 }} 秒轮询，不影响停充准确度。
       </p>

@@ -295,6 +295,15 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   );
   if (String(plugI) !== String(input.loop_interval_plugged_sec)) mark(true);
   next.loop_interval_plugged_sec = String(plugI);
+  // 0 = 不放大；仅对支持 watch 的 Rust 版守护有效，模块侧比「插电间隔」小则不生效
+  const plugNativeI = clampInt(
+    next.loop_interval_plugged_native_sec,
+    0,
+    300,
+    Number(DEFAULTS.loop_interval_plugged_native_sec),
+  );
+  if (String(plugNativeI) !== String(input.loop_interval_plugged_native_sec)) mark(true);
+  next.loop_interval_plugged_native_sec = String(plugNativeI);
   const nearW = clampInt(
     next.loop_interval_near_window,
     1,

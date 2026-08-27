@@ -25,6 +25,7 @@ export type ConfigKey =
   | "loop_interval_idle_sec"
   | "loop_interval_idle_native_sec"
   | "loop_interval_plugged_sec"
+  | "loop_interval_plugged_native_sec"
   | "loop_interval_near_window"
   | "native_daemon"
   | "native_impl"

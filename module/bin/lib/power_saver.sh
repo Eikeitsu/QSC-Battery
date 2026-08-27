@@ -28,6 +28,11 @@ qsc_ps_load_conf() {
 	QSC_PS_IDLE=30
 	QSC_PS_IDLE_NATIVE=120
 	QSC_PS_PLUGGED=10
+	QSC_PS_PLUGGED_NATIVE=60
+	# 101 / 999 = 该项不参与 watch 的判断
+	QSC_PS_STOP=101
+	QSC_PS_TEMP_ON=1
+	QSC_PS_TEMP_STOP=999
 	QSC_PS_NEAR=3
 	QSC_PS_LOOP=3
 	QSC_PS_MAINTAIN=8
@@ -49,6 +54,10 @@ qsc_ps_load_conf() {
 			loop_interval_idle_sec) QSC_PS_IDLE="$v" ;;
 			loop_interval_idle_native_sec) QSC_PS_IDLE_NATIVE="$v" ;;
 			loop_interval_plugged_sec) QSC_PS_PLUGGED="$v" ;;
+			loop_interval_plugged_native_sec) QSC_PS_PLUGGED_NATIVE="$v" ;;
+			power_stop) QSC_PS_STOP="$v" ;;
+			temperature_switch) QSC_PS_TEMP_ON="$v" ;;
+			temperature_switch_stop) QSC_PS_TEMP_STOP="$v" ;;
 			loop_interval_near_window) QSC_PS_NEAR="$v" ;;
 			loop_interval_sec) QSC_PS_LOOP="$v" ;;
 			loop_interval_maintain_sec) QSC_PS_MAINTAIN="$v" ;;
@@ -60,6 +69,12 @@ qsc_ps_load_conf() {
 	QSC_PS_IDLE="$(qsc_clamp_int "$QSC_PS_IDLE" 3 300 30)"
 	QSC_PS_IDLE_NATIVE="$(qsc_clamp_int "$QSC_PS_IDLE_NATIVE" 0 300 120)"
 	QSC_PS_PLUGGED="$(qsc_clamp_int "$QSC_PS_PLUGGED" 2 120 10)"
+	QSC_PS_PLUGGED_NATIVE="$(qsc_clamp_int "$QSC_PS_PLUGGED_NATIVE" 0 300 60)"
+	# 停充阈值只做形状校验：>100 是「关闭电量停充」的既有约定，原样传给 watch
+	QSC_PS_STOP="$(qsc_clamp_int "$QSC_PS_STOP" 1 255 101)"
+	QSC_PS_TEMP_ON="$(qsc_clamp_int "$QSC_PS_TEMP_ON" 0 1 1)"
+	QSC_PS_TEMP_STOP="$(qsc_clamp_int "$QSC_PS_TEMP_STOP" 25 70 60)"
+	[ "$QSC_PS_TEMP_ON" = "1" ] || QSC_PS_TEMP_STOP=999
 	QSC_PS_NEAR="$(qsc_clamp_int "$QSC_PS_NEAR" 1 20 3)"
 	QSC_PS_LOOP="$(qsc_clamp_int "$QSC_PS_LOOP" 2 60 3)"
 	QSC_PS_MAINTAIN="$(qsc_clamp_int "$QSC_PS_MAINTAIN" 3 60 8)"
@@ -231,12 +246,53 @@ qsc_ps_idle_secs() {
 	return 0
 }
 
+# 守护是否支持 watch（带阈值的等待）。每个进程只问一次；
+# C 版不认 features 子命令会退出 2，即视为不支持，自动沿用 wait-event。
+# 结论缓存到 data/qscd_watch：qsc_switch.sh 是另一个进程，让它也能不 fork
+# 二进制就知道能力（换二进制或重启服务时清掉重新问）。
+QSC_PS_WATCH_OK=""
+
+qsc_ps_watch_supported() {
+	if [ -z "$QSC_PS_WATCH_OK" ]; then
+		QSC_PS_WATCH_OK="$(cat "$DATADIR/qscd_watch" 2>/dev/null | tr -d ' \r\n')"
+	fi
+	case "$QSC_PS_WATCH_OK" in
+		0 | 1) ;;
+		*)
+			QSC_PS_WATCH_OK=0
+			if "$BINDIR/qscd" features 2>/dev/null | grep -q watch; then
+				QSC_PS_WATCH_OK=1
+			fi
+			echo "$QSC_PS_WATCH_OK" >"$DATADIR/qscd_watch" 2>/dev/null
+			;;
+	esac
+	[ "$QSC_PS_WATCH_OK" = "1" ]
+}
+
+# 交给守护等待。支持 watch 时把阈值一起交下去：充电中「离阈值还远」的
+# uevent 由它自己吞掉，不再每轮叫醒 shell；插拔与跨阈值仍立即返回。
+# 未插电或正在维持停充时不传阈值 —— 那两种场景任何电池事件都该让 shell 复算。
+qsc_ps_native_wait() {
+	local secs="$1" floor="$2"
+	if qsc_ps_watch_supported; then
+		if [ ! -f "$DATADIR/power_switch" ] && qsc_ps_plugged; then
+			"$BINDIR/qscd" watch --max "$secs" --floor "$floor" \
+				--stop "${QSC_PS_STOP:-101}" --near "${QSC_PS_NEAR:-3}" \
+				--temp-stop "${QSC_PS_TEMP_STOP:-999}" >/dev/null 2>&1
+			return "$?"
+		fi
+		"$BINDIR/qscd" watch --max "$secs" --floor "$floor" >/dev/null 2>&1
+		return "$?"
+	fi
+	"$BINDIR/qscd" wait-event "$secs" "$floor" >/dev/null 2>&1
+}
+
 qsc_ps_wait() {
 	local secs="${1:-30}" floor
 	floor="${QSC_PS_WAIT_FLOOR:-3}"
 	[ "$secs" -lt "$floor" ] 2>/dev/null && floor="$secs"
 	if qsc_ps_native_ready; then
-		if "$BINDIR/qscd" wait-event "$secs" "$floor" >/dev/null 2>&1; then
+		if qsc_ps_native_wait "$secs" "$floor"; then
 			return 0
 		fi
 		QSC_PS_WAIT_HELPER_OK=0
@@ -249,7 +305,7 @@ qsc_ps_wait() {
 # 本轮结束后应睡多久
 # 参数: 电量 停充电量 是否插电(1/0) [温度 停充温度]
 qsc_ps_next_sleep() {
-	local level="$1" stop="$2" plugged="$3" temp="$4" temp_stop="$5"
+	local level="$1" stop="$2" plugged="$3" temp="$4" temp_stop="$5" _pl
 	if [ "${QSC_PS_ENABLE:-1}" != "1" ]; then
 		echo "${QSC_PS_LOOP:-3}"
 		return 0
@@ -286,5 +342,12 @@ qsc_ps_next_sleep() {
 			;;
 	esac
 
-	echo "${QSC_PS_PLUGGED:-10}"
+	# 插电但离阈值还远。守护支持 watch 时可以睡久些：这段的 uevent 由它
+	# 自己按阈值过滤，跨阈值与插拔仍会立刻返回，间隔只是兜底上限。
+	_pl="${QSC_PS_PLUGGED:-10}"
+	if [ "${QSC_PS_PLUGGED_NATIVE:-0}" -gt "$_pl" ] 2>/dev/null \
+		&& qsc_ps_native_ready && qsc_ps_watch_supported; then
+		_pl="$QSC_PS_PLUGGED_NATIVE"
+	fi
+	echo "$_pl"
 }

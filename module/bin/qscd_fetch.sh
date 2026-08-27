@@ -125,8 +125,8 @@ qscd_activate() {
 	fi
 
 	rm -f "$_backup" 2>/dev/null
-	# 换了二进制，之前那个「不可用」的判定作废
-	rm -f "$DATADIR/qscd_unusable" 2>/dev/null
+	# 换了二进制，之前那个「不可用」与「支持哪些子命令」的判定都作废
+	rm -f "$DATADIR/qscd_unusable" "$DATADIR/qscd_watch" 2>/dev/null
 	echo "$_impl" >"$DATADIR/native_impl_used" 2>/dev/null
 	echo "$_from" >"$DATADIR/native_src" 2>/dev/null
 	qscd_conf_set native_impl "$_impl"

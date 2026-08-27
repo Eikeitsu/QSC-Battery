@@ -148,7 +148,7 @@ qsc_merge_config() {
 	for _nk in loop_interval_sec loop_interval_maintain_sec switch_verify_sec \
 		wireless_policy history_enable history_interval_sec app_stop app_stop_list \
 		power_saver loop_interval_idle_sec loop_interval_idle_native_sec \
-		loop_interval_plugged_sec \
+		loop_interval_plugged_sec loop_interval_plugged_native_sec \
 		loop_interval_near_window native_daemon native_impl chart_show; do
 		_nv="$(sed -n "s/^${_nk}=//p" "$source" 2>/dev/null | head -n1 | tr -d '\r')"
 		[ -n "$_nv" ] || continue
