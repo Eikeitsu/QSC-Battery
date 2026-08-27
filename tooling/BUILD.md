@@ -67,6 +67,16 @@ npm run build:docs        # 构建文档站点
 3. 本地先：`npm run format` → `npm run check`
 4. 钩子未生效时：在仓库根目录 `npm run prepare`，确认 `git config core.hooksPath` 为 `.husky/_`
 
+## 原生守护（Rust 为主，C 版已冻结）
+
+维护策略：**新功能只加在 Rust 版**。C 版冻结在现有的轻量能力
+（`wait-event` / `probe` / `selftest`）上，只修 bug、不再跟进新子命令——
+两版逐字对齐的要求会让每个新子命令都得写两遍，代价压过收益。
+
+因此模块侧调用任何新子命令都必须能优雅退化：约定「未知子命令退出 2」，
+调用方据此回退到 `wait-event` 或纯 `sleep`。`qscd features` 用来一次性问清
+装的是哪一套（C 版不认这个子命令，退出 2，即视为无扩展能力）。
+
 ## 原生事件等待器（Rust 版与 C 版双实现）
 
 只有一个职责：阻塞在内核 `power_supply` uevent 上，让 shell 主循环在未插电时不必定时唤醒。
