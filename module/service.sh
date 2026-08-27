@@ -87,12 +87,43 @@ echo 3 >"$DATADIR/loop_sleep" 2>/dev/null
 
 QSC_PS_LAST_FULL=0
 
+# 免重启更新的运行期兜底。第三方安装器（InstallX 等）会连带杀掉安装时
+# 脱离出去的收尾作业，留下 modules_update 暂存与 update 标记，用户就看到
+# 「还是要重启」。常驻服务活得比任何安装器都久，由它复查一遍最稳。
+# 热路径只多一次 [ -f update ] 判断，命中才做后面那些事。
+if [ -f "$LIBDIR/hot_update.sh" ]; then
+	# shellcheck disable=SC1090
+	. "$LIBDIR/hot_update.sh" 2>/dev/null || true
+fi
+QSC_HOT_FIN_TS=0
+QSC_HOT_FIN_TRIES=0
+
+qsc_hot_finalize_maybe() {
+	local now
+	[ -f "$MODDIR/update" ] || return 0
+	type qsc_hot_finalize >/dev/null 2>&1 || return 0
+	# 失败时别每轮重试：最多 5 次，每次至少隔 60 秒
+	[ "$QSC_HOT_FIN_TRIES" -ge 5 ] 2>/dev/null && return 0
+	now="$(date +%s 2>/dev/null)" || now=0
+	case "$now" in "" | *[!0-9]*) now=0 ;; esac
+	if [ "$now" -gt 0 ] && [ "$QSC_HOT_FIN_TS" -gt 0 ] \
+		&& [ "$((now - QSC_HOT_FIN_TS))" -lt 60 ] 2>/dev/null; then
+		return 0
+	fi
+	QSC_HOT_FIN_TS="$now"
+	QSC_HOT_FIN_TRIES=$((QSC_HOT_FIN_TRIES + 1))
+	qsc_hot_finalize || true
+}
+
+qsc_hot_finalize_maybe
+
 # power_saver.sh 缺失（如手动裁剪安装）时退化为普通 sleep
 if ! type qsc_ps_wait >/dev/null 2>&1; then
 	qsc_ps_wait() { sleep "${1:-3}"; }
 fi
 
 while true ; do
+	qsc_hot_finalize_maybe
 	# 省电快路径：未插电且未维持停充时，本轮只读几个 online 节点就睡，
 	# 不 fork qsc_switch.sh（那会重新解析约 90KB 脚本并触发多次写盘）。
 	if type qsc_ps_load_conf >/dev/null 2>&1; then

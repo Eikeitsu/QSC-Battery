@@ -131,8 +131,20 @@ hot_update_request() {
 	# modules/<id>/update，赛跑赢了也会被它重新写回。
 	# 放在两个模块目录之外：worker 要删掉 modules_update，不能跟着被删；
 	# 也不能落在 MODPATH 里，否则会被打包进模块目录
-	_worker="/data/adb/.qsc_hot_update.sh"
-	cat >"$_worker" <<'HOT_UPDATE_WORKER'
+	hot_update_spawn_worker "$_modid" "$_script" || return 1
+
+	ui_print "- 已安排免重启热更新（无需重启）"
+	ui_print "- 约 10 秒后刷新模块列表；若仍提示需重启，重启一次即可"
+	return 0
+}
+
+# 生成收尾作业脚本。参数: 目标路径
+# 独立成函数是为了让常驻服务也能用同一份逻辑做兜底：有些第三方安装器
+# （如 InstallX）会连带杀掉我们脱离出去的后台作业，那时就由服务重新拉起它。
+hot_update_write_worker() {
+	_worker_path="$1"
+	[ -n "$_worker_path" ] || return 1
+	cat >"$_worker_path" <<'HOT_UPDATE_WORKER'
 #!/system/bin/sh
 # 由 customize.sh 生成并脱离安装器运行；参数: <modid> <hotinstall 脚本名>
 MODID="$1"
@@ -175,6 +187,7 @@ hu_wait_stable() {
 }
 
 [ -n "$MODID" ] || exit 0
+hu_log "start: 收尾作业已启动 (pid $$)"
 if ! hu_wait_stable; then
 	hu_log "abort: modules_update 未在 60s 内稳定"
 	exit 0
@@ -197,14 +210,19 @@ fi
 hu_log "ok: 已就地覆盖到 $OLD"
 
 # 管理器可能在我们之后才 touch update / 回写暂存，持续清理一段时间。
+# 窗口给足 120 秒：第三方安装器（InstallX 等）收尾比管理器慢得多，
+# 原先 20 秒经常是我们先退场、它后 touch update，用户就又看到「需重启」。
 # 暂存只在前几秒清：再往后出现的暂存更可能是用户又刷了一次包，不能删。
 _i=0
-while [ "$_i" -lt 20 ]; do
+_seen_update=0
+while [ "$_i" -lt 120 ]; do
 	[ "$_i" -lt 5 ] && rm -rf "$NEW" 2>/dev/null
+	[ -f "$OLD/update" ] && _seen_update=$((_seen_update + 1))
 	rm -f "$OLD/update" "$OLD/remove" 2>/dev/null
 	sleep 1
 	_i=$((_i + 1))
 done
+[ "$_seen_update" -gt 0 ] && hu_log "info: 期间清理 update 标记 ${_seen_update} 次"
 [ -e "$NEW" ] && hu_log "warn: $NEW 仍残留"
 [ -f "$OLD/update" ] && hu_log "warn: $OLD/update 仍残留"
 
@@ -214,17 +232,72 @@ if [ -f "$OLD/$SCRIPT" ]; then
 fi
 rm -f /data/adb/.qsc_hot_update.sh 2>/dev/null
 HOT_UPDATE_WORKER
-	chmod 0700 "$_worker" 2>/dev/null
+	chmod 0700 "$_worker_path" 2>/dev/null
+}
 
+# 写出并脱离当前会话启动收尾作业。参数: <modid> <hotinstall 脚本名>
+hot_update_spawn_worker() {
+	_sw_modid="$1"
+	_sw_script="${2:-hotinstall.sh}"
+	[ -n "$_sw_modid" ] || return 1
+	# 放在两个模块目录之外：worker 要删掉 modules_update，不能跟着被删；
+	# 也不能落在 MODPATH 里，否则会被打包进模块目录
+	_sw_path="/data/adb/.qsc_hot_update.sh"
+	hot_update_write_worker "$_sw_path" || return 1
 	# setsid 才能真正脱离安装器的会话；没有就退回 nohup
 	if command -v setsid >/dev/null 2>&1; then
-		setsid sh "$_worker" "$_modid" "$_script" </dev/null >/dev/null 2>&1 &
+		setsid sh "$_sw_path" "$_sw_modid" "$_sw_script" </dev/null >/dev/null 2>&1 &
 	else
-		nohup sh "$_worker" "$_modid" "$_script" </dev/null >/dev/null 2>&1 &
+		nohup sh "$_sw_path" "$_sw_modid" "$_sw_script" </dev/null >/dev/null 2>&1 &
+	fi
+	return 0
+}
+
+hot_update_versioncode() {
+	sed -n 's/^versionCode=//p' "$1" 2>/dev/null | head -n1 | tr -d ' \r'
+}
+
+# 运行期兜底：安装器把我们脱离出去的收尾作业杀掉时，由常驻服务自己了结。
+# InstallX 这类第三方安装器就会这样，表现是 modules_update 残留 +
+# 模块目录留着 update，管理器一直提示需重启。
+#
+# 只看两样东西：模块目录里的 update 标记，和 modules_update 里的暂存。
+#   暂存版本更高 → 安装器没能应用，重新拉起收尾作业（它在模块目录之外跑，
+#                  不会出现「覆盖正在执行的 service.sh」这种自伤）
+#   暂存同版本或没有暂存 → 标记是残留，删掉，免得白提示重启
+# 真正待应用的更新一定会提高 versionCode，所以这个判据不会把更新弄丢。
+# 返回 0 = 做了处理
+qsc_hot_finalize() {
+	local modid new mine theirs f
+	[ -f "$MODDIR/update" ] || return 1
+	modid="$(sed -n 's/^id=//p' "$MODDIR/module.prop" 2>/dev/null | head -n1 | tr -d ' \r')"
+	[ -n "$modid" ] || return 1
+	new="/data/adb/modules_update/$modid"
+	mine="$(hot_update_versioncode "$MODDIR/module.prop")"
+	case "$mine" in "" | *[!0-9]*) return 1 ;; esac
+	theirs=""
+	[ -f "$new/module.prop" ] && theirs="$(hot_update_versioncode "$new/module.prop")"
+	case "$theirs" in *[!0-9]*) theirs="" ;; esac
+
+	if [ -n "$theirs" ] && [ "$theirs" -gt "$mine" ] 2>/dev/null; then
+		for f in module.prop service.sh bin/common.sh; do
+			if [ ! -f "$new/$f" ]; then
+				qsc_log_once hot_fin warn "暂存的更新缺少 $f，改为重启生效"
+				return 1
+			fi
+		done
+		if hot_update_spawn_worker "$modid" hotinstall.sh; then
+			qsc_log info "检测到未完成的免重启更新（暂存 $theirs > 当前 $mine），已重新拉起收尾作业"
+			return 0
+		fi
+		return 1
 	fi
 
-	ui_print "- 已安排免重启热更新（无需重启）"
-	ui_print "- 约 10 秒后刷新模块列表；若仍提示需重启，重启一次即可"
+	rm -f "$MODDIR/update" 2>/dev/null
+	if [ -n "$theirs" ] && [ "$theirs" = "$mine" ]; then
+		rm -rf "$new" 2>/dev/null
+	fi
+	qsc_log info "已清理残留的重启标记（暂存版本 ${theirs:-无}，当前 $mine）"
 	return 0
 }
 
