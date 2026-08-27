@@ -129,10 +129,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 解到仓库根：构件同时含 release/ 与 module/bin/，
+      # 其内部路径是相对仓库根的（upload-artifact 取所有 path 的最近公共父目录做根）
       - uses: actions/download-artifact@v4
         with:
           name: magisk-module-${{ needs.build.outputs.tag }}
-          path: release/
+          path: .
 
       - name: Prepare release notes
         shell: bash
@@ -169,14 +171,23 @@ jobs:
           # 回写主分支需要可推送
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # 同 publish：解到仓库根，让 release/*.zip 与 module/bin/qscd-* 各回原位
       - uses: actions/download-artifact@v4
         with:
           name: magisk-module-${{ needs.build.outputs.tag }}
-          path: release/
+          path: .
 
+      # 构件不保留权限位。四个都必须在：少一个就意味着 Pages 上缺守护，
+      # WebUI 的下载入口会静默失效，所以这里硬失败而不是 `|| true`
       - name: Restore executable bit on native binaries
         shell: bash
-        run: chmod 0755 module/bin/qscd-arm64 module/bin/qscd-arm module/bin/qscdc-arm64 module/bin/qscdc-arm || true
+        run: |
+          set -euo pipefail
+          for f in module/bin/qscd-arm64 module/bin/qscd-arm \
+                   module/bin/qscdc-arm64 module/bin/qscdc-arm; do
+            [ -f "$f" ] || { echo "missing $f (artifact layout changed?)"; exit 1; }
+            chmod 0755 "$f"
+          done
 
       - name: Update default branch (changelog / update.json / Pages zip + qscd)
         env:
