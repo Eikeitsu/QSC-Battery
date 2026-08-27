@@ -5,15 +5,16 @@
  * 跑一次真正的 bin/qsc_switch.sh，然后断言「有没有停充、写了什么值、状态标记
  * 与简介对不对」。这里只覆盖判定，不碰机型探测与电流控制。
  *
- * 尚未覆盖：按 App 停充。它要造出能被 ps 匹配到的前台进程，得先给
- * qsc_pkg_list_hit 留一个可注入的进程列表来源。
+ * 尚未覆盖：按 App 停充的「命中」判定本身。用例里靠列表写 sh 让 ps 必然命中，
+ * 但这依赖宿主机进程表，不适合用来测更细的匹配规则。
  *
  * 字段说明
  *   sysfs   假 /sys/class/power_supply 下的文件，键是相对路径
  *   config  追加到 config.conf 末尾的覆盖项（后出现的键生效）
  *   data    预置的 data/ 标记文件，值为文件内容
- *   node    注入的停充开关节点：initial=初值，stop/start=写入值
- *   expect  断言
+ *   node    注入的停充开关节点：initial=初值，stop/start=写入值，
+ *           missing=不创建该文件（用来构造写入失败）
+ *   expect  断言；node 省略时不检查节点值
  */
 
 // 电池温度 sysfs 是 0.1°C 单位；300 = 30.0°C
@@ -264,6 +265,145 @@ export const cases = [
       node: "0",
       files: { power_switch: false },
       descIncludes: "已关闭",
+    },
+  },
+
+  {
+    // 曾经的严重 bug：停充生效时去关模块，恢复流程被 off_qsc 门禁跳过，
+    // 节点永远停在停充值上，手机再也充不进电
+    name: "停充中关掉总开关 → 先还原节点再罢工",
+    sysfs: {
+      "battery/capacity": "85",
+      "battery/status": "Not charging",
+      "battery/temp": COOL,
+      "battery/current_now": "0",
+      "usb/online": "1",
+    },
+    config: { ...FAST, power_stop: "80", power_start: "75", temperature_switch: "0" },
+    node: { initial: "1", stop: "1", start: "0" },
+    data: { off_qsc: "", power_switch: "", battery_switch: "" },
+    activeSwitch: true,
+    expect: {
+      node: "0",
+      files: { power_switch: false, battery_switch: false, resume_fail_hint: false },
+      descIncludes: "已关闭",
+      logIncludes: "模块已关闭，还原充电节点",
+    },
+  },
+
+  {
+    name: "关掉总开关但还原失败 → 保留标记并在简介里报警",
+    sysfs: {
+      "battery/capacity": "85",
+      "battery/status": "Not charging",
+      "battery/temp": COOL,
+      "battery/current_now": "0",
+      "usb/online": "1",
+    },
+    config: { ...FAST, power_stop: "80", power_start: "75", temperature_switch: "0" },
+    // 节点文件不存在 → 写入被 [ -f ] 跳过 → start_ok 恒为 0
+    node: { initial: "1", stop: "1", start: "0", missing: true },
+    data: { off_qsc: "", power_switch: "" },
+    expect: {
+      files: { power_switch: true, resume_fail_hint: true },
+      // 这条必须盖过「已关闭」，否则用户永远看不到真正的原因
+      descIncludes: "恢复充电失败",
+    },
+  },
+
+  {
+    name: "电量低于安全线 → 忽略温控停充强制恢复",
+    sysfs: {
+      "battery/capacity": "15",
+      "battery/status": "Not charging",
+      // 45°C，仍高于温控恢复线 40°C，正常逻辑不会恢复
+      "battery/temp": "450",
+      "battery/current_now": "0",
+      "usb/online": "1",
+    },
+    config: {
+      ...FAST,
+      power_stop: "80",
+      power_start: "75",
+      temperature_switch: "1",
+      temperature_switch_stop: "45",
+      temperature_switch_start: "40",
+    },
+    node: { initial: "1", stop: "1", start: "0" },
+    data: { power_switch: "", temp_switch: "" },
+    activeSwitch: true,
+    expect: {
+      node: "0",
+      files: { power_switch: false, temp_switch: false },
+      logIncludes: "已低于安全线",
+    },
+  },
+
+  {
+    name: "电量低于安全线 → 忽略按 App 停充强制恢复",
+    sysfs: {
+      "battery/capacity": "15",
+      "battery/status": "Not charging",
+      "battery/temp": COOL,
+      "battery/current_now": "0",
+      "usb/online": "1",
+    },
+    config: {
+      ...FAST,
+      power_stop: "80",
+      power_start: "75",
+      temperature_switch: "0",
+      app_stop: "1",
+      // 宿主机上必然有 sh 进程，等于让 App 命中判定恒为真
+      app_stop_list: "sh",
+    },
+    node: { initial: "1", stop: "1", start: "0" },
+    data: { power_switch: "", app_stop_flag: "" },
+    activeSwitch: true,
+    expect: {
+      node: "0",
+      files: { power_switch: false, app_stop_flag: false },
+      logIncludes: "已低于安全线",
+    },
+  },
+
+  {
+    // 安全线只放行温控与 App 两个 latch，不能推翻用户自己设的电量阈值
+    name: "安全线不越权：电量停充阈值由用户设定时仍维持停充",
+    sysfs: {
+      "battery/capacity": "15",
+      "battery/status": "Not charging",
+      "battery/temp": COOL,
+      "battery/current_now": "0",
+      "usb/online": "1",
+    },
+    config: { ...FAST, power_stop: "20", power_start: "10", temperature_switch: "0" },
+    node: { initial: "1", stop: "1", start: "0" },
+    data: { power_switch: "", battery_switch: "" },
+    activeSwitch: true,
+    expect: {
+      node: "1",
+      files: { power_switch: true },
+      descIncludes: "已停充",
+    },
+  },
+
+  {
+    // 节点停在停充值但标记已丢失：没有任何常规流程会管它
+    name: "残留停充节点（无标记）→ 开机首轮回收",
+    sysfs: {
+      "battery/capacity": "50",
+      "battery/status": "Charging",
+      "battery/temp": COOL,
+      "battery/current_now": "500000",
+      "usb/online": "1",
+    },
+    config: { ...FAST, power_stop: "80", power_start: "75", temperature_switch: "0" },
+    node: { initial: "1", stop: "1", start: "0" },
+    expect: {
+      node: "0",
+      files: { power_switch: false, ".orphan_checked": true },
+      logIncludes: "发现残留停充节点",
     },
   },
 ];

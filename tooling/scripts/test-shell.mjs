@@ -85,7 +85,9 @@ function setupCase(tc) {
   }
 
   const nodePath = join(dir, "fake_switch_node");
-  writeFileSync(nodePath, `${tc.node.initial}\n`);
+  // node.missing：列表照旧指向这个路径，但文件不存在。写节点的两个方向都会
+  // 被 [ -f ] 跳过，用来构造「停充/还原失败」这类分支
+  if (!tc.node.missing) writeFileSync(nodePath, `${tc.node.initial}\n`);
   const entry = `${posix(nodePath)},start=${tc.node.start},stop=${tc.node.stop}`;
   writeFileSync(join(data, "list_switch"), `${entry}\n`);
   if (tc.activeSwitch) writeFileSync(join(data, "active_switch"), `${entry}\n`);
@@ -127,7 +129,7 @@ function describeFailure(tc, env, ctx) {
 function checkCase(tc, ctx) {
   const errors = [];
   const node = readTrimmed(ctx.nodePath);
-  if (node !== tc.expect.node) {
+  if (tc.expect.node !== undefined && node !== tc.expect.node) {
     errors.push(
       `节点值应为 ${JSON.stringify(tc.expect.node)}，实际 ${JSON.stringify(node)}`,
     );
