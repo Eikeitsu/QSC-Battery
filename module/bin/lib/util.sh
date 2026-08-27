@@ -1,6 +1,10 @@
 #!/system/bin/sh
 # 通用小工具：超时读节点、温度归一化、调试步进、配置钳位
 
+# 正常由 common.sh 的 qsc_init_paths 设好；这里兜一道底，
+# 免得有人直接 source 某个 lib 时把路径拼成 /battery/capacity 这种废路径
+PSDIR="${PSDIR:-/sys/class/power_supply}"
+
 # 调试开关：每个进程只判定一次（主循环每轮会问 9 次）
 qsc_debug_enabled() {
 	if [ -z "$QSC_DEBUG_ON" ]; then

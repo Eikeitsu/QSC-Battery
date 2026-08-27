@@ -12,7 +12,14 @@
  * REQUIRE_SHELL_TESTS=1 时视为失败。
  */
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { existsSync } from "node:fs";
 import { appendFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -41,7 +48,9 @@ function findShell() {
     const r = which(bin);
     if (r.status === 0 && r.stdout.trim()) {
       const path = r.stdout.trim().split("\n")[0];
-      return bin === "busybox" ? { cmd: path, args: ["sh"], label: "busybox sh" } : { cmd: path, args: [], label: bin };
+      return bin === "busybox"
+        ? { cmd: path, args: ["sh"], label: "busybox sh" }
+        : { cmd: path, args: [], label: bin };
     }
   }
   return null;
@@ -98,7 +107,9 @@ function readTrimmed(p) {
 function describeFailure(tc, env, ctx) {
   const lines = [];
   const node = readTrimmed(ctx.nodePath);
-  lines.push(`    节点值: ${JSON.stringify(node)}（期望 ${JSON.stringify(tc.expect.node)}）`);
+  lines.push(
+    `    节点值: ${JSON.stringify(node)}（期望 ${JSON.stringify(tc.expect.node)}）`,
+  );
   for (const name of Object.keys(tc.expect.files ?? {})) {
     lines.push(`    data/${name} 存在: ${existsSync(join(ctx.mod, "data", name))}`);
   }
@@ -108,7 +119,8 @@ function describeFailure(tc, env, ctx) {
   lines.push(`    简介: ${desc ?? "(无)"}`);
   const log = readTrimmed(join(ctx.mod, "data/log.log"));
   if (log) lines.push(`    日志:\n${log.replace(/^/gm, "      ")}`);
-  if (env.stderr?.trim()) lines.push(`    stderr:\n${env.stderr.trim().replace(/^/gm, "      ")}`);
+  if (env.stderr?.trim())
+    lines.push(`    stderr:\n${env.stderr.trim().replace(/^/gm, "      ")}`);
   return lines.join("\n");
 }
 
@@ -116,7 +128,9 @@ function checkCase(tc, ctx) {
   const errors = [];
   const node = readTrimmed(ctx.nodePath);
   if (node !== tc.expect.node) {
-    errors.push(`节点值应为 ${JSON.stringify(tc.expect.node)}，实际 ${JSON.stringify(node)}`);
+    errors.push(
+      `节点值应为 ${JSON.stringify(tc.expect.node)}，实际 ${JSON.stringify(node)}`,
+    );
   }
   for (const [name, want] of Object.entries(tc.expect.files ?? {})) {
     const got = existsSync(join(ctx.mod, "data", name));
@@ -155,16 +169,20 @@ function main() {
   const summary = [];
   for (const tc of cases) {
     const ctx = setupCase(tc);
-    const run = spawnSync(shell.cmd, [...shell.args, posix(join(ctx.mod, "bin/qsc_switch.sh"))], {
-      encoding: "utf8",
-      timeout: 120_000,
-      env: {
-        ...process.env,
-        MODDIR: posix(ctx.mod),
-        QSC_SYSFS_ROOT: posix(ctx.dir),
-        // 判定层不该依赖 PATH 之外的东西；保持继承以便用到 sed/awk/find
+    const run = spawnSync(
+      shell.cmd,
+      [...shell.args, posix(join(ctx.mod, "bin/qsc_switch.sh"))],
+      {
+        encoding: "utf8",
+        timeout: 120_000,
+        env: {
+          ...process.env,
+          MODDIR: posix(ctx.mod),
+          QSC_SYSFS_ROOT: posix(ctx.dir),
+          // 判定层不该依赖 PATH 之外的东西；保持继承以便用到 sed/awk/find
+        },
       },
-    });
+    );
     const errors = run.error ? [`执行失败: ${run.error.message}`] : checkCase(tc, ctx);
     if (errors.length === 0) {
       console.log(`  ✓ ${tc.name}`);
