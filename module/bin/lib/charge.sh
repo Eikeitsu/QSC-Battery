@@ -241,11 +241,11 @@ qsc_clear_active_switch() {
 # 粗判是否已停充（供 verify；MCA 写入后可能短暂仍显示 Charging，故 MCA 路径不依赖此函数）
 qsc_charge_looks_stopped() {
 	local st cur
-	st="$(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d '\r\n')"
+	st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
 	case "$st" in
 		"Not charging"|Discharging|Full) return 0 ;;
 	esac
-	cur="$(cat /sys/class/power_supply/battery/current_now 2>/dev/null | tr -d ' \r\n-')"
+	cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
 	case "$cur" in
 		""|*[!0-9]*) return 1 ;;
 	esac
@@ -336,8 +336,8 @@ qsc_maintain_stop_while_plugged() {
 	}
 	# 小米等停充后 dumpsys 可能短暂无 powered:true，改用 usb/online 判断仍插电
 	if [ -z "$battery_powered" ]; then
-		for online in /sys/class/power_supply/usb/online /sys/class/power_supply/qc_usb/online \
-			/sys/class/power_supply/wireless/online; do
+		for online in "$PSDIR/usb/online" "$PSDIR/qc_usb/online" \
+			"$PSDIR/wireless/online"; do
 			if [ -f "$online" ] && [ "$(cat "$online" 2>/dev/null | tr -d ' \r\n')" = "1" ]; then
 				battery_powered="powered: true"
 				break

@@ -28,9 +28,9 @@ dumpsys_battery=""
 _sf_cap=""
 _sf_status=""
 _sf_temp=""
-qsc_read_node /sys/class/power_supply/battery/capacity && _sf_cap="$QSC_NODE_VAL"
-qsc_read_node /sys/class/power_supply/battery/status && _sf_status="$QSC_NODE_VAL"
-qsc_read_node /sys/class/power_supply/battery/temp && _sf_temp="$QSC_NODE_VAL"
+qsc_read_node "$PSDIR/battery/capacity" && _sf_cap="$QSC_NODE_VAL"
+qsc_read_node "$PSDIR/battery/status" && _sf_status="$QSC_NODE_VAL"
+qsc_read_node "$PSDIR/battery/temp" && _sf_temp="$QSC_NODE_VAL"
 if [ -n "$_sf_cap" ] && [ -n "$_sf_status" ] && [ -n "$_sf_temp" ]; then
 	case "$_sf_cap" in
 		""|*[!0-9]*) _sf_cap="" ;;
@@ -81,7 +81,7 @@ battery_status="$(echo "$dumpsys_battery" | egrep 'status: ' | sed -n 's/.*statu
 qsc_debug_step 4
 
 if [ ! -n "$battery_powered" ] || [ ! -n "$battery_status" ]; then
-	sysfs_status="$(qsc_safe_cat /sys/class/power_supply/battery/status)"
+	sysfs_status="$(qsc_safe_cat "$PSDIR/battery/status")"
 	if [ -n "$sysfs_status" ]; then
 		qsc_log_once batt_st debug "充电状态来自 sysfs status=$sysfs_status"
 		case "$sysfs_status" in
@@ -93,9 +93,9 @@ if [ ! -n "$battery_powered" ] || [ ! -n "$battery_status" ]; then
 	fi
 fi
 if [ ! -n "$battery_powered" ]; then
-	for usb_online in /sys/class/power_supply/usb/online /sys/class/power_supply/qc_usb/online \
-		/sys/class/power_supply/ac/online /sys/class/power_supply/dc/online \
-		/sys/class/power_supply/wireless/online; do
+	for usb_online in "$PSDIR/usb/online" "$PSDIR/qc_usb/online" \
+		"$PSDIR/ac/online" "$PSDIR/dc/online" \
+		"$PSDIR/wireless/online"; do
 		if [ -f "$usb_online" ] && [ "$(qsc_safe_cat "$usb_online")" = "1" ]; then
 			battery_powered="powered: true"
 			battery_status="${battery_status:-2}"
@@ -179,7 +179,7 @@ off_qsc=0
 qsc_debug_step 5
 
 if [ ! -n "$battery_level" ]; then
-	for sysfs_cap in /sys/class/power_supply/battery/capacity /sys/class/power_supply/bms/capacity /sys/class/power_supply/battery/soc; do
+	for sysfs_cap in "$PSDIR/battery/capacity" "$PSDIR/bms/capacity" "$PSDIR/battery/soc"; do
 		if [ -f "$sysfs_cap" ] && [ -r "$sysfs_cap" ]; then
 			battery_level="$(qsc_safe_cat "$sysfs_cap")"
 			if [ -n "$battery_level" ]; then
@@ -203,7 +203,7 @@ if [ ! -n "$battery_level" ]; then
 fi
 
 if [ ! -n "$temperature" ]; then
-	for sysfs_temp in /sys/class/power_supply/battery/temp /sys/class/power_supply/bms/temp /sys/class/power_supply/battery/batt_temp; do
+	for sysfs_temp in "$PSDIR/battery/temp" "$PSDIR/bms/temp" "$PSDIR/battery/batt_temp"; do
 		if [ -f "$sysfs_temp" ] && [ -r "$sysfs_temp" ]; then
 			temperature_raw="$(qsc_safe_cat "$sysfs_temp")"
 			temperature="$(qsc_normalize_temperature "$temperature_raw")"
@@ -271,7 +271,7 @@ qsc_build_switch_list
 
 qsc_charge_full() {
 	if [ "$charge_full" = "1" -a "$battery_level" = "100" -a "$power_stop" = "100" ]; then
-		now_current="$(qsc_safe_cat /sys/class/power_supply/battery/current_now)"
+		now_current="$(qsc_safe_cat "$PSDIR/battery/current_now")"
 		if [ "$battery_status" = "5" ]; then
 			rm -f "$DATADIR/now_c"
 			qsc_log info "电量$battery_level 触发充满再停功能 当前已充满"

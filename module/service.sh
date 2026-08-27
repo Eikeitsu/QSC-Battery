@@ -61,6 +61,8 @@ rm -f "$DATADIR/history_last_lv"
 rm -f "$DATADIR/startup.log" "$DATADIR/debug.log"
 rm -f "$DATADIR/off_d"
 rm -f "$DATADIR/power_on"
+# 守护可用性每次启动重新判定（可能换了二进制或换了机型）
+rm -f "$DATADIR/qscd_unusable"
 rm -f "$DATADIR/power_off"
 echo "$(date +%F_%T) service.sh 启动，开始循环" > "$DATADIR/service_start.log"
 if [ -f "$DATADIR/hot_update_at" ]; then
@@ -96,9 +98,14 @@ while true ; do
 		if qsc_ps_can_skip_round "$_now"; then
 			# 整轮跳过也要刷简介，否则管理器里的电量/温度会停在上一次满轮
 			if type qsc_ps_refresh_desc >/dev/null 2>&1; then
-				qsc_ps_refresh_desc
+				qsc_ps_refresh_desc "$_now"
 			fi
-			qsc_ps_wait "${QSC_PS_IDLE:-30}"
+			if type qsc_ps_idle_secs >/dev/null 2>&1; then
+				qsc_ps_idle_secs
+			else
+				QSC_PS_IDLE_EFF="${QSC_PS_IDLE:-30}"
+			fi
+			qsc_ps_wait "$QSC_PS_IDLE_EFF"
 			continue
 		fi
 		[ "$_now" -gt 0 ] 2>/dev/null && QSC_PS_LAST_FULL="$_now"

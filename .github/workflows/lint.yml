@@ -21,13 +21,19 @@ jobs:
 
       - uses: ./.github/actions/setup-node-npm
 
-      - name: Install shellcheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Install shellcheck / busybox
+        run: sudo apt-get update && sudo apt-get install -y shellcheck busybox
 
       - name: ESLint / Stylelint / Markdown / Shell
         run: npm run lint
         env:
           REQUIRE_SHELLCHECK: "1"
+
+      # 停充判定的行为用例：假 sysfs + 假开关节点跑真 qsc_switch.sh
+      - name: Charge decision tests (busybox ash)
+        run: npm run test:shell
+        env:
+          REQUIRE_SHELL_TESTS: "1"
 
       - name: Typecheck WebUI
         run: npm run typecheck:web

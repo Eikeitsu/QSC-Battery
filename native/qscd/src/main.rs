@@ -19,8 +19,9 @@ const NETLINK_KOBJECT_UEVENT: libc::c_int = 15;
 /// 内核 uevent 载荷里的匹配串；命中即认为电池状态可能变了
 const MATCH: &[u8] = b"SUBSYSTEM=power_supply";
 const RECV_BUF: usize = 8192;
-/// 单次 recv 超时，用于周期性回到循环检查总截止时间
-const RECV_SLICE: Duration = Duration::from_secs(2);
+/// 剩余时间不足这么点就直接收工：SO_RCVTIMEO 传 0 表示「永不超时」，
+/// 把不足 1ms 的余量四舍五入成 0 会让本进程永久挂死在 recv 上
+const RECV_MIN_TIMEOUT: Duration = Duration::from_millis(1);
 
 const EXIT_OK: u8 = 0;
 const EXIT_UNUSABLE: u8 = 2;
@@ -60,7 +61,7 @@ impl UeventSocket {
             return None;
         }
 
-        sock.set_recv_timeout(RECV_SLICE)?;
+        // 超时由 wait_event 按剩余时间逐次设定，这里不预设
         Some(sock)
     }
 
@@ -132,14 +133,24 @@ fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
 
     let deadline = Instant::now() + Duration::from_secs(remaining);
     let mut buf = [0u8; RECV_BUF];
-    while Instant::now() < deadline {
+    loop {
+        // 接收超时一次设满剩余时间：整段等待只在截止时刻醒一次。
+        // 早先按固定 2 秒切片轮流复查截止时间，30 秒窗口要醒 15 次，
+        // 白让 CPU 进不了深层 idle，而事件到达本来就是立即返回、与超时无关。
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left < RECV_MIN_TIMEOUT {
+            return EXIT_OK;
+        }
+        if sock.set_recv_timeout(left).is_none() {
+            return EXIT_UNUSABLE;
+        }
         match sock.poll_once(&mut buf) {
             Ok(true) => return EXIT_OK,
+            // 超时或与电池无关的事件：回到循环按新的剩余时间重设超时
             Ok(false) => {}
             Err(_) => return EXIT_UNUSABLE,
         }
     }
-    EXIT_OK
 }
 
 fn parse_secs(arg: Option<&str>, default: u64, max: u64) -> u64 {
@@ -157,7 +168,11 @@ fn main() -> ExitCode {
             ExitCode::from(wait_event(max, floor))
         }
         Some("probe") => {
-            if UeventSocket::open().is_some() {
+            // 顺带验一次 SO_RCVTIMEO：wait_event 的截止时间全靠它
+            let ok = UeventSocket::open()
+                .map(|s| s.set_recv_timeout(Duration::from_secs(1)).is_some())
+                .unwrap_or(false);
+            if ok {
                 println!("ok");
                 ExitCode::from(EXIT_OK)
             } else {

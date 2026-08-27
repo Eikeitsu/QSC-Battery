@@ -28,6 +28,11 @@ qsc_init_paths() {
 	LOG_FILE="$DATADIR/log.log"
 	OFF_FLAG="$DATADIR/off_qsc"
 	DEVICE_PROFILE="$DATADIR/device.profile"
+	# 电池输入节点的根。QSC_SYSFS_ROOT 只由测试台设置，为空时展开结果与
+	# 写死绝对路径逐字节相同，线上行为不变。停充候选节点列表不走这个前缀：
+	# 那些路径在测试机上本就不存在，会被 [ -f ] 跳过，测试用 list_switch
+	# 与 device.profile 显式指定假节点。
+	PSDIR="${QSC_SYSFS_ROOT:-}/sys/class/power_supply"
 }
 
 qsc_init_paths "$0"

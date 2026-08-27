@@ -8,8 +8,8 @@ QSC_HISTORY_MAX_LINES=1600
 qsc_charge_source() {
 	local p
 	# 内建 read，避免每轮为几个 online 节点各 fork 一次 cat
-	for p in /sys/class/power_supply/usb/online /sys/class/power_supply/qc_usb/online \
-		/sys/class/power_supply/ac/online /sys/class/power_supply/dc/online; do
+	for p in "$PSDIR/usb/online" "$PSDIR/qc_usb/online" \
+		"$PSDIR/ac/online" "$PSDIR/dc/online"; do
 		[ -r "$p" ] || continue
 		QSC_SRC_VAL=""
 		IFS= read -r QSC_SRC_VAL <"$p" 2>/dev/null
@@ -18,8 +18,8 @@ qsc_charge_source() {
 			return 0
 		}
 	done
-	for p in /sys/class/power_supply/wireless/online /sys/class/power_supply/wireless/present \
-		/sys/class/power_supply/wireless_chg/online; do
+	for p in "$PSDIR/wireless/online" "$PSDIR/wireless/present" \
+		"$PSDIR/wireless_chg/online"; do
 		[ -r "$p" ] || continue
 		QSC_SRC_VAL=""
 		IFS= read -r QSC_SRC_VAL <"$p" 2>/dev/null
@@ -108,7 +108,7 @@ qsc_history_sample() {
 	if [ "$((now - last))" -lt "$interval" ] 2>/dev/null; then
 		return 0
 	fi
-	[ -n "$level" ] || level="$(qsc_cat_node /sys/class/power_supply/battery/capacity 2>/dev/null)"
+	[ -n "$level" ] || level="$(qsc_cat_node "$PSDIR/battery/capacity" 2>/dev/null)"
 	[ -n "$temp" ] || temp="--"
 	src="$(qsc_charge_source 2>/dev/null)"
 
@@ -117,8 +117,8 @@ qsc_history_sample() {
 	[ "$src" = "none" ] && return 0
 
 	echo "$now" >"$DATADIR/history_last_ts" 2>/dev/null
-	cur="$(qsc_cat_node /sys/class/power_supply/battery/current_now 2>/dev/null)"
-	status="$(qsc_cat_node /sys/class/power_supply/battery/status 2>/dev/null)"
+	cur="$(qsc_cat_node "$PSDIR/battery/current_now" 2>/dev/null)"
+	status="$(qsc_cat_node "$PSDIR/battery/status" 2>/dev/null)"
 	mkdir -p "$DATADIR" 2>/dev/null
 	if [ ! -f "$QSC_HISTORY_FILE" ]; then
 		echo "ts,level,temp,current_ua,status,source" >"$QSC_HISTORY_FILE"

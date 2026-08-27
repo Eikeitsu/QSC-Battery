@@ -41,8 +41,6 @@ static const char MATCH[] = "SUBSYSTEM=power_supply";
 #define MATCH_LEN (sizeof(MATCH) - 1)
 
 #define RECV_BUF 8192
-/* 单次 recv 超时，用于周期性回到循环检查总截止时间 */
-#define RECV_SLICE_SEC 2
 
 #define EXIT_OK 0
 #define EXIT_UNUSABLE 2
@@ -98,10 +96,18 @@ static unsigned long parse_secs(const char *arg, unsigned long fallback,
   return value > cap ? cap : value;
 }
 
+/* 设置接收超时；成功返回 1 */
+static int set_recv_timeout(int fd, long secs) {
+  struct timeval tv;
+
+  tv.tv_sec = (time_t)secs;
+  tv.tv_usec = 0;
+  return setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == 0;
+}
+
 /* 成功返回 fd，失败返回 -1 */
 static int uevent_socket_open(void) {
   struct sockaddr_nl addr;
-  struct timeval tv;
   int fd;
 
   fd = socket(AF_NETLINK, SOCK_DGRAM | SOCK_CLOEXEC, NETLINK_KOBJECT_UEVENT);
@@ -118,12 +124,7 @@ static int uevent_socket_open(void) {
     return -1;
   }
 
-  tv.tv_sec = RECV_SLICE_SEC;
-  tv.tv_usec = 0;
-  if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
-    close(fd);
-    return -1;
-  }
+  /* 超时由 wait_event 按剩余时间逐次设定，这里不预设 */
   return fd;
 }
 
@@ -190,9 +191,29 @@ static int wait_event(unsigned long max_secs, unsigned long floor_secs) {
   }
 
   deadline = now + (long)remaining;
-  while (monotonic_sec(&now) && now < deadline) {
-    int rc = uevent_poll_once(fd, buf, sizeof(buf));
+  for (;;) {
+    long left;
+    int rc;
 
+    /* 接收超时一次设满剩余时间：整段等待只在截止时刻醒一次。
+     * 早先按固定 2 秒切片轮流复查截止时间，30 秒窗口要醒 15 次，
+     * 白让 CPU 进不了深层 idle，而事件到达本来就是立即返回、与超时无关。
+     * 时钟读失败必须退出：截止时间失效会让本进程一直挂在 recv 上。 */
+    if (!monotonic_sec(&now)) {
+      close(fd);
+      return EXIT_UNUSABLE;
+    }
+    left = deadline - now;
+    if (left <= 0) {
+      break;
+    }
+    /* SO_RCVTIMEO 传 0 表示永不超时，所以 left 必须严格为正 */
+    if (!set_recv_timeout(fd, left)) {
+      close(fd);
+      return EXIT_UNUSABLE;
+    }
+
+    rc = uevent_poll_once(fd, buf, sizeof(buf));
     if (rc > 0) {
       close(fd);
       return EXIT_OK;
@@ -201,6 +222,7 @@ static int wait_event(unsigned long max_secs, unsigned long floor_secs) {
       close(fd);
       return EXIT_UNUSABLE;
     }
+    /* 超时或与电池无关的事件：回到循环按新的剩余时间重设超时 */
   }
   close(fd);
   return EXIT_OK;
@@ -270,9 +292,14 @@ int main(int argc, char **argv) {
     int fd = uevent_socket_open();
 
     if (fd >= 0) {
+      /* 顺带验一次 SO_RCVTIMEO：wait_event 的截止时间全靠它 */
+      int ok = set_recv_timeout(fd, 1);
+
       close(fd);
-      printf("ok\n");
-      return EXIT_OK;
+      if (ok) {
+        printf("ok\n");
+        return EXIT_OK;
+      }
     }
     fprintf(stderr, "qscd: netlink uevent socket unavailable\n");
     return EXIT_UNUSABLE;

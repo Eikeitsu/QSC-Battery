@@ -6,31 +6,38 @@
 DESC_INTRO="电量/温度停充；电流控制为安装时可选。配置：config/config.conf，日志：data/log.log。"
 
 # $1=大状态  $2=括号内子状态（可空）  $3=括号外说明（必填，可空则回退 DESC_INTRO）
+# 结果写入 QSC_DESC 而不是 echo：本函数每轮都会被调用，命令替换会白 fork 一次
 qsc_format_module_description() {
 	local major="$1"
 	local inner="$2"
 	local outer="$3"
-	local head
 
 	if [ -n "$inner" ]; then
-		head="[${major} | ${inner}]"
+		QSC_DESC="[${major} | ${inner}]"
 	else
-		head="[${major}]"
+		QSC_DESC="[${major}]"
 	fi
 	[ -n "$outer" ] || outer="$DESC_INTRO"
-	echo "${head} ${outer}"
+	QSC_DESC="${QSC_DESC} ${outer}"
 }
 
 qsc_write_module_description() {
 	local major="$1"
 	local inner="$2"
 	local outer="$3"
-	local prop desc old tmp
+	local prop desc old tmp line
 
 	prop="$MODDIR/module.prop"
 	[ -f "$prop" ] || return 0
-	desc="$(qsc_format_module_description "$major" "$inner" "$outer")"
-	old="$(grep '^description=' "$prop" 2>/dev/null | sed 's/^description=//')"
+	qsc_format_module_description "$major" "$inner" "$outer"
+	desc="$QSC_DESC"
+	# 取旧值用内建遍历：文案绝大多数时候没变，不值得为一次比对 fork grep+sed
+	old=""
+	while IFS= read -r line || [ -n "$line" ]; do
+		case "$line" in
+			description=*) old="${line#description=}"; break ;;
+		esac
+	done <"$prop"
 	[ "$old" = "$desc" ] && return 0
 
 	tmp="$prop.tmp.$$"

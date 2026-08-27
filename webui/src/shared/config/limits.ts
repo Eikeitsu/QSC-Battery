@@ -278,6 +278,15 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   );
   if (String(idleI) !== String(input.loop_interval_idle_sec)) mark(true);
   next.loop_interval_idle_sec = String(idleI);
+  // 0 = 不放大；比「未插电间隔」小则模块侧不生效，这里不强改，避免抹掉用户输入
+  const idleNativeI = clampInt(
+    next.loop_interval_idle_native_sec,
+    0,
+    300,
+    Number(DEFAULTS.loop_interval_idle_native_sec),
+  );
+  if (String(idleNativeI) !== String(input.loop_interval_idle_native_sec)) mark(true);
+  next.loop_interval_idle_native_sec = String(idleNativeI);
   const plugI = clampInt(
     next.loop_interval_plugged_sec,
     2,

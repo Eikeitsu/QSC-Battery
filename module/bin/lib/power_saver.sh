@@ -3,7 +3,7 @@
 # 设计目标：不插电时把主循环从「每 3 秒 fork 一次 qsc_switch」降到
 # 「每 N 秒读一个 online 文件」，且全程不产生子进程。
 
-QSC_PS_CONF_MTIME=""
+QSC_PS_CONF_LOADED=0
 
 # 无 fork 读取单行文件；成功置 QSC_PS_VAL
 qsc_ps_read() {
@@ -14,23 +14,26 @@ qsc_ps_read() {
 	[ -n "$QSC_PS_VAL" ]
 }
 
-# 仅在 config.conf 变化时重新解析（内建循环，无 fork）
+# 仅在 config.conf 变化时重新解析（内建循环，无 fork）。
+# 判断「变过没有」用内建 test -nt 比哨兵文件：原先的 stat 走命令替换，
+# 未插电快路径里这是每轮唯一固定的两个 fork（每小时约 240 次白唤醒 CPU）。
 qsc_ps_load_conf() {
-	local mtime
-	mtime="$(qsc_ps_conf_mtime)"
-	if [ -n "$mtime" ] && [ "$mtime" = "$QSC_PS_CONF_MTIME" ]; then
+	local seen="$DATADIR/.conf_seen"
+	if [ "$QSC_PS_CONF_LOADED" = "1" ] && [ -f "$seen" ] \
+		&& [ ! "$CONF" -nt "$seen" ]; then
 		return 0
 	fi
-	QSC_PS_CONF_MTIME="$mtime"
 
 	QSC_PS_ENABLE=1
 	QSC_PS_IDLE=30
+	QSC_PS_IDLE_NATIVE=120
 	QSC_PS_PLUGGED=10
 	QSC_PS_NEAR=3
 	QSC_PS_LOOP=3
 	QSC_PS_MAINTAIN=8
 	QSC_PS_NATIVE=1
 
+	QSC_PS_CONF_LOADED=1
 	[ -f "$CONF" ] || return 0
 	local line k v
 	while IFS= read -r line || [ -n "$line" ]; do
@@ -44,6 +47,7 @@ qsc_ps_load_conf() {
 		case "$k" in
 			power_saver) QSC_PS_ENABLE="$v" ;;
 			loop_interval_idle_sec) QSC_PS_IDLE="$v" ;;
+			loop_interval_idle_native_sec) QSC_PS_IDLE_NATIVE="$v" ;;
 			loop_interval_plugged_sec) QSC_PS_PLUGGED="$v" ;;
 			loop_interval_near_window) QSC_PS_NEAR="$v" ;;
 			loop_interval_sec) QSC_PS_LOOP="$v" ;;
@@ -54,17 +58,19 @@ qsc_ps_load_conf() {
 
 	QSC_PS_ENABLE="$(qsc_clamp_int "$QSC_PS_ENABLE" 0 1 1)"
 	QSC_PS_IDLE="$(qsc_clamp_int "$QSC_PS_IDLE" 3 300 30)"
+	QSC_PS_IDLE_NATIVE="$(qsc_clamp_int "$QSC_PS_IDLE_NATIVE" 0 300 120)"
 	QSC_PS_PLUGGED="$(qsc_clamp_int "$QSC_PS_PLUGGED" 2 120 10)"
 	QSC_PS_NEAR="$(qsc_clamp_int "$QSC_PS_NEAR" 1 20 3)"
 	QSC_PS_LOOP="$(qsc_clamp_int "$QSC_PS_LOOP" 2 60 3)"
 	QSC_PS_MAINTAIN="$(qsc_clamp_int "$QSC_PS_MAINTAIN" 3 60 8)"
 	QSC_PS_NATIVE="$(qsc_clamp_int "$QSC_PS_NATIVE" 0 1 1)"
-	return 0
-}
 
-qsc_ps_conf_mtime() {
-	[ -f "$CONF" ] || return 0
-	stat -c %Y "$CONF" 2>/dev/null || echo ""
+	# 只在配置真的更新过时刷哨兵：否则每个 qsc_switch.sh 进程都会写一次，
+	# 插电时就变成每轮一次无谓写盘
+	if [ ! -f "$seen" ] || [ "$CONF" -nt "$seen" ]; then
+		: >"$seen" 2>/dev/null
+	fi
+	return 0
 }
 
 # 单调秒（/proc/uptime 整数部分），避免快路径每轮 fork 一次 date
@@ -82,11 +88,11 @@ qsc_ps_now() {
 # 插电判定：只读 online 节点，无 fork
 qsc_ps_plugged() {
 	local p
-	for p in /sys/class/power_supply/usb/online \
-		/sys/class/power_supply/qc_usb/online \
-		/sys/class/power_supply/ac/online \
-		/sys/class/power_supply/dc/online \
-		/sys/class/power_supply/wireless/online; do
+	for p in "$PSDIR/usb/online" \
+		"$PSDIR/qc_usb/online" \
+		"$PSDIR/ac/online" \
+		"$PSDIR/dc/online" \
+		"$PSDIR/wireless/online"; do
 		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
 			return 0
 		fi
@@ -116,18 +122,27 @@ qsc_ps_can_skip_round() {
 # 省电快路径下的简介刷新。
 # 跳过整轮时 qsc_switch.sh 不会跑，而简介只在满轮里刷新，未插电时最长要等
 # QSC_PS_FULL_MAX_GAP 才动一次，管理器里看着像电量/温度卡住了。
-# 这里只用内建 read 取两个 sysfs 值，且仅在显示值变化时才真正改写 module.prop，
-# 未插电时电量/温度变化很慢，实际写盘次数很少。
+# 这里只用内建 read 取两个 sysfs 值，且仅在显示值变化时才真正改写 module.prop。
+# 温度待机时会在两三度间来回抖，只靠「值变了就写」会变成每 30 秒改一次 prop，
+# 所以再压一道最小间隔：省电的关键是别唤醒 CPU、别乱写盘，这一路两样都要守住。
 QSC_PS_DESC_SIG=""
+QSC_PS_DESC_TS=0
+QSC_PS_DESC_MIN_GAP=120
 
+# 参数: 当前单调秒（service.sh 已经读过 /proc/uptime，不再重复读）
 qsc_ps_refresh_desc() {
+	local now="${1:-0}"
 	local lv temp digits off sig p
 	type qsc_refresh_module_description >/dev/null 2>&1 || return 0
+	if [ "$now" -gt 0 ] 2>/dev/null \
+		&& [ "$((now - QSC_PS_DESC_TS))" -lt "$QSC_PS_DESC_MIN_GAP" ] 2>/dev/null; then
+		return 0
+	fi
 
 	lv=""
-	for p in /sys/class/power_supply/battery/capacity \
-		/sys/class/power_supply/bms/capacity \
-		/sys/class/power_supply/battery/soc; do
+	for p in "$PSDIR/battery/capacity" \
+		"$PSDIR/bms/capacity" \
+		"$PSDIR/battery/soc"; do
 		if qsc_ps_read "$p"; then
 			case "$QSC_PS_VAL" in
 				*[!0-9]*) ;;
@@ -137,9 +152,9 @@ qsc_ps_refresh_desc() {
 	done
 
 	temp=""
-	for p in /sys/class/power_supply/battery/temp \
-		/sys/class/power_supply/bms/temp \
-		/sys/class/power_supply/battery/batt_temp; do
+	for p in "$PSDIR/battery/temp" \
+		"$PSDIR/bms/temp" \
+		"$PSDIR/battery/batt_temp"; do
 		qsc_ps_read "$p" && { temp="$QSC_PS_VAL"; break; }
 	done
 	if [ -n "$temp" ]; then
@@ -165,7 +180,7 @@ qsc_ps_refresh_desc() {
 		esac
 	fi
 
-	# 总开关也进指纹：关掉后要马上显示「已关闭」，不能等满轮
+	# 总开关也进指纹：关掉后最迟下一次刷新就显示「已关闭」，不用等满轮
 	off=0
 	if [ -f "$OFF_FLAG" ] || [ -f "$MODDIR/disable" ]; then
 		off=1
@@ -174,6 +189,7 @@ qsc_ps_refresh_desc() {
 	sig="${off}:${lv}:${temp}"
 	[ "$sig" = "$QSC_PS_DESC_SIG" ] && return 0
 	QSC_PS_DESC_SIG="$sig"
+	QSC_PS_DESC_TS="$now"
 
 	# 快路径只在未插电且未维持停充时进入，简介必然走「未充电」分支
 	battery_level="$lv"
@@ -190,16 +206,41 @@ qsc_ps_refresh_desc() {
 QSC_PS_WAIT_HELPER_OK=1
 QSC_PS_WAIT_FLOOR=3
 
+# 守护此刻是否真能用。
+# 失败要落一个标记文件：qsc_switch.sh 是另一个进程，看不到主循环里的
+# QSC_PS_WAIT_HELPER_OK，否则它会照着「有守护」算出放大后的间隔，
+# 而主循环其实已经退回 sleep，插电就要等满那个大间隔才被发现。
+# 标记在 service.sh 启动时清掉，换二进制后重新判定。
+qsc_ps_native_ready() {
+	[ "$QSC_PS_WAIT_HELPER_OK" = "1" ] || return 1
+	[ "${QSC_PS_NATIVE:-1}" = "1" ] || return 1
+	[ -x "$BINDIR/qscd" ] || return 1
+	[ -f "$DATADIR/qscd_unusable" ] && return 1
+	return 0
+}
+
+# 未插电该睡多久，结果写入 QSC_PS_IDLE_EFF。
+# 有守护时可以睡得更久：插电由 uevent 立刻叫醒，等待间隔不再决定响应速度，
+# 而它恰好是待机功耗的主要旋钮。没有守护则必须沿用 loop_interval_idle_sec，
+# 否则插上充电器要等满一个间隔才被发现。
+qsc_ps_idle_secs() {
+	QSC_PS_IDLE_EFF="${QSC_PS_IDLE:-30}"
+	qsc_ps_native_ready || return 0
+	[ "${QSC_PS_IDLE_NATIVE:-0}" -gt "$QSC_PS_IDLE_EFF" ] 2>/dev/null \
+		&& QSC_PS_IDLE_EFF="$QSC_PS_IDLE_NATIVE"
+	return 0
+}
+
 qsc_ps_wait() {
 	local secs="${1:-30}" floor
 	floor="${QSC_PS_WAIT_FLOOR:-3}"
 	[ "$secs" -lt "$floor" ] 2>/dev/null && floor="$secs"
-	if [ "$QSC_PS_WAIT_HELPER_OK" = "1" ] && [ "${QSC_PS_NATIVE:-1}" = "1" ] \
-		&& [ -x "$BINDIR/qscd" ]; then
+	if qsc_ps_native_ready; then
 		if "$BINDIR/qscd" wait-event "$secs" "$floor" >/dev/null 2>&1; then
 			return 0
 		fi
 		QSC_PS_WAIT_HELPER_OK=0
+		: >"$DATADIR/qscd_unusable" 2>/dev/null
 		qsc_log_once qscd warn "事件等待器不可用，已退回定时轮询"
 	fi
 	sleep "$secs"
@@ -219,7 +260,8 @@ qsc_ps_next_sleep() {
 		return 0
 	fi
 	if [ "$plugged" != "1" ]; then
-		echo "${QSC_PS_IDLE:-30}"
+		qsc_ps_idle_secs
+		echo "$QSC_PS_IDLE_EFF"
 		return 0
 	fi
 

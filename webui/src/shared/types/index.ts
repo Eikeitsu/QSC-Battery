@@ -23,6 +23,7 @@ export type ConfigKey =
   | "history_interval_sec"
   | "power_saver"
   | "loop_interval_idle_sec"
+  | "loop_interval_idle_native_sec"
   | "loop_interval_plugged_sec"
   | "loop_interval_near_window"
   | "native_daemon"
