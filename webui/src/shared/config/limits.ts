@@ -268,6 +268,48 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   if (String(histI) !== String(input.history_interval_sec)) mark(true);
   next.history_interval_sec = String(histI);
 
+  next.power_saver = next.power_saver === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
+  if (next.power_saver !== String(input.power_saver || BinaryFlag.On)) mark(true);
+  const idleI = clampInt(
+    next.loop_interval_idle_sec,
+    3,
+    300,
+    Number(DEFAULTS.loop_interval_idle_sec),
+  );
+  if (String(idleI) !== String(input.loop_interval_idle_sec)) mark(true);
+  next.loop_interval_idle_sec = String(idleI);
+  const plugI = clampInt(
+    next.loop_interval_plugged_sec,
+    2,
+    120,
+    Number(DEFAULTS.loop_interval_plugged_sec),
+  );
+  if (String(plugI) !== String(input.loop_interval_plugged_sec)) mark(true);
+  next.loop_interval_plugged_sec = String(plugI);
+  const nearW = clampInt(
+    next.loop_interval_near_window,
+    1,
+    20,
+    Number(DEFAULTS.loop_interval_near_window),
+  );
+  if (String(nearW) !== String(input.loop_interval_near_window)) mark(true);
+  next.loop_interval_near_window = String(nearW);
+
+  next.native_daemon =
+    next.native_daemon === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
+  if (next.native_daemon !== String(input.native_daemon || BinaryFlag.On)) mark(true);
+  next.native_impl =
+    next.native_impl === "c" || next.native_impl === "off" ? next.native_impl : "rust";
+  if (next.native_impl !== String(input.native_impl || "rust")) mark(true);
+
+  // 曲线隐藏时采样没有意义，顺带把采样一并关掉，避免"看不见还在写盘"
+  next.chart_show = next.chart_show === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
+  if (next.chart_show !== String(input.chart_show || BinaryFlag.On)) mark(true);
+  if (next.chart_show === BinaryFlag.Off && next.history_enable !== BinaryFlag.Off) {
+    next.history_enable = BinaryFlag.Off;
+    mark(true);
+  }
+
   return { value: next, fixed };
 }
 

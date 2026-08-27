@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { inject } from "vue";
-import { TabName, ThemePack } from "@/shared";
-import { useTheme } from "@/stores";
+import { computed, inject } from "vue";
+import { BinaryFlag, TabName, ThemePack } from "@/shared";
+import { useAppStore, useTheme } from "@/stores";
 import Md3HomeStatus from "./ui/md3/HomeStatus.vue";
 import Md3HomeMetrics from "./ui/md3/HomeMetrics.vue";
 import Md3HomeStrategy from "./ui/md3/HomeStrategy.vue";
@@ -27,7 +27,11 @@ defineEmits<{
 }>();
 
 const theme = useTheme();
+const app = useAppStore();
 const setTab = inject<(name: TabName) => void>("setTab");
+
+// 采样与显示解耦：采样只决定有没有电流线，这里只看显示开关
+const showChart = computed(() => app.settings.chart_show !== BinaryFlag.Off);
 
 function goConfig() {
   setTab?.(TabName.Config);
@@ -44,7 +48,7 @@ function goConfig() {
       <div class="md3-stack">
         <Md3HomeStatus />
         <Md3HomeMetrics />
-        <HomeChargeChart />
+        <HomeChargeChart v-if="showChart" />
         <Md3HomeStrategy @open-config="goConfig" />
         <div class="md3-label">电池健康</div>
         <Md3HomeBattery />
@@ -60,8 +64,10 @@ function goConfig() {
     <div v-else-if="theme.themePack === ThemePack.Miuix" class="page page-miuix">
       <div class="miuix-label">总览</div>
       <MiuixHomeOverview />
-      <div class="miuix-label">曲线</div>
-      <HomeChargeChart />
+      <template v-if="showChart">
+        <div class="miuix-label">曲线</div>
+        <HomeChargeChart />
+      </template>
       <div class="miuix-label">当前策略</div>
       <MiuixHomeStrategy @open-config="goConfig" />
       <div class="miuix-label">更多</div>
@@ -76,7 +82,7 @@ function goConfig() {
     <div v-else class="page page-default">
       <DefaultHomeHero />
       <DefaultHomeSwitch />
-      <HomeChargeChart />
+      <HomeChargeChart v-if="showChart" />
       <DefaultHomeStrategy @open-config="goConfig" />
       <DefaultHomeDetail />
       <DefaultHomeStake />

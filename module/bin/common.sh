@@ -51,5 +51,6 @@ fi
 . "$LIBDIR/status.sh"
 . "$LIBDIR/jsonc.sh"
 . "$LIBDIR/history.sh"
+[ -f "$LIBDIR/power_saver.sh" ] && . "$LIBDIR/power_saver.sh"
 # 电流控制为可选组件，安装时未选择则无此文件
 [ -f "$LIBDIR/current.sh" ] && . "$LIBDIR/current.sh"

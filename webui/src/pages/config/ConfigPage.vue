@@ -8,6 +8,7 @@ import AdvancedRuntimeCard from "./ui/AdvancedRuntimeCard.vue";
 import PreferredCard from "./ui/PreferredCard.vue";
 import PowerSwitchCard from "./ui/PowerSwitchCard.vue";
 import SwitchToolsCard from "./ui/SwitchToolsCard.vue";
+import DaemonCard from "./ui/DaemonCard.vue";
 
 const { packClass } = useThemePackClass();
 provideConfigForm();
@@ -23,5 +24,6 @@ provideConfigForm();
     <PowerSwitchCard />
     <SwitchToolsCard />
     <AdvancedRuntimeCard />
+    <DaemonCard />
   </div>
 </template>

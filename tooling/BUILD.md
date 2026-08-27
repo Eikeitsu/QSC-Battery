@@ -17,6 +17,10 @@ webui/                  # WebUI 源码（Vue 3 + Vite + Vant + TypeScript，样�
 
 module/                 # Magisk 模块本体（打包 zip 的根内容来源）
   webroot/              # WebUI 构建产物（由 npm run build:web 同步）
+  bin/qscd-arm64|arm    # 原生事件等待器 Rust 版（build:native 交叉编译，不入库）
+  bin/qscdc-arm64|arm   # 原生事件等待器 C 版（build:native:c 交叉编译，不入库）
+native/qscd/            # 事件等待器源码（Rust + libc；阻塞在 power_supply uevent）
+native/qscd-c/          # 同一等待器的 C 实现（单文件，只依赖 NDK clang）
 archives/
   webroot-vanilla-*/    # 旧版原生 HTML/JS WebUI 归档（不参与打包）
 tooling/scripts/        # 构建脚本
@@ -31,8 +35,12 @@ npm install
 npm run prepare           # 启用 husky（install 后一般会自动跑）
 npm run dev:web           # Vite 开发预览 webui/
 npm run build:web         # Vite 构建 → .build/webroot，并同步到 module/webroot
+npm run build:native      # 交叉编译 native/qscd → module/bin/qscd-arm64|arm（缺 cargo/NDK 则跳过）
+npm run build:native:c    # 交叉编译 native/qscd-c → module/bin/qscdc-arm64|arm（缺 NDK 则跳过）
 npm run package:module    # 打 Magisk zip（webroot 缺失或过期会先 build:web）
+npm run package:module:all # 打 4 个变体包：full / rust / c / sh
 npm run build:module      # 强制 build:web + package:module
+npm run build:module:all  # 强制 build:web + 4 个变体包
 npm run check             # typecheck + 全量 lint + prettier check
 npm run lint              # eslint + stylelint + markdownlint + shellcheck
 npm run format            # prettier 写回
@@ -58,6 +66,41 @@ npm run build:docs        # 构建文档站点
 2. 不要设环境变量 `HUSKY=0`
 3. 本地先：`npm run format` → `npm run check`
 4. 钩子未生效时：在仓库根目录 `npm run prepare`，确认 `git config core.hooksPath` 为 `.husky/_`
+
+## 原生事件等待器（Rust 版与 C 版双实现）
+
+只有一个职责：阻塞在内核 `power_supply` uevent 上，让 shell 主循环在未插电时不必定时唤醒。
+两套实现（`native/qscd` = Rust + `libc`，`native/qscd-c` = 单文件 C）子命令、退出码、钳位范围逐字对齐，可互换安装。
+
+- 子命令：`qscd wait-event <最长秒> [最短秒]`（0=有事件或到时，2=不可用）、`qscd probe`（安装自检）；C 版额外有 `selftest`，供宿主机在没有 netlink 的环境里跑纯函数用例
+- 它**不写任何充电节点、不做阈值判定**；退出非 0 时 `lib/power_saver.sh` 会永久退回 `sleep`，所以最坏结果是退化成定时轮询
+- 目标 `aarch64-linux-android`、`armv7-linux-androideabi`，API 由 `QSCD_ANDROID_API` 控制（默认 24）
+- Rust 版需 `cargo` + NDK（NDK 的 clang 兼作链接器）；C 版只需 NDK clang，因此没有 Rust 工具链也能产出可用二进制
+- 本机缺依赖时两个 `build:native*` 都打印跳过并退出 0；`CI=true` 或 `REQUIRE_NATIVE=1` 时视为失败
+- 宿主端门禁（`Lint` 工作流，均不需要 NDK）：Rust 侧 `cargo fmt --check` + `clippy -D warnings` + `cargo test`；C 侧 `clang -Wall -Wextra -Werror` 编译后跑 `qscd selftest`
+- 安装时 `customize.sh` 按 `$ARCH` 取包内候选，依 `config.conf` 的 `native_impl`（`rust` 默认 / `c` / `off`）顺序逐个跑 `probe`，第一个通过的装成 `bin/qscd`；实际启用的实现与来源记在 `data/native_impl_used`、`data/native_src`，其余候选文件删除
+- 包内没有可用候选时（主包 / sh 变体），沿用上一版里 WebUI 下载好的 `bin/qscd`（由 `hot_update_preserve_paths` 带过来）；自带同实现时用自带的覆盖
+- 运行期开关是 `config.conf` 的 `native_daemon`：关闭则 `qsc_ps_wait` 直接 `sleep`，不调用二进制
+
+### 发布变体
+
+`package-module.mjs --native=<full|rust|c|sh>` 决定包里带哪套二进制，脚本内容四者完全相同：
+
+| 变体   | 带的二进制           | zip 名                 | 说明                                   |
+| ------ | -------------------- | ---------------------- | -------------------------------------- |
+| `sh`   | 无                   | `..._v<版本>.zip`      | 主包，不带后缀；`update.json` 指向此版 |
+| `full` | `qscd-*` + `qscdc-*` | `..._v<版本>-full.zip` | 安装时按 `native_impl` 逐个自检选用    |
+| `rust` | `qscd-*`             | `..._v<版本>-rust.zip` | 只带 Rust 版                           |
+| `c`    | `qscdc-*`            | `..._v<版本>-c.zip`    | 只带 C 版                              |
+
+`CI=true` 或 `REQUIRE_NATIVE=1` 时，变体要求的二进制缺失即打包失败；本地缺编译器则只告警。
+
+### WebUI 下载守护
+
+- 后端是 `module/bin/qscd_fetch.sh`（`status` / `install <rust|c>` / `use <rust|c>` / `remove`），输出统一 `KEY=VALUE`，前端 `webui/src/shared/api/daemon.ts` 解析
+- 二进制与 `manifest.json`（含每个文件的 sha256）由 `post-release-update.sh` 发到 Pages 的 `qscd/` 下，文件名 `qscd-<rust|c>-<arm64|arm>`
+- `install` 会先取 manifest、下载、比对 sha256、`chmod 0755`、跑 `probe`，任一步失败即回滚到原文件；成功后写回 `native_impl`、置 `native_daemon=1` 并重拉 `service.sh`（主循环把"等待器不可用"缓存在内存里，不重启不会生效）
+- `customize.sh` 在包内无候选时也会调用它（`MODDIR=$MODPATH QSCD_NO_RESTART=1`）：装的是 `modules_update` 里的副本、服务还没起来，此时重启只会误杀上一版进程，所以用 `QSCD_NO_RESTART` 跳过。下载结果只影响提示文案，不影响安装成败
 
 ## Web 构建
 
@@ -144,6 +187,9 @@ npm run package:module:debug   # 调试包（文件名带 -debug）
 | `lib/jsonc.sh`            | current.json 解析                  |
 | `lib/current.sh`          | 电流控制（可选）                   |
 | `lib/status.sh`           | 动态 module.prop 简介              |
+| `lib/power_saver.sh`      | 自适应轮询间隔与事件等待           |
+| `qscd`                    | 事件唤醒守护（按 ABI 装入）        |
+| `qscd_fetch.sh`           | 守护的下载/切换/删除（WebUI 调用） |
 | `qsc_switch.sh`           | 停充策略主循环                     |
 | `list_switch.sh`          | 扫描本机节点生成列表               |
 | `detect_device.sh`        | 触发 profile 探测                  |

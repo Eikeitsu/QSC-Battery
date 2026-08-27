@@ -10,6 +10,29 @@ const { store, onSwitch } = useConfigFormContext();
 const compatHint = ref("");
 /** 冷门项默认收起 */
 const nicheOpen = ref<string[]>([]);
+/** 重新打开曲线后提示一次：采样不会跟着自动打开，由用户决定 */
+const chartJustEnabled = ref(false);
+
+const samplingLabel = computed(() =>
+  store.settings.chart_show === "0"
+    ? "曲线已关闭，采样同时停止"
+    : "仅充电时采样，用于曲线上的电流线；关闭后曲线只用系统电池记录",
+);
+
+const samplingHint = computed(() => {
+  if (store.settings.chart_show === "0") return "";
+  if (!chartJustEnabled.value) return "";
+  if (store.settings.history_enable === "1") return "";
+  return "曲线已重新显示。采样仍是关闭的：不开也能看电量与温度线（数据来自系统电池记录），开了才有充电电流线，是否开启由你决定。";
+});
+
+async function setChartShow(show: boolean) {
+  store.settings.chart_show = show ? "1" : "0";
+  // 关闭曲线时连采样一起停，避免"看不见还在写盘"；重新打开不自动开采样
+  if (!show) store.settings.history_enable = "0";
+  chartJustEnabled.value = show;
+  await store.saveSettings();
+}
 
 const wirelessIgnore = computed(() => store.settings.wireless_policy === "ignore");
 
@@ -28,8 +51,45 @@ onMounted(async () => {
 </script>
 
 <template>
-  <SectionHead title="更多选项" hint="曲线采样常用；其余冷门能力默认收起" />
+  <SectionHead title="更多选项" hint="省电与曲线采样常用；其余冷门能力默认收起" />
   <ThemedCard>
+    <SwitchCell
+      title="省电模式"
+      label="按场景切换轮询间隔，明显降低待机耗电；关闭则全程用最短间隔"
+      :model-value="store.settings.power_saver !== '0'"
+      @update:model-value="(v) => onSwitch('power_saver', v)"
+    />
+    <template v-if="store.settings.power_saver !== '0'">
+      <van-field
+        v-model="store.settings.loop_interval_idle_sec"
+        type="digit"
+        label="未插电间隔(秒)"
+        placeholder="3–300，越大越省电"
+        input-align="right"
+        @change="saveField"
+      />
+      <van-field
+        v-model="store.settings.loop_interval_plugged_sec"
+        type="digit"
+        label="插电间隔(秒)"
+        placeholder="2–120，离阈值远时"
+        input-align="right"
+        @change="saveField"
+      />
+      <van-field
+        v-model="store.settings.loop_interval_near_window"
+        type="digit"
+        label="临近阈值窗口(%)"
+        placeholder="1–20，窗口内用最短间隔"
+        input-align="right"
+        @change="saveField"
+      />
+      <p class="warn">
+        未插电时最多延迟「未插电间隔」才会发现插上了充电器；电量进入停充阈值前
+        {{ store.settings.loop_interval_near_window || 3 }}% 后自动切回
+        {{ store.settings.loop_interval_sec || 3 }} 秒轮询，不影响停充准确度。
+      </p>
+    </template>
     <van-cell
       v-if="compatHint"
       title="检测到其它充电模块"
@@ -38,11 +98,19 @@ onMounted(async () => {
       @click="onSwitch('Compatibility_mode', true)"
     />
     <SwitchCell
-      title="充放电历史"
-      label="供概览曲线；关闭后不再采样"
+      title="显示充放电曲线"
+      label="关闭后概览页不再显示曲线，并一并停止采样"
+      :model-value="store.settings.chart_show !== '0'"
+      @update:model-value="setChartShow"
+    />
+    <SwitchCell
+      title="充放电历史采样"
+      :label="samplingLabel"
       :model-value="store.settings.history_enable === '1'"
+      :disabled="store.settings.chart_show === '0'"
       @update:model-value="(v) => onSwitch('history_enable', v)"
     />
+    <p v-if="samplingHint" class="warn">{{ samplingHint }}</p>
     <van-field
       v-if="store.settings.history_enable === '1'"
       v-model="store.settings.history_interval_sec"

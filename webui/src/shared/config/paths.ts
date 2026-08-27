@@ -21,6 +21,8 @@ export const PATHS = {
   SWITCH_TEST_STATUS: `${ROOT}/data/switch_test_status`,
   CHARGE_HISTORY: `${ROOT}/data/charge_history.csv`,
   COMPAT_HINT: `${ROOT}/data/compat_hint`,
+  QSCD: `${ROOT}/bin/qscd`,
+  QSCD_FETCH: `${ROOT}/bin/qscd_fetch.sh`,
 } as const;
 
 export const STATUS_INTERVAL = STATUS_INTERVAL_MS;

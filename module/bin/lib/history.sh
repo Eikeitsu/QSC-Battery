@@ -7,18 +7,23 @@ QSC_HISTORY_MAX_LINES=1600
 # 充电来源：usb | wireless | none
 qsc_charge_source() {
 	local p
+	# 内建 read，避免每轮为几个 online 节点各 fork 一次 cat
 	for p in /sys/class/power_supply/usb/online /sys/class/power_supply/qc_usb/online \
 		/sys/class/power_supply/ac/online /sys/class/power_supply/dc/online; do
-		[ -f "$p" ] || continue
-		[ "$(cat "$p" 2>/dev/null | tr -d ' \r\n')" = "1" ] && {
+		[ -r "$p" ] || continue
+		QSC_SRC_VAL=""
+		IFS= read -r QSC_SRC_VAL <"$p" 2>/dev/null
+		[ "$QSC_SRC_VAL" = "1" ] && {
 			echo usb
 			return 0
 		}
 	done
 	for p in /sys/class/power_supply/wireless/online /sys/class/power_supply/wireless/present \
 		/sys/class/power_supply/wireless_chg/online; do
-		[ -f "$p" ] || continue
-		[ "$(cat "$p" 2>/dev/null | tr -d ' \r\n')" = "1" ] && {
+		[ -r "$p" ] || continue
+		QSC_SRC_VAL=""
+		IFS= read -r QSC_SRC_VAL <"$p" 2>/dev/null
+		[ "$QSC_SRC_VAL" = "1" ] && {
 			echo wireless
 			return 0
 		}
@@ -29,13 +34,15 @@ qsc_charge_source() {
 
 # $1=包名列表文件（一行一个）命中前台或进程则 0
 qsc_pkg_list_hit() {
-	local list_file="$1" pkg focus ps_line
+	local list_file="$1" pkg focus snap
 	[ -f "$list_file" ] && [ -s "$list_file" ] || return 1
+	# 一次 ps 快照供全部包名匹配：原先每个包名都要跑一遍 ps -ef
+	snap="$(ps -ef 2>/dev/null)"
 	while IFS= read -r pkg || [ -n "$pkg" ]; do
 		pkg="$(printf '%s' "$pkg" | tr -d ' \r\n')"
 		[ -n "$pkg" ] || continue
-		ps_line="$(ps -ef 2>/dev/null | egrep "$pkg" | egrep -v "${pkg}:" | egrep -v 'egrep')"
-		if [ -n "$ps_line" ]; then
+		# 命中主进程即算；仅命中 "pkg:xxx" 子进程不算
+		if printf '%s\n' "$snap" | grep -F "$pkg" | grep -qv "${pkg}:"; then
 			return 0
 		fi
 	done <"$list_file"
@@ -101,12 +108,17 @@ qsc_history_sample() {
 	if [ "$((now - last))" -lt "$interval" ] 2>/dev/null; then
 		return 0
 	fi
-	echo "$now" >"$DATADIR/history_last_ts" 2>/dev/null
-	cur="$(cat /sys/class/power_supply/battery/current_now 2>/dev/null | tr -d ' \r\n')"
-	status="$(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d ' \r\n')"
-	src="$(qsc_charge_source 2>/dev/null)"
-	[ -n "$level" ] || level="$(cat /sys/class/power_supply/battery/capacity 2>/dev/null | tr -d ' \r\n')"
+	[ -n "$level" ] || level="$(qsc_cat_node /sys/class/power_supply/battery/capacity 2>/dev/null)"
 	[ -n "$temp" ] || temp="--"
+	src="$(qsc_charge_source 2>/dev/null)"
+
+	# 只在插电期间采样：放电段由 WebUI 现场解析系统 batterystats 历史补齐，
+	# 后台因此在日常待机时对本文件零写入。电流线只有插电时才有意义。
+	[ "$src" = "none" ] && return 0
+
+	echo "$now" >"$DATADIR/history_last_ts" 2>/dev/null
+	cur="$(qsc_cat_node /sys/class/power_supply/battery/current_now 2>/dev/null)"
+	status="$(qsc_cat_node /sys/class/power_supply/battery/status 2>/dev/null)"
 	mkdir -p "$DATADIR" 2>/dev/null
 	if [ ! -f "$QSC_HISTORY_FILE" ]; then
 		echo "ts,level,temp,current_ua,status,source" >"$QSC_HISTORY_FILE"
@@ -139,8 +151,17 @@ qsc_write_loop_sleep() {
 	normal="$(qsc_clamp_int "${normal:-3}" 2 30 3)"
 	maintain="$(qsc_clamp_int "${maintain:-8}" 3 60 8)"
 	if [ -f "$DATADIR/power_switch" ] && [ ! -f "$OFF_FLAG" ]; then
-		echo "$maintain" >"$DATADIR/loop_sleep" 2>/dev/null
+		qsc_write_loop_sleep_value "$maintain"
 	else
-		echo "$normal" >"$DATADIR/loop_sleep" 2>/dev/null
+		qsc_write_loop_sleep_value "$normal"
 	fi
+}
+
+# 值未变则不写盘（主循环每轮都写会白白产生数万次/天的小写入）
+qsc_write_loop_sleep_value() {
+	local v="$1" old
+	v="$(qsc_clamp_int "${v:-3}" 2 300 3)"
+	old="$(cat "$DATADIR/loop_sleep" 2>/dev/null | tr -d ' \r\n')"
+	[ "$old" = "$v" ] && return 0
+	echo "$v" >"$DATADIR/loop_sleep" 2>/dev/null
 }

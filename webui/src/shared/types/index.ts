@@ -20,7 +20,14 @@ export type ConfigKey =
   | "app_stop"
   | "app_stop_list"
   | "history_enable"
-  | "history_interval_sec";
+  | "history_interval_sec"
+  | "power_saver"
+  | "loop_interval_idle_sec"
+  | "loop_interval_plugged_sec"
+  | "loop_interval_near_window"
+  | "native_daemon"
+  | "native_impl"
+  | "chart_show";
 
 export type Settings = Record<ConfigKey, string>;
 

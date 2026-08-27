@@ -170,6 +170,20 @@ fi
 if [ -n "$CONF" ] && [ -f "$CONF" ]; then
   echo "  Compatibility_mode=$(grep '^Compatibility_mode=' "$CONF" 2>/dev/null | sed 's/.*=//' | tr -d '\r')" >> "$OUT"
 fi
+# 充电状态判定：MCA 机型 battery/status 可能插电充电时也报 Not charging，
+# 主循环靠 online 兜底判供电，这里把两边原始值都打出来便于对照
+echo "  充电状态判定:" >> "$OUT"
+echo "    battery/status = $(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d '\r\n')" >> "$OUT"
+for node in /sys/class/power_supply/usb/online /sys/class/power_supply/qc_usb/online \
+  /sys/class/power_supply/ac/online /sys/class/power_supply/dc/online \
+  /sys/class/power_supply/wireless/online; do
+  [ -f "$node" ] || continue
+  echo "    $node = $(cat "$node" 2>/dev/null | tr -d ' \r\n')" >> "$OUT"
+done
+if [ -n "$DATADIR" ]; then
+  echo "    data/power_switch(本模块停充中) = $([ -f "$DATADIR/power_switch" ] && echo yes || echo no)" >> "$OUT"
+  echo "    data/active_switch = $(cat "$DATADIR/active_switch" 2>/dev/null | tr -d ' \r\n')" >> "$OUT"
+fi
 echo "  电流控制组件: $([ -f "$BINDIR/lib/current.sh" ] && echo 已安装 || echo 未安装)" >> "$OUT"
 echo "  电流节点可写性:" >> "$OUT"
 for node in \

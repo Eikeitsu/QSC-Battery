@@ -1,0 +1,22 @@
+[package]
+name = "qscd"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+description = "QSC-Battery event waiter: blocks on kernel power_supply uevents so the shell loop needs no timer wakeups"
+license = "GPL-3.0-or-later"
+publish = false
+
+[[bin]]
+name = "qscd"
+path = "src/main.rs"
+
+[dependencies]
+libc = "0.2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

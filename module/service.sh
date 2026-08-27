@@ -56,6 +56,9 @@ else
 	qsc_log warn "缺少 detect_device.sh，使用内置机型探测"
 fi
 rm -f "$DATADIR/now_c"
+rm -f "$DATADIR/history_last_lv"
+# 旧版本每轮都写这两个文件，可能已积到很大；调试时会重新生成
+rm -f "$DATADIR/startup.log" "$DATADIR/debug.log"
 rm -f "$DATADIR/off_d"
 rm -f "$DATADIR/power_on"
 rm -f "$DATADIR/power_off"
@@ -76,13 +79,33 @@ fi
 # 默认循环间隔；qsc_switch 会按停充态改写 data/loop_sleep
 echo 3 >"$DATADIR/loop_sleep" 2>/dev/null
 
+QSC_PS_LAST_FULL=0
+
+# power_saver.sh 缺失（如手动裁剪安装）时退化为普通 sleep
+if ! type qsc_ps_wait >/dev/null 2>&1; then
+	qsc_ps_wait() { sleep "${1:-3}"; }
+fi
+
 while true ; do
+	# 省电快路径：未插电且未维持停充时，本轮只读几个 online 节点就睡，
+	# 不 fork qsc_switch.sh（那会重新解析约 90KB 脚本并触发多次写盘）。
+	if type qsc_ps_load_conf >/dev/null 2>&1; then
+		qsc_ps_load_conf
+		qsc_ps_now
+		_now="$QSC_PS_NOW"
+		if qsc_ps_can_skip_round "$_now"; then
+			qsc_ps_wait "${QSC_PS_IDLE:-30}"
+			continue
+		fi
+		[ "$_now" -gt 0 ] 2>/dev/null && QSC_PS_LAST_FULL="$_now"
+	fi
+
 	"$BINDIR/qsc_switch.sh" > /dev/null 2>&1
 	_sleep="$(cat "$DATADIR/loop_sleep" 2>/dev/null | tr -d ' \r\n')"
 	case "$_sleep" in
 		""|*[!0-9]*) _sleep=3 ;;
 	esac
 	[ "$_sleep" -ge 2 ] 2>/dev/null || _sleep=3
-	[ "$_sleep" -le 60 ] 2>/dev/null || _sleep=60
-	sleep "$_sleep"
+	[ "$_sleep" -le 300 ] 2>/dev/null || _sleep=300
+	qsc_ps_wait "$_sleep"
 done

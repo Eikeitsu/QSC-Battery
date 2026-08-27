@@ -112,6 +112,27 @@ power_switch=[/proc/mtk_battery_cmd/current_cmd start=0::0 stop=0::1]
 
 WebUI 游戏列表：可「加载应用列表」后搜索应用名 / 包名并勾选（优先使用管理器自带的应用枚举接口，否则 `pm list packages -3`）。也可继续手动编辑包名。
 
+## 省电与曲线（`config.conf`）
+
+| 键                          | 说明                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------ |
+| `power_saver`               | `1` 开（默认）：按场景切换轮询间隔；`0` = 全程用 `loop_interval_sec`，最费电               |
+| `loop_interval_idle_sec`    | 未插电轮询间隔（秒，3–300）。越大越省电；插上充电器最多延迟这么久才被识别                  |
+| `loop_interval_plugged_sec` | 插电但离阈值较远时的间隔（秒，2–120）                                                      |
+| `loop_interval_near_window` | 「接近阈值」窗口（%，1–20）：进入窗口后切回 `loop_interval_sec`；温度距温控阈值 3°C 内同理 |
+| `chart_show`                | `1` 显示充放电曲线（默认）；`0` = 概览页隐藏曲线，并强制 `history_enable=0`                |
+| `history_enable`            | `1` 开（默认）：仅充电时采样，为曲线提供充电电流线；关闭后曲线只用系统电池记录             |
+| `history_interval_sec`      | 采样间隔（秒，15–600）                                                                     |
+
+## 事件唤醒守护（`config.conf`）
+
+| 键              | 说明                                                                       |
+| --------------- | -------------------------------------------------------------------------- |
+| `native_daemon` | `1` 开（默认）：未插电时由内核充电事件唤醒，替代定时轮询；`0` = 纯脚本轮询 |
+| `native_impl`   | `rust`（默认）/ `c` / `off`。安装时按此顺序自检选用；`off` = 不装守护      |
+
+守护实际状态在 `data/native_impl_used`（`rust` / `c`）与 `data/native_src`（`bundled` / `download`）。缺少 `bin/qscd` 时 `native_daemon` 无效果，等同关闭。推荐直接在 WebUI 的「事件唤醒（守护）」卡片里下载与切换，详见 [WebUI 使用说明](/guide/webui#事件唤醒守护)。
+
 ## WebUI 使用提示
 
 - 停充配置修改后一般 **即时生效**（主循环约 3 秒一轮）

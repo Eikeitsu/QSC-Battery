@@ -19,7 +19,11 @@ function toUnixPath(root, abs) {
 function unixFileMode(unixPath) {
   const base = unixPath.split("/").pop() || "";
   const exec =
-    unixPath.endsWith(".sh") || base === "update-binary" || base === "updater-script";
+    unixPath.endsWith(".sh") ||
+    base === "update-binary" ||
+    base === "updater-script" ||
+    // 原生事件等待器：qscd/qscdc + 可选 ABI 后缀，安装时改名为 bin/qscd
+    /^qscdc?(-[a-z0-9]+)?$/.test(base);
   return exec ? 0o100755 : 0o100644;
 }
 

@@ -35,6 +35,24 @@ jobs:
       - name: Prettier check
         run: npm run format:check
 
+      # 原生等待器：宿主端跑 fmt / clippy / 单测（不需要 NDK）
+      - name: Setup Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
+
+      - name: Rust fmt / clippy / test (qscd)
+        working-directory: native/qscd
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+
+      # C 版等待器：宿主 clang 编译 + 跑内建 selftest（不需要 NDK）
+      - name: C build / selftest (qscd-c)
+        working-directory: native/qscd-c
+        run: |
+          clang -std=gnu11 -Os -Wall -Wextra -Werror -o /tmp/qscd-host qscd.c
+          /tmp/qscd-host selftest
+
       - name: Commitlint (PR range)
         if: github.event_name == 'pull_request'
         run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose

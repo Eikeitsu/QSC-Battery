@@ -37,8 +37,32 @@ jobs:
 
       - uses: ./.github/actions/setup-node-npm
 
-      - name: Build module zip
-        run: npm run build:module
+      # 原生事件等待器：NDK 的 clang 同时作为交叉编译链接器
+      - name: Setup Rust (Android targets)
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add aarch64-linux-android armv7-linux-androideabi
+
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r26d
+          local-cache: true
+
+      - name: Build native qscd (Rust)
+        env:
+          ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
+          REQUIRE_NATIVE: "1"
+        run: node tooling/scripts/build-native.mjs
+
+      - name: Build native qscd (C)
+        env:
+          ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
+          REQUIRE_NATIVE: "1"
+        run: node tooling/scripts/build-native-c.mjs
+
+      - name: Build all module zips (full / rust / c / sh)
+        run: npm run build:module:all
 
       - name: Summarize package
         shell: bash
@@ -55,15 +79,38 @@ jobs:
               echo "- size: $(du -h "$z" | cut -f1)"
               echo "- contains hotinstall: $(unzip -l "$z" | grep -c 'hotinstall\.sh$' || true)"
               echo "- contains hot_update: $(unzip -l "$z" | grep -c 'hot_update\.sh$' || true)"
+              echo "- native qscd (rust): $(unzip -l "$z" | grep -c 'bin/qscd-' || true)"
+              echo "- native qscd (c): $(unzip -l "$z" | grep -c 'bin/qscdc-' || true)"
               echo
               echo '```'
               unzip -l "$z" | sed -n '1,40p'
               echo '```'
             done
           } >> "$GITHUB_STEP_SUMMARY"
+          # 每个变体都必须有脚本与下载入口；二进制按变体断言"该有的有、该没的没"
           for z in "${zips[@]}"; do
             unzip -l "$z" | grep -q 'hotinstall\.sh$' || { echo "missing hotinstall.sh in $z"; exit 1; }
             unzip -l "$z" | grep -q 'bin/lib/hot_update\.sh$' || { echo "missing hot_update.sh in $z"; exit 1; }
+            unzip -l "$z" | grep -q 'bin/qscd_fetch\.sh$' || { echo "missing bin/qscd_fetch.sh in $z"; exit 1; }
+            has_rust=0; has_c=0
+            unzip -l "$z" | grep -q 'bin/qscd-arm64$' && has_rust=1
+            unzip -l "$z" | grep -q 'bin/qscdc-arm64$' && has_c=1
+            # 主包（sh 变体）不带后缀，所以放在最后兜底
+            case "$(basename "$z")" in
+              *-full.zip) want_rust=1; want_c=1 ;;
+              *-rust.zip) want_rust=1; want_c=0 ;;
+              *-c.zip)    want_rust=0; want_c=1 ;;
+              QSC-Battery_v*.zip) want_rust=0; want_c=0 ;;
+              *) echo "unexpected zip name: $z"; exit 1 ;;
+            esac
+            [ "$has_rust" = "$want_rust" ] || { echo "$z: rust binaries expected=$want_rust got=$has_rust"; exit 1; }
+            [ "$has_c" = "$want_c" ] || { echo "$z: c binaries expected=$want_c got=$has_c"; exit 1; }
+            if [ "$want_rust" = "1" ]; then
+              unzip -l "$z" | grep -q 'bin/qscd-arm$' || { echo "missing bin/qscd-arm in $z"; exit 1; }
+            fi
+            if [ "$want_c" = "1" ]; then
+              unzip -l "$z" | grep -q 'bin/qscdc-arm$' || { echo "missing bin/qscdc-arm in $z"; exit 1; }
+            fi
           done
 
       - uses: actions/upload-artifact@v4

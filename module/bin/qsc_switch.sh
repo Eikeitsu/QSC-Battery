@@ -2,16 +2,60 @@
 # 停充主循环：读配置/电量 → 判定 → 调用 lib/charge 写节点
 . "${0%/*}/common.sh"
 
-echo "$(date +%F_%T) qsc_switch.sh 被调用" >> "$DATADIR/startup.log"
+if qsc_debug_enabled; then
+	echo "$(date +%F_%T) qsc_switch.sh 被调用" >> "$DATADIR/startup.log"
+fi
 qsc_debug_step 1
 
-config_conf="$(cat "$CONF" | egrep -v '^#')"
+# 单键取值走 qsc_conf_scan 的 QSCV_*（无 fork）；多行键仍需原文
+config_conf="$(egrep -v '^#' "$CONF" 2>/dev/null)"
+qsc_conf_scan
 qsc_debug_step 2
 
 if [ ! -f "$CONF" ]; then
 	qsc_log_once no_conf error "找不到 config.conf"
 fi
 
+# sysfs 优先：dumpsys battery 是 binder 调用，每轮都做会把 system_server 从
+# doze 里叫醒，是待机耗电的主要来源。四项齐全就完全不碰 dumpsys。
+battery_level=""
+battery_status=""
+battery_powered=""
+temperature=""
+temperature_raw=""
+dumpsys_battery=""
+
+_sf_cap=""
+_sf_status=""
+_sf_temp=""
+qsc_read_node /sys/class/power_supply/battery/capacity && _sf_cap="$QSC_NODE_VAL"
+qsc_read_node /sys/class/power_supply/battery/status && _sf_status="$QSC_NODE_VAL"
+qsc_read_node /sys/class/power_supply/battery/temp && _sf_temp="$QSC_NODE_VAL"
+if [ -n "$_sf_cap" ] && [ -n "$_sf_status" ] && [ -n "$_sf_temp" ]; then
+	case "$_sf_cap" in
+		""|*[!0-9]*) _sf_cap="" ;;
+	esac
+	temperature="$(qsc_normalize_temperature "$_sf_temp")" || temperature=""
+	case "$_sf_status" in
+		Charging) battery_status="2"; battery_powered="powered: true" ;;
+		Full) battery_status="5"; battery_powered="powered: true" ;;
+		Discharging) battery_status="3" ;;
+		"Not charging") battery_status="4" ;;
+		*) battery_status="" ;;
+	esac
+	if [ -n "$_sf_cap" ] && [ -n "$battery_status" ] && [ -n "$temperature" ]; then
+		battery_level="$_sf_cap"
+		# 停充后不少机型 status 变 Not charging，仍需知道是否插着
+		if [ -z "$battery_powered" ] && type qsc_ps_plugged >/dev/null 2>&1 \
+			&& qsc_ps_plugged; then
+			battery_powered="powered: true"
+		fi
+		QSC_BATT_FROM_SYSFS=1
+	fi
+fi
+
+# ↓ sysfs 不全时的 dumpsys 兜底（保持原有逻辑，未额外缩进以便对照历史版本）
+if [ -z "$battery_level" ] || [ -z "$battery_status" ] || [ -z "$temperature" ]; then
 dumpsys battery > "$DATADIR/.dumpsys_tmp" 2>/dev/null &
 dumpsys_pid=$!
 for wait_i in 1 2 3 4 5; do
@@ -60,9 +104,10 @@ if [ ! -n "$battery_powered" ]; then
 		fi
 	done
 fi
+fi
 
 charge_source="$(qsc_charge_source 2>/dev/null)"
-wireless_policy="$(echo "$config_conf" | egrep '^wireless_policy=' | sed -n 's/wireless_policy=//g;$p')"
+wireless_policy="${QSCV_wireless_policy}"
 case "$wireless_policy" in
 	same|ignore) ;;
 	*) wireless_policy=same ;;
@@ -73,25 +118,28 @@ if [ "$wireless_policy" = "ignore" ] && [ "$charge_source" = "wireless" ]; then
 	wireless_skip=1
 fi
 
-loop_interval_sec="$(echo "$config_conf" | egrep '^loop_interval_sec=' | sed -n 's/loop_interval_sec=//g;$p')"
-loop_interval_maintain_sec="$(echo "$config_conf" | egrep '^loop_interval_maintain_sec=' | sed -n 's/loop_interval_maintain_sec=//g;$p')"
-history_enable="$(echo "$config_conf" | egrep '^history_enable=' | sed -n 's/history_enable=//g;$p')"
-history_interval_sec="$(echo "$config_conf" | egrep '^history_interval_sec=' | sed -n 's/history_interval_sec=//g;$p')"
-app_stop="$(echo "$config_conf" | egrep '^app_stop=' | sed -n 's/app_stop=//g;$p')"
-app_stop_list="$(echo "$config_conf" | egrep '^app_stop_list=' | sed -n 's/app_stop_list=//g;$p')"
+loop_interval_sec="${QSCV_loop_interval_sec}"
+loop_interval_maintain_sec="${QSCV_loop_interval_maintain_sec}"
+history_enable="${QSCV_history_enable}"
+history_interval_sec="${QSCV_history_interval_sec}"
+app_stop="${QSCV_app_stop}"
+app_stop_list="${QSCV_app_stop_list}"
 app_stop="$(qsc_clamp_int "${app_stop:-0}" 0 1 0)"
 history_enable="$(qsc_clamp_int "${history_enable:-1}" 0 1 1)"
 
-charge_full="$(echo "$config_conf" | egrep '^charge_full=' | sed -n 's/charge_full=//g;$p')"
-power_reset="$(echo "$config_conf" | egrep '^power_reset=' | sed -n 's/power_reset=//g;$p')"
-Shut_down="$(echo "$config_conf" | egrep '^Shut_down=' | sed -n 's/Shut_down=//g;$p')"
-temperature_raw="$(echo "$dumpsys_battery" | egrep 'temperature: ' | sed -n 's/.*temperature: //g;$p')"
-temperature="$(qsc_normalize_temperature "$temperature_raw")"
-power_stop="$(echo "$config_conf" | egrep '^power_stop=' | sed -n 's/power_stop=//g;$p')"
-power_start="$(echo "$config_conf" | egrep '^power_start=' | sed -n 's/power_start=//g;$p')"
-temperature_switch="$(echo "$config_conf" | egrep '^temperature_switch=' | sed -n 's/temperature_switch=//g;$p')"
-temperature_switch_stop="$(echo "$config_conf" | egrep '^temperature_switch_stop=' | sed -n 's/temperature_switch_stop=//g;$p')"
-temperature_switch_start="$(echo "$config_conf" | egrep '^temperature_switch_start=' | sed -n 's/temperature_switch_start=//g;$p')"
+charge_full="${QSCV_charge_full}"
+power_reset="${QSCV_power_reset}"
+Shut_down="${QSCV_Shut_down}"
+# sysfs 快路径已算出温度；只有走 dumpsys 兜底时才从其输出里取
+if [ -z "$temperature" ] && [ -n "$dumpsys_battery" ]; then
+	temperature_raw="$(echo "$dumpsys_battery" | egrep 'temperature: ' | sed -n 's/.*temperature: //g;$p')"
+	temperature="$(qsc_normalize_temperature "$temperature_raw")"
+fi
+power_stop="${QSCV_power_stop}"
+power_start="${QSCV_power_start}"
+temperature_switch="${QSCV_temperature_switch}"
+temperature_switch_stop="${QSCV_temperature_switch_stop}"
+temperature_switch_start="${QSCV_temperature_switch_start}"
 
 _raw_power_stop="$power_stop"
 _raw_power_start="$power_start"
@@ -248,23 +296,59 @@ qsc_charge_full() {
 }
 
 qsc_debug_step 8
-# 必须同时「插电」且 status 为充电中(2)/已满(5)
-# 仅凭 usb/online 会在停充后仍判为供电，导致每轮全量重写开关，小米上易与系统互抢闪充
+# status 为充电中(2)/已满(5)
 if [ "$battery_status" = "2" -o "$battery_status" = "5" ]; then
 	battery_status_data=1
 fi
 
-# 按 App 停充命中（不依赖无线 skip 之外的条件，但仍需在充电中触发）
-app_stop_hit=0
-if [ "$app_stop" = "1" ] && [ -n "$app_stop_list" ]; then
-	qsc_write_pkg_tmp "$app_stop_list" "$DATADIR/.app_stop_list"
-	if qsc_pkg_list_hit "$DATADIR/.app_stop_list"; then
-		app_stop_hit=1
+# 是否该评估停充/电流控制。
+# 光看 status=2/5 不够：MCA 机型（红米K90U 等）充电由 mca_charger 接管，
+# battery/status 插电充电时也可能一直报 Not charging，那样停充分支永远进不去。
+# 光看插电也不行：本模块停充后 status 会变 Not charging，每轮再全量重写开关
+# 会在小米上与系统互抢闪充。
+# 故取两者之一：status 明确在充电，或当前并非本模块停充的状态。
+charge_eval=0
+if [ -n "$battery_powered" ]; then
+	if [ "$battery_status_data" = "1" ] || [ ! -f "$DATADIR/power_switch" ]; then
+		charge_eval=1
 	fi
-	rm -f "$DATADIR/.app_stop_list"
+fi
+if [ "$charge_eval" = "1" ] && [ "$battery_status_data" != "1" ]; then
+	qsc_log_once st_odd debug "插电但 status=${battery_status:-?}（非充电中），仍按供电评估停充"
 fi
 
-if [ -n "$battery_powered" -a "$battery_status_data" = "1" ]; then
+# 按 App 停充命中。前台检测要跑 ps / dumpsys window，是本模块最贵的一步：
+# 只在「该评估停充」或「已因 App 停充需维持」时执行，且至少间隔
+# QSC_APP_STOP_MIN_GAP 秒，中间沿用上轮缓存结果。
+# 注意：已停充时 status 会变成 Not charging，若此时不检测会误判应用已退出而恢复充电；
+# 拔掉充电器后不再检测，标记会在恢复流程里清掉，下次插电重新判定。
+QSC_APP_STOP_MIN_GAP=10
+app_stop_hit=0
+if [ "$app_stop" = "1" ] && [ -n "$app_stop_list" ] \
+	&& { [ "$charge_eval" = "1" ] \
+		|| { [ -n "$battery_powered" ] && [ -f "$DATADIR/app_stop_flag" ]; }; }; then
+	_as_now="$(date +%s 2>/dev/null)"
+	_as_last=""
+	qsc_read_node "$DATADIR/app_stop_ts" && _as_last="$QSC_NODE_VAL"
+	case "$_as_last" in ""|*[!0-9]*) _as_last=0 ;; esac
+	if [ -n "$_as_now" ] && [ "$((_as_now - _as_last))" -lt "$QSC_APP_STOP_MIN_GAP" ] 2>/dev/null; then
+		[ -f "$DATADIR/app_stop_cache" ] && app_stop_hit=1
+	else
+		qsc_write_pkg_tmp "$app_stop_list" "$DATADIR/.app_stop_list"
+		if qsc_pkg_list_hit "$DATADIR/.app_stop_list"; then
+			app_stop_hit=1
+			touch "$DATADIR/app_stop_cache"
+		else
+			rm -f "$DATADIR/app_stop_cache"
+		fi
+		rm -f "$DATADIR/.app_stop_list"
+		[ -n "$_as_now" ] && echo "$_as_now" >"$DATADIR/app_stop_ts" 2>/dev/null
+	fi
+elif [ "$app_stop" != "1" ]; then
+	rm -f "$DATADIR/app_stop_cache" "$DATADIR/app_stop_ts" 2>/dev/null
+fi
+
+if [ "$charge_eval" = "1" ]; then
 	if [ -f "$LOG_FILE" ]; then
 		log_n="$(cat "$LOG_FILE" | wc -l)"
 		if [ "$log_n" -gt "80" ]; then
@@ -299,7 +383,7 @@ if [ -n "$battery_powered" -a "$battery_status_data" = "1" ]; then
 			first_stop=1
 		fi
 		if [ "$cpu_log" = "0" -a "$charge_full" != "1" -a "$first_stop" = "1" ]; then
-			power_stop_time="$(echo "$config_conf" | egrep '^power_stop_time=' | sed -n 's/power_stop_time=//g;$p')"
+			power_stop_time="${QSCV_power_stop_time}"
 			power_stop_time="$(qsc_clamp_int "$power_stop_time" 1 120 3)"
 			if [ "$power_stop_time" -gt "0" ]; then
 				qsc_log debug "电量$battery_level 延时功能 继续充电$power_stop_time秒 倒计时中"
@@ -425,14 +509,14 @@ if [ -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
 fi
 
 # 供电开关未停充时，若已安装电流控制组件则应用策略（兼容模式跳过，避免与其它限流模块抢写）
-# 同样要求 status=充电中，避免停充后仍写电流节点与小米充电服务互抢
-Compatibility_mode="$(echo "$config_conf" | egrep '^Compatibility_mode=' | sed -n 's/Compatibility_mode=//g;$p')"
+# 同样只在「该评估充电」时写，避免停充后仍写电流节点与小米充电服务互抢
+Compatibility_mode="${QSCV_Compatibility_mode}"
 [ -n "$Compatibility_mode" ] || Compatibility_mode=0
 if [ -f "$DATADIR/compat_hint" ] && [ "$Compatibility_mode" != "1" ]; then
 	_ch="$(cat "$DATADIR/compat_hint" 2>/dev/null | tr -d '\r\n')"
 	[ -n "$_ch" ] && qsc_log_once compat_mod warn "检测到其它充电/限流模块($_ch)，建议开启兼容模式"
 fi
-if [ -n "$battery_powered" ] && [ "$battery_status_data" = "1" ] && [ ! -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
+if [ "$charge_eval" = "1" ] && [ ! -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
 	if [ "$Compatibility_mode" = "1" ]; then
 		qsc_log_once compat warn "兼容模式开启，已跳过电流控制"
 		rm -f "$DATADIR/current_mode_tag"
@@ -455,7 +539,7 @@ if [ -n "$battery_powered" ] && [ "$battery_status_data" = "1" ] && [ ! -f "$DAT
 	elif [ -f "$CURRENT_CONF" ]; then
 		qsc_log_once no_cc error "存在 current.json 但缺少 current.sh，请重新安装并勾选电流控制"
 	fi
-elif [ ! -n "$battery_powered" ] || [ "$battery_status_data" != "1" ]; then
+elif [ "$charge_eval" != "1" ]; then
 	rm -f "$DATADIR/current_mode_tag"
 	rm -f "$DATADIR/current_reaffirm_ts" "$DATADIR/current_drift_streak"
 	if type qsc_bypass_hw_off >/dev/null 2>&1; then
@@ -467,7 +551,16 @@ fi
 if type qsc_history_sample >/dev/null 2>&1; then
 	qsc_history_sample "$history_enable" "$history_interval_sec" "$battery_level" "$temperature"
 fi
-if type qsc_write_loop_sleep >/dev/null 2>&1; then
+if type qsc_ps_load_conf >/dev/null 2>&1; then
+	qsc_ps_load_conf
+	_plugged=0
+	[ -n "$battery_powered" ] && _plugged=1
+	_temp_stop=""
+	[ "$temperature_switch" = "1" ] && _temp_stop="$temperature_switch_stop"
+	qsc_write_loop_sleep_value \
+		"$(qsc_ps_next_sleep "$battery_level" "$power_stop" "$_plugged" \
+			"$temperature" "$_temp_stop")"
+elif type qsc_write_loop_sleep >/dev/null 2>&1; then
 	qsc_write_loop_sleep "$loop_interval_sec" "$loop_interval_maintain_sec"
 fi
 

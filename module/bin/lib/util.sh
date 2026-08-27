@@ -1,8 +1,71 @@
 #!/system/bin/sh
 # 通用小工具：超时读节点、温度归一化、调试步进、配置钳位
 
+# 调试开关：每个进程只判定一次（主循环每轮会问 9 次）
+qsc_debug_enabled() {
+	if [ -z "$QSC_DEBUG_ON" ]; then
+		if [ "${QSC_DEBUG:-0}" = "1" ] || [ -f "$DATADIR/debug_on" ]; then
+			QSC_DEBUG_ON=1
+		else
+			QSC_DEBUG_ON=0
+		fi
+	fi
+	[ "$QSC_DEBUG_ON" = "1" ]
+}
+
+# 默认不写盘：主循环每轮 9 次步进日志会带来数十万次/天的小写入。
+# 需要排障时 touch data/debug_on（或 export QSC_DEBUG=1）。
 qsc_debug_step() {
+	qsc_debug_enabled || return 0
 	echo "$(date +%F_%T) step$1" >> "$DATADIR/debug.log"
+}
+
+# 单行节点快速读取：纯内建，无 fork、不写临时文件。结果放 QSC_NODE_VAL。
+# 仅用于 power_supply 等已知不会阻塞的节点；未知节点仍走 qsc_safe_cat。
+# 注意：热路径请直接用本函数 + $QSC_NODE_VAL，套 $(...) 会重新引入一次 fork。
+qsc_read_node() {
+	QSC_NODE_VAL=""
+	[ -r "$1" ] || return 1
+	IFS= read -r QSC_NODE_VAL <"$1" 2>/dev/null
+	[ -n "$QSC_NODE_VAL" ]
+}
+
+# 需要在 $(...) 里取值的场合
+qsc_cat_node() {
+	qsc_read_node "$1" || return 1
+	echo "$QSC_NODE_VAL"
+}
+
+QSC_CR="$(printf '\r')"
+
+# 一次遍历 config.conf，把白名单键写成 QSCV_<key>（全内建，无 fork）。
+# 多行键（power_switch / *_schedule）不在此处理，仍由各自逻辑 grep。
+qsc_conf_scan() {
+	local line k v
+	[ -f "$CONF" ] || return 1
+	while IFS= read -r line || [ -n "$line" ]; do
+		case "$line" in
+			\#*|"") continue ;;
+			*=*) ;;
+			*) continue ;;
+		esac
+		k="${line%%=*}"
+		v="${line#*=}"
+		# 容忍 Windows 编辑器留下的 CR
+		case "$v" in
+			*"$QSC_CR") v="${v%"$QSC_CR"}" ;;
+		esac
+		case "$k" in
+			power_stop|power_start|power_stop_time|charge_full|power_reset \
+			|Compatibility_mode|Shut_down|loop_interval_sec \
+			|loop_interval_maintain_sec|switch_verify_sec|wireless_policy \
+			|app_stop|app_stop_list|history_enable|history_interval_sec \
+			|temperature_switch|temperature_switch_stop|temperature_switch_start)
+				eval "QSCV_$k=\$v"
+				;;
+		esac
+	done <"$CONF"
+	return 0
 }
 
 # 避免个别 sysfs 读阻塞拖死主循环
@@ -96,8 +159,11 @@ qsc_log_once() {
 	_qsc_omsg="$*"
 	_qsc_of="$DATADIR/.log_once_${_qsc_okey}"
 	mkdir -p "$DATADIR" 2>/dev/null
-	if [ -f "$_qsc_of" ] && [ "$(cat "$_qsc_of" 2>/dev/null)" = "$_qsc_omsg" ]; then
-		return 0
+	# 内建 read 比较，避免主循环里每次判重都 fork 一个 cat
+	_qsc_oprev=""
+	if [ -r "$_qsc_of" ]; then
+		IFS= read -r _qsc_oprev <"$_qsc_of" 2>/dev/null
+		[ "$_qsc_oprev" = "$_qsc_omsg" ] && return 0
 	fi
 	printf '%s\n' "$_qsc_omsg" >"$_qsc_of"
 	qsc_log "$_qsc_olvl" "$_qsc_omsg"

@@ -22,6 +22,13 @@ export const CONFIG_KEYS: readonly ConfigKey[] = [
   "app_stop_list",
   "history_enable",
   "history_interval_sec",
+  "power_saver",
+  "loop_interval_idle_sec",
+  "loop_interval_plugged_sec",
+  "loop_interval_near_window",
+  "native_daemon",
+  "native_impl",
+  "chart_show",
 ] as const;
 
 export const DEFAULTS: Settings = {
@@ -45,6 +52,13 @@ export const DEFAULTS: Settings = {
   app_stop_list: "",
   history_enable: BinaryFlag.On,
   history_interval_sec: "60",
+  power_saver: BinaryFlag.On,
+  loop_interval_idle_sec: "30",
+  loop_interval_plugged_sec: "10",
+  loop_interval_near_window: "3",
+  native_daemon: BinaryFlag.On,
+  native_impl: "rust",
+  chart_show: BinaryFlag.On,
 };
 
 export const CURRENT_DEFAULTS: CurrentConfig = {

@@ -7,6 +7,8 @@
     "prepare": "husky",
     "dev:web": "vite --config webui/vite.config.ts",
     "build:web": "node tooling/scripts/build-web.mjs",
+    "build:native": "node tooling/scripts/build-native.mjs",
+    "build:native:c": "node tooling/scripts/build-native-c.mjs",
     "typecheck:web": "vue-tsc --noEmit -p webui/tsconfig.json",
     "lint:js": "eslint webui tooling docs/.vitepress eslint.config.js stylelint.config.js commitlint.config.js --max-warnings 0",
     "lint:js:fix": "npm run lint:js -- --fix",
@@ -24,7 +26,9 @@
     "test:unit:watch": "vitest --config webui/vitest.config.ts",
     "package:module": "node tooling/scripts/package-module.mjs",
     "package:module:debug": "node tooling/scripts/package-module.mjs --debug",
+    "package:module:all": "node tooling/scripts/package-module.mjs --native=full && node tooling/scripts/package-module.mjs --native=rust && node tooling/scripts/package-module.mjs --native=c && node tooling/scripts/package-module.mjs --native=sh",
     "build:module": "npm run build:web && npm run package:module",
+    "build:module:all": "npm run build:web && npm run package:module:all",
     "dev:docs": "vitepress dev docs",
     "build:docs": "vitepress build docs",
     "preview:docs": "vitepress preview docs"

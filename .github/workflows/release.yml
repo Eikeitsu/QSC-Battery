@@ -70,6 +70,7 @@ jobs:
           else
             NAME="$TAG"
           fi
+          # update.json 指向主包（sh 版，无后缀；守护由 WebUI 按需下载）
           ZIP="QSC-Battery_v${version}.zip"
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -97,13 +98,40 @@ jobs:
 
       - uses: ./.github/actions/setup-node-npm
 
-      - run: npm run build:module
+      # 守护二进制：两套实现都要有，四个变体包与 Pages 托管都依赖它们
+      - name: Setup Rust (Android targets)
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add aarch64-linux-android armv7-linux-androideabi
 
-      - name: Upload zip artifact
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r26d
+          local-cache: true
+
+      - name: Build native qscd (Rust + C)
+        env:
+          ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
+          REQUIRE_NATIVE: "1"
+        run: |
+          node tooling/scripts/build-native.mjs
+          node tooling/scripts/build-native-c.mjs
+
+      - name: Build all module zips (full / rust / c / sh)
+        run: npm run build:module:all
+
+      # 二进制随构件带到 post 任务：那里要把它们发到 Pages 供 WebUI 下载
+      - name: Upload zips and native binaries
         uses: actions/upload-artifact@v4
         with:
           name: magisk-module-${{ steps.meta.outputs.tag }}
-          path: release/*.zip
+          path: |
+            release/*.zip
+            module/bin/qscd-arm64
+            module/bin/qscd-arm
+            module/bin/qscdc-arm64
+            module/bin/qscdc-arm
           if-no-files-found: error
 
   publish:
@@ -159,7 +187,11 @@ jobs:
           name: magisk-module-${{ needs.build.outputs.tag }}
           path: release/
 
-      - name: Update default branch (changelog / update.json / Pages zip)
+      - name: Restore executable bit on native binaries
+        shell: bash
+        run: chmod 0755 module/bin/qscd-arm64 module/bin/qscd-arm module/bin/qscdc-arm64 module/bin/qscdc-arm || true
+
+      - name: Update default branch (changelog / update.json / Pages zip + qscd)
         env:
           RAW: ${{ needs.build.outputs.raw }}
           CODE: ${{ needs.build.outputs.version_code }}

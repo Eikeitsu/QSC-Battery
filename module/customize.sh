@@ -146,7 +146,9 @@ qsc_merge_config() {
 	}
 	# 迁移新增标量键（有则覆盖模板默认）
 	for _nk in loop_interval_sec loop_interval_maintain_sec switch_verify_sec \
-		wireless_policy history_enable history_interval_sec app_stop app_stop_list; do
+		wireless_policy history_enable history_interval_sec app_stop app_stop_list \
+		power_saver loop_interval_idle_sec loop_interval_plugged_sec \
+		loop_interval_near_window native_daemon native_impl chart_show; do
 		_nv="$(sed -n "s/^${_nk}=//p" "$source" 2>/dev/null | head -n1 | tr -d '\r')"
 		[ -n "$_nv" ] || continue
 		if grep -q "^${_nk}=" "$merged" 2>/dev/null; then
@@ -371,8 +373,186 @@ if [ -f "$LIBDIR/hot_update.sh" ]; then
 	hot_update_preserve_paths "$CURRENT_MODULE" "$MODPATH" \
 		data/list_switch data/list_charge_current data/ch_curr_ctrl_files \
 		data/device.profile data/charge_history.csv data/off_qsc \
-		data/compat_hint
+		data/compat_hint data/native_src
+	# WebUI 下载来的守护要留住：本包（如主包）可能一个二进制都不带，
+	# 冲掉就等于把用户装好的守护弄没了。自带同实现时下面会用自带的覆盖。
+	hot_update_preserve_paths "$CURRENT_MODULE" "$MODPATH" bin/qscd
 fi
+
+# 事件唤醒守护：包里可能自带 Rust 版（qscd-*）、C 版（qscdc-*）、两套或一套都没有
+# （主包）。按 ABI 取候选并逐个现场自检，第一个通过的装成 bin/qscd。
+# 顺序由 config/config.conf 的 native_impl 决定（rust 默认 / c / off）。
+# 本包不带可用候选时，沿用上一版里 WebUI 下载好的守护；两者都没有也不影响
+# 功能——service.sh 会退回定时轮询。
+qscd_conf_pref() {
+	_cf="$MODPATH/config/config.conf"
+	[ -f "$_cf" ] || return 0
+	grep -E '^[[:space:]]*native_impl[[:space:]]*=' "$_cf" 2>/dev/null \
+		| tail -1 | sed 's/^[^=]*=//' | tr -d ' \t\r\n'
+}
+
+qscd_cleanup_candidates() {
+	rm -f "$MODPATH/bin/qscd-arm64" "$MODPATH/bin/qscd-arm" \
+		"$MODPATH/bin/qscdc-arm64" "$MODPATH/bin/qscdc-arm" 2>/dev/null
+}
+
+qscd_try_candidate() {
+	# $1=源文件 $2=实现名（用于提示） $3=来源（bundled/download）
+	[ -f "$1" ] || return 1
+	cp -f "$1" "$MODPATH/bin/qscd" 2>/dev/null || return 1
+	chmod 0755 "$MODPATH/bin/qscd" 2>/dev/null
+	if "$MODPATH/bin/qscd" probe >/dev/null 2>&1; then
+		if [ "$3" = "download" ]; then
+			ui_print "- 沿用已下载的守护（$2 版）：未插电时零定时唤醒"
+		else
+			ui_print "- 守护可用（$2 版）：未插电时零定时唤醒"
+		fi
+		echo "$2" >"$MODPATH/data/native_impl_used" 2>/dev/null
+		echo "$3" >"$MODPATH/data/native_src" 2>/dev/null
+		return 0
+	fi
+	ui_print "- 守护自检未通过（$2 版）"
+	rm -f "$MODPATH/bin/qscd" 2>/dev/null
+	return 1
+}
+
+install_qscd() {
+	_suffix=""
+	case "$ARCH" in
+		arm64) _suffix="arm64" ;;
+		arm) _suffix="arm" ;;
+	esac
+
+	# 上一版里 WebUI 下载好的守护已由 preserve 带过来，先挪开：
+	# 本包自带候选时优先用自带的，都不可用再拿它兜底。
+	_inherited=""
+	if [ -f "$MODPATH/bin/qscd" ]; then
+		_inherited="$MODPATH/data/.qscd_inherited"
+		mv -f "$MODPATH/bin/qscd" "$_inherited" 2>/dev/null || _inherited=""
+	fi
+	_inherited_impl="$(cat "$MODPATH/data/native_impl_used" 2>/dev/null | tr -d ' \r\n')"
+	case "$_inherited_impl" in
+		c) _inherited_name="C" ;;
+		*) _inherited_name="Rust" ;;
+	esac
+	rm -f "$MODPATH/bin/qscd" "$MODPATH/data/native_impl_used" \
+		"$MODPATH/data/native_src" 2>/dev/null
+
+	if [ -z "$_suffix" ]; then
+		ui_print "- 本机架构($ARCH)无可用守护：使用定时轮询"
+		rm -f "$_inherited" 2>/dev/null
+		qscd_cleanup_candidates
+		return 0
+	fi
+
+	_pref="$(qscd_conf_pref)"
+	case "$_pref" in
+		off)
+			ui_print "- 已按配置禁用守护：使用定时轮询"
+			rm -f "$_inherited" 2>/dev/null
+			qscd_cleanup_candidates
+			return 0
+			;;
+		c) _order="qscdc qscd" ;;
+		*) _order="qscd qscdc" ;;
+	esac
+
+	for _impl in $_order; do
+		case "$_impl" in
+			qscd) _name="Rust" ;;
+			*) _name="C" ;;
+		esac
+		if qscd_try_candidate "$MODPATH/bin/${_impl}-${_suffix}" "$_name" bundled; then
+			rm -f "$_inherited" 2>/dev/null
+			qscd_cleanup_candidates
+			return 0
+		fi
+	done
+
+	if [ -n "$_inherited" ] && [ -f "$_inherited" ]; then
+		if qscd_try_candidate "$_inherited" "$_inherited_name" download; then
+			rm -f "$_inherited" 2>/dev/null
+			qscd_cleanup_candidates
+			return 0
+		fi
+		rm -f "$_inherited" 2>/dev/null
+	fi
+
+	qscd_cleanup_candidates
+	qscd_offer_download "$_pref"
+}
+
+# 本包没带守护时，问一次是否现在联网下载。
+# 下载失败（超时 / 无网 / 校验不过）一律只提示，绝不阻断安装：
+# 模块不装守护也能正常停充，用户随时可以在 WebUI 里再试。
+qscd_offer_download() {
+	_pref="$1"
+	ui_print "--------------------------------"
+	ui_print " 本安装包未自带「事件唤醒」守护文件"
+	ui_print " 它能让未插电时由充电事件唤醒，替代定时轮询，更省电"
+	ui_print " 不装也不影响停充功能"
+	ui_print " 音量上：现在联网下载"
+	ui_print " 音量下：跳过（安装完成后可在 WebUI 里下载）"
+	ui_print " 20 秒未选择时跳过"
+	qsc_volume_choice
+	case "$?" in
+		0) ;;
+		1)
+			ui_print "- 已跳过：可在 WebUI「事件唤醒（守护）」里随时下载"
+			return 0
+			;;
+		*)
+			ui_print "- 选择超时，已跳过：可在 WebUI 里随时下载"
+			return 0
+			;;
+	esac
+
+	# 只在明确选 c 时先试 C 版，其余按默认的 Rust
+	case "$_pref" in
+		c) _dl_impl="c"; _dl_name="C" ;;
+		*) _dl_impl="rust"; _dl_name="Rust" ;;
+	esac
+
+	ui_print "--------------------------------"
+	ui_print " 下载哪套实现？两者功能完全一致，只能二选一"
+	ui_print " 音量上：Rust 版（内存安全，体积略大）"
+	ui_print " 音量下：C 版（依赖最少，体积最小）"
+	ui_print " 20 秒未选择时下载 $_dl_name 版"
+	qsc_volume_choice
+	case "$?" in
+		0) _dl_impl="rust"; _dl_name="Rust" ;;
+		1) _dl_impl="c"; _dl_name="C" ;;
+		*) ;;
+	esac
+
+	ui_print "- 正在下载 $_dl_name 版守护（含 sha256 校验）..."
+	if [ ! -f "$MODPATH/bin/qscd_fetch.sh" ]; then
+		ui_print "- 缺少下载脚本，已跳过；请在 WebUI 里下载"
+		return 0
+	fi
+
+	# 独立进程 + 安装期不重启服务；无论成败都不让它影响安装流程
+	_dl_out="$(MODDIR="$MODPATH" QSCD_NO_RESTART=1 \
+		sh "$MODPATH/bin/qscd_fetch.sh" install "$_dl_impl" 2>/dev/null)"
+	if echo "$_dl_out" | grep -q '^ok=1'; then
+		ui_print "- 守护已下载并通过自检（$_dl_name 版）"
+		return 0
+	fi
+
+	_dl_err="$(echo "$_dl_out" | sed -n 's/^error=//p' | head -1)"
+	case "$_dl_err" in
+		manifest_download_failed | download_failed)
+			ui_print "- 下载失败（网络不通或超时）" ;;
+		sha256_mismatch) ui_print "- 文件校验不通过，已丢弃" ;;
+		no_sha256_tool) ui_print "- 系统缺少 sha256 工具，无法校验，已放弃" ;;
+		probe_failed) ui_print "- 本机自检未通过，已回滚" ;;
+		unsupported_arch) ui_print "- 本机架构无可用守护文件" ;;
+		*) ui_print "- 下载未成功（${_dl_err:-未知原因}）" ;;
+	esac
+	ui_print "- 不影响安装：请在 WebUI「事件唤醒（守护）」里重试"
+	return 0
+}
+install_qscd
 
 ui_print "--------------------------------"
 ui_print " 目录结构: "
@@ -402,6 +582,8 @@ set_perm "$MODPATH/uninstall.sh" root root 0755
 set_perm "$MODPATH/action.sh" root root 0755
 set_perm "$MODPATH/customize.sh" root root 0755
 set_perm "$MODPATH/hotinstall.sh" root root 0755
+[ -f "$MODPATH/bin/qscd" ] && set_perm "$MODPATH/bin/qscd" root root 0755
+[ -f "$MODPATH/bin/qscd_fetch.sh" ] && set_perm "$MODPATH/bin/qscd_fetch.sh" root root 0755
 
 # 非首次：本模块无 system/sepolicy 等开机挂载，更新默认可免重启
 ui_print "--------------------------------"

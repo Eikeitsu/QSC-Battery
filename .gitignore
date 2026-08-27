@@ -7,3 +7,9 @@ docs/.vitepress/dist
 docs/.vitepress/cache
 .release-body.md
 .release-notes.md
+# 交叉编译产物：由 tooling/scripts/build-native{,-c}.mjs 生成
+native/qscd/target/
+module/bin/qscd-arm64
+module/bin/qscd-arm
+module/bin/qscdc-arm64
+module/bin/qscdc-arm
