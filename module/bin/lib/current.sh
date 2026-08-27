@@ -756,7 +756,7 @@ qsc_current_now_ua() {
 
 # 游戏命中：进程列表匹配主程序；并补充前台窗口匹配
 qsc_current_game_hit() {
-	local pkg focus list_file ps_line
+	local pkg focus list_file
 	list_file="$DATADIR/.app_list_tmp"
 	qsc_current_conf_get_strings app_list >"$list_file" 2>/dev/null || return 1
 	[ -s "$list_file" ] || {
@@ -764,16 +764,12 @@ qsc_current_game_hit() {
 		return 1
 	}
 
-	while IFS= read -r pkg || [ -n "$pkg" ]; do
-		pkg="$(printf '%s' "$pkg" | tr -d ' \r\n')"
-		[ -n "$pkg" ] || continue
-		# ps 匹配包名，排除 pkg: 子进程与 egrep 自身
-		ps_line="$(ps -ef 2>/dev/null | egrep "$pkg" | egrep -v "${pkg}:" | egrep -v 'egrep')"
-		if [ -n "$ps_line" ]; then
-			rm -f "$list_file"
-			return 0
-		fi
-	done <"$list_file"
+	# 进程匹配统一走 qsc_pkg_proc_hit：有原生守护时遍历 /proc，否则一次 ps
+	# 快照喂给所有包名（这里原先是每个包名各跑一遍 ps -ef，最贵的写法）
+	if qsc_pkg_proc_hit "$list_file"; then
+		rm -f "$list_file"
+		return 0
+	fi
 
 	# 补充：前台窗口包名命中也触发
 	focus="$(dumpsys window 2>/dev/null | grep 'mCurrentFocus' | tail -1)"

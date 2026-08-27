@@ -12,6 +12,11 @@
 //!       shell 轮次整段省掉，而不牺牲跨阈值的及时性。
 //!       不给任何阈值时行为等同 wait-event。
 //!       退出 0 = 该跑一轮；退出 2 = 不可用（调用方应退回 sleep）
+//!   qscd pkgs <包名列表文件> [--proc-root DIR]
+//!       遍历 /proc/<pid>/cmdline 判断列表里的包有没有在跑主进程。
+//!       替代 shell 侧的 `ps -ef` 全量快照 + 逐包 grep（按 App 停充开启后
+//!       最贵的周期性动作）。只读 /proc，不涉及任何充电节点。
+//!       退出 0 = 有包在跑；1 = 都没在跑；2 = 不可用（调用方应退回 ps）
 //!   qscd probe
 //!       安装时自检：能建起 netlink 套接字则退出 0。
 //!   qscd features
@@ -27,7 +32,7 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 /// 支持的扩展子命令；features 子命令原样打印
-const FEATURES: &str = "watch";
+const FEATURES: &str = "watch pkgs";
 
 const NETLINK_KOBJECT_UEVENT: libc::c_int = 15;
 /// 内核 uevent 载荷里的匹配串；命中即认为电池状态可能变了
@@ -337,6 +342,58 @@ fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
     }
 }
 
+const EXIT_NO_HIT: u8 = 1;
+
+/// 判断包名列表里有没有包在跑主进程。
+/// 匹配规则是「cmdline 首字段与包名完全相等」：Android 应用主进程的 cmdline
+/// 就是包名本身，子进程是 `包名:xxx`。shell 版用的是 grep 子串匹配，
+/// 列表里写 `com.foo` 会连带命中 `com.foo.bar`，这里顺手收紧。
+fn pkgs_running(list_path: &str, proc_root: &str) -> u8 {
+    let Ok(list) = std::fs::read_to_string(list_path) else {
+        // 列表读不到不算「不可用」——调用方保证它存在，读不到就是没有目标
+        return EXIT_NO_HIT;
+    };
+    let wanted: Vec<&str> = list
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
+    if wanted.is_empty() {
+        return EXIT_NO_HIT;
+    }
+    let root = if proc_root.is_empty() {
+        "/proc"
+    } else {
+        proc_root
+    };
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return EXIT_UNUSABLE;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if !name.bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
+        // 进程随时会消失，读失败是常态，跳过即可
+        let Ok(raw) = std::fs::read(entry.path().join("cmdline")) else {
+            continue;
+        };
+        let first = raw.split(|&b| b == 0).next().unwrap_or(&[]);
+        let Ok(cmd) = std::str::from_utf8(first) else {
+            continue;
+        };
+        let cmd = cmd.trim();
+        if cmd.is_empty() {
+            continue;
+        }
+        if wanted.iter().any(|w| *w == cmd) {
+            return EXIT_OK;
+        }
+    }
+    EXIT_NO_HIT
+}
+
 fn parse_secs(arg: Option<&str>, default: u64, max: u64) -> u64 {
     arg.and_then(|s| s.trim().parse::<u64>().ok())
         .unwrap_or(default)
@@ -354,6 +411,18 @@ fn main() -> ExitCode {
         Some("watch") => {
             let (max, floor, th) = parse_watch_args(&args[2..]);
             ExitCode::from(watch(max, floor, &th))
+        }
+        Some("pkgs") => {
+            let list = args.get(2).map(String::as_str).unwrap_or("");
+            if list.is_empty() {
+                eprintln!("usage: qscd pkgs <list_file> [--proc-root DIR]");
+                return ExitCode::from(EXIT_UNUSABLE);
+            }
+            let mut root = "";
+            if let Some(i) = args.iter().position(|a| a == "--proc-root") {
+                root = args.get(i + 1).map(String::as_str).unwrap_or("");
+            }
+            ExitCode::from(pkgs_running(list, root))
         }
         Some("features") => {
             println!("{FEATURES}");
@@ -376,6 +445,7 @@ fn main() -> ExitCode {
             eprintln!(
                 "usage: qscd wait-event <max_secs> [floor_secs]\n       \
                  qscd watch --max N [--floor N] [--stop N] [--near N] [--temp-stop N]\n       \
+                 qscd pkgs <list_file> [--proc-root DIR]\n       \
                  qscd probe | qscd features"
             );
             ExitCode::from(EXIT_UNUSABLE)
@@ -529,6 +599,82 @@ mod tests {
         ]);
         // 58°C，停充 60°C，留 3°C 余量 → 该叫醒
         assert!(th_for(&root, None, Some(60)).should_wake(true));
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// 造一棵假 /proc：pid → cmdline 首字段
+    fn fake_proc(procs: &[(&str, &str)]) -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static SEQ: AtomicU32 = AtomicU32::new(0);
+        let n = SEQ.fetch_add(1, Ordering::Relaxed);
+        let mut dir = std::env::temp_dir();
+        dir.push(format!("qscd-proc-{}-{n}", std::process::id()));
+        for (pid, cmd) in procs {
+            let p = dir.join(pid);
+            std::fs::create_dir_all(&p).unwrap();
+            // 真 cmdline 以 NUL 分隔并以 NUL 结尾
+            std::fs::write(p.join("cmdline"), format!("{cmd}\0")).unwrap();
+        }
+        // 非数字目录必须被跳过
+        std::fs::create_dir_all(dir.join("self")).unwrap();
+        dir
+    }
+
+    fn write_list(dir: &std::path::Path, lines: &str) -> String {
+        let p = dir.join("list");
+        std::fs::write(&p, lines).unwrap();
+        p.to_string_lossy().to_string()
+    }
+
+    #[test]
+    fn pkgs_hits_only_main_process() {
+        let root = fake_proc(&[
+            ("1", "/system/bin/init"),
+            ("222", "com.example.app:push"),
+            ("333", "com.example.app"),
+        ]);
+        let list = write_list(&root, "com.example.app\n");
+        assert_eq!(pkgs_running(&list, root.to_str().unwrap()), EXIT_OK);
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn pkgs_ignores_subprocess_only() {
+        let root = fake_proc(&[("1", "/system/bin/init"), ("222", "com.example.app:push")]);
+        let list = write_list(&root, "com.example.app\n");
+        assert_eq!(pkgs_running(&list, root.to_str().unwrap()), EXIT_NO_HIT);
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn pkgs_requires_exact_package_name() {
+        // shell 版的 grep 子串匹配会误命中 com.example.app.helper
+        let root = fake_proc(&[("222", "com.example.app.helper")]);
+        let list = write_list(&root, "com.example.app\n");
+        assert_eq!(pkgs_running(&list, root.to_str().unwrap()), EXIT_NO_HIT);
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn pkgs_handles_blank_lines_and_crlf() {
+        let root = fake_proc(&[("222", "com.example.app")]);
+        let list = write_list(&root, "\r\n  \r\ncom.example.app\r\n");
+        assert_eq!(pkgs_running(&list, root.to_str().unwrap()), EXIT_OK);
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn pkgs_reports_unusable_when_proc_root_missing() {
+        assert_eq!(
+            pkgs_running("/nonexistent/list", "/nonexistent/proc"),
+            EXIT_NO_HIT
+        );
+        let root = fake_proc(&[("1", "/system/bin/init")]);
+        let list = write_list(&root, "com.example.app\n");
+        assert_eq!(
+            pkgs_running(&list, "/definitely/not/here"),
+            EXIT_UNUSABLE
+        );
         std::fs::remove_dir_all(&root).ok();
     }
 

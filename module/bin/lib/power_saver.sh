@@ -248,25 +248,32 @@ qsc_ps_idle_secs() {
 
 # 守护是否支持 watch（带阈值的等待）。每个进程只问一次；
 # C 版不认 features 子命令会退出 2，即视为不支持，自动沿用 wait-event。
-# 结论缓存到 data/qscd_watch：qsc_switch.sh 是另一个进程，让它也能不 fork
-# 二进制就知道能力（换二进制或重启服务时清掉重新问）。
-QSC_PS_WATCH_OK=""
+# 守护支持哪些扩展子命令。C 版不认 features（退出 2），输出为空即视为
+# 无扩展能力，一切自动沿用老路径。
+# 结论缓存到 data/qscd_features：qsc_switch.sh 是另一个进程，让它也能只读文件
+# 而不必再 fork 一次二进制（换二进制或重启服务时清掉重新问）。
+QSC_NATIVE_FEATURES=""
+
+qsc_native_has() {
+	local want="$1"
+	if [ -z "$QSC_NATIVE_FEATURES" ]; then
+		QSC_NATIVE_FEATURES="$(cat "$DATADIR/qscd_features" 2>/dev/null | tr -d '\r\n')"
+	fi
+	if [ -z "$QSC_NATIVE_FEATURES" ]; then
+		[ -x "$BINDIR/qscd" ] || return 1
+		QSC_NATIVE_FEATURES="$("$BINDIR/qscd" features 2>/dev/null | tr -d '\r\n')"
+		# 用 "-" 占位，免得每轮都去 fork 一次问同一个答案
+		[ -n "$QSC_NATIVE_FEATURES" ] || QSC_NATIVE_FEATURES="-"
+		echo "$QSC_NATIVE_FEATURES" >"$DATADIR/qscd_features" 2>/dev/null
+	fi
+	case " $QSC_NATIVE_FEATURES " in
+		*" $want "*) return 0 ;;
+	esac
+	return 1
+}
 
 qsc_ps_watch_supported() {
-	if [ -z "$QSC_PS_WATCH_OK" ]; then
-		QSC_PS_WATCH_OK="$(cat "$DATADIR/qscd_watch" 2>/dev/null | tr -d ' \r\n')"
-	fi
-	case "$QSC_PS_WATCH_OK" in
-		0 | 1) ;;
-		*)
-			QSC_PS_WATCH_OK=0
-			if "$BINDIR/qscd" features 2>/dev/null | grep -q watch; then
-				QSC_PS_WATCH_OK=1
-			fi
-			echo "$QSC_PS_WATCH_OK" >"$DATADIR/qscd_watch" 2>/dev/null
-			;;
-	esac
-	[ "$QSC_PS_WATCH_OK" = "1" ]
+	qsc_native_has watch
 }
 
 # 交给守护等待。支持 watch 时把阈值一起交下去：充电中「离阈值还远」的

@@ -33,9 +33,18 @@ qsc_charge_source() {
 }
 
 # $1=包名列表文件（一行一个）命中前台或进程则 0
-qsc_pkg_list_hit() {
-	local list_file="$1" pkg focus snap
-	[ -f "$list_file" ] && [ -s "$list_file" ] || return 1
+# 进程那半边优先交给原生守护：它直接遍历 /proc/<pid>/cmdline，
+# 省掉 ps -ef 全量快照与逐包两次 grep（按 App 停充最贵的一步）。
+# 退出 0=命中、1=确定没命中（可直接跳到前台检测）、其它=不可用则退回 ps。
+qsc_pkg_proc_hit() {
+	local list_file="$1" pkg snap _rc
+	if qsc_native_has pkgs && qsc_ps_native_ready; then
+		"$BINDIR/qscd" pkgs "$list_file" >/dev/null 2>&1
+		_rc=$?
+		[ "$_rc" = "0" ] && return 0
+		[ "$_rc" = "1" ] && return 1
+		qsc_log_once qscd_pkgs warn "原生进程检测不可用，已退回 ps"
+	fi
 	# 一次 ps 快照供全部包名匹配：原先每个包名都要跑一遍 ps -ef
 	snap="$(ps -ef 2>/dev/null)"
 	while IFS= read -r pkg || [ -n "$pkg" ]; do
@@ -46,6 +55,15 @@ qsc_pkg_list_hit() {
 			return 0
 		fi
 	done <"$list_file"
+	return 1
+}
+
+qsc_pkg_list_hit() {
+	local list_file="$1" pkg focus
+	[ -f "$list_file" ] && [ -s "$list_file" ] || return 1
+	if qsc_pkg_proc_hit "$list_file"; then
+		return 0
+	fi
 	focus="$(dumpsys window 2>/dev/null | grep 'mCurrentFocus' | tail -1)"
 	[ -z "$focus" ] && focus="$(dumpsys activity activities 2>/dev/null | grep -E 'mResumedActivity|topResumedActivity' | head -1)"
 	if [ -n "$focus" ]; then

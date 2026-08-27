@@ -62,7 +62,7 @@ rm -f "$DATADIR/startup.log" "$DATADIR/debug.log"
 rm -f "$DATADIR/off_d"
 rm -f "$DATADIR/power_on"
 # 守护可用性每次启动重新判定（可能换了二进制或换了机型）
-rm -f "$DATADIR/qscd_unusable" "$DATADIR/qscd_watch"
+rm -f "$DATADIR/qscd_unusable" "$DATADIR/qscd_features"
 rm -f "$DATADIR/power_off"
 echo "$(date +%F_%T) service.sh 启动，开始循环" > "$DATADIR/service_start.log"
 if [ -f "$DATADIR/hot_update_at" ]; then
