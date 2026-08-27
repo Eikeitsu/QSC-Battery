@@ -387,7 +387,7 @@ fn pkgs_running(list_path: &str, proc_root: &str) -> u8 {
         if cmd.is_empty() {
             continue;
         }
-        if wanted.iter().any(|w| *w == cmd) {
+        if wanted.contains(&cmd) {
             return EXIT_OK;
         }
     }
