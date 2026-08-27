@@ -665,16 +665,10 @@ mod tests {
 
     #[test]
     fn pkgs_reports_unusable_when_proc_root_missing() {
-        assert_eq!(
-            pkgs_running("/nonexistent/list", "/nonexistent/proc"),
-            EXIT_NO_HIT
-        );
+        assert_eq!(pkgs_running("/nonexistent/list", "/nonexistent/proc"), EXIT_NO_HIT);
         let root = fake_proc(&[("1", "/system/bin/init")]);
         let list = write_list(&root, "com.example.app\n");
-        assert_eq!(
-            pkgs_running(&list, "/definitely/not/here"),
-            EXIT_UNUSABLE
-        );
+        assert_eq!(pkgs_running(&list, "/definitely/not/here"), EXIT_UNUSABLE);
         std::fs::remove_dir_all(&root).ok();
     }
 
