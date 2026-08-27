@@ -570,6 +570,44 @@ qsc_power_reset() {
 	qsc_power_start
 }
 
+# 回收「孤儿停充」：节点还停在停充值上，但 data/power_switch 标记已经不在了。
+# 这种状态没有任何常规流程会去管它（恢复流程以 power_switch 存在为前提），
+# 结果就是手机一直充不进电而模块自认为一切正常。可能的来路：
+# 进程在写完节点、还没 touch 标记之前被杀；data 目录被清过；旧版本留下的残留。
+# 判定按「节点当前值 == 该条目的停充值」精确比对，不用 qsc_charge_looks_stopped：
+# 后者在未插电时恒为真，会把没停充的机器也误判成停充。
+# 返回 0 = 发现并处理了孤儿节点
+qsc_orphan_stop_check() {
+	local i route stop_val _sv cur hit=0
+	[ -f "$DATADIR/power_switch" ] && return 1
+	for i in $switch_list $QSC_USER_SWITCHES; do
+		route="$(echo "$i" | sed -n 's/,start=.*//g;$p')"
+		[ -n "$route" ] && [ -f "$route" ] || continue
+		stop_val="$(echo "$i" | sed -n 's/.*,stop=//g;s/_/ /g;$p')"
+		_sv="$(echo "$i" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
+		[ -n "$stop_val" ] && [ -n "$_sv" ] || continue
+		# 停充值与恢复值相同的条目无法区分状态，跳过
+		[ "$stop_val" = "$_sv" ] && continue
+		cur="$(cat "$route" 2>/dev/null | tr -d ' \r\n')"
+		[ -n "$cur" ] || continue
+		if [ "$cur" = "$stop_val" ]; then
+			hit=1
+			qsc_log warn "发现残留停充节点（无停充标记）：$route=$cur，正在还原"
+			break
+		fi
+	done
+	[ "$hit" = "1" ] || return 1
+	qsc_power_start
+	if [ "$start_ok" = "1" ]; then
+		rm -f "$DATADIR/resume_fail_hint"
+		qsc_log info "已还原残留停充节点 [$start_node <- $start_val]"
+	else
+		touch "$DATADIR/resume_fail_hint"
+		qsc_log error "残留停充节点还原失败，手机可能充不进电"
+	fi
+	return 0
+}
+
 # 卸载时按列表恢复 start 值
 qsc_restore_switches_from_list() {
 	local i route start_val

@@ -60,6 +60,15 @@ qsc_refresh_module_description() {
 	level="${battery_level:-}"
 	temp="${temperature:-}"
 
+	# 还原失败排在最前面：此时充电节点仍停在停充值上，手机充不进电，
+	# 是所有状态里最紧急的一个。尤其不能被下面「已关闭」那条提前 return 掉——
+	# 关模块时还原失败恰恰是最容易让人找不到原因的情形。
+	if [ -f "$DATADIR/resume_fail_hint" ]; then
+		qsc_write_module_description "❗异常" "恢复充电失败" \
+			"充电节点仍停在停充值，手机可能充不进电：请拔插一次充电器，或查看 data/log.log"
+		return 0
+	fi
+
 	if [ -f "$MODDIR/disable" ] || [ "${off_qsc:-0}" = "1" ] || [ -f "$OFF_FLAG" ]; then
 		qsc_write_module_description "⛔已关闭" "模块未运行" \
 			"打开总开关或移除 disable 后恢复电量/温度停充"

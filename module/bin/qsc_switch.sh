@@ -176,6 +176,9 @@ if [ "$temperature_switch_stop" != "$_raw_temp_stop" ] || [ "$temperature_switch
 	qsc_log_once cfg_temp warn "温控阈值已纠正 ${_raw_temp_stop}/${_raw_temp_start} → 停充${temperature_switch_stop}°C 恢复${temperature_switch_start}°C"
 fi
 off_qsc=0
+# 低电量安全线：低于它就忽略温控与按 App 停充，强制恢复充电。
+# 故意不做成配置项——安全底线不应该能被关掉。
+QSC_EMERGENCY_LEVEL=20
 qsc_debug_step 5
 
 if [ ! -n "$battery_level" ]; then
@@ -234,7 +237,9 @@ if [ -f "$OFF_FLAG" -o -f "$MODDIR/disable" ]; then
 	power_start="105"
 	temperature_switch="0"
 	qsc_stop_wakelock_release
-	qsc_clear_active_switch
+	# active_switch 记着「当初用哪个节点停的」，是还原时最可靠的一条线索。
+	# 仍停充时不能在这里抹掉，得留给下面的还原流程用完再清。
+	[ -f "$DATADIR/power_switch" ] || qsc_clear_active_switch
 	if [ ! -f "$DATADIR/off_d" ]; then
 		touch "$DATADIR/off_d"
 		rm -f "$DATADIR/now_c" "$DATADIR/power_on" "$DATADIR/power_off" "$DATADIR/current_mode_tag"
@@ -268,6 +273,34 @@ if [ ! -f "$LIST_SWITCH" ]; then
 fi
 
 qsc_build_switch_list
+
+# 每次开机（服务启动）检查一轮残留停充节点。标记由 service.sh 启动时清掉，
+# 所以这段每个开机周期只跑一次，不进热路径。
+if [ ! -f "$DATADIR/.orphan_checked" ] && type qsc_orphan_stop_check >/dev/null 2>&1; then
+	touch "$DATADIR/.orphan_checked"
+	qsc_orphan_stop_check || true
+fi
+
+# 关掉总开关时先把充电节点还原，再罢工。
+# 停充生效期间去关模块，原先会直接跳过 484 行那段恢复流程（它有 off_qsc 门禁），
+# 节点就永远停在停充值上：手机再也充不进电，而模块简介显示「已关闭 / 模块未运行」，
+# 没人会怀疑到模块头上。放在 qsc_build_switch_list 之后，是因为 qsc_power_start
+# 要用它算出的 switch_list 与 QSC_USER_SWITCHES。
+if [ "$off_qsc" = "1" ] && [ -f "$DATADIR/power_switch" ]; then
+	qsc_power_start
+	if [ "$start_ok" = "1" ]; then
+		rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" \
+			"$DATADIR/battery_switch" "$DATADIR/app_stop_flag" \
+			"$DATADIR/resume_fail_hint"
+		qsc_clear_active_switch
+		qsc_log info "模块已关闭，还原充电节点并清除停充状态 [$start_node <- $start_val]"
+		qsc_log_once_clear off_restore
+	else
+		# 还原失败要留着标记继续重试，别把「节点仍停着」这件事丢掉
+		touch "$DATADIR/resume_fail_hint"
+		qsc_log_once off_restore error "模块已关闭但还原充电节点失败，将持续重试"
+	fi
+fi
 
 qsc_charge_full() {
 	if [ "$charge_full" = "1" -a "$battery_level" = "100" -a "$power_stop" = "100" ]; then
@@ -409,6 +442,9 @@ if [ "$charge_eval" = "1" ]; then
 			touch "$DATADIR/power_switch"
 			qsc_stop_wakelock_acquire
 			rm -f "$DATADIR/no_node_logged" "$DATADIR/stop_fail_hint"
+			# 又能成功停充说明节点是通的，之前那次还原失败的提示不该再挂着
+			rm -f "$DATADIR/resume_fail_hint"
+			qsc_log_once_clear resume_fail
 			if [ "$battery_stop_reason" = "1" ]; then
 				touch "$DATADIR/battery_switch"
 			fi
@@ -469,13 +505,16 @@ else
 		qsc_power_start
 		if [ "$start_ok" = "1" ]; then
 			rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" \
-				"$DATADIR/battery_switch" "$DATADIR/app_stop_flag"
+				"$DATADIR/battery_switch" "$DATADIR/app_stop_flag" \
+				"$DATADIR/resume_fail_hint"
 			qsc_clear_active_switch
 			qsc_stop_wakelock_release
 			qsc_log info "已拔出充电器，还原充电节点并清除停充状态 [$start_node <- $start_val]"
 			qsc_log_once_clear unplug_restore
+			qsc_log_once_clear resume_fail
 		else
 			# 还原失败时保留标记，交给恢复流程继续重试，避免节点停在停充态却没人管
+			touch "$DATADIR/resume_fail_hint"
 			qsc_log_once unplug_restore warn "拔出充电器后还原充电节点失败，将持续重试"
 		fi
 	fi
@@ -510,13 +549,33 @@ if [ -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
 			app_ready=0
 		fi
 	fi
+	# 低电量紧急恢复：温控与按 App 停充这两个 latch 只看温度/进程，
+	# 条件不消失就一直不恢复，手机能被一路锁到 0% 充不进电。
+	# 低于安全线时无条件放行，先保证充上。
+	# 故意不覆盖 battery_ready：那是用户自己设的停充/恢复电量（有人会把
+	# power_start 设成 10%），紧急线不该去推翻显式配置。
+	if [ "$battery_level" -le "$QSC_EMERGENCY_LEVEL" ] 2>/dev/null; then
+		if [ "$temp_ready" = "0" ] || [ "$app_ready" = "0" ]; then
+			qsc_log_once emerg_resume warn \
+				"电量$battery_level 已低于安全线 ${QSC_EMERGENCY_LEVEL}%，忽略温控/应用停充，强制恢复充电"
+			qsc_notify qsc_resume "充电控制" "电量过低（${battery_level}%），已强制恢复充电"
+		fi
+		temp_ready=1
+		app_ready=1
+	fi
 	if [ "$temp_ready" = "1" -a "$battery_ready" = "1" -a "$app_ready" = "1" ]; then
 		sleep 3
 		qsc_power_start
 		if [ "$start_ok" = "1" ]; then
 			rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" "$DATADIR/battery_switch" "$DATADIR/app_stop_flag"
+			rm -f "$DATADIR/resume_fail_hint"
 			qsc_clear_active_switch
 			qsc_stop_wakelock_release
+			qsc_log_once_clear resume_fail
+		else
+			# 还原失败在这里原先完全静默：标记留着、节点还停着、用户只看到充不进电
+			touch "$DATADIR/resume_fail_hint"
+			qsc_log_once resume_fail error "已满足恢复条件但还原充电节点失败，将持续重试"
 		fi
 		if [ "$log_log2" = "1" ]; then
 			if [ "$cpu_log2" = "1" ]; then
