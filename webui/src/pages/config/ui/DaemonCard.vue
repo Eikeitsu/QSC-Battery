@@ -42,6 +42,9 @@ const stateLabel = computed(() => {
   const parts = [implLabel.value ? `${implLabel.value} 版` : "已安装"];
   if (srcLabel.value) parts.push(srcLabel.value);
   parts.push(status.value.probeOk ? "自检通过" : "自检未通过，实际仍用定时轮询");
+  // C 版已冻结，装了它就用不到阈值过滤与原生进程检测，这里明确讲出来，
+  // 免得对着「插电间隔·有守护」等设置项纳闷为什么没效果
+  if (status.value.impl === "c") parts.push("不含阈值过滤与原生进程检测");
   return parts.join(" · ");
 });
 
@@ -55,7 +58,11 @@ function implRowLabel(impl: DaemonImpl) {
   const bits: string[] = [];
   if (status.value?.bundled.includes(impl)) bits.push("安装包自带");
   if (status.value?.impl === impl) bits.push("当前使用");
-  bits.push(impl === "rust" ? "内存安全，体积略大" : "依赖最少，体积最小");
+  bits.push(
+    impl === "rust"
+      ? "推荐：含阈值过滤与原生进程检测，最省电"
+      : "仅基础事件唤醒，体积最小，功能已冻结",
+  );
   return bits.join(" · ");
 }
 
@@ -152,8 +159,15 @@ onMounted(reload);
         @click="onRemove"
       />
       <p class="warn">
-        两套实现功能完全一致，只是编译语言不同，只能选其一；选另一个会自动替换掉当前的。
-        安装包未自带时从模块官网下载，落盘前会校验 sha256，校验或自检不通过一律回滚。
+        两套实现只能选其一，选另一个会自动替换掉当前的。安装包未自带时从模块官网下载，
+        落盘前会校验 sha256，校验或自检不通过一律回滚。
+      </p>
+      <p class="warn">
+        两版能力已经不同：Rust 版是主力，除了事件唤醒还能按阈值过滤电池事件（充电中离
+        停充阈值还远时不叫醒脚本）和用原生方式做进程检测（替代
+        <code>ps</code> 全量快照）； C 版冻结在基础事件唤醒上，只修
+        bug、不再跟进新能力。装 C 版一切照常工作，
+        只是用不上上面两项，对应场景自动退回原有做法。
       </p>
     </template>
     <p v-else class="warn">

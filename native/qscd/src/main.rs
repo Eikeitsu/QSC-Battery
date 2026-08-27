@@ -404,8 +404,16 @@ fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     match args.get(1).map(String::as_str) {
         Some("wait-event") => {
-            let max = parse_secs(args.get(2).map(String::as_str), WAIT_MAX_DEFAULT, WAIT_MAX_CAP);
-            let floor = parse_secs(args.get(3).map(String::as_str), WAIT_FLOOR_DEFAULT, max.max(1));
+            let max = parse_secs(
+                args.get(2).map(String::as_str),
+                WAIT_MAX_DEFAULT,
+                WAIT_MAX_CAP,
+            );
+            let floor = parse_secs(
+                args.get(3).map(String::as_str),
+                WAIT_FLOOR_DEFAULT,
+                max.max(1),
+            );
             ExitCode::from(wait_event(max, floor))
         }
         Some("watch") => {
@@ -505,10 +513,12 @@ mod tests {
 
     #[test]
     fn parse_watch_args_reads_flags_and_clamps() {
-        let args: Vec<String> = ["--max", "600", "--floor", "5", "--stop", "80", "--near", "99"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        let args: Vec<String> = [
+            "--max", "600", "--floor", "5", "--stop", "80", "--near", "99",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
         let (max, floor, th) = parse_watch_args(&args);
         assert_eq!(max, 600);
         assert_eq!(floor, 5);
@@ -665,7 +675,10 @@ mod tests {
 
     #[test]
     fn pkgs_reports_unusable_when_proc_root_missing() {
-        assert_eq!(pkgs_running("/nonexistent/list", "/nonexistent/proc"), EXIT_NO_HIT);
+        assert_eq!(
+            pkgs_running("/nonexistent/list", "/nonexistent/proc"),
+            EXIT_NO_HIT
+        );
         let root = fake_proc(&[("1", "/system/bin/init")]);
         let list = write_list(&root, "com.example.app\n");
         assert_eq!(pkgs_running(&list, "/definitely/not/here"), EXIT_UNUSABLE);
