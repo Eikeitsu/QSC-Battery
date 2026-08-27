@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2026.08.27
+
 ### 省电（待机功耗）
 
 - 新增 `power_saver`（默认开）与三档轮询间隔：未插电 30s 且该轮只读 `online` 节点、不再 fork `qsc_switch.sh`，插电离阈值较远 10s，进入阈值附近（默认 3%）回到 `loop_interval_sec`；三档均可在 WebUI 调整
