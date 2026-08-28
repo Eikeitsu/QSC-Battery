@@ -169,6 +169,8 @@ const daemonCard = read(join(root, "webui/src/pages/config/ui/DaemonCard.vue"));
 const batterySnapshotApi = read(join(root, "webui/src/shared/api/batterySnapshot.ts"));
 const historyApi = read(join(root, "webui/src/shared/api/history.ts"));
 const chart = read(join(root, "webui/src/pages/home/ui/HomeChargeChart.vue"));
+const appShell = read(join(root, "webui/src/layouts/AppShell.vue"));
+const batteryStore = read(join(root, "webui/src/stores/battery.ts"));
 const installGuide = read(join(root, "docs/guide/install.md"));
 const webuiGuide = read(join(root, "docs/guide/webui.md"));
 const configGuide = read(join(root, "docs/guide/config.md"));
@@ -207,10 +209,24 @@ requireText(serviceSource, "qsc_history_flush_pending", "unplugged history flush
 requireText(historyApi, ".pending", "WebUI pending history read");
 requireText(chart, "setInterval", "WebUI chart refresh timer");
 requireText(chart, "当前 ${currentLevel}%", "WebUI live chart summary");
+requireText(chart, "正在读取曲线数据", "WebUI chart loading state");
+requireText(appShell, "PageLoading", "WebUI page loading state");
+requireText(appShell, "<Suspense", "WebUI async page fallback");
+requireText(
+  batteryStore,
+  "const initializing = ref(false)",
+  "WebUI bootstrap loading state",
+);
 requireText(powerSaver, "QSC_PS_WAIT_FAILURES", "native wait failure backoff");
 requireText(powerSaver, "reason=%s", "native wait failure reason");
 requireText(powerSaver, "QSC_PS_WAIT_NEXT_RETRY", "native wait retry deadline");
 requireText(serviceSource, "qscd_unusable", "native wait failure state");
+requireText(serviceSource, "正在读取实时充电状态", "hot update live status");
+requireText(
+  serviceSource,
+  'qsc_ps_refresh_desc "${QSC_PS_NOW:-0}"',
+  "hot update early status refresh",
+);
 requireText(daemonApi, "snapshotFailure", "WebUI snapshot failure status");
 requireText(daemonApi, "waitFailure", "WebUI native wait failure status");
 requireText(daemonApi, "waitFailureTime", "WebUI native wait failure time");

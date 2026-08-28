@@ -52,6 +52,8 @@ export const useAppStore = defineStore("app", () => {
   const logText = ref("暂无日志");
   const logLines = ref(0);
   const logSize = ref("--");
+  const initializing = ref(false);
+  const ready = ref(false);
 
   let statusTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -472,25 +474,34 @@ export const useAppStore = defineStore("app", () => {
   }
 
   async function init(): Promise<void> {
+    if (initializing.value || ready.value) return;
+    initializing.value = true;
     if (!api.hasBridge()) {
       bridgeOk.value = false;
       deviceName.value = "未检测到 WebUI 桥接";
       status.badge = "当前环境无法执行 shell";
       status.badgeType = BadgeType.Danger;
       showToast("请使用支持 WebUI 的管理器打开");
+      initializing.value = false;
+      ready.value = true;
       return;
     }
-    await Promise.allSettled([
-      loadDeviceInfo(),
-      loadConfig(),
-      loadCurrentConfig(),
-      refreshStatus(),
-      refreshLog(),
-    ]);
-    if (statusTimer) clearInterval(statusTimer);
-    statusTimer = setInterval(() => {
-      void refreshStatus();
-    }, STATUS_INTERVAL);
+    try {
+      await Promise.allSettled([
+        loadDeviceInfo(),
+        loadConfig(),
+        loadCurrentConfig(),
+        refreshStatus(),
+        refreshLog(),
+      ]);
+      if (statusTimer) clearInterval(statusTimer);
+      statusTimer = setInterval(() => {
+        void refreshStatus();
+      }, STATUS_INTERVAL);
+    } finally {
+      initializing.value = false;
+      ready.value = true;
+    }
   }
 
   return {
@@ -506,6 +517,8 @@ export const useAppStore = defineStore("app", () => {
     logText,
     logLines,
     logSize,
+    initializing,
+    ready,
     powerPlan,
     tempPlan,
     currentPlan,

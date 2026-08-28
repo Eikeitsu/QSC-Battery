@@ -4,8 +4,11 @@ import { slideDir } from "@/router";
 import { useAppShell } from "./composables/useAppShell";
 import AppTopbar from "./ui/AppTopbar.vue";
 import AppDock from "./ui/AppDock.vue";
+import PageLoading from "@/shared/ui/PageLoading.vue";
+import { useAppStore } from "@/stores";
 
 const { shellClass, theme, tab, refreshing, setTab, onRefreshHome } = useAppShell();
+const store = useAppStore();
 </script>
 
 <template>
@@ -18,19 +21,27 @@ const { shellClass, theme, tab, refreshing, setTab, onRefreshHome } = useAppShel
     <AppTopbar />
 
     <main class="app-main">
-      <RouterView v-slot="{ Component, route: viewRoute }">
-        <Transition
-          :name="slideDir === 'forward' ? 'slide-left' : 'slide-right'"
-          mode="out-in"
-        >
-          <component
-            :is="Component"
-            :key="viewRoute.name"
-            :refreshing="viewRoute.name === 'home' ? refreshing : undefined"
-            @refresh="onRefreshHome()"
-          />
-        </Transition>
-      </RouterView>
+      <PageLoading v-if="store.initializing" text="正在读取设备数据…" />
+      <Suspense timeout="0">
+        <template #default>
+          <RouterView v-slot="{ Component, route: viewRoute }">
+            <Transition
+              :name="slideDir === 'forward' ? 'slide-left' : 'slide-right'"
+              mode="out-in"
+            >
+              <component
+                :is="Component"
+                :key="viewRoute.name"
+                :refreshing="viewRoute.name === 'home' ? refreshing : undefined"
+                @refresh="onRefreshHome()"
+              />
+            </Transition>
+          </RouterView>
+        </template>
+        <template #fallback>
+          <PageLoading text="正在打开页面…" />
+        </template>
+      </Suspense>
     </main>
 
     <AppDock :tab="tab" @update:tab="setTab" />

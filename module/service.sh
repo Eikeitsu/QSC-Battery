@@ -171,9 +171,16 @@ qsc_service_heartbeat() {
 	fi
 }
 if [ -f "$DATADIR/hot_update_at" ]; then
-	qsc_write_module_description "♻️已热更新" "服务已重启" \
-		"本次更新无需重启；实时状态将在下一轮刷新"
+		qsc_write_module_description "♻️更新中" "服务已重启" \
+			"本次更新无需重启；正在读取实时充电状态"
 	rm -f "$DATADIR/hot_update_at"
+	# 不要等设备探测、兼容模块扫描和全量节点扫描完成后才刷新简介。
+	# 这些任务可能较慢，先用当前电量/温度/供电状态覆盖临时的「更新中」。
+	if type qsc_ps_load_conf >/dev/null 2>&1; then
+		qsc_ps_load_conf
+		qsc_ps_now
+		qsc_ps_refresh_desc "${QSC_PS_NOW:-0}"
+	fi
 else
 	qsc_write_module_description "🔎启动中" "服务已拉起" "$DESC_INTRO"
 fi

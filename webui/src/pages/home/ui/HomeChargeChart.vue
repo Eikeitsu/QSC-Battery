@@ -5,6 +5,7 @@ import ThemedCard from "@/shared/ui/ThemedCard.vue";
 import * as api from "@/shared/api";
 import { BinaryFlag } from "@/shared";
 import { useAppStore } from "@/stores";
+import PageLoading from "@/shared/ui/PageLoading.vue";
 
 const app = useAppStore();
 const points = ref<api.HistoryPoint[]>([]);
@@ -182,11 +183,10 @@ defineExpose({ reload });
   <SectionHead title="充放电曲线" :hint="summary" />
   <ThemedCard>
     <div v-if="!points.length" class="empty">
-      {{
-        loading
-          ? "读取中…"
-          : "尚无历史数据。系统电池记录可能刚被清空，用一段时间后即有曲线。"
-      }}
+      <PageLoading v-if="loading" text="正在读取曲线数据…" />
+      <template v-else>
+        尚无历史数据。系统电池记录可能刚被清空，用一段时间后即有曲线。
+      </template>
     </div>
     <div v-else class="chart-wrap">
       <svg class="chart" :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="充放电曲线">
