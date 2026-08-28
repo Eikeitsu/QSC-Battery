@@ -140,6 +140,8 @@ for (const mod of modules) {
   requireText(service, "failed:$rc", `${mod.name} scan failure state`);
   requireText(service, "service_heartbeat", `${mod.name} service heartbeat`);
   requireText(service, "service_metrics", `${mod.name} service metrics`);
+  requireText(service, "diagnostic_on", `${mod.name} optional diagnostic sampling`);
+  requireText(service, "history_pending", `${mod.name} history pending metric`);
 }
 
 const update = JSON.parse(read(join(root, "docs/public/update.json")));
@@ -160,6 +162,13 @@ const configTemplate = read(join(root, "module/config/config.conf"));
 const customize = read(join(root, "module/customize.sh"));
 const qscdFetch = read(join(root, "module/bin/qscd_fetch.sh"));
 const qscdSource = read(join(root, "native/qscd/src/main.rs"));
+const powerSaver = read(join(root, "module/bin/lib/power_saver.sh"));
+const serviceSource = read(join(root, "module/service.sh"));
+const daemonApi = read(join(root, "webui/src/shared/api/daemon.ts"));
+const daemonCard = read(join(root, "webui/src/pages/config/ui/DaemonCard.vue"));
+const installGuide = read(join(root, "docs/guide/install.md"));
+const webuiGuide = read(join(root, "docs/guide/webui.md"));
+const configGuide = read(join(root, "docs/guide/config.md"));
 const keysBlock = defaults.match(/CONFIG_KEYS:[\s\S]*?\n\] as const;/)?.[0] || "";
 const configKeys = [...keysBlock.matchAll(/^\s+"([^"]+)",$/gm)].map((match) => match[1]);
 for (const key of configKeys) {
@@ -176,6 +185,12 @@ requireText(qscdFetch, 'mv -f "$_candidate" "$BINDIR/qscd"', "native atomic repl
 requireText(qscdFetch, 'rm -rf "$TMPDIR"', "native temporary cleanup");
 requireText(qscdFetch, "qscd_progress", "native download progress");
 requireText(qscdFetch, "qscd_valid_version", "native version validation");
+requireText(
+  qscdFetch,
+  "qscd_version_compare",
+  "component-wise native version comparison",
+);
+requireText(qscdFetch, "manifest_invalid_sha256", "remote hash validation");
 requireText(qscdFetch, "cmd_check", "remote native version check");
 requireText(qscdFetch, "native_version", "local native version record");
 requireText(qscdFetch, "remote_version", "remote native version output");
@@ -184,8 +199,29 @@ requireText(customize, "qscd_try_candidate", "candidate version recording");
 const history = read(join(root, "module/bin/lib/history.sh"));
 requireText(history, "QSC_HISTORY_BATCH", "batched history sampling");
 requireText(history, "QSC_HISTORY_BUFFER", "history pending buffer");
+requireText(powerSaver, "QSC_PS_WAIT_FAILURES", "native wait failure backoff");
+requireText(powerSaver, "reason=%s", "native wait failure reason");
+requireText(powerSaver, "QSC_PS_WAIT_NEXT_RETRY", "native wait retry deadline");
+requireText(serviceSource, "qscd_unusable", "native wait failure state");
+requireText(daemonApi, "snapshotFailure", "WebUI snapshot failure status");
+requireText(daemonApi, "waitFailure", "WebUI native wait failure status");
+requireText(daemonApi, "waitFailureTime", "WebUI native wait failure time");
+requireText(daemonCard, "等待器退避重试", "WebUI native wait recovery hint");
+requireText(daemonCard, "updateDaemon", "WebUI remote repair action");
+requireText(installGuide, "Rust 版额外提供阈值事件过滤", "install guide Rust capability");
+requireText(webuiGuide, "只读快照与诊断", "WebUI guide snapshot capability");
+requireText(webuiGuide, "升级继承", "WebUI guide inherited source");
+requireText(configGuide, "native_version", "config guide native version");
+if (installGuide.includes("两套实现功能、命令行、行为完全一致")) {
+  throw new Error("install guide still claims Rust and C are behaviorally identical");
+}
+if (webuiGuide.includes("不写任何充电节点、不做阈值判定")) {
+  throw new Error("WebUI guide still claims qscd never performs threshold filtering");
+}
 requireText(qscdSource, "struct BatterySnapshot", "Rust snapshot layer");
 requireText(qscdSource, "snapshot_source=", "Rust snapshot diagnostics");
+requireText(qscdSource, "snapshot_failure=", "Rust snapshot failure diagnostics");
+requireText(qscdSource, "reason=netlink_open", "Rust netlink failure reason");
 simulateHotUpdateContract();
 
 console.log(

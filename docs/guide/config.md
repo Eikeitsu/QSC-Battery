@@ -141,7 +141,7 @@ WebUI 游戏列表：可「加载应用列表」后搜索应用名 / 包名并�
 | `native_daemon` | `1` 开（默认）：未插电时由内核充电事件唤醒，替代定时轮询；`0` = 纯脚本轮询 |
 | `native_impl`   | `rust`（默认）/ `c` / `off`。安装时按此顺序自检选用；`off` = 不装守护      |
 
-守护实际状态在 `data/native_impl_used`（`rust` / `c`）与 `data/native_src`（`bundled` / `download`）。缺少 `bin/qscd` 时 `native_daemon` 无效果，等同关闭。推荐直接在 WebUI 的「事件唤醒（守护）」卡片里下载与切换，详见 [WebUI 使用说明](/guide/webui#事件唤醒守护)。
+守护实际状态在 `data/native_impl_used`（`rust` / `c`）、`data/native_src`（`bundled` / `download` / `inherited`）与 `data/native_version`。等待器失败时会把原因、实现、返回码和时间写入 `data/qscd_unusable`，并由服务按退避策略自动重试；缺少 `bin/qscd` 时 `native_daemon` 无效果，等同关闭。推荐直接在 WebUI 的「事件唤醒（守护）」卡片里下载与切换，详见 [WebUI 使用说明](/guide/webui#事件唤醒守护)。
 
 ## WebUI 使用提示
 

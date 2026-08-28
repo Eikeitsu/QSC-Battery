@@ -490,4 +490,29 @@ export const cases = [
       logIncludes: "发现残留停充节点",
     },
   },
+
+  {
+    name: "历史采样 → 先写 pending，达到批量后再落盘",
+    sysfs: {
+      "battery/capacity": "60",
+      "battery/status": "Charging",
+      "battery/temp": COOL,
+      "battery/current_now": "500000",
+      "usb/online": "1",
+    },
+    config: {
+      ...FAST,
+      history_enable: "1",
+      history_interval_sec: "15",
+      power_stop: "80",
+      power_start: "75",
+      temperature_switch: "0",
+    },
+    data: { history_last_ts: "0" },
+    node: { initial: "0", stop: "1", start: "0" },
+    expect: {
+      node: "0",
+      files: { "charge_history.csv.pending": true, history_last_ts: true },
+    },
+  },
 ];

@@ -15,10 +15,18 @@ export interface DaemonStatus {
   selftestNetlink: boolean;
   /** Rust selftest 检查到电源 sysfs */
   selftestSysfs: boolean;
+  /** 快照缺失时的只读诊断原因 */
+  snapshotFailure: string;
   /** 二进制支持的扩展能力 */
   features: string[];
   /** debug_on 开启时记录的最近一次等待结果 */
   lastWakeReason: string;
+  /** 最近一次原生等待失败的原因；存在时表示正在退避重试 */
+  waitFailure: string;
+  waitFailureMode: string;
+  waitFailureRc: string;
+  waitFailureAt: string;
+  waitFailureTime: string;
   /** 当前用的是哪套实现 */
   impl: DaemonImpl | "";
   /** 本地二进制激活时记录的版本 */
@@ -37,8 +45,14 @@ const EMPTY: DaemonStatus = {
   selftestOk: false,
   selftestNetlink: false,
   selftestSysfs: false,
+  snapshotFailure: "",
   features: [],
   lastWakeReason: "",
+  waitFailure: "",
+  waitFailureMode: "",
+  waitFailureRc: "",
+  waitFailureAt: "",
+  waitFailureTime: "",
   impl: "",
   localVersion: "",
   src: "",
@@ -71,8 +85,14 @@ function toStatus(kv: Record<string, string>): DaemonStatus {
     selftestOk: kv.selftest === "1",
     selftestNetlink: kv.selftest_netlink === "1",
     selftestSysfs: kv.selftest_sysfs === "1",
+    snapshotFailure: kv.snapshot_failure || "",
     features: (kv.features || "").split(/\s+/).filter(Boolean),
     lastWakeReason: kv.last_wake || "",
+    waitFailure: kv.wait_failure || "",
+    waitFailureMode: kv.wait_failure_mode || "",
+    waitFailureRc: kv.wait_failure_rc || "",
+    waitFailureAt: kv.wait_failure_at || "",
+    waitFailureTime: kv.wait_failure_time || "",
     impl: toImpl(kv.impl),
     localVersion: kv.local_version || "",
     src:
@@ -112,6 +132,7 @@ export interface DaemonUpdateStatus {
   localVersion: string;
   remoteVersion: string;
   versionState: "same" | "update" | "local_newer" | "unknown";
+  /** 远程更新或本地哈希不一致时均为 true，可用于重新下载修复 */
   updateAvailable: boolean;
   hashMatch: boolean;
 }

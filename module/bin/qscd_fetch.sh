@@ -110,10 +110,25 @@ qscd_version_key() {
 	printf '%s' "$1" | tr -cd '0-9'
 }
 
+qscd_version_compare() {
+	awk -F'[.]' -v left="$1" -v right="$2" '
+		BEGIN {
+			na = split(left, a, "[.]"); nb = split(right, b, "[.]")
+			n = (na > nb ? na : nb)
+			for (i = 1; i <= n; i++) {
+				x = (a[i] == "" ? 0 : a[i]) + 0
+				y = (b[i] == "" ? 0 : b[i]) + 0
+				if (x < y) { print -1; exit }
+				if (x > y) { print 1; exit }
+			}
+			print 0
+		}'
+}
+
 qscd_valid_version() {
 	_v="$1"
 	case "$_v" in
-		""|*[!0-9.]*|.*|*.) return 1 ;;
+		""|*[!0-9.]*|.*|*.|*..*) return 1 ;;
 	esac
 	qscd_version_key "$_v" | grep -q '[0-9]'
 }
@@ -214,8 +229,14 @@ cmd_status() {
 	out snapshot_source "$(printf '%s\n' "$_selftest_out" | sed -n 's/^snapshot_source=//p')"
 	out snapshot_level "$(printf '%s\n' "$_selftest_out" | sed -n 's/^snapshot_level=//p')"
 	out snapshot_temp "$(printf '%s\n' "$_selftest_out" | sed -n 's/^snapshot_temp=//p')"
+	out snapshot_failure "$(printf '%s\n' "$_selftest_out" | sed -n 's/^snapshot_failure=//p')"
 	out features "$_features"
 	out last_wake "$(cat "$DATADIR/qscd_last_wake_reason" 2>/dev/null | tr -d '\r\n')"
+	out wait_failure "$(awk -F= '$1 == "reason" { print $2; exit }' "$DATADIR/qscd_unusable" 2>/dev/null)"
+	out wait_failure_mode "$(awk -F= '$1 == "mode" { print $2; exit }' "$DATADIR/qscd_unusable" 2>/dev/null)"
+	out wait_failure_rc "$(awk -F= '$1 == "rc" { print $2; exit }' "$DATADIR/qscd_unusable" 2>/dev/null)"
+	out wait_failure_at "$(awk -F= '$1 == "at" { print $2; exit }' "$DATADIR/qscd_unusable" 2>/dev/null)"
+	out wait_failure_time "$(awk -F= '$1 == "time" { print $2; exit }' "$DATADIR/qscd_unusable" 2>/dev/null)"
 }
 
 cmd_install() {
@@ -313,6 +334,9 @@ cmd_check() {
 	_name="qscd-${_impl}-${_suffix}"
 	_remote_hash="$(qscd_manifest_get "$_name" | tr 'A-F' 'a-f')"
 	[ -n "$_remote_hash" ] || fail "manifest_no_entry"
+	_hash_len="$(printf '%s' "$_remote_hash" | wc -c | tr -d ' ')"
+	case "$_remote_hash" in *[!0-9a-f]*) fail "manifest_invalid_sha256" ;; esac
+	[ "$_hash_len" = "64" ] || fail "manifest_invalid_sha256"
 	_local_version="$(cat "$DATADIR/native_version" 2>/dev/null | tr -d ' \r\n')"
 	_local_hash=""
 	[ -f "$BINDIR/qscd" ] && _local_hash="$(qscd_sha256 "$BINDIR/qscd")"
@@ -321,16 +345,16 @@ cmd_check() {
 	_state=unknown
 	_update=0
 	if qscd_valid_version "$_local_version"; then
-		_remote_key="$(qscd_version_key "$_remote_version")"
-		_local_key="$(qscd_version_key "$_local_version")"
-		if [ "$_remote_key" = "$_local_key" ]; then
-			_state=same
-		elif [ "$_remote_key" -gt "$_local_key" ] 2>/dev/null; then
-			_state=update
-			_update=1
-		else
-			_state=local_newer
-		fi
+		case "$(qscd_version_compare "$_remote_version" "$_local_version")" in
+			0) _state=same ;;
+			1) _state=update; _update=1 ;;
+			-1) _state=local_newer ;;
+		esac
+	fi
+	# 版本号相同但文件被替换/损坏时也必须允许重新下载修复，不能只显示
+	# 「版本相同」却把用户锁在当前二进制上。
+	if [ -f "$BINDIR/qscd" ] && [ "$_hash_match" != "1" ]; then
+		_update=1
 	fi
 	rm -rf "$TMPDIR" 2>/dev/null
 	qscd_progress 100 "done"

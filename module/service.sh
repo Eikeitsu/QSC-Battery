@@ -113,6 +113,7 @@ rm -f "$DATADIR/now_c"
 rm -f "$DATADIR/history_last_lv"
 # 旧版本每轮都写这两个文件，可能已积到很大；调试时会重新生成
 rm -f "$DATADIR/startup.log" "$DATADIR/debug.log"
+rm -f "$DATADIR/service_diag"
 rm -f "$DATADIR/off_d"
 rm -f "$DATADIR/power_on"
 # 残留停充节点每个开机周期查一次，由 qsc_switch.sh 首轮执行
@@ -122,13 +123,15 @@ rm -f "$DATADIR/unplug_streak"
 # 守护可用性每次启动重新判定（可能换了二进制或换了机型）
 rm -f "$DATADIR/qscd_unusable" "$DATADIR/qscd_features" \
 	"$DATADIR/qscd_last_wake_reason"
+rm -f "$DATADIR"/qscd_wait_error.* "$DATADIR/qscd_unusable.tmp"
 rm -f "$DATADIR/power_off"
 echo "$(date +%F_%T) service.sh 启动，开始循环" > "$DATADIR/service_start.log"
 QSC_SERVICE_HEARTBEAT_LAST=0
 QSC_SERVICE_LOOP_COUNT=0
 QSC_SERVICE_FULL_ROUNDS=0
+QSC_SERVICE_DIAG_LAST=0
 qsc_service_heartbeat() {
-	local now
+	local now pending
 	now="${QSC_PS_NOW:-$(date +%s 2>/dev/null)}"
 	case "$now" in ""|*[!0-9]*) return 0 ;; esac
 	if [ "$QSC_SERVICE_HEARTBEAT_LAST" -eq 0 ] ||
@@ -145,6 +148,26 @@ qsc_service_heartbeat() {
 				>"$DATADIR/qscd_last_wake_reason" 2>/dev/null
 		fi
 		QSC_SERVICE_HEARTBEAT_LAST="$now"
+	fi
+	# 诊断采样默认关闭；touch data/diagnostic_on 后每 10 秒记录一次详细
+	# 计数，便于真机测量唤醒/写盘，不把额外写盘成本带给普通用户。
+	if [ -f "$DATADIR/diagnostic_on" ] &&
+		{ [ "$QSC_SERVICE_DIAG_LAST" -eq 0 ] ||
+			[ "$((now - QSC_SERVICE_DIAG_LAST))" -ge 10 ] 2>/dev/null; }; then
+		pending=0
+		if [ -f "${QSC_HISTORY_BUFFER:-$DATADIR/charge_history.csv.pending}" ]; then
+			pending="$(wc -l <"${QSC_HISTORY_BUFFER:-$DATADIR/charge_history.csv.pending}" 2>/dev/null | tr -d ' ')"
+		fi
+		case "$pending" in ""|*[!0-9]*) pending=0 ;; esac
+		printf 'timestamp=%s\nloops=%s\nfull_rounds=%s\nnative_wakes=%s\n' \
+			"$now" "$QSC_SERVICE_LOOP_COUNT" "$QSC_SERVICE_FULL_ROUNDS" \
+			"${QSC_PS_WAKE_COUNT:-0}" \
+			>"$DATADIR/service_diag.tmp" 2>/dev/null
+		printf 'description_writes=%s\nhistory_pending=%s\nnative_failure=%s\n' \
+			"${QSC_PS_DESC_WRITES:-0}" "$pending" \
+			"${QSC_PS_NATIVE_ERROR:-}" >>"$DATADIR/service_diag.tmp" 2>/dev/null &&
+			mv -f "$DATADIR/service_diag.tmp" "$DATADIR/service_diag" 2>/dev/null
+		QSC_SERVICE_DIAG_LAST="$now"
 	fi
 }
 if [ -f "$DATADIR/hot_update_at" ]; then

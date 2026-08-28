@@ -6,6 +6,10 @@
 QSC_PS_CONF_LOADED=0
 QSC_PS_WAKE_COUNT=0
 QSC_PS_LAST_WAKE_REASON=""
+QSC_PS_WAIT_FAILURES=0
+QSC_PS_WAIT_NEXT_RETRY=0
+QSC_PS_NATIVE_MODE=""
+QSC_PS_DESC_WRITES=0
 
 # 仅在用户开启 debug_on 时落盘；默认路径不增加日志写入。
 qsc_ps_dbg() {
@@ -266,6 +270,7 @@ qsc_ps_refresh_desc() {
 	[ "$sig" = "$QSC_PS_DESC_SIG" ] && return 0
 	QSC_PS_DESC_SIG="$sig"
 	QSC_PS_DESC_TS="$now"
+	QSC_PS_DESC_WRITES=$((QSC_PS_DESC_WRITES + 1))
 
 	# 该函数也由 service.sh 在满轮前调用，不能假定一定是未插电。
 	battery_level="$lv"
@@ -289,10 +294,15 @@ QSC_PS_WAIT_FLOOR=3
 # 而主循环其实已经退回 sleep，插电就要等满那个大间隔才被发现。
 # 标记在 service.sh 启动时清掉，换二进制后重新判定。
 qsc_ps_native_ready() {
-	[ "$QSC_PS_WAIT_HELPER_OK" = "1" ] || return 1
+	local now
 	[ "${QSC_PS_NATIVE:-1}" = "1" ] || return 1
 	[ -x "$BINDIR/qscd" ] || return 1
-	[ -f "$DATADIR/qscd_unusable" ] && return 1
+	if [ "$QSC_PS_WAIT_HELPER_OK" != "1" ]; then
+		now="${QSC_PS_NOW:-0}"
+		case "$now" in ""|*[!0-9]*) now=0 ;; esac
+		[ "$now" -gt 0 ] || qsc_ps_now
+		[ "${QSC_PS_NOW:-0}" -ge "${QSC_PS_WAIT_NEXT_RETRY:-0}" ] 2>/dev/null || return 1
+	fi
 	return 0
 }
 
@@ -342,36 +352,71 @@ qsc_ps_watch_supported() {
 # uevent 由它自己吞掉，不再每轮叫醒 shell；插拔与跨阈值仍立即返回。
 # 未插电或正在维持停充时不传阈值 —— 那两种场景任何电池事件都该让 shell 复算。
 qsc_ps_native_wait() {
-	local secs="$1" floor="$2" rc
+	local secs="$1" floor="$2" rc error_file
+	error_file="$DATADIR/qscd_wait_error.$$"
 	if qsc_ps_watch_supported; then
+		QSC_PS_NATIVE_MODE=watch
 		if [ ! -f "$DATADIR/power_switch" ] && qsc_ps_plugged; then
 			"$BINDIR/qscd" watch --max "$secs" --floor "$floor" \
 				--stop "${QSC_PS_STOP:-101}" --near "${QSC_PS_NEAR:-3}" \
-				--temp-stop "${QSC_PS_TEMP_STOP:-999}" >/dev/null 2>&1
+				--temp-stop "${QSC_PS_TEMP_STOP:-999}" > /dev/null 2>"$error_file"
 			rc="$?"
 		else
-			"$BINDIR/qscd" watch --max "$secs" --floor "$floor" >/dev/null 2>&1
+			"$BINDIR/qscd" watch --max "$secs" --floor "$floor" \
+				> /dev/null 2>"$error_file"
 			rc="$?"
 		fi
-		[ "$rc" -eq 0 ] && qsc_ps_record_wake "正常返回（事件或截止时间）"
-		return "$rc"
+	else
+		QSC_PS_NATIVE_MODE=wait-event
+		"$BINDIR/qscd" wait-event "$secs" "$floor" \
+			> /dev/null 2>"$error_file"
+		rc="$?"
 	fi
-	"$BINDIR/qscd" wait-event "$secs" "$floor" >/dev/null 2>&1
-	rc="$?"
+	QSC_PS_NATIVE_ERROR="$(awk -F= '/reason=/{print $2; exit}' "$error_file" 2>/dev/null)"
+	[ -n "$QSC_PS_NATIVE_ERROR" ] || QSC_PS_NATIVE_ERROR=wait_failed
+	rm -f "$error_file" 2>/dev/null
 	[ "$rc" -eq 0 ] && qsc_ps_record_wake "正常返回（事件或截止时间）"
 	return "$rc"
 }
 
+qsc_ps_mark_native_failure() {
+	local rc="$1" now="${QSC_PS_NOW:-0}" reason="${QSC_PS_NATIVE_ERROR:-wait_failed}" wall
+	wall="$(date +%F_%T 2>/dev/null)"
+	case "$now" in ""|*[!0-9]*) now=0 ;; esac
+	case "$reason" in ""|*[!a-zA-Z0-9_-]*) reason=wait_failed ;;
+	esac
+	printf 'reason=%s\nmode=%s\nrc=%s\nat=%s\ntime=%s\n' \
+		"$reason" "${QSC_PS_NATIVE_MODE:-unknown}" "$rc" "$now" "$wall" \
+		>"$DATADIR/qscd_unusable.tmp" 2>/dev/null &&
+		mv -f "$DATADIR/qscd_unusable.tmp" "$DATADIR/qscd_unusable" 2>/dev/null
+}
+
 qsc_ps_wait() {
 	local secs="${1:-30}" floor
+	local rc backoff now
 	floor="${QSC_PS_WAIT_FLOOR:-3}"
 	[ "$secs" -lt "$floor" ] 2>/dev/null && floor="$secs"
 	if qsc_ps_native_ready; then
-		if qsc_ps_native_wait "$secs" "$floor"; then
+		qsc_ps_native_wait "$secs" "$floor"
+		rc="$?"
+		if [ "$rc" -eq 0 ]; then
+			QSC_PS_WAIT_HELPER_OK=1
+			QSC_PS_WAIT_FAILURES=0
+			QSC_PS_WAIT_NEXT_RETRY=0
+			rm -f "$DATADIR/qscd_unusable" 2>/dev/null
+			qsc_log_once_clear qscd
 			return 0
 		fi
 		QSC_PS_WAIT_HELPER_OK=0
-		: >"$DATADIR/qscd_unusable" 2>/dev/null
+		QSC_PS_WAIT_FAILURES=$((QSC_PS_WAIT_FAILURES + 1))
+		backoff=30
+		[ "$QSC_PS_WAIT_FAILURES" -gt 1 ] && backoff=60
+		[ "$QSC_PS_WAIT_FAILURES" -gt 2 ] && backoff=300
+		[ "$QSC_PS_WAIT_FAILURES" -gt 3 ] && backoff=900
+		now="${QSC_PS_NOW:-0}"
+		case "$now" in ""|*[!0-9]*) now=0 ;; esac
+		QSC_PS_WAIT_NEXT_RETRY=$((now + backoff))
+		qsc_ps_mark_native_failure "$rc"
 		qsc_log_once qscd warn "事件等待器不可用，已退回定时轮询"
 		qsc_ps_record_wake "守护不可用，已退回定时轮询"
 	fi

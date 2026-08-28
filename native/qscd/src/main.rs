@@ -188,6 +188,7 @@ fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
     }
 
     let Some(sock) = UeventSocket::open() else {
+        eprintln!("qscd: reason=netlink_open");
         return EXIT_UNUSABLE;
     };
 
@@ -202,18 +203,23 @@ fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
             return EXIT_OK;
         }
         if sock.set_recv_timeout(left).is_none() {
+            eprintln!("qscd: reason=set_recv_timeout");
             return EXIT_UNUSABLE;
         }
         match sock.poll_once(&mut buf) {
             Ok(Some(true)) => {
                 if sock.drain_event_burst(&mut buf).is_err() {
+                    eprintln!("qscd: reason=event_drain");
                     return EXIT_UNUSABLE;
                 }
                 return EXIT_OK;
             }
             // 超时或与电池无关的事件：回到循环按新的剩余时间重设超时
             Ok(Some(false)) | Ok(None) => {}
-            Err(_) => return EXIT_UNUSABLE,
+            Err(_) => {
+                eprintln!("qscd: reason=netlink_recv");
+                return EXIT_UNUSABLE;
+            }
         }
     }
 }
@@ -268,12 +274,21 @@ enum SnapshotSource {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+enum SnapshotFailure {
+    None,
+    LevelMissing,
+    TemperatureMissing,
+    StatusMissing,
+}
+
+#[derive(Debug, PartialEq, Eq)]
 struct BatterySnapshot {
     level: Option<i64>,
     temp: Option<i64>,
     status: Option<String>,
     plugged: bool,
     source: SnapshotSource,
+    failure: SnapshotFailure,
 }
 
 impl BatterySnapshot {
@@ -301,12 +316,22 @@ impl BatterySnapshot {
         .find_map(|path| read_int(&path).and_then(normalize_temp));
         let status = read_text(&format!("{base}/battery/status"))
             .or_else(|| read_text(&format!("{base}/bms/status")));
+        let failure = if level.is_none() {
+            SnapshotFailure::LevelMissing
+        } else if temp.is_none() {
+            SnapshotFailure::TemperatureMissing
+        } else if status.is_none() {
+            SnapshotFailure::StatusMissing
+        } else {
+            SnapshotFailure::None
+        };
         Self {
             level,
             temp,
             status,
             plugged: PowerState::read(root).plugged,
             source,
+            failure,
         }
     }
 }
@@ -438,9 +463,10 @@ fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
         return EXIT_OK;
     }
     let Some(sock) = UeventSocket::open() else {
+        eprintln!("qscd: reason=netlink_open");
         return EXIT_UNUSABLE;
     };
-    let plugged_at_start = th.plugged();
+    let plugged_at_start = BatterySnapshot::read(&th.root).plugged;
     let deadline = Instant::now() + Duration::from_secs(remaining);
     let mut buf = [0u8; RECV_BUF];
     loop {
@@ -449,6 +475,7 @@ fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
             return EXIT_OK;
         }
         if sock.set_recv_timeout(left).is_none() {
+            eprintln!("qscd: reason=set_recv_timeout");
             return EXIT_UNUSABLE;
         }
         match sock.poll_once(&mut buf) {
@@ -456,13 +483,17 @@ fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
             Ok(Some(true)) => {
                 if th.should_wake(plugged_at_start) {
                     if sock.drain_event_burst(&mut buf).is_err() {
+                        eprintln!("qscd: reason=event_drain");
                         return EXIT_UNUSABLE;
                     }
                     return EXIT_OK;
                 }
             }
             Ok(Some(false)) | Ok(None) => {}
-            Err(_) => return EXIT_UNUSABLE,
+            Err(_) => {
+                eprintln!("qscd: reason=netlink_recv");
+                return EXIT_UNUSABLE;
+            }
         }
     }
 }
@@ -528,9 +559,18 @@ fn parse_secs(arg: Option<&str>, default: u64, max: u64) -> u64 {
 fn selftest(root: &str) -> u8 {
     let netlink = UeventSocket::open().is_some();
     let base = format!("{root}/sys/class/power_supply");
-    let sysfs = ["battery/capacity", "battery/status", "battery/temp"]
-        .iter()
-        .any(|path| std::path::Path::new(&format!("{base}/{path}")).is_file());
+    let sysfs = [
+        "battery/capacity",
+        "battery/soc",
+        "battery/status",
+        "battery/temp",
+        "battery/batt_temp",
+        "bms/capacity",
+        "bms/status",
+        "bms/temp",
+    ]
+    .iter()
+    .any(|path| std::path::Path::new(&format!("{base}/{path}")).is_file());
     let state = PowerState::read(root);
     let snapshot = BatterySnapshot::read(root);
     let snapshot_source = match &snapshot.source {
@@ -557,6 +597,13 @@ fn selftest(root: &str) -> u8 {
         "snapshot_status={}",
         snapshot.status.as_deref().unwrap_or("missing")
     );
+    let snapshot_failure = match snapshot.failure {
+        SnapshotFailure::None => "none",
+        SnapshotFailure::LevelMissing => "level_missing",
+        SnapshotFailure::TemperatureMissing => "temperature_missing",
+        SnapshotFailure::StatusMissing => "status_missing",
+    };
+    println!("snapshot_failure={snapshot_failure}");
     println!("watch=1");
     println!("pkgs=1");
     if netlink {
@@ -725,6 +772,7 @@ mod tests {
         assert_eq!(snapshot.temp, Some(32));
         assert_eq!(snapshot.status.as_deref(), Some("Charging"));
         assert_eq!(snapshot.source, SnapshotSource::Battery);
+        assert_eq!(snapshot.failure, SnapshotFailure::None);
         assert!(snapshot.plugged);
         std::fs::remove_dir_all(&root).ok();
     }
@@ -740,13 +788,24 @@ mod tests {
         assert_eq!(snapshot.level, Some(77));
         assert_eq!(snapshot.temp, Some(30));
         assert_eq!(snapshot.source, SnapshotSource::Bms);
+        assert_eq!(snapshot.failure, SnapshotFailure::None);
         std::fs::remove_dir_all(&bms).ok();
 
         let soc = fake_sysfs(&[("battery/soc", "66"), ("battery/temp", "30")]);
         let snapshot = BatterySnapshot::read(soc.to_str().unwrap());
         assert_eq!(snapshot.level, Some(66));
         assert_eq!(snapshot.source, SnapshotSource::Soc);
+        assert_eq!(snapshot.failure, SnapshotFailure::None);
         std::fs::remove_dir_all(&soc).ok();
+    }
+
+    #[test]
+    fn snapshot_reports_missing_level_as_failure() {
+        let root = fake_sysfs(&[("battery/temp", "300"), ("battery/status", "Unknown")]);
+        let snapshot = BatterySnapshot::read(root.to_str().unwrap());
+        assert_eq!(snapshot.source, SnapshotSource::Missing);
+        assert_eq!(snapshot.failure, SnapshotFailure::LevelMissing);
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]

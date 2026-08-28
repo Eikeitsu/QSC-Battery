@@ -35,6 +35,11 @@ jobs:
         env:
           REQUIRE_SHELL_TESTS: "1"
 
+      - name: Service recovery tests (busybox ash)
+        run: npm run test:service-recovery
+        env:
+          REQUIRE_SERVICE_TESTS: "1"
+
       - name: Hot update and release contracts
         run: npm run test:hot-update
 

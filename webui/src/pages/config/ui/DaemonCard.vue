@@ -29,7 +29,8 @@ const checkBusy = computed(() => busy.value === "check");
 
 const updateLabel = computed(() => {
   if (checkBusy.value) return "检查中…";
-  if (updateStatus.value?.updateAvailable) return "有更新";
+  if (updateStatus.value?.versionState === "update") return "有更新";
+  if (updateStatus.value?.updateAvailable) return "可修复";
   if (updateStatus.value?.versionState === "same" && updateStatus.value.hashMatch)
     return "已是最新";
   if (updateStatus.value?.versionState === "same" && !updateStatus.value.hashMatch)
@@ -41,7 +42,13 @@ const updateLabel = computed(() => {
 const updateHint = computed(() => {
   const checked = updateStatus.value;
   if (checked?.updateAvailable) {
-    return `本地 ${checked.localVersion || "未知"} · 远程 ${checked.remoteVersion}`;
+    const action =
+      checked.versionState === "update"
+        ? "点击下载更新"
+        : checked.hashMatch
+          ? "点击下载"
+          : "点击重新下载校验";
+    return `${action} · 本地 ${checked.localVersion || "未知"} · 远程 ${checked.remoteVersion}`;
   }
   if (checked?.versionState === "same" && !checked.hashMatch) {
     return `版本 ${checked.remoteVersion}，但本地文件校验不一致`;
@@ -97,8 +104,17 @@ const diagnosticsLabel = computed(() => {
   } else if (status.value.impl === "c") {
     checks.push("基础事件唤醒");
   }
+  if (status.value.snapshotFailure && status.value.snapshotFailure !== "none") {
+    checks.push(`快照：${status.value.snapshotFailure}`);
+  }
   if (status.value.lastWakeReason) {
     checks.push(`最近等待：${status.value.lastWakeReason}`);
+  }
+  if (status.value.waitFailure) {
+    const mode = status.value.waitFailureMode ? ` · ${status.value.waitFailureMode}` : "";
+    const rc = status.value.waitFailureRc ? ` · rc ${status.value.waitFailureRc}` : "";
+    const time = status.value.waitFailureTime ? ` · ${status.value.waitFailureTime}` : "";
+    checks.push(`等待器退避重试：${status.value.waitFailure}${mode}${rc}${time}`);
   }
   return checks.join(" · ");
 });
@@ -166,6 +182,32 @@ async function checkUpdate(silent = false) {
     }
   } finally {
     busy.value = "";
+  }
+}
+
+async function updateDaemon() {
+  if (busy.value || !status.value?.impl) return;
+  if (!updateStatus.value?.updateAvailable) {
+    await checkUpdate();
+    if (!updateStatus.value?.updateAvailable || !status.value?.impl) return;
+  }
+  const impl = status.value.impl;
+  busy.value = impl;
+  startProgress();
+  try {
+    const result = await api.installDaemon(impl);
+    if (!result.ok) {
+      showToast(api.daemonErrorText(result.error));
+      return;
+    }
+    store.settings.native_impl = impl;
+    store.settings.native_daemon = "1";
+    updateStatus.value = null;
+    showToast("已下载校验并启用");
+  } finally {
+    stopProgress();
+    busy.value = "";
+    await reload();
   }
 }
 
@@ -285,7 +327,7 @@ onUnmounted(stopProgress);
         :label="updateHint"
         :value="updateLabel"
         is-link
-        @click="checkUpdate()"
+        @click="updateStatus?.updateAvailable ? updateDaemon() : checkUpdate()"
       />
       <van-cell v-if="installed" title="运行自检" :label="diagnosticsLabel" />
       <van-cell
