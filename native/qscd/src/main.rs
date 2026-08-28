@@ -795,7 +795,11 @@ mod tests {
         assert_eq!(snapshot.failure, SnapshotFailure::None);
         std::fs::remove_dir_all(&bms).ok();
 
-        let soc = fake_sysfs(&[("battery/soc", "66"), ("battery/temp", "30")]);
+        let soc = fake_sysfs(&[
+            ("battery/soc", "66"),
+            ("battery/temp", "30"),
+            ("battery/status", "Charging"),
+        ]);
         let snapshot = BatterySnapshot::read(soc.to_str().unwrap());
         assert_eq!(snapshot.level, Some(66));
         assert_eq!(snapshot.source, SnapshotSource::Soc);
