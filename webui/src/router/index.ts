@@ -1,10 +1,10 @@
 import { createRouter, createWebHashHistory } from "vue-router";
-import { ref } from "vue";
 import { STORAGE_KEYS, removeStorage } from "@/shared";
 import { routes, isTabName } from "./routes";
+import { slideDir } from "./state";
 
 /** 与原先 App.vue slideDir 行为一致，供 AppShell Transition 使用 */
-export const slideDir = ref<"forward" | "back">("forward");
+export { slideDir } from "./state";
 
 export const router = createRouter({
   history: createWebHashHistory(),

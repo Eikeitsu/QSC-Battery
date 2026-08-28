@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterView } from "vue-router";
-import { slideDir } from "@/router";
+import { slideDir } from "@/router/state";
 import { useAppShell } from "./composables/useAppShell";
 import AppTopbar from "./ui/AppTopbar.vue";
 import AppDock from "./ui/AppDock.vue";
@@ -25,10 +25,7 @@ const store = useAppStore();
       <Suspense timeout="0">
         <template #default>
           <RouterView v-slot="{ Component, route: viewRoute }">
-            <Transition
-              :name="slideDir === 'forward' ? 'slide-left' : 'slide-right'"
-              mode="in-out"
-            >
+            <Transition :name="slideDir === 'forward' ? 'slide-left' : 'slide-right'">
               <component
                 :is="Component"
                 :key="viewRoute.name"

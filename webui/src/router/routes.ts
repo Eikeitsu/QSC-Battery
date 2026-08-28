@@ -1,6 +1,7 @@
 import type { RouteRecordRaw } from "vue-router";
 import { TabName, isTabName } from "@/shared/config/enums";
 import { TABS, TAB_ORDER } from "@/shared/config/navigation";
+import AppShell from "@/layouts/AppShell.vue";
 
 const TAB_PAGES = {
   [TabName.Home]: () => import("@/pages/home/HomePage.vue"),
@@ -12,7 +13,7 @@ const TAB_PAGES = {
 export const routes: RouteRecordRaw[] = [
   {
     path: "/",
-    component: () => import("@/layouts/AppShell.vue"),
+    component: AppShell,
     redirect: { name: TabName.Home },
     children: TABS.map((t) => ({
       path: t.name,

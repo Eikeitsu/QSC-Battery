@@ -170,6 +170,7 @@ const batterySnapshotApi = read(join(root, "webui/src/shared/api/batterySnapshot
 const historyApi = read(join(root, "webui/src/shared/api/history.ts"));
 const chart = read(join(root, "webui/src/pages/home/ui/HomeChargeChart.vue"));
 const appShell = read(join(root, "webui/src/layouts/AppShell.vue"));
+const routes = read(join(root, "webui/src/router/routes.ts"));
 const batteryStore = read(join(root, "webui/src/stores/battery.ts"));
 const installGuide = read(join(root, "docs/guide/install.md"));
 const webuiGuide = read(join(root, "docs/guide/webui.md"));
@@ -216,7 +217,10 @@ requireText(chart, "loadSystemBatteryHistory", "WebUI unplugged history source")
 requireText(chart, "chartNow", "WebUI moving time axis");
 requireText(appShell, "PageLoading", "WebUI page loading state");
 requireText(appShell, "<Suspense", "WebUI async page fallback");
-requireText(appShell, 'mode="in-out"', "WebUI keeps previous page during navigation");
+requireText(routes, "component: AppShell", "WebUI synchronous root layout");
+if (/mode="(?:out-in|in-out)"/.test(appShell)) {
+  throw new Error("WebUI route transition must not wait for async page chunks");
+}
 requireText(
   batteryStore,
   "const initializing = ref(false)",
