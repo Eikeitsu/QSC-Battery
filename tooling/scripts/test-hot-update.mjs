@@ -210,8 +210,13 @@ requireText(historyApi, ".pending", "WebUI pending history read");
 requireText(chart, "setInterval", "WebUI chart refresh timer");
 requireText(chart, "当前 ${currentLevel}%", "WebUI live chart summary");
 requireText(chart, "正在读取曲线数据", "WebUI chart loading state");
+requireText(chart, "useSampledHistory", "WebUI charge source selection");
+requireText(chart, "dataSource === 'sampled'", "WebUI sampled chart mode");
+requireText(chart, "loadSystemBatteryHistory", "WebUI unplugged history source");
+requireText(chart, "chartNow", "WebUI moving time axis");
 requireText(appShell, "PageLoading", "WebUI page loading state");
 requireText(appShell, "<Suspense", "WebUI async page fallback");
+requireText(appShell, 'mode="in-out"', "WebUI keeps previous page during navigation");
 requireText(
   batteryStore,
   "const initializing = ref(false)",

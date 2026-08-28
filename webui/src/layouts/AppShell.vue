@@ -27,7 +27,7 @@ const store = useAppStore();
           <RouterView v-slot="{ Component, route: viewRoute }">
             <Transition
               :name="slideDir === 'forward' ? 'slide-left' : 'slide-right'"
-              mode="out-in"
+              mode="in-out"
             >
               <component
                 :is="Component"

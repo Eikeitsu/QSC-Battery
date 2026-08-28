@@ -21,27 +21,35 @@ const PAD_R = 30;
 const PAD_T = 8;
 const PAD_B = 16;
 
-const sysCount = ref(0);
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
+let reloadId = 0;
+const dataSource = ref<"sampled" | "system">("system");
+const chartNow = ref(Math.floor(Date.now() / 1000));
+
+const useSampledHistory = computed(
+  () => !samplingOff.value && ["充电中", "已充满"].includes(app.status.chargeLabel),
+);
 
 async function reload() {
+  const requestId = ++reloadId;
   loading.value = true;
   try {
-    // 充电段来自模块采样（有电流线），放电段读系统 batterystats 历史（零额外采样）。
-    // 采样关闭时旧文件已过期，只用系统记录。
-    const [sampled, system] = await Promise.all([
-      samplingOff.value
-        ? Promise.resolve<api.HistoryPoint[]>([])
-        : api.loadChargeHistory(288),
-      api.loadSystemBatteryHistory(),
-    ]);
-    const merged = api.mergeHistory(sampled, system);
-    const visible = merged.slice(-480);
-    const sampledTimes = new Set(sampled.map((point) => point.ts));
-    sysCount.value = visible.filter((point) => !sampledTimes.has(point.ts)).length;
-    points.value = visible;
+    // 未充电只读系统 batterystats，充电时只读模块采样，避免把旧充电电流
+    // 线带到拔电后的曲线中。
+    const sampled = useSampledHistory.value;
+    let next = sampled
+      ? await api.loadChargeHistory(480)
+      : await api.loadSystemBatteryHistory();
+    // 充电刚开始时可能还没有第一条采样，临时用系统历史避免整块空白；
+    // 一旦采样产生，下一次刷新自动切回采样数据。
+    if (!next.length && sampled) {
+      next = await api.loadSystemBatteryHistory();
+    }
+    if (requestId !== reloadId) return;
+    dataSource.value = sampled && next.length ? "sampled" : "system";
+    points.value = next.slice(-480);
   } finally {
-    loading.value = false;
+    if (requestId === reloadId) loading.value = false;
   }
 }
 
@@ -49,8 +57,8 @@ const timeSpan = computed(() => {
   const list = points.value;
   if (list.length < 2) return null;
   const minT = list[0].ts;
-  const maxT = list[list.length - 1].ts;
-  return { minT, span: Math.max(1, maxT - minT) };
+  const maxT = Math.max(list[list.length - 1].ts, chartNow.value);
+  return { minT, maxT, span: Math.max(1, maxT - minT) };
 });
 
 function xAt(ts: number) {
@@ -149,23 +157,27 @@ const summary = computed(() => {
     : last.temp != null
       ? ` · ${last.temp}°C`
       : "";
-  const sys = sysCount.value > 0 ? ` · 含系统记录 ${sysCount.value} 点` : "";
-  return `${list.length} 点 · ${duration} · 当前 ${currentLevel}%${currentTemp}${sys}`;
+  const source = dataSource.value === "sampled" ? "模块采样" : "系统历史";
+  return `${list.length} 点 · ${duration} · 当前 ${currentLevel}%${currentTemp} · ${source}`;
 });
 
 onMounted(() => {
   void reload();
   refreshTimer = setInterval(() => {
+    chartNow.value = Math.floor(Date.now() / 1000);
     void reload();
   }, 30_000);
 });
 
 watch(
-  () => [app.status.updatedAt, app.settings.history_enable] as const,
-  ([updatedAt, historyEnable], previous) => {
+  () =>
+    [app.status.updatedAt, app.status.chargeLabel, app.settings.history_enable] as const,
+  ([updatedAt, chargeLabel, historyEnable], previous) => {
     if (
       updatedAt !== "--" &&
-      (updatedAt !== previous?.[0] || historyEnable !== previous?.[1])
+      (updatedAt !== previous?.[0] ||
+        chargeLabel !== previous?.[1] ||
+        historyEnable !== previous?.[2])
     ) {
       void reload();
     }
@@ -247,8 +259,11 @@ defineExpose({ reload });
         <template v-if="samplingOff">
           已关闭「充放电历史」采样：曲线全部来自系统电池记录，没有充电电流线。
         </template>
+        <template v-else-if="dataSource === 'sampled'">
+          当前充电中：使用模块采样数据，包含充电电流。
+        </template>
         <template v-else>
-          电流线仅充电段有：放电段直接读系统电池记录，不额外采样。
+          当前未充电：使用系统电池历史数据，不显示旧充电电流线。
         </template>
       </p>
     </div>
