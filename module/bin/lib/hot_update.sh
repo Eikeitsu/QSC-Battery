@@ -134,7 +134,7 @@ hot_update_request() {
 	hot_update_spawn_worker "$_modid" "$_script" || return 1
 
 	ui_print "- 已安排免重启热更新（无需重启）"
-	ui_print "- 约 10 秒后刷新模块列表；若仍提示需重启，重启一次即可"
+	ui_print "- 服务会立即重启；模块列表残留标记会在后台清理"
 	return 0
 }
 
@@ -152,6 +152,15 @@ SCRIPT="$2"
 OLD="/data/adb/modules/$MODID"
 NEW="/data/adb/modules_update/$MODID"
 LOG="$OLD/data/hot_update.log"
+LOCK="/data/adb/.${MODID}.hot_update.lock"
+
+if ! mkdir "$LOCK" 2>/dev/null; then
+	exit 0
+fi
+hu_cleanup_lock() {
+	rm -rf "$LOCK" 2>/dev/null
+}
+trap hu_cleanup_lock 0 1 2 15
 
 hu_log() {
 	mkdir -p "$OLD/data" 2>/dev/null
@@ -209,6 +218,15 @@ if ! cp -a "$NEW"/. "$OLD"/ 2>/dev/null; then
 fi
 hu_log "ok: 已就地覆盖到 $OLD"
 
+# 生效与清理分离：复制成功后立刻清除当前更新标记并执行 hotinstall，
+# 不再让第三方安装器的延迟收尾阻塞服务重启。
+rm -rf "$NEW" 2>/dev/null
+rm -f "$OLD/update" "$OLD/remove" 2>/dev/null
+if [ -f "$OLD/$SCRIPT" ]; then
+	sh "$OLD/$SCRIPT" >/dev/null 2>&1 &
+	hu_log "ok: 已启动 $SCRIPT（立即生效，pid $!）"
+fi
+
 # 管理器可能在我们之后才 touch update / 回写暂存，持续清理一段时间。
 # 窗口给足 120 秒：第三方安装器（InstallX 等）收尾比管理器慢得多，
 # 原先 20 秒经常是我们先退场、它后 touch update，用户就又看到「需重启」。
@@ -225,11 +243,6 @@ done
 [ "$_seen_update" -gt 0 ] && hu_log "info: 期间清理 update 标记 ${_seen_update} 次"
 [ -e "$NEW" ] && hu_log "warn: $NEW 仍残留"
 [ -f "$OLD/update" ] && hu_log "warn: $OLD/update 仍残留"
-
-if [ -f "$OLD/$SCRIPT" ]; then
-	sh "$OLD/$SCRIPT" >/dev/null 2>&1 || true
-	hu_log "ok: 已执行 $SCRIPT"
-fi
 rm -f /data/adb/.qsc_hot_update.sh 2>/dev/null
 HOT_UPDATE_WORKER
 	chmod 0700 "$_worker_path" 2>/dev/null
