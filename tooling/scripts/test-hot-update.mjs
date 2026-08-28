@@ -49,8 +49,16 @@ for (const mod of modules) {
   const service = read(mod.service);
   const uninstall = read(mod.uninstall);
 
-  requireText(hotinstall, 'setsid sh "$MODDIR/service.sh"', `${mod.name} detached service`);
-  requireText(hotinstall, 'nohup sh "$MODDIR/service.sh"', `${mod.name} fallback service`);
+  requireText(
+    hotinstall,
+    'setsid sh "$MODDIR/service.sh"',
+    `${mod.name} detached service`,
+  );
+  requireText(
+    hotinstall,
+    'nohup sh "$MODDIR/service.sh"',
+    `${mod.name} fallback service`,
+  );
   requireText(hot, mod.payload, `${mod.name} external payload`);
   requireText(hot, `LOCK="/data/adb/.`, `${mod.name} lock`);
   requireText(hot, `echo "$$" >"$LOCK/pid"`, `${mod.name} lock owner`);
