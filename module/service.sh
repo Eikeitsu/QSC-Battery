@@ -100,7 +100,8 @@ QSC_HOT_FIN_TRIES=0
 
 qsc_hot_finalize_maybe() {
 	local now
-	[ -f "$MODDIR/update" ] || return 0
+	[ -f "$MODDIR/update" ] || \
+		[ -d "/data/adb/.qsc_hot_update_payload/QSC_Battery" ] || return 0
 	type qsc_hot_finalize >/dev/null 2>&1 || return 0
 	# 失败时别每轮重试：最多 5 次，每次至少隔 60 秒
 	[ "$QSC_HOT_FIN_TRIES" -ge 5 ] 2>/dev/null && return 0
