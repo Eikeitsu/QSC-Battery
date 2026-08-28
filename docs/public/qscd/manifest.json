@@ -1,7 +1,7 @@
 {
-  "version": "2026.08.27",
-  "qscd-c-arm": "27a28b94254ed64ccb988cfcf467b579f27c93a5da9cfc5fd0c4c8131575e5a2",
-  "qscd-c-arm64": "407abc839d454b0147df85784a6361dcf3a62ad6af43e839532da209cd72e903",
-  "qscd-rust-arm": "5bf6741728ab3f5df0ac9aaa74884f3c493068299668f44c7d23fe06ce8002d3",
-  "qscd-rust-arm64": "50cd6f254f8ff33d1d852e8a6db7d75a6e6468479075537aaa42f371e8f2d6b5"
+  "version": "2026.08.28",
+  "qscd-c-arm": "67a7090aaf8d8ed95e84884d92630d1b5a7df06a9c10ac20657bd49f37851e3b",
+  "qscd-c-arm64": "e6b9e791dbb1db2707d9d2bdf914ff1ef39c94f8668e15f9375b10f99e5d420d",
+  "qscd-rust-arm": "da7e4e2417c5c5897753c7f7b954e407ad220da23053fe8e4b267b1baa4a190f",
+  "qscd-rust-arm64": "5a9f3e0b3e822cec02d3d60d804af756f7b456301b9db0eccc24ff99ff3e9d94"
 }
