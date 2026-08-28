@@ -17,6 +17,7 @@ const modules = [
   {
     name: "QSC-Battery",
     hot: join(root, "module/bin/lib/hot_update.sh"),
+    hotinstall: join(root, "module/hotinstall.sh"),
     service: join(root, "module/service.sh"),
     uninstall: join(root, "module/uninstall.sh"),
     payload: "/data/adb/.qsc_hot_update_payload",
@@ -44,9 +45,12 @@ function requireOrder(text, first, second, label) {
 
 for (const mod of modules) {
   const hot = read(mod.hot);
+  const hotinstall = read(mod.hotinstall);
   const service = read(mod.service);
   const uninstall = read(mod.uninstall);
 
+  requireText(hotinstall, 'setsid sh "$MODDIR/service.sh"', `${mod.name} detached service`);
+  requireText(hotinstall, 'nohup sh "$MODDIR/service.sh"', `${mod.name} fallback service`);
   requireText(hot, mod.payload, `${mod.name} external payload`);
   requireText(hot, `LOCK="/data/adb/.`, `${mod.name} lock`);
   requireText(hot, `echo "$$" >"$LOCK/pid"`, `${mod.name} lock owner`);

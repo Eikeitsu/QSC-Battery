@@ -29,7 +29,12 @@ done
 sleep 1
 
 if [ -f "$MODDIR/service.sh" ]; then
-	nohup sh "$MODDIR/service.sh" >/dev/null 2>&1 &
+	# 安装器结束时可能连带清理当前会话；让常驻服务先脱离该会话。
+	if command -v setsid >/dev/null 2>&1; then
+		setsid sh "$MODDIR/service.sh" </dev/null >/dev/null 2>&1 &
+	else
+		nohup sh "$MODDIR/service.sh" </dev/null >/dev/null 2>&1 &
+	fi
 fi
 
 echo "qsc: hotinstall done" >>/dev/kmsg 2>/dev/null || true

@@ -189,7 +189,7 @@ qsc_ps_can_skip_round() {
 	return 0
 }
 
-# 省电快路径下的简介刷新。
+# 省电路径下的简介刷新。
 # 跳过整轮时 qsc_switch.sh 不会跑，而简介只在满轮里刷新，未插电时最长要等
 # QSC_PS_FULL_MAX_GAP 才动一次，管理器里看着像电量/温度卡住了。
 # 这里只用内建 read 取两个 sysfs 值，且仅在显示值变化时才真正改写 module.prop。
@@ -197,12 +197,12 @@ qsc_ps_can_skip_round() {
 # 所以再压一道最小间隔：省电的关键是别唤醒 CPU、别乱写盘，这一路两样都要守住。
 QSC_PS_DESC_SIG=""
 QSC_PS_DESC_TS=0
-QSC_PS_DESC_MIN_GAP=120
+QSC_PS_DESC_MIN_GAP=30
 
 # 参数: 当前单调秒（service.sh 已经读过 /proc/uptime，不再重复读）
 qsc_ps_refresh_desc() {
 	local now="${1:-0}"
-	local lv temp digits off sig p
+	local lv temp digits off plugged stopped sig p
 	type qsc_refresh_module_description >/dev/null 2>&1 || return 0
 	if [ "$now" -gt 0 ] 2>/dev/null \
 		&& [ "$((now - QSC_PS_DESC_TS))" -lt "$QSC_PS_DESC_MIN_GAP" ] 2>/dev/null; then
@@ -255,16 +255,21 @@ qsc_ps_refresh_desc() {
 	if [ -f "$OFF_FLAG" ] || [ -f "$MODDIR/disable" ]; then
 		off=1
 	fi
+	plugged=0
+	qsc_ps_plugged && plugged=1
+	stopped=0
+	[ -f "$DATADIR/power_switch" ] && stopped=1
 
-	sig="${off}:${lv}:${temp}"
+	sig="${off}:${plugged}:${stopped}:${lv}:${temp}"
 	[ "$sig" = "$QSC_PS_DESC_SIG" ] && return 0
 	QSC_PS_DESC_SIG="$sig"
 	QSC_PS_DESC_TS="$now"
 
-	# 快路径只在未插电且未维持停充时进入，简介必然走「未充电」分支
+	# 该函数也由 service.sh 在满轮前调用，不能假定一定是未插电。
 	battery_level="$lv"
 	temperature="$temp"
 	battery_powered=""
+	[ "$plugged" = "1" ] && battery_powered="powered: true"
 	qsc_refresh_module_description
 }
 

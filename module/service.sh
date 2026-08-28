@@ -135,11 +135,11 @@ while true ; do
 		qsc_ps_load_conf
 		qsc_ps_now
 		_now="$QSC_PS_NOW"
+		# 即使本轮准备跳过 qsc_switch，也要用当前供电状态刷新模块简介。
+		if type qsc_ps_refresh_desc >/dev/null 2>&1; then
+			qsc_ps_refresh_desc "$_now"
+		fi
 		if qsc_ps_can_skip_round "$_now"; then
-			# 整轮跳过也要刷简介，否则管理器里的电量/温度会停在上一次满轮
-			if type qsc_ps_refresh_desc >/dev/null 2>&1; then
-				qsc_ps_refresh_desc "$_now"
-			fi
 			if type qsc_ps_idle_secs >/dev/null 2>&1; then
 				qsc_ps_idle_secs
 			else
