@@ -15,9 +15,9 @@ done
 sleep 5
 mkdir -p "$DATADIR" "$CONFDIR" "$ASSETDIR"
 
-chmod 0755 "$BINDIR"/*.sh 2>/dev/null
-chmod 0644 "$CONF" 2>/dev/null
-[ -d "$MODDIR/webroot" ] && find "$MODDIR/webroot" -type f -exec chmod 0644 {} \;
+# 脚本权限由打包/安装阶段保证；不要在常驻服务启动时批量 chmod 整个 bin，
+# 某些 Android 文件系统会让这类 glob 操作长时间阻塞，导致服务永远起不来。
+# 配置和 WebUI 静态文件同样由打包/安装阶段设置权限。
 
 sleep 1
 
