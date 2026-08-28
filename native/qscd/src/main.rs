@@ -259,30 +259,59 @@ fn normalize_temp(raw: i64) -> Option<i64> {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum SnapshotSource {
+    Battery,
+    Bms,
+    Soc,
+    Missing,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct BatterySnapshot {
+    level: Option<i64>,
+    temp: Option<i64>,
+    status: Option<String>,
+    plugged: bool,
+    source: SnapshotSource,
+}
+
+impl BatterySnapshot {
+    fn read(root: &str) -> Self {
+        let base = format!("{root}/sys/class/power_supply");
+        let mut level = None;
+        let mut source = SnapshotSource::Missing;
+        for (path, candidate) in [
+            (format!("{base}/battery/capacity"), SnapshotSource::Battery),
+            (format!("{base}/bms/capacity"), SnapshotSource::Bms),
+            (format!("{base}/battery/soc"), SnapshotSource::Soc),
+        ] {
+            if let Some(value) = read_int(&path) {
+                level = Some(value);
+                source = candidate;
+                break;
+            }
+        }
+        let temp = [
+            format!("{base}/battery/temp"),
+            format!("{base}/bms/temp"),
+            format!("{base}/battery/batt_temp"),
+        ]
+        .into_iter()
+        .find_map(|path| read_int(&path).and_then(normalize_temp));
+        let status = read_text(&format!("{base}/battery/status"))
+            .or_else(|| read_text(&format!("{base}/bms/status")));
+        Self {
+            level,
+            temp,
+            status,
+            plugged: PowerState::read(root).plugged,
+            source,
+        }
+    }
+}
+
 impl Thresholds {
-    fn ps_dir(&self) -> String {
-        format!("{}/sys/class/power_supply", self.root)
-    }
-
-    fn plugged(&self) -> bool {
-        PowerState::read(&self.root).plugged
-    }
-
-    fn level(&self) -> Option<i64> {
-        let base = self.ps_dir();
-        read_int(&format!("{base}/battery/capacity"))
-            .or_else(|| read_int(&format!("{base}/bms/capacity")))
-            .or_else(|| read_int(&format!("{base}/battery/soc")))
-    }
-
-    fn temp(&self) -> Option<i64> {
-        let base = self.ps_dir();
-        let raw = read_int(&format!("{base}/battery/temp"))
-            .or_else(|| read_int(&format!("{base}/bms/temp")))
-            .or_else(|| read_int(&format!("{base}/battery/batt_temp")))?;
-        normalize_temp(raw)
-    }
-
     /// 没有任何阈值时退化成 wait-event：任何 power_supply 事件都叫醒 shell
     fn is_empty(&self) -> bool {
         self.stop.is_none() && self.temp_stop.is_none()
@@ -293,16 +322,17 @@ impl Thresholds {
         if self.is_empty() {
             return true;
         }
+        let snapshot = BatterySnapshot::read(&self.root);
         // 插拔必须立刻交给 shell：停充/恢复的整套判定都在那边
-        if self.plugged() != plugged_at_start {
+        if snapshot.plugged != plugged_at_start {
             return true;
         }
-        if let (Some(stop), Some(level)) = (self.stop, self.level()) {
+        if let (Some(stop), Some(level)) = (self.stop, snapshot.level) {
             if level >= stop - self.near {
                 return true;
             }
         }
-        if let (Some(ts), Some(temp)) = (self.temp_stop, self.temp()) {
+        if let (Some(ts), Some(temp)) = (self.temp_stop, snapshot.temp) {
             // 温度涨得比电量快，留 3°C 余量，与 shell 侧收紧间隔的阈值一致
             if temp >= ts - 3 {
                 return true;
@@ -502,11 +532,31 @@ fn selftest(root: &str) -> u8 {
         .iter()
         .any(|path| std::path::Path::new(&format!("{base}/{path}")).is_file());
     let state = PowerState::read(root);
+    let snapshot = BatterySnapshot::read(root);
+    let snapshot_source = match &snapshot.source {
+        SnapshotSource::Battery => "battery",
+        SnapshotSource::Bms => "bms",
+        SnapshotSource::Soc => "soc",
+        SnapshotSource::Missing => "missing",
+    };
 
     println!("netlink={}", if netlink { 1 } else { 0 });
     println!("event_filter=1");
     println!("sysfs={}", if sysfs { 1 } else { 0 });
     println!("plugged={}", if state.plugged { 1 } else { 0 });
+    println!("snapshot_source={snapshot_source}");
+    println!(
+        "snapshot_level={}",
+        snapshot.level.map_or_else(|| "missing".to_string(), |v| v.to_string())
+    );
+    println!(
+        "snapshot_temp={}",
+        snapshot.temp.map_or_else(|| "missing".to_string(), |v| v.to_string())
+    );
+    println!(
+        "snapshot_status={}",
+        snapshot.status.as_deref().unwrap_or("missing")
+    );
     println!("watch=1");
     println!("pkgs=1");
     if netlink {
@@ -658,6 +708,45 @@ mod tests {
         assert_eq!(normalize_temp(30000), Some(30));
         assert_eq!(normalize_temp(30), Some(30));
         assert_eq!(normalize_temp(9999999), None);
+    }
+
+    #[test]
+    fn snapshot_prefers_battery_nodes_and_normalizes_temperature() {
+        let root = fake_sysfs(&[
+            ("battery/capacity", "82"),
+            ("battery/status", "Charging"),
+            ("battery/temp", "320"),
+            ("bms/capacity", "1"),
+            ("bms/temp", "1"),
+            ("usb/online", "1"),
+        ]);
+        let snapshot = BatterySnapshot::read(root.to_str().unwrap());
+        assert_eq!(snapshot.level, Some(82));
+        assert_eq!(snapshot.temp, Some(32));
+        assert_eq!(snapshot.status.as_deref(), Some("Charging"));
+        assert_eq!(snapshot.source, SnapshotSource::Battery);
+        assert!(snapshot.plugged);
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn snapshot_falls_back_to_bms_and_soc() {
+        let bms = fake_sysfs(&[
+            ("bms/capacity", "77"),
+            ("bms/status", "Not charging"),
+            ("bms/temp", "3000"),
+        ]);
+        let snapshot = BatterySnapshot::read(bms.to_str().unwrap());
+        assert_eq!(snapshot.level, Some(77));
+        assert_eq!(snapshot.temp, Some(30));
+        assert_eq!(snapshot.source, SnapshotSource::Bms);
+        std::fs::remove_dir_all(&bms).ok();
+
+        let soc = fake_sysfs(&[("battery/soc", "66"), ("battery/temp", "30")]);
+        let snapshot = BatterySnapshot::read(soc.to_str().unwrap());
+        assert_eq!(snapshot.level, Some(66));
+        assert_eq!(snapshot.source, SnapshotSource::Soc);
+        std::fs::remove_dir_all(&soc).ok();
     }
 
     #[test]

@@ -44,16 +44,59 @@ if [ -f "$MODDIR/t_module" -a "$(cat "$MODDIR/module.prop" | egrep '^# ##' | sed
 	chmod 0644 "$MODDIR/module.prop"
 fi
 
-# 不让全量 /sys 扫描阻塞常驻服务：没有可用列表时先建立空列表，
-# qsc_switch 会立即使用内置兜底节点；完整扫描在后台成功后再替换正式列表。
-if [ ! -s "$LIST_SWITCH" ]; then
+QSC_SCAN_LOCK="$DATADIR/.list_switch_scan.lock"
+QSC_SCAN_STATE="$DATADIR/list_switch.state"
+
+# 全量 /sys 扫描必须是一次性后台任务：主服务先用内置兜底节点进入循环，
+# 扫描结束后再通过状态文件报告 ready/failed。锁目录带 pid，既防止每轮重复
+# 拉起扫描，也能回收上一次被杀掉的陈旧锁。
+qsc_start_switch_scan() {
+	[ -s "$LIST_SWITCH" ] && {
+		printf '%s\n' "ready" >"$QSC_SCAN_STATE" 2>/dev/null
+		return 0
+	}
 	: >"$LIST_SWITCH"
-	if command -v setsid >/dev/null 2>&1; then
-		setsid sh "$BINDIR/list_switch.sh" >/dev/null 2>&1 &
-	else
-		nohup sh "$BINDIR/list_switch.sh" </dev/null >/dev/null 2>&1 &
+	if [ -d "$QSC_SCAN_LOCK" ]; then
+		_scan_pid="$(cat "$QSC_SCAN_LOCK/pid" 2>/dev/null | tr -d ' \r\n')"
+		case "$_scan_pid" in
+			""|*[!0-9]*) rm -rf "$QSC_SCAN_LOCK" 2>/dev/null ;;
+			*) kill -0 "$_scan_pid" 2>/dev/null || rm -rf "$QSC_SCAN_LOCK" 2>/dev/null ;;
+		esac
 	fi
-fi
+	mkdir "$QSC_SCAN_LOCK" 2>/dev/null || return 0
+	printf '%s\n' "$$" >"$QSC_SCAN_LOCK/owner" 2>/dev/null
+	_scan_job='
+		scan="$1"
+		state="$2"
+		lock="$3"
+		list="$4"
+		printf "%s\n" "running" >"${state}.tmp.$$" 2>/dev/null &&
+			mv -f "${state}.tmp.$$" "$state" 2>/dev/null
+		sh "$scan" >/dev/null 2>&1
+		rc=$?
+		if [ "$rc" -eq 0 ] && [ -s "$list" ]; then
+			printf "%s\n" "ready" >"${state}.tmp.$$" 2>/dev/null &&
+				mv -f "${state}.tmp.$$" "$state" 2>/dev/null
+		else
+			printf "%s\n" "failed:$rc" >"${state}.tmp.$$" 2>/dev/null &&
+				mv -f "${state}.tmp.$$" "$state" 2>/dev/null
+		fi
+		rm -rf "$lock" 2>/dev/null
+	'
+	if command -v setsid >/dev/null 2>&1; then
+		setsid sh -c "$_scan_job" sh "$BINDIR/list_switch.sh" \
+			"$QSC_SCAN_STATE" "$QSC_SCAN_LOCK" "$LIST_SWITCH" \
+			</dev/null >/dev/null 2>&1 &
+	else
+		nohup sh -c "$_scan_job" sh "$BINDIR/list_switch.sh" \
+			"$QSC_SCAN_STATE" "$QSC_SCAN_LOCK" "$LIST_SWITCH" \
+			</dev/null >/dev/null 2>&1 &
+	fi
+	_scan_pid=$!
+	printf '%s\n' "$_scan_pid" >"$QSC_SCAN_LOCK/pid" 2>/dev/null
+}
+
+qsc_start_switch_scan
 # 插电后电流节点探测（未在充则跳过，主循环会重试）
 if [ -f "$BINDIR/list_curr.sh" ]; then
 	chmod 0755 "$BINDIR/list_curr.sh" 2>/dev/null
@@ -81,6 +124,29 @@ rm -f "$DATADIR/qscd_unusable" "$DATADIR/qscd_features" \
 	"$DATADIR/qscd_last_wake_reason"
 rm -f "$DATADIR/power_off"
 echo "$(date +%F_%T) service.sh 启动，开始循环" > "$DATADIR/service_start.log"
+QSC_SERVICE_HEARTBEAT_LAST=0
+QSC_SERVICE_LOOP_COUNT=0
+QSC_SERVICE_FULL_ROUNDS=0
+qsc_service_heartbeat() {
+	local now
+	now="${QSC_PS_NOW:-$(date +%s 2>/dev/null)}"
+	case "$now" in ""|*[!0-9]*) return 0 ;; esac
+	if [ "$QSC_SERVICE_HEARTBEAT_LAST" -eq 0 ] ||
+		[ "$((now - QSC_SERVICE_HEARTBEAT_LAST))" -ge 60 ] 2>/dev/null; then
+		printf '%s\n' "$now" >"$DATADIR/service_heartbeat" 2>/dev/null
+		printf '%s\n' "$QSC_SERVICE_LOOP_COUNT" >"$DATADIR/service_loop_count" 2>/dev/null
+		printf 'timestamp=%s\nloops=%s\nfull_rounds=%s\nnative_wakes=%s\nwake_reason=%s\n' \
+			"$now" "$QSC_SERVICE_LOOP_COUNT" "$QSC_SERVICE_FULL_ROUNDS" \
+			"${QSC_PS_WAKE_COUNT:-0}" "${QSC_PS_LAST_WAKE_REASON:-}" \
+			>"$DATADIR/service_metrics.tmp" 2>/dev/null &&
+			mv -f "$DATADIR/service_metrics.tmp" "$DATADIR/service_metrics" 2>/dev/null
+		if qsc_debug_enabled; then
+			printf '%s\n' "${QSC_PS_LAST_WAKE_REASON:-}" \
+				>"$DATADIR/qscd_last_wake_reason" 2>/dev/null
+		fi
+		QSC_SERVICE_HEARTBEAT_LAST="$now"
+	fi
+}
 if [ -f "$DATADIR/hot_update_at" ]; then
 	qsc_write_module_description "♻️已热更新" "服务已重启" \
 		"本次更新无需重启；实时状态将在下一轮刷新"
@@ -136,6 +202,7 @@ if ! type qsc_ps_wait >/dev/null 2>&1; then
 fi
 
 while true ; do
+	QSC_SERVICE_LOOP_COUNT=$((QSC_SERVICE_LOOP_COUNT + 1))
 	qsc_hot_finalize_maybe
 	# 省电快路径：未插电且未维持停充时，本轮只读几个 online 节点就睡，
 	# 不 fork qsc_switch.sh（那会重新解析约 90KB 脚本并触发多次写盘）。
@@ -143,6 +210,7 @@ while true ; do
 		qsc_ps_load_conf
 		qsc_ps_now
 		_now="$QSC_PS_NOW"
+		qsc_service_heartbeat
 		# 即使本轮准备跳过 qsc_switch，也要用当前供电状态刷新模块简介。
 		if type qsc_ps_refresh_desc >/dev/null 2>&1; then
 			qsc_ps_refresh_desc "$_now"
@@ -161,6 +229,7 @@ while true ; do
 		QSC_PS_DESC_SIG=""
 	fi
 
+	QSC_SERVICE_FULL_ROUNDS=$((QSC_SERVICE_FULL_ROUNDS + 1))
 	"$BINDIR/qsc_switch.sh" > /dev/null 2>&1
 	_sleep="$(cat "$DATADIR/loop_sleep" 2>/dev/null | tr -d ' \r\n')"
 	case "$_sleep" in

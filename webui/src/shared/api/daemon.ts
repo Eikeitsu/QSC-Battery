@@ -21,8 +21,10 @@ export interface DaemonStatus {
   lastWakeReason: string;
   /** 当前用的是哪套实现 */
   impl: DaemonImpl | "";
+  /** 本地二进制激活时记录的版本 */
+  localVersion: string;
   /** 来源：模块自带 or WebUI 下载 */
-  src: "bundled" | "download" | "";
+  src: "bundled" | "download" | "inherited" | "";
   /** 本包自带哪些实现（sh 版为空） */
   bundled: DaemonImpl[];
   /** 本机 ABI 对应的后缀；unsupported 表示没有可用二进制 */
@@ -38,6 +40,7 @@ const EMPTY: DaemonStatus = {
   features: [],
   lastWakeReason: "",
   impl: "",
+  localVersion: "",
   src: "",
   bundled: [],
   arch: "",
@@ -55,7 +58,10 @@ function parseKv(text: string): Record<string, string> {
 }
 
 function toImpl(value: string | undefined): DaemonImpl | "" {
-  return value === "rust" || value === "c" ? value : "";
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  return normalized === "rust" || normalized === "c" ? normalized : "";
 }
 
 function toStatus(kv: Record<string, string>): DaemonStatus {
@@ -68,7 +74,11 @@ function toStatus(kv: Record<string, string>): DaemonStatus {
     features: (kv.features || "").split(/\s+/).filter(Boolean),
     lastWakeReason: kv.last_wake || "",
     impl: toImpl(kv.impl),
-    src: kv.src === "bundled" || kv.src === "download" ? kv.src : "",
+    localVersion: kv.local_version || "",
+    src:
+      kv.src === "bundled" || kv.src === "download" || kv.src === "inherited"
+        ? kv.src
+        : "",
     bundled: (kv.bundled || "")
       .split(",")
       .map((s) => toImpl(s.trim()))
@@ -90,6 +100,59 @@ export interface DaemonActionResult {
   error: string;
   impl: DaemonImpl | "";
   version: string;
+}
+
+export interface DaemonDownloadProgress {
+  percent: number;
+  stage: string;
+}
+
+export interface DaemonUpdateStatus {
+  impl: DaemonImpl;
+  localVersion: string;
+  remoteVersion: string;
+  versionState: "same" | "update" | "local_newer" | "unknown";
+  updateAvailable: boolean;
+  hashMatch: boolean;
+}
+
+const EMPTY_PROGRESS: DaemonDownloadProgress = { percent: 0, stage: "" };
+
+export async function loadDaemonDownloadProgress(): Promise<DaemonDownloadProgress> {
+  const r = await exec(`cat '${PATHS.QSCD_PROGRESS}' 2>/dev/null`, 3000);
+  if (r.errno !== 0) return EMPTY_PROGRESS;
+  const kv = parseKv(r.stdout || "");
+  const percent = Number.parseInt(kv.percent || "", 10);
+  return {
+    percent: Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0,
+    stage: kv.stage || "",
+  };
+}
+
+export async function checkDaemonUpdate(impl: DaemonImpl): Promise<{
+  value: DaemonUpdateStatus | null;
+  error: string;
+}> {
+  const r = await exec(`sh '${PATHS.QSCD_FETCH}' check ${impl} 2>/dev/null`, 150_000);
+  const kv = parseKv(r.stdout || "");
+  if (kv.ok !== "1") return { value: null, error: kv.error || "exec_failed" };
+  const versionState = kv.version_state;
+  return {
+    value: {
+      impl,
+      localVersion: kv.local_version || "",
+      remoteVersion: kv.remote_version || "",
+      versionState:
+        versionState === "same" ||
+        versionState === "update" ||
+        versionState === "local_newer"
+          ? versionState
+          : "unknown",
+      updateAvailable: kv.update_available === "1",
+      hashMatch: kv.hash_match === "1",
+    },
+    error: "",
+  };
 }
 
 /** 下载耗时可能较长（含 manifest + 二进制两次请求），给足超时 */

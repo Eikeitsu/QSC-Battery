@@ -23,6 +23,7 @@ export const PATHS = {
   COMPAT_HINT: `${ROOT}/data/compat_hint`,
   QSCD: `${ROOT}/bin/qscd`,
   QSCD_FETCH: `${ROOT}/bin/qscd_fetch.sh`,
+  QSCD_PROGRESS: `${ROOT}/data/qscd_download_progress`,
 } as const;
 
 export const STATUS_INTERVAL = STATUS_INTERVAL_MS;

@@ -4,6 +4,8 @@
 # 「每 N 秒读一个 online 文件」，且全程不产生子进程。
 
 QSC_PS_CONF_LOADED=0
+QSC_PS_WAKE_COUNT=0
+QSC_PS_LAST_WAKE_REASON=""
 
 # 仅在用户开启 debug_on 时落盘；默认路径不增加日志写入。
 qsc_ps_dbg() {
@@ -12,8 +14,8 @@ qsc_ps_dbg() {
 }
 
 qsc_ps_record_wake() {
-	qsc_debug_enabled || return 0
-	printf '%s\n' "$1" >"$DATADIR/qscd_last_wake_reason" 2>/dev/null
+	QSC_PS_WAKE_COUNT=$((QSC_PS_WAKE_COUNT + 1))
+	QSC_PS_LAST_WAKE_REASON="$1"
 }
 
 # 无 fork 读取单行文件；成功置 QSC_PS_VAL

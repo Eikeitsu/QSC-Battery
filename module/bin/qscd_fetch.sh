@@ -3,6 +3,7 @@
 #
 # 用法
 #   qscd_fetch.sh status              打印当前状态（KEY=VALUE 行）
+#   qscd_fetch.sh check [rust|c]      校验远程版本、哈希与本地二进制
 #   qscd_fetch.sh install <rust|c>    从 Pages 下载指定实现并替换当前守护
 #   qscd_fetch.sh use <rust|c>        改用模块自带的该实现（不联网）
 #   qscd_fetch.sh remove              删除守护并把 native_daemon 置 0
@@ -19,10 +20,22 @@ MODDIR="${MODDIR:-$(cd "${0%/*}/.." && pwd)}"
 PAGES_BASE="${QSCD_PAGES_BASE:-https://eikeitsu.github.io/QSC-Battery}"
 MANIFEST_URL="$PAGES_BASE/qscd/manifest.json"
 TMPDIR="$DATADIR/.qscd_tmp"
+PROGRESS_FILE="$DATADIR/qscd_download_progress"
 
 out() { echo "$1=$2"; }
 
+qscd_progress() {
+	mkdir -p "$DATADIR" 2>/dev/null
+	_percent="$1"
+	_stage="$2"
+	printf 'percent=%s\nstage=%s\n' "$_percent" "$_stage" \
+		>"$PROGRESS_FILE.tmp.$$" 2>/dev/null &&
+		mv -f "$PROGRESS_FILE.tmp.$$" "$PROGRESS_FILE" 2>/dev/null
+}
+
 fail() {
+	rm -rf "$TMPDIR" 2>/dev/null
+	qscd_progress 0 failed
 	out ok 0
 	out error "$1"
 	exit 1
@@ -88,6 +101,23 @@ qscd_conf_set() {
 	fi
 }
 
+qscd_module_version() {
+	sed -n 's/^version=//p' "$MODDIR/module.prop" 2>/dev/null |
+		head -n1 | tr -d ' \r\n'
+}
+
+qscd_version_key() {
+	printf '%s' "$1" | tr -cd '0-9'
+}
+
+qscd_valid_version() {
+	_v="$1"
+	case "$_v" in
+		""|*[!0-9.]*|.*|*.) return 1 ;;
+	esac
+	qscd_version_key "$_v" | grep -q '[0-9]'
+}
+
 # 换过守护后必须重拉 service.sh：主循环把"等待器不可用"缓存在内存里，
 # 且旧进程仍指向被替换掉的 inode。
 # 安装期（QSCD_NO_RESTART=1）例外：那时装的是 modules_update 里的副本，
@@ -104,31 +134,31 @@ qscd_activate() {
 	_src="$1"
 	_impl="$2"
 	_from="$3"
-	_backup="$DATADIR/.qscd_prev"
+	_version="$4"
+	_candidate="$BINDIR/.qscd.new.$$"
 
 	[ -s "$_src" ] || return 1
-	rm -f "$_backup" 2>/dev/null
-	[ -f "$BINDIR/qscd" ] && cp -f "$BINDIR/qscd" "$_backup" 2>/dev/null
-
-	cp -f "$_src" "$BINDIR/qscd" 2>/dev/null || return 1
-	chmod 0755 "$BINDIR/qscd" 2>/dev/null
-	chown 0:0 "$BINDIR/qscd" 2>/dev/null
-
-	if ! "$BINDIR/qscd" probe >/dev/null 2>&1; then
-		rm -f "$BINDIR/qscd" 2>/dev/null
-		if [ -f "$_backup" ]; then
-			cp -f "$_backup" "$BINDIR/qscd" 2>/dev/null
-			chmod 0755 "$BINDIR/qscd" 2>/dev/null
-		fi
-		rm -f "$_backup" 2>/dev/null
+	rm -f "$BINDIR"/.qscd.new.* 2>/dev/null
+	rm -f "$_candidate" 2>/dev/null
+	cp -f "$_src" "$_candidate" 2>/dev/null || {
+		rm -f "$_candidate" 2>/dev/null
+		return 1
+	}
+	chmod 0755 "$_candidate" 2>/dev/null
+	chown 0:0 "$_candidate" 2>/dev/null
+	if ! "$_candidate" probe >/dev/null 2>&1; then
+		rm -f "$_candidate" 2>/dev/null
 		return 1
 	fi
-
-	rm -f "$_backup" 2>/dev/null
+	if ! mv -f "$_candidate" "$BINDIR/qscd" 2>/dev/null; then
+		rm -f "$_candidate" 2>/dev/null
+		return 1
+	fi
 	# 换了二进制，之前那个「不可用」与「支持哪些子命令」的判定都作废
 	rm -f "$DATADIR/qscd_unusable" "$DATADIR/qscd_features" 2>/dev/null
 	echo "$_impl" >"$DATADIR/native_impl_used" 2>/dev/null
 	echo "$_from" >"$DATADIR/native_src" 2>/dev/null
+	echo "$_version" >"$DATADIR/native_version" 2>/dev/null
 	qscd_conf_set native_impl "$_impl"
 	qscd_conf_set native_daemon 1
 	qscd_restart_service
@@ -144,7 +174,15 @@ cmd_status() {
 	else
 		out installed 0
 	fi
-	out impl "$(cat "$DATADIR/native_impl_used" 2>/dev/null | tr -d ' \r\n')"
+	_impl="$(cat "$DATADIR/native_impl_used" 2>/dev/null |
+		tr -d ' \r\n' | tr 'A-Z' 'a-z')"
+	if [ "$_impl" != "rust" ] && [ "$_impl" != "c" ]; then
+		_impl="$(sed -n 's/^native_impl=//p' "$CONF" 2>/dev/null |
+			head -n1 | tr -d ' \r\n' | tr 'A-Z' 'a-z')"
+	fi
+	case "$_impl" in rust|c) ;; *) _impl="" ;; esac
+	out impl "$_impl"
+	out local_version "$(cat "$DATADIR/native_version" 2>/dev/null | tr -d ' \r\n')"
 	out src "$(cat "$DATADIR/native_src" 2>/dev/null | tr -d ' \r\n')"
 	# 模块自带的候选（sh 版一个都没有）
 	_bundled=""
@@ -173,6 +211,9 @@ cmd_status() {
 	out selftest "$_selftest_ok"
 	out selftest_netlink "$(printf '%s\n' "$_selftest_out" | sed -n 's/^netlink=//p')"
 	out selftest_sysfs "$(printf '%s\n' "$_selftest_out" | sed -n 's/^sysfs=//p')"
+	out snapshot_source "$(printf '%s\n' "$_selftest_out" | sed -n 's/^snapshot_source=//p')"
+	out snapshot_level "$(printf '%s\n' "$_selftest_out" | sed -n 's/^snapshot_level=//p')"
+	out snapshot_temp "$(printf '%s\n' "$_selftest_out" | sed -n 's/^snapshot_temp=//p')"
 	out features "$_features"
 	out last_wake "$(cat "$DATADIR/qscd_last_wake_reason" 2>/dev/null | tr -d '\r\n')"
 }
@@ -186,17 +227,26 @@ cmd_install() {
 	_suffix="$(qscd_arch_suffix)"
 	[ -n "$_suffix" ] || fail "unsupported_arch"
 
+	qscd_progress 5 prepare
 	mkdir -p "$TMPDIR" 2>/dev/null
 	rm -f "$TMPDIR/manifest.json" "$TMPDIR/qscd" 2>/dev/null
 
+	qscd_progress 15 manifest
 	qscd_download "$MANIFEST_URL" "$TMPDIR/manifest.json" || fail "manifest_download_failed"
 
 	_name="qscd-${_impl}-${_suffix}"
-	_want="$(qscd_manifest_get "$_name")"
+	_want="$(qscd_manifest_get "$_name" | tr 'A-F' 'a-f')"
 	[ -n "$_want" ] || fail "manifest_no_entry"
+	_remote_version="$(qscd_manifest_get version)"
+	qscd_valid_version "$_remote_version" || fail "manifest_invalid_version"
+	_sha_len="$(printf '%s' "$_want" | wc -c | tr -d ' ')"
+	case "$_want" in *[!0-9a-fA-F]*) fail "manifest_invalid_sha256" ;; esac
+	[ "$_sha_len" = "64" ] || fail "manifest_invalid_sha256"
 
+	qscd_progress 35 binary
 	qscd_download "$PAGES_BASE/qscd/$_name" "$TMPDIR/qscd" || fail "download_failed"
 
+	qscd_progress 65 verify
 	_got="$(qscd_sha256 "$TMPDIR/qscd")"
 	[ -n "$_got" ] || fail "no_sha256_tool"
 	if [ "$_got" != "$_want" ]; then
@@ -204,15 +254,17 @@ cmd_install() {
 		fail "sha256_mismatch"
 	fi
 
-	if ! qscd_activate "$TMPDIR/qscd" "$_impl" download; then
+	qscd_progress 82 activate
+	if ! qscd_activate "$TMPDIR/qscd" "$_impl" download "$_remote_version"; then
 		rm -rf "$TMPDIR" 2>/dev/null
 		fail "probe_failed"
 	fi
 	rm -rf "$TMPDIR" 2>/dev/null
+	qscd_progress 100 "done"
 	out ok 1
 	out impl "$_impl"
 	out src download
-	out version "$(qscd_manifest_get version)"
+	out version "$_remote_version"
 }
 
 cmd_use() {
@@ -225,22 +277,75 @@ cmd_use() {
 		*) fail "bad_impl" ;;
 	esac
 	[ -f "$_src" ] || fail "not_bundled"
-	qscd_activate "$_src" "$_impl" bundled || fail "probe_failed"
+	qscd_progress 35 activate
+	_local_version="$(qscd_module_version)"
+	qscd_valid_version "$_local_version" || _local_version=""
+	qscd_activate "$_src" "$_impl" bundled "$_local_version" || fail "probe_failed"
+	qscd_progress 100 "done"
 	out ok 1
 	out impl "$_impl"
 	out src bundled
 }
 
 cmd_remove() {
-	rm -f "$BINDIR/qscd" "$DATADIR/native_impl_used" "$DATADIR/native_src" 2>/dev/null
+	rm -f "$BINDIR/qscd" "$DATADIR/native_impl_used" "$DATADIR/native_src" \
+		"$DATADIR/native_version" 2>/dev/null
+	rm -f "$PROGRESS_FILE" 2>/dev/null
 	qscd_conf_set native_daemon 0
 	qscd_restart_service
 	out ok 1
 	out installed 0
 }
 
+cmd_check() {
+	_impl="$1"
+	[ -n "$_impl" ] || _impl="$(cat "$DATADIR/native_impl_used" 2>/dev/null |
+		tr -d ' \r\n' | tr 'A-Z' 'a-z')"
+	case "$_impl" in rust|c) ;; *) fail "bad_impl" ;; esac
+	_suffix="$(qscd_arch_suffix)"
+	[ -n "$_suffix" ] || fail "unsupported_arch"
+	qscd_progress 10 manifest
+	mkdir -p "$TMPDIR" 2>/dev/null
+	rm -f "$TMPDIR/manifest.json" 2>/dev/null
+	qscd_download "$MANIFEST_URL" "$TMPDIR/manifest.json" || fail "manifest_download_failed"
+	_remote_version="$(qscd_manifest_get version)"
+	qscd_valid_version "$_remote_version" || fail "manifest_invalid_version"
+	_name="qscd-${_impl}-${_suffix}"
+	_remote_hash="$(qscd_manifest_get "$_name" | tr 'A-F' 'a-f')"
+	[ -n "$_remote_hash" ] || fail "manifest_no_entry"
+	_local_version="$(cat "$DATADIR/native_version" 2>/dev/null | tr -d ' \r\n')"
+	_local_hash=""
+	[ -f "$BINDIR/qscd" ] && _local_hash="$(qscd_sha256 "$BINDIR/qscd")"
+	_hash_match=0
+	[ -n "$_local_hash" ] && [ "$_local_hash" = "$_remote_hash" ] && _hash_match=1
+	_state=unknown
+	_update=0
+	if qscd_valid_version "$_local_version"; then
+		_remote_key="$(qscd_version_key "$_remote_version")"
+		_local_key="$(qscd_version_key "$_local_version")"
+		if [ "$_remote_key" = "$_local_key" ]; then
+			_state=same
+		elif [ "$_remote_key" -gt "$_local_key" ] 2>/dev/null; then
+			_state=update
+			_update=1
+		else
+			_state=local_newer
+		fi
+	fi
+	rm -rf "$TMPDIR" 2>/dev/null
+	qscd_progress 100 "done"
+	out ok 1
+	out impl "$_impl"
+	out local_version "$_local_version"
+	out remote_version "$_remote_version"
+	out version_state "$_state"
+	out update_available "$_update"
+	out hash_match "$_hash_match"
+}
+
 case "$1" in
 	status) cmd_status ;;
+	check) cmd_check "$2" ;;
 	install) cmd_install "$2" ;;
 	use) cmd_use "$2" ;;
 	remove) cmd_remove ;;

@@ -3,6 +3,8 @@
 
 QSC_HISTORY_FILE="${QSC_HISTORY_FILE:-$DATADIR/charge_history.csv}"
 QSC_HISTORY_MAX_LINES=1600
+QSC_HISTORY_BATCH=5
+QSC_HISTORY_BUFFER="${QSC_HISTORY_FILE}.pending"
 
 # 充电来源：usb | wireless | none
 qsc_charge_source() {
@@ -147,7 +149,18 @@ qsc_history_sample() {
 	cur="$(printf '%s' "$cur" | tr -d ',')"
 	status="$(printf '%s' "$status" | tr -d ',')"
 	src="$(printf '%s' "$src" | tr -d ',')"
-	echo "${now},${level},${temp},${cur},${status},${src}" >>"$QSC_HISTORY_FILE"
+	# 先聚合到 pending，五个采样再一次性追加 CSV，避免充电时高频打开主历史文件。
+	echo "${now},${level},${temp},${cur},${status},${src}" >>"$QSC_HISTORY_BUFFER"
+	n="$(wc -l <"$QSC_HISTORY_BUFFER" 2>/dev/null | tr -d ' ')"
+	case "$n" in ""|*[!0-9]*) n=0 ;; esac
+	if [ "$n" -lt "$QSC_HISTORY_BATCH" ]; then
+		return 0
+	fi
+	if [ ! -f "$QSC_HISTORY_FILE" ]; then
+		echo "ts,level,temp,current_ua,status,source" >"$QSC_HISTORY_FILE"
+	fi
+	cat "$QSC_HISTORY_BUFFER" >>"$QSC_HISTORY_FILE" 2>/dev/null
+	: >"$QSC_HISTORY_BUFFER"
 	n="$(wc -l <"$QSC_HISTORY_FILE" 2>/dev/null | tr -d ' ')"
 	if [ -n "$n" ] && [ "$n" -gt "$QSC_HISTORY_MAX_LINES" ] 2>/dev/null; then
 		# 保留表头 + 末尾

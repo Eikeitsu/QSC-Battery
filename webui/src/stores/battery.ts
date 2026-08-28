@@ -317,14 +317,9 @@ export const useAppStore = defineStore("app", () => {
       return;
     }
 
-    const [capR, tempR, offR, switchR, descR, statusR, voltR, currR, verR, battR, failR] =
+    const [snapshotR, offR, switchR, descR, voltR, currR, verR, battR, failR] =
       await Promise.all([
-        api.exec(
-          `cat /sys/class/power_supply/battery/capacity 2>/dev/null || cat /sys/class/power_supply/bms/capacity 2>/dev/null`,
-        ),
-        api.exec(
-          `cat /sys/class/power_supply/battery/temp 2>/dev/null || cat /sys/class/power_supply/bms/temp 2>/dev/null`,
-        ),
+        api.loadBatterySnapshot(),
         api.exec(
           `[ -f '${PATHS.OFF_FLAG}' ] || [ -f '${PATHS.MODDIR}/disable' ] && echo 1 || echo 0`,
         ),
@@ -332,7 +327,6 @@ export const useAppStore = defineStore("app", () => {
         api.exec(
           `grep '^description=' '${PATHS.MODDIR}/module.prop' 2>/dev/null | cut -d= -f2-`,
         ),
-        api.exec(`cat /sys/class/power_supply/battery/status 2>/dev/null`),
         api.exec(`cat /sys/class/power_supply/battery/voltage_now 2>/dev/null`),
         api.exec(`cat /sys/class/power_supply/battery/current_now 2>/dev/null`),
         api.exec(
@@ -344,7 +338,7 @@ export const useAppStore = defineStore("app", () => {
         ),
       ]);
 
-    if (capR.errno === -2 || tempR.errno === -2) {
+    if (snapshotR.result.errno === -2) {
       status.badge = "状态读取超时，下拉重试";
       status.badgeType = BadgeType.Warning;
       if (showTip) showToast("状态读取超时");
@@ -352,8 +346,8 @@ export const useAppStore = defineStore("app", () => {
     }
 
     bridgeOk.value = true;
-    const level = capR.stdout.trim();
-    const rawTemp = parseInt(tempR.stdout.trim(), 10);
+    const level = snapshotR.value.level;
+    const rawTemp = parseInt(snapshotR.value.temp, 10);
     const tempC = Number.isNaN(rawTemp)
       ? null
       : rawTemp > 200
@@ -361,7 +355,16 @@ export const useAppStore = defineStore("app", () => {
         : rawTemp;
     const moduleOff = offR.stdout.trim() === BinaryFlag.On;
     const chargingStopped = switchR.stdout.trim() === BinaryFlag.On;
-    const chargeStatus = statusR.stdout.trim();
+    const chargeStatus =
+      snapshotR.value.status === "2"
+        ? "Charging"
+        : snapshotR.value.status === "5"
+          ? "Full"
+          : snapshotR.value.status === "3"
+            ? "Discharging"
+            : snapshotR.value.status === "4"
+              ? "Not charging"
+              : snapshotR.value.status;
 
     status.level = level || "--";
     status.temp = tempC !== null ? String(tempC) : "--";

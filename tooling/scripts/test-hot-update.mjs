@@ -8,9 +8,18 @@
  * 3. 失败时保留标准重启更新；
  * 4. 成功与卸载时的临时资源清理。
  */
-import { readFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const modules = [
@@ -40,6 +49,54 @@ function requireText(text, pattern, label) {
 function requireOrder(text, first, second, label) {
   if (text.indexOf(first) >= text.indexOf(second)) {
     throw new Error(`${label}: ${first} must precede ${second}`);
+  }
+}
+
+function simulateHotUpdateContract() {
+  const root = mkdtempSync(join(tmpdir(), "qsc-release-contract-"));
+  const oldDir = join(root, "modules/QSC-Battery");
+  const pendingDir = join(root, "modules_update/QSC-Battery");
+  const payloadDir = join(root, "payload/QSC-Battery");
+  const required = ["module.prop", "service.sh", "bin/common.sh", "hotinstall.sh"];
+  const writeTree = (dir, files) => {
+    for (const [rel, text] of Object.entries(files)) {
+      const path = join(dir, rel);
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, text);
+    }
+  };
+  try {
+    writeTree(oldDir, Object.fromEntries(required.map((file) => [file, "old"])));
+    writeTree(payloadDir, Object.fromEntries(required.map((file) => [file, "new"])));
+    writeFileSync(join(oldDir, "update"), "");
+    cpSync(payloadDir, pendingDir, { recursive: true });
+    cpSync(payloadDir, oldDir, { recursive: true, force: true });
+    if (required.some((file) => readFileSync(join(oldDir, file), "utf8") !== "new")) {
+      throw new Error("successful install did not replace every required file");
+    }
+    rmSync(pendingDir, { recursive: true, force: true });
+    rmSync(join(oldDir, "update"), { force: true });
+    rmSync(payloadDir, { recursive: true, force: true });
+    if (
+      existsSync(pendingDir) ||
+      existsSync(join(oldDir, "update")) ||
+      existsSync(payloadDir)
+    ) {
+      throw new Error("successful install left temporary release state");
+    }
+
+    writeTree(oldDir, Object.fromEntries(required.map((file) => [file, "old"])));
+    writeTree(payloadDir, { "module.prop": "new" });
+    writeFileSync(join(oldDir, "update"), "");
+    if (required.some((file) => !existsSync(join(payloadDir, file)))) {
+      if (!existsSync(join(oldDir, "update")))
+        throw new Error("failed install lost update marker");
+      if (readFileSync(join(oldDir, "module.prop"), "utf8") !== "old") {
+        throw new Error("failed install modified active module");
+      }
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 }
 
@@ -78,6 +135,11 @@ for (const mod of modules) {
   requireText(uninstall, mod.worker, `${mod.name} uninstall worker cleanup`);
   requireText(uninstall, mod.staged, `${mod.name} uninstall staged cleanup`);
   requireText(service, mod.lock, `${mod.name} service stale-lock cleanup`);
+  requireText(service, "QSC_SCAN_LOCK", `${mod.name} scan lock`);
+  requireText(service, "QSC_SCAN_STATE", `${mod.name} scan state`);
+  requireText(service, "failed:$rc", `${mod.name} scan failure state`);
+  requireText(service, "service_heartbeat", `${mod.name} service heartbeat`);
+  requireText(service, "service_metrics", `${mod.name} service metrics`);
 }
 
 const update = JSON.parse(read(join(root, "docs/public/update.json")));
@@ -96,6 +158,8 @@ for (const key of ["qscd-c-arm", "qscd-c-arm64", "qscd-rust-arm", "qscd-rust-arm
 const defaults = read(join(root, "webui/src/shared/config/defaults.ts"));
 const configTemplate = read(join(root, "module/config/config.conf"));
 const customize = read(join(root, "module/customize.sh"));
+const qscdFetch = read(join(root, "module/bin/qscd_fetch.sh"));
+const qscdSource = read(join(root, "native/qscd/src/main.rs"));
 const keysBlock = defaults.match(/CONFIG_KEYS:[\s\S]*?\n\] as const;/)?.[0] || "";
 const configKeys = [...keysBlock.matchAll(/^\s+"([^"]+)",$/gm)].map((match) => match[1]);
 for (const key of configKeys) {
@@ -107,6 +171,22 @@ for (const key of configKeys) {
 }
 const store = read(join(root, "webui/src/stores/battery.ts"));
 requireText(store, "settings[key] = value || DEFAULTS[key]", "config migration fallback");
+requireText(qscdFetch, "qscd.new.$$", "native temporary candidate");
+requireText(qscdFetch, 'mv -f "$_candidate" "$BINDIR/qscd"', "native atomic replacement");
+requireText(qscdFetch, 'rm -rf "$TMPDIR"', "native temporary cleanup");
+requireText(qscdFetch, "qscd_progress", "native download progress");
+requireText(qscdFetch, "qscd_valid_version", "native version validation");
+requireText(qscdFetch, "cmd_check", "remote native version check");
+requireText(qscdFetch, "native_version", "local native version record");
+requireText(qscdFetch, "remote_version", "remote native version output");
+requireText(customize, "data/native_version", "upgrade native version preservation");
+requireText(customize, "qscd_try_candidate", "candidate version recording");
+const history = read(join(root, "module/bin/lib/history.sh"));
+requireText(history, "QSC_HISTORY_BATCH", "batched history sampling");
+requireText(history, "QSC_HISTORY_BUFFER", "history pending buffer");
+requireText(qscdSource, "struct BatterySnapshot", "Rust snapshot layer");
+requireText(qscdSource, "snapshot_source=", "Rust snapshot diagnostics");
+simulateHotUpdateContract();
 
 console.log(
   `[test:hot-update] ${modules.length} module contracts and release metadata passed`,

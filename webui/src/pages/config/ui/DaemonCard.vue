@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { showConfirmDialog, showToast } from "vant";
 import SectionHead from "@/shared/ui/SectionHead.vue";
 import SwitchCell from "@/shared/ui/SwitchCell.vue";
@@ -12,6 +12,10 @@ const { store, onSwitch } = useConfigFormContext();
 
 const status = ref<api.DaemonStatus | null>(null);
 const busy = ref("");
+const progress = ref<api.DaemonDownloadProgress>({ percent: 0, stage: "" });
+const updateStatus = ref<api.DaemonUpdateStatus | null>(null);
+const updateError = ref("");
+let progressTimer: ReturnType<typeof setInterval> | null = null;
 
 const installed = computed(() => status.value?.installed === true);
 const archOk = computed(
@@ -20,6 +24,52 @@ const archOk = computed(
 /** 没有二进制就不允许打开开关：开了也没效果，反而让人误以为在省电 */
 const switchDisabled = computed(() => !installed.value || busy.value !== "");
 const switchOn = computed(() => installed.value && store.settings.native_daemon !== "0");
+const actionBusy = computed(() => busy.value === "rust" || busy.value === "c");
+const checkBusy = computed(() => busy.value === "check");
+
+const updateLabel = computed(() => {
+  if (checkBusy.value) return "检查中…";
+  if (updateStatus.value?.updateAvailable) return "有更新";
+  if (updateStatus.value?.versionState === "same" && updateStatus.value.hashMatch)
+    return "已是最新";
+  if (updateStatus.value?.versionState === "same" && !updateStatus.value.hashMatch)
+    return "校验异常";
+  if (updateError.value) return "检查失败";
+  return "检查更新";
+});
+
+const updateHint = computed(() => {
+  const checked = updateStatus.value;
+  if (checked?.updateAvailable) {
+    return `本地 ${checked.localVersion || "未知"} · 远程 ${checked.remoteVersion}`;
+  }
+  if (checked?.versionState === "same" && !checked.hashMatch) {
+    return `版本 ${checked.remoteVersion}，但本地文件校验不一致`;
+  }
+  if (checked?.versionState === "same") {
+    return `版本 ${checked.remoteVersion}，版本号与文件校验一致`;
+  }
+  if (checked?.versionState === "local_newer") {
+    return `本地 ${checked.localVersion} · 远程 ${checked.remoteVersion}`;
+  }
+  if (checked?.remoteVersion) {
+    return `远程 ${checked.remoteVersion} · 本地版本未知`;
+  }
+  return updateError.value || "点击检查远程版本与本地文件";
+});
+
+const progressStageLabel = computed(() => {
+  const labels: Record<string, string> = {
+    prepare: "正在准备安全安装环境…",
+    manifest: "正在获取版本清单…",
+    binary: "正在下载二进制文件…",
+    verify: "正在校验 SHA-256…",
+    activate: "正在切换并重启服务…",
+    done: "已完成",
+    failed: "操作失败",
+  };
+  return labels[progress.value.stage] || "正在处理，请稍候…";
+});
 
 const implLabel = computed(() => {
   const impl = status.value?.impl;
@@ -32,6 +82,7 @@ const srcLabel = computed(() => {
   const src = status.value?.src;
   if (src === "bundled") return "安装包自带";
   if (src === "download") return "已下载";
+  if (src === "inherited") return "升级继承";
   return "";
 });
 
@@ -80,7 +131,10 @@ const switchLabel = computed(() => {
 function implRowLabel(impl: DaemonImpl) {
   const bits: string[] = [];
   if (status.value?.bundled.includes(impl)) bits.push("安装包自带");
-  if (status.value?.impl === impl) bits.push("当前使用");
+  if (status.value?.impl === impl) {
+    const source = srcLabel.value ? ` · ${srcLabel.value}` : "";
+    bits.push(`当前使用${source} · 版本 ${status.value.localVersion || "未知"}`);
+  }
   bits.push(
     impl === "rust"
       ? "推荐：含阈值过滤与原生进程检测，最省电"
@@ -93,6 +147,42 @@ async function reload() {
   status.value = await api.loadDaemonStatus();
 }
 
+async function reloadProgress() {
+  progress.value = await api.loadDaemonDownloadProgress();
+}
+
+async function checkUpdate(silent = false) {
+  if (busy.value || !status.value?.impl) return;
+  busy.value = "check";
+  updateError.value = "";
+  try {
+    const result = await api.checkDaemonUpdate(status.value.impl);
+    updateStatus.value = result.value;
+    updateError.value = result.value ? "" : api.daemonErrorText(result.error);
+    if (!silent && result.value) {
+      showToast(result.value.updateAvailable ? "发现远程二进制更新" : "当前已是最新版本");
+    } else if (!silent && !result.value) {
+      showToast(updateError.value);
+    }
+  } finally {
+    busy.value = "";
+  }
+}
+
+function startProgress() {
+  if (progressTimer) clearInterval(progressTimer);
+  progress.value = { percent: 0, stage: "prepare" };
+  void reloadProgress();
+  progressTimer = setInterval(() => {
+    void reloadProgress();
+  }, 500);
+}
+
+function stopProgress() {
+  if (progressTimer) clearInterval(progressTimer);
+  progressTimer = null;
+}
+
 /** 自带就直接用，避免没必要的联网；否则下载 */
 async function pick(impl: DaemonImpl) {
   if (busy.value) return;
@@ -102,6 +192,7 @@ async function pick(impl: DaemonImpl) {
   }
   const bundled = status.value?.bundled.includes(impl) === true;
   busy.value = impl;
+  startProgress();
   try {
     const result = bundled
       ? await api.useBundledDaemon(impl)
@@ -114,6 +205,7 @@ async function pick(impl: DaemonImpl) {
     store.settings.native_daemon = "1";
     showToast(bundled ? "已切换并重启服务" : "已下载校验并启用");
   } finally {
+    stopProgress();
     busy.value = "";
     await reload();
   }
@@ -144,7 +236,11 @@ async function onRemove() {
   }
 }
 
-onMounted(reload);
+onMounted(async () => {
+  await reload();
+  void checkUpdate(true);
+});
+onUnmounted(stopProgress);
 </script>
 
 <template>
@@ -159,19 +255,37 @@ onMounted(reload);
     />
 
     <template v-if="archOk">
+      <div v-if="actionBusy" class="daemon-progress" role="status" aria-live="polite">
+        <div class="daemon-progress__head">
+          <span>{{ progressStageLabel }}</span>
+          <span>{{ progress.percent }}%</span>
+        </div>
+        <div class="daemon-progress__track">
+          <span :style="{ width: `${progress.percent}%` }"></span>
+        </div>
+        <div class="daemon-progress__hint">下载、校验和切换期间请不要重复点击</div>
+      </div>
       <van-cell
         title="Rust 版"
         :label="implRowLabel('rust')"
-        :is-link="status?.impl !== 'rust'"
+        is-link
         :value="busy === 'rust' ? '处理中…' : status?.impl === 'rust' ? '使用中' : '选用'"
         @click="pick('rust')"
       />
       <van-cell
         title="C 版"
         :label="implRowLabel('c')"
-        :is-link="status?.impl !== 'c'"
+        is-link
         :value="busy === 'c' ? '处理中…' : status?.impl === 'c' ? '使用中' : '选用'"
         @click="pick('c')"
+      />
+      <van-cell
+        v-if="installed"
+        title="远程版本"
+        :label="updateHint"
+        :value="updateLabel"
+        is-link
+        @click="checkUpdate()"
       />
       <van-cell v-if="installed" title="运行自检" :label="diagnosticsLabel" />
       <van-cell
@@ -208,6 +322,41 @@ onMounted(reload);
   font-size: 12px;
   color: var(--qsc-text-3);
   line-height: 1.45;
+}
+
+.daemon-progress {
+  padding: 12px var(--qsc-cell-pad-x, 16px) 14px;
+  color: var(--qsc-text-2);
+  font-size: 12px;
+}
+
+.daemon-progress__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+}
+
+.daemon-progress__track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--qsc-text) 12%, transparent);
+}
+
+.daemon-progress__track span {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+  background: var(--qsc-primary);
+  transition: width 240ms ease;
+}
+
+.daemon-progress__hint {
+  margin-top: 6px;
+  color: var(--qsc-text-3);
 }
 
 :deep(.van-cell) {

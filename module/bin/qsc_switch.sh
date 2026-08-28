@@ -16,95 +16,23 @@ if [ ! -f "$CONF" ]; then
 	qsc_log_once no_conf error "找不到 config.conf"
 fi
 
-# sysfs 优先：dumpsys battery 是 binder 调用，每轮都做会把 system_server 从
-# doze 里叫醒，是待机耗电的主要来源。四项齐全就完全不碰 dumpsys。
+# 统一快照：sysfs 优先，只有字段不完整时才调用 dumpsys battery。
+# 这样停充决策、模块简介和 WebUI 共享相同的电量/温度/供电语义。
 battery_level=""
 battery_status=""
 battery_powered=""
 temperature=""
-temperature_raw=""
-dumpsys_battery=""
-
-_sf_cap=""
-_sf_status=""
-_sf_temp=""
-qsc_read_node "$PSDIR/battery/capacity" && _sf_cap="$QSC_NODE_VAL"
-qsc_read_node "$PSDIR/battery/status" && _sf_status="$QSC_NODE_VAL"
-qsc_read_node "$PSDIR/battery/temp" && _sf_temp="$QSC_NODE_VAL"
-if [ -n "$_sf_cap" ] && [ -n "$_sf_status" ] && [ -n "$_sf_temp" ]; then
-	case "$_sf_cap" in
-		""|*[!0-9]*) _sf_cap="" ;;
-	esac
-	temperature="$(qsc_normalize_temperature "$_sf_temp")" || temperature=""
-	case "$_sf_status" in
-		Charging) battery_status="2"; battery_powered="powered: true" ;;
-		Full) battery_status="5"; battery_powered="powered: true" ;;
-		Discharging) battery_status="3" ;;
-		"Not charging") battery_status="4" ;;
-		*) battery_status="" ;;
-	esac
-	if [ -n "$_sf_cap" ] && [ -n "$battery_status" ] && [ -n "$temperature" ]; then
-		battery_level="$_sf_cap"
-		# 停充后不少机型 status 变 Not charging，仍需知道是否插着
-		if [ -z "$battery_powered" ] && type qsc_ps_plugged >/dev/null 2>&1 \
-			&& qsc_ps_plugged; then
-			battery_powered="powered: true"
-		fi
-		QSC_BATT_FROM_SYSFS=1
-	fi
-fi
-
-# ↓ sysfs 不全时的 dumpsys 兜底（保持原有逻辑，未额外缩进以便对照历史版本）
-if [ -z "$battery_level" ] || [ -z "$battery_status" ] || [ -z "$temperature" ]; then
-dumpsys battery > "$DATADIR/.dumpsys_tmp" 2>/dev/null &
-dumpsys_pid=$!
-for wait_i in 1 2 3 4 5; do
-	if [ ! -d "/proc/$dumpsys_pid" ]; then break; fi
-	sleep 1
-done
-if [ -d "/proc/$dumpsys_pid" ]; then
-	qsc_log_once dumpsys_to warn "dumpsys battery 超时，改用 sysfs"
-	qsc_log_once_clear dumpsys_ok
+if qsc_battery_snapshot_read; then
+	battery_level="$QSC_BATTERY_LEVEL"
+	battery_status="$QSC_BATTERY_STATUS"
+	battery_powered="$QSC_BATTERY_POWERED"
+	temperature="$QSC_BATTERY_TEMP"
+	_sf_status="$QSC_BATTERY_STATUS"
 else
-	qsc_log_once dumpsys_ok debug "dumpsys battery 读取成功"
-	qsc_log_once_clear dumpsys_to
+	qsc_log_once no_snapshot warn "电池快照不完整，跳过本轮停充评估"
 fi
-kill $dumpsys_pid 2>/dev/null
-dumpsys_battery="$(cat "$DATADIR/.dumpsys_tmp" 2>/dev/null)"
+qsc_battery_snapshot_record
 qsc_debug_step 3
-rm -f "$DATADIR/.dumpsys_tmp"
-
-# Android 16+ dumpsys 可能多处含 level:，取首个行首字段，避免 sed $p 取到错误值
-battery_level="$(qsc_dumpsys_level "$dumpsys_battery")"
-battery_powered="$(echo "$dumpsys_battery" | egrep 'powered: true')"
-battery_status="$(echo "$dumpsys_battery" | egrep 'status: ' | sed -n 's/.*status: //g;$p')"
-qsc_debug_step 4
-
-if [ ! -n "$battery_powered" ] || [ ! -n "$battery_status" ]; then
-	sysfs_status="$(qsc_safe_cat "$PSDIR/battery/status")"
-	if [ -n "$sysfs_status" ]; then
-		qsc_log_once batt_st debug "充电状态来自 sysfs status=$sysfs_status"
-		case "$sysfs_status" in
-			Charging) battery_status="2"; battery_powered="powered: true" ;;
-			Full) battery_status="5"; battery_powered="powered: true" ;;
-			Discharging) battery_status="3"; battery_powered="" ;;
-			"Not charging") battery_status="4"; battery_powered="" ;;
-		esac
-	fi
-fi
-if [ ! -n "$battery_powered" ]; then
-	for usb_online in "$PSDIR/usb/online" "$PSDIR/qc_usb/online" \
-		"$PSDIR/ac/online" "$PSDIR/dc/online" \
-		"$PSDIR/wireless/online"; do
-		if [ -f "$usb_online" ] && [ "$(qsc_safe_cat "$usb_online")" = "1" ]; then
-			battery_powered="powered: true"
-			battery_status="${battery_status:-2}"
-			qsc_log_once usb_on debug "插电状态来自 $usb_online=1"
-			break
-		fi
-	done
-fi
-fi
 
 charge_source="$(qsc_charge_source 2>/dev/null)"
 wireless_policy="${QSCV_wireless_policy}"
@@ -130,11 +58,6 @@ history_enable="$(qsc_clamp_int "${history_enable:-1}" 0 1 1)"
 charge_full="${QSCV_charge_full}"
 power_reset="${QSCV_power_reset}"
 Shut_down="${QSCV_Shut_down}"
-# sysfs 快路径已算出温度；只有走 dumpsys 兜底时才从其输出里取
-if [ -z "$temperature" ] && [ -n "$dumpsys_battery" ]; then
-	temperature_raw="$(echo "$dumpsys_battery" | egrep 'temperature: ' | sed -n 's/.*temperature: //g;$p')"
-	temperature="$(qsc_normalize_temperature "$temperature_raw")"
-fi
 power_stop="${QSCV_power_stop}"
 power_start="${QSCV_power_start}"
 temperature_switch="${QSCV_temperature_switch}"

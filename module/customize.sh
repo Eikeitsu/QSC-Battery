@@ -374,7 +374,7 @@ if [ -f "$LIBDIR/hot_update.sh" ]; then
 	hot_update_preserve_paths "$CURRENT_MODULE" "$MODPATH" \
 		data/list_switch data/list_charge_current data/ch_curr_ctrl_files \
 		data/device.profile data/charge_history.csv data/off_qsc \
-		data/compat_hint data/native_src
+		data/compat_hint data/native_src data/native_version
 	# WebUI 下载来的守护要留住：本包（如主包）可能一个二进制都不带，
 	# 冲掉就等于把用户装好的守护弄没了。自带同实现时下面会用自带的覆盖。
 	hot_update_preserve_paths "$CURRENT_MODULE" "$MODPATH" bin/qscd
@@ -398,7 +398,7 @@ qscd_cleanup_candidates() {
 }
 
 qscd_try_candidate() {
-	# $1=源文件 $2=实现名（用于提示） $3=来源（bundled/download）
+	# $1=源文件 $2=实现名（用于提示） $3=来源 $4=版本
 	[ -f "$1" ] || return 1
 	cp -f "$1" "$MODPATH/bin/qscd" 2>/dev/null || return 1
 	chmod 0755 "$MODPATH/bin/qscd" 2>/dev/null
@@ -408,8 +408,16 @@ qscd_try_candidate() {
 		else
 			ui_print "- 守护可用（$2 版）：未插电时零定时唤醒"
 		fi
-		echo "$2" >"$MODPATH/data/native_impl_used" 2>/dev/null
+		case "$2" in
+			Rust|rust) _used_impl=rust ;;
+			C|c) _used_impl=c ;;
+			*) _used_impl="$2" ;;
+		esac
+		echo "$_used_impl" >"$MODPATH/data/native_impl_used" 2>/dev/null
 		echo "$3" >"$MODPATH/data/native_src" 2>/dev/null
+		_version="$4"
+		[ -n "$_version" ] || _version="$(sed -n 's/^version=//p' "$MODPATH/module.prop" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+		[ -n "$_version" ] && echo "$_version" >"$MODPATH/data/native_version" 2>/dev/null
 		return 0
 	fi
 	ui_print "- 守护自检未通过（$2 版）"
@@ -432,12 +440,13 @@ install_qscd() {
 		mv -f "$MODPATH/bin/qscd" "$_inherited" 2>/dev/null || _inherited=""
 	fi
 	_inherited_impl="$(cat "$MODPATH/data/native_impl_used" 2>/dev/null | tr -d ' \r\n')"
+	_inherited_version="$(cat "$MODPATH/data/native_version" 2>/dev/null | tr -d ' \r\n')"
 	case "$_inherited_impl" in
 		c) _inherited_name="C" ;;
 		*) _inherited_name="Rust" ;;
 	esac
 	rm -f "$MODPATH/bin/qscd" "$MODPATH/data/native_impl_used" \
-		"$MODPATH/data/native_src" 2>/dev/null
+		"$MODPATH/data/native_src" "$MODPATH/data/native_version" 2>/dev/null
 
 	if [ -z "$_suffix" ]; then
 		ui_print "- 本机架构($ARCH)无可用守护：使用定时轮询"
@@ -471,7 +480,7 @@ install_qscd() {
 	done
 
 	if [ -n "$_inherited" ] && [ -f "$_inherited" ]; then
-		if qscd_try_candidate "$_inherited" "$_inherited_name" download; then
+		if qscd_try_candidate "$_inherited" "$_inherited_name" inherited "$_inherited_version"; then
 			rm -f "$_inherited" 2>/dev/null
 			qscd_cleanup_candidates
 			return 0
