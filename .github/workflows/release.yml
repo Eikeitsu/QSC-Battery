@@ -108,6 +108,9 @@ jobs:
       - name: Verify module zips
         run: npm run verify:zips
 
+      - name: Verify hot update and release contracts
+        run: npm run test:hot-update
+
       # 二进制随构件带到 post 任务：那里要把它们发到 Pages 供 WebUI 下载
       - name: Upload zips and native binaries
         uses: actions/upload-artifact@v4

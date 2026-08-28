@@ -80,9 +80,12 @@ npm run build:docs        # 构建文档站点
 
 Rust 版目前的扩展能力：
 
-- `watch`：带阈值的等待，见下一节
+- `watch`：带阈值的等待，见下一节；插电状态与 shell 侧同时检查
+  `online`、`present`、类型、VBUS 和 `battery/status`，兼容 MCA 停充后的 `online=0`
 - `pkgs`：遍历 `/proc/<pid>/cmdline` 判断包名列表里有没有主进程在跑，
   替代 `ps -ef` 快照。退出 0=命中、1=没命中、2=不可用
+- `selftest`：只读检查 netlink、事件过滤器和电源节点读取能力，支持
+  `--sysfs-root DIR` 供假 sysfs 测试使用
 
 新增子命令的硬性要求：只读、不写任何充电节点、不做停充/恢复决策。
 sh 主包没有这个二进制也必须行为一致，阈值判定的唯一真理留在 shell。
@@ -94,8 +97,8 @@ sh 主包没有这个二进制也必须行为一致，阈值判定的唯一真�
 反而比它替代的 `sleep` 更碎，而事件到达是数据就绪即返回，与超时长短无关。
 两套实现（`native/qscd` = Rust + `libc`，`native/qscd-c` = 单文件 C）子命令、退出码、钳位范围逐字对齐，可互换安装。
 
-- 子命令：`qscd wait-event <最长秒> [最短秒]`（0=有事件或到时，2=不可用）、`qscd probe`（安装自检）；C 版额外有 `selftest`，供宿主机在没有 netlink 的环境里跑纯函数用例
-- 它**不写任何充电节点、不做阈值判定**；退出非 0 时 `lib/power_saver.sh` 会永久退回 `sleep`，所以最坏结果是退化成定时轮询
+- 子命令：`qscd wait-event <最长秒> [最短秒]`（0=有事件或到时，2=不可用）、`qscd probe`（安装自检）、`qscd selftest`（运行期只读诊断）；C 版的 `selftest` 继续用于宿主机纯函数门禁
+- 它**不写任何充电节点、不做停充/恢复决策**；退出非 0 时 `lib/power_saver.sh` 会永久退回 `sleep`，所以最坏结果是退化成定时轮询
 - 目标 `aarch64-linux-android`、`armv7-linux-androideabi`，API 由 `QSCD_ANDROID_API` 控制（默认 24）
 - Rust 版需 `cargo` + NDK（NDK 的 clang 兼作链接器）；C 版只需 NDK clang，因此没有 Rust 工具链也能产出可用二进制
 - 本机缺依赖时两个 `build:native*` 都打印跳过并退出 0；`CI=true` 或 `REQUIRE_NATIVE=1` 时视为失败

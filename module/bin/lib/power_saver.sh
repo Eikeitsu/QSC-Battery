@@ -11,6 +11,11 @@ qsc_ps_dbg() {
 	qsc_log_once "$@"
 }
 
+qsc_ps_record_wake() {
+	qsc_debug_enabled || return 0
+	printf '%s\n' "$1" >"$DATADIR/qscd_last_wake_reason" 2>/dev/null
+}
+
 # 无 fork 读取单行文件；成功置 QSC_PS_VAL
 qsc_ps_read() {
 	QSC_PS_VAL=""
@@ -330,18 +335,24 @@ qsc_ps_watch_supported() {
 # uevent 由它自己吞掉，不再每轮叫醒 shell；插拔与跨阈值仍立即返回。
 # 未插电或正在维持停充时不传阈值 —— 那两种场景任何电池事件都该让 shell 复算。
 qsc_ps_native_wait() {
-	local secs="$1" floor="$2"
+	local secs="$1" floor="$2" rc
 	if qsc_ps_watch_supported; then
 		if [ ! -f "$DATADIR/power_switch" ] && qsc_ps_plugged; then
 			"$BINDIR/qscd" watch --max "$secs" --floor "$floor" \
 				--stop "${QSC_PS_STOP:-101}" --near "${QSC_PS_NEAR:-3}" \
 				--temp-stop "${QSC_PS_TEMP_STOP:-999}" >/dev/null 2>&1
-			return "$?"
+			rc="$?"
+		else
+			"$BINDIR/qscd" watch --max "$secs" --floor "$floor" >/dev/null 2>&1
+			rc="$?"
 		fi
-		"$BINDIR/qscd" watch --max "$secs" --floor "$floor" >/dev/null 2>&1
-		return "$?"
+		[ "$rc" -eq 0 ] && qsc_ps_record_wake "正常返回（事件或截止时间）"
+		return "$rc"
 	fi
 	"$BINDIR/qscd" wait-event "$secs" "$floor" >/dev/null 2>&1
+	rc="$?"
+	[ "$rc" -eq 0 ] && qsc_ps_record_wake "正常返回（事件或截止时间）"
+	return "$rc"
 }
 
 qsc_ps_wait() {
@@ -355,6 +366,7 @@ qsc_ps_wait() {
 		QSC_PS_WAIT_HELPER_OK=0
 		: >"$DATADIR/qscd_unusable" 2>/dev/null
 		qsc_log_once qscd warn "事件等待器不可用，已退回定时轮询"
+		qsc_ps_record_wake "守护不可用，已退回定时轮询"
 	fi
 	sleep "$secs"
 }

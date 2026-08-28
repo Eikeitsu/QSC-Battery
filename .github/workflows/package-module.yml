@@ -46,6 +46,9 @@ jobs:
       - name: Verify module zips
         run: npm run verify:zips
 
+      - name: Verify hot update and release contracts
+        run: npm run test:hot-update
+
       - uses: actions/upload-artifact@v4
         with:
           name: magisk-module-${{ github.sha }}

@@ -35,6 +35,9 @@ jobs:
         env:
           REQUIRE_SHELL_TESTS: "1"
 
+      - name: Hot update and release contracts
+        run: npm run test:hot-update
+
       - name: Typecheck WebUI
         run: npm run typecheck:web
 

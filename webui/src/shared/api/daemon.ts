@@ -1,7 +1,7 @@
 import { PATHS } from "@/shared/config/paths";
 import { exec } from "./ksu";
 
-/** 守护实现：两套功能完全一致，只是编译语言不同 */
+/** 守护实现：Rust 为主力，C 保持基础事件唤醒兼容 */
 export type DaemonImpl = "rust" | "c";
 
 export interface DaemonStatus {
@@ -9,6 +9,16 @@ export interface DaemonStatus {
   installed: boolean;
   /** 现场 probe 通过（本机能建起 netlink 套接字） */
   probeOk: boolean;
+  /** Rust selftest 通过（C 版不提供扩展自检时为 false） */
+  selftestOk: boolean;
+  /** Rust selftest 检查的 netlink 能力 */
+  selftestNetlink: boolean;
+  /** Rust selftest 检查到电源 sysfs */
+  selftestSysfs: boolean;
+  /** 二进制支持的扩展能力 */
+  features: string[];
+  /** debug_on 开启时记录的最近一次等待结果 */
+  lastWakeReason: string;
   /** 当前用的是哪套实现 */
   impl: DaemonImpl | "";
   /** 来源：模块自带 or WebUI 下载 */
@@ -22,6 +32,11 @@ export interface DaemonStatus {
 const EMPTY: DaemonStatus = {
   installed: false,
   probeOk: false,
+  selftestOk: false,
+  selftestNetlink: false,
+  selftestSysfs: false,
+  features: [],
+  lastWakeReason: "",
   impl: "",
   src: "",
   bundled: [],
@@ -47,6 +62,11 @@ function toStatus(kv: Record<string, string>): DaemonStatus {
   return {
     installed: kv.installed === "1",
     probeOk: kv.probe === "1",
+    selftestOk: kv.selftest === "1",
+    selftestNetlink: kv.selftest_netlink === "1",
+    selftestSysfs: kv.selftest_sysfs === "1",
+    features: (kv.features || "").split(/\s+/).filter(Boolean),
+    lastWakeReason: kv.last_wake || "",
     impl: toImpl(kv.impl),
     src: kv.src === "bundled" || kv.src === "download" ? kv.src : "",
     bundled: (kv.bundled || "")

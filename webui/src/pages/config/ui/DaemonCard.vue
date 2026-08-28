@@ -35,13 +35,36 @@ const srcLabel = computed(() => {
   return "";
 });
 
+const diagnosticsLabel = computed(() => {
+  if (!status.value?.installed) return "未安装";
+  const checks = [
+    `netlink ${status.value.selftestNetlink || status.value.probeOk ? "正常" : "失败"}`,
+    `电源节点 ${status.value.selftestSysfs ? "可读" : "未确认"}`,
+  ];
+  if (status.value.features.length > 0) {
+    checks.push(`能力：${status.value.features.join("、")}`);
+  } else if (status.value.impl === "c") {
+    checks.push("基础事件唤醒");
+  }
+  if (status.value.lastWakeReason) {
+    checks.push(`最近等待：${status.value.lastWakeReason}`);
+  }
+  return checks.join(" · ");
+});
+
 const stateLabel = computed(() => {
   if (!status.value) return "读取中…";
   if (!archOk.value) return "本机 CPU 架构不支持（仅 arm64 / armv7）";
   if (!installed.value) return "未安装：请在下方选择一个实现下载";
   const parts = [implLabel.value ? `${implLabel.value} 版` : "已安装"];
   if (srcLabel.value) parts.push(srcLabel.value);
-  parts.push(status.value.probeOk ? "自检通过" : "自检未通过，实际仍用定时轮询");
+  parts.push(
+    status.value.probeOk
+      ? status.value.selftestOk
+        ? "基础与 Rust 自检通过"
+        : "基础自检通过"
+      : "自检未通过，实际仍用定时轮询",
+  );
   // C 版已冻结，装了它就用不到阈值过滤与原生进程检测，这里明确讲出来，
   // 免得对着「插电间隔·有守护」等设置项纳闷为什么没效果
   if (status.value.impl === "c") parts.push("不含阈值过滤与原生进程检测");
@@ -150,6 +173,7 @@ onMounted(reload);
         :value="busy === 'c' ? '处理中…' : status?.impl === 'c' ? '使用中' : '选用'"
         @click="pick('c')"
       />
+      <van-cell v-if="installed" title="运行自检" :label="diagnosticsLabel" />
       <van-cell
         v-if="installed"
         title="删除守护文件"

@@ -162,6 +162,19 @@ cmd_status() {
 	else
 		out probe 0
 	fi
+	_selftest_out=""
+	_selftest_ok=0
+	_features=""
+	if [ -x "$BINDIR/qscd" ]; then
+		_selftest_out="$("$BINDIR/qscd" selftest 2>/dev/null)"
+		[ "$?" -eq 0 ] && _selftest_ok=1
+		_features="$("$BINDIR/qscd" features 2>/dev/null | tr -d '\r\n')"
+	fi
+	out selftest "$_selftest_ok"
+	out selftest_netlink "$(printf '%s\n' "$_selftest_out" | sed -n 's/^netlink=//p')"
+	out selftest_sysfs "$(printf '%s\n' "$_selftest_out" | sed -n 's/^sysfs=//p')"
+	out features "$_features"
+	out last_wake "$(cat "$DATADIR/qscd_last_wake_reason" 2>/dev/null | tr -d '\r\n')"
 }
 
 cmd_install() {

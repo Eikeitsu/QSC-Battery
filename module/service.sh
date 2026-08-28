@@ -69,7 +69,8 @@ rm -f "$DATADIR/.orphan_checked"
 # 拔线防抖计数重新开始，避免拿着重启前的旧计数直接还原
 rm -f "$DATADIR/unplug_streak"
 # 守护可用性每次启动重新判定（可能换了二进制或换了机型）
-rm -f "$DATADIR/qscd_unusable" "$DATADIR/qscd_features"
+rm -f "$DATADIR/qscd_unusable" "$DATADIR/qscd_features" \
+	"$DATADIR/qscd_last_wake_reason"
 rm -f "$DATADIR/power_off"
 echo "$(date +%F_%T) service.sh 启动，开始循环" > "$DATADIR/service_start.log"
 if [ -f "$DATADIR/hot_update_at" ]; then

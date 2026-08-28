@@ -22,6 +22,8 @@
 //!   qscd features
 //!       打印本二进制支持的扩展子命令，供 shell 一次性问清能力。
 //!       C 版不认这个子命令（退出 2），即视为无扩展能力。
+//!   qscd selftest [--sysfs-root DIR]
+//!       检查 netlink、事件过滤和电源节点读取能力，只读不写。
 //!
 //! 设计约束：本程序不写任何充电节点，也不做停充/恢复决策，只负责「等」与
 //! 「该不该叫醒 shell」。阈值判定的唯一真理仍在 shell 里——sh 版主包没有本
@@ -32,7 +34,7 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 /// 支持的扩展子命令；features 子命令原样打印
-const FEATURES: &str = "watch pkgs";
+const FEATURES: &str = "watch pkgs selftest";
 
 const NETLINK_KOBJECT_UEVENT: libc::c_int = 15;
 /// 内核 uevent 载荷里的匹配串；命中即认为电池状态可能变了
@@ -106,22 +108,41 @@ impl UeventSocket {
         }
     }
 
-    /// Ok(true)=命中 power_supply 事件；Ok(false)=本次超时或事件无关；Err=套接字不可用
-    fn poll_once(&self, buf: &mut [u8]) -> std::io::Result<bool> {
+    /// Ok(Some(true))=命中 power_supply 事件；Ok(Some(false))=其它事件；
+    /// Ok(None)=接收超时；Err=套接字不可用
+    fn poll_once(&self, buf: &mut [u8]) -> std::io::Result<Option<bool>> {
         let ptr = buf.as_mut_ptr() as *mut libc::c_void;
         // SAFETY: ptr 与长度来自同一 buf，recv 最多写入 buf.len() 字节。
         let n = unsafe { libc::recv(self.fd, ptr, buf.len(), 0) };
         if n > 0 {
-            return Ok(contains(&buf[..n as usize], MATCH));
+            return Ok(Some(is_power_supply_event(&buf[..n as usize])));
         }
         if n == 0 {
-            return Ok(false);
+            return Ok(Some(false));
         }
         // EAGAIN=收满超时；EINTR=被信号打断。两者都只是本次没拿到事件。
         let err = std::io::Error::last_os_error();
         match err.raw_os_error() {
-            Some(libc::EAGAIN) | Some(libc::EINTR) => Ok(false),
+            Some(libc::EAGAIN) | Some(libc::EINTR) => Ok(None),
             _ => Err(err),
+        }
+    }
+
+    /// 命中一个事件后短暂排空同一波事件，避免充电器一次状态变化唤醒多轮 shell。
+    fn drain_event_burst(&self, buf: &mut [u8]) -> std::io::Result<()> {
+        let deadline = Instant::now() + Duration::from_millis(50);
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left < RECV_MIN_TIMEOUT {
+                return Ok(());
+            }
+            if self.set_recv_timeout(left).is_none() {
+                return Err(std::io::Error::last_os_error());
+            }
+            match self.poll_once(buf)? {
+                Some(_) => {}
+                None => return Ok(()),
+            }
         }
     }
 }
@@ -138,6 +159,24 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
         return false;
     }
     haystack.windows(needle.len()).any(|w| w == needle)
+}
+
+fn is_power_supply_event(payload: &[u8]) -> bool {
+    let mut subsystem = false;
+    let mut power_path = false;
+    let mut supply_name = false;
+
+    for field in payload.split(|byte| *byte == 0) {
+        if field == b"SUBSYSTEM=power_supply" {
+            subsystem = true;
+        } else if let Some(path) = field.strip_prefix(b"DEVPATH=") {
+            power_path = contains(path, b"/power_supply/");
+        } else if let Some(name) = field.strip_prefix(b"POWER_SUPPLY_NAME=") {
+            supply_name = !name.is_empty();
+        }
+    }
+
+    subsystem && (power_path || supply_name)
 }
 
 fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
@@ -168,9 +207,14 @@ fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
             return EXIT_UNUSABLE;
         }
         match sock.poll_once(&mut buf) {
-            Ok(true) => return EXIT_OK,
+            Ok(Some(true)) => {
+                if sock.drain_event_burst(&mut buf).is_err() {
+                    return EXIT_UNUSABLE;
+                }
+                return EXIT_OK;
+            }
             // 超时或与电池无关的事件：回到循环按新的剩余时间重设超时
-            Ok(false) => {}
+            Ok(Some(false)) | Ok(None) => {}
             Err(_) => return EXIT_UNUSABLE,
         }
     }
@@ -189,10 +233,13 @@ struct Thresholds {
     root: String,
 }
 
-/// 单行 sysfs 读取；读不到或不是整数返回 None
+/// 单行 sysfs 读取；读不到返回 None，并去掉首尾空白
+fn read_text(path: &str) -> Option<String> {
+    Some(std::fs::read_to_string(path).ok()?.trim().to_string())
+}
+
 fn read_int(path: &str) -> Option<i64> {
-    let raw = std::fs::read_to_string(path).ok()?;
-    raw.trim().parse::<i64>().ok()
+    read_text(path)?.parse::<i64>().ok()
 }
 
 /// 温度归一化：与 shell 侧 qsc_normalize_temperature 同一套换算
@@ -220,13 +267,7 @@ impl Thresholds {
     }
 
     fn plugged(&self) -> bool {
-        let base = self.ps_dir();
-        for name in ["usb", "qc_usb", "ac", "dc", "wireless"] {
-            if read_int(&format!("{base}/{name}/online")) == Some(1) {
-                return true;
-            }
-        }
-        false
+        PowerState::read(&self.root).plugged
     }
 
     fn level(&self) -> Option<i64> {
@@ -270,6 +311,63 @@ impl Thresholds {
             }
         }
         false
+    }
+}
+
+/// 与 shell 侧 qsc_ps_plugged 对齐的最小电源状态。
+///
+/// MCA 设备在模块接管停充后可能把 usb/online 置为 0，因此 online 不能
+/// 作为唯一依据。这里仅判断「是否仍像插着线」，不决定停充或恢复。
+#[derive(Debug, Default, PartialEq, Eq)]
+struct PowerState {
+    plugged: bool,
+}
+
+impl PowerState {
+    fn read(root: &str) -> Self {
+        let base = format!("{root}/sys/class/power_supply");
+
+        for name in ["usb", "qc_usb", "ac", "dc", "wireless"] {
+            if read_int(&format!("{base}/{name}/online")) == Some(1) {
+                return Self { plugged: true };
+            }
+        }
+
+        // K90U / MCA 停充时 online 可能被驱动压成 0。
+        for name in ["usb", "qc_usb", "wireless", "ac"] {
+            if read_int(&format!("{base}/{name}/present")) == Some(1) {
+                return Self { plugged: true };
+            }
+        }
+
+        for path in [
+            format!("{base}/usb/real_type"),
+            format!("{base}/usb/type"),
+        ] {
+            if let Some(value) = read_text(&path) {
+                match value.as_str() {
+                    "" | "Unknown" | "UNKNOWN" | "None" | "NONE" => {}
+                    _ => return Self { plugged: true },
+                }
+            }
+        }
+
+        if let Some(value) = read_int(&format!("{base}/usb/voltage_now")) {
+            // 节点单位可能是 µV 或 mV，与 shell 侧使用 3V 门槛一致。
+            if value > 3_000_000 || (value > 3_000 && value < 100_000) {
+                return Self { plugged: true };
+            }
+        }
+
+        // MCA 的 battery/status 可能为 Not charging，但此时仍是插线状态。
+        if matches!(
+            read_text(&format!("{base}/battery/status")).as_deref(),
+            Some("Charging" | "Full" | "Not charging")
+        ) {
+            return Self { plugged: true };
+        }
+
+        Self::default()
     }
 }
 
@@ -331,12 +429,15 @@ fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
         }
         match sock.poll_once(&mut buf) {
             // 命中电池事件：只有确实需要 shell 干活时才返回
-            Ok(true) => {
+            Ok(Some(true)) => {
                 if th.should_wake(plugged_at_start) {
+                    if sock.drain_event_burst(&mut buf).is_err() {
+                        return EXIT_UNUSABLE;
+                    }
                     return EXIT_OK;
                 }
             }
-            Ok(false) => {}
+            Ok(Some(false)) | Ok(None) => {}
             Err(_) => return EXIT_UNUSABLE,
         }
     }
@@ -400,6 +501,27 @@ fn parse_secs(arg: Option<&str>, default: u64, max: u64) -> u64 {
         .min(max)
 }
 
+fn selftest(root: &str) -> u8 {
+    let netlink = UeventSocket::open().is_some();
+    let base = format!("{root}/sys/class/power_supply");
+    let sysfs = ["battery/capacity", "battery/status", "battery/temp"]
+        .iter()
+        .any(|path| std::path::Path::new(&format!("{base}/{path}")).is_file());
+    let state = PowerState::read(root);
+
+    println!("netlink={}", if netlink { 1 } else { 0 });
+    println!("event_filter=1");
+    println!("sysfs={}", if sysfs { 1 } else { 0 });
+    println!("plugged={}", if state.plugged { 1 } else { 0 });
+    println!("watch=1");
+    println!("pkgs=1");
+    if netlink {
+        EXIT_OK
+    } else {
+        EXIT_UNUSABLE
+    }
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     match args.get(1).map(String::as_str) {
@@ -449,12 +571,19 @@ fn main() -> ExitCode {
                 ExitCode::from(EXIT_UNUSABLE)
             }
         }
+        Some("selftest") => {
+            let mut root = "";
+            if let Some(i) = args.iter().position(|a| a == "--sysfs-root") {
+                root = args.get(i + 1).map(String::as_str).unwrap_or("");
+            }
+            ExitCode::from(selftest(root))
+        }
         _ => {
             eprintln!(
                 "usage: qscd wait-event <max_secs> [floor_secs]\n       \
                  qscd watch --max N [--floor N] [--stop N] [--near N] [--temp-stop N]\n       \
                  qscd pkgs <list_file> [--proc-root DIR]\n       \
-                 qscd probe | qscd features"
+                 qscd probe | qscd features | qscd selftest [--sysfs-root DIR]"
             );
             ExitCode::from(EXIT_UNUSABLE)
         }
@@ -477,6 +606,30 @@ mod tests {
         assert!(!contains(payload, MATCH));
         assert!(!contains(b"", MATCH));
         assert!(!contains(b"short", MATCH));
+    }
+
+    #[test]
+    fn power_supply_event_requires_power_supply_identity() {
+        let payload =
+            b"change@/devices/battery\0ACTION=change\0SUBSYSTEM=power_supply\0DEVPATH=/devices/battery\0";
+        assert!(!is_power_supply_event(payload));
+    }
+
+    #[test]
+    fn power_supply_event_accepts_path_or_supply_name() {
+        let path =
+            b"change@/devices/battery\0SUBSYSTEM=power_supply\0DEVPATH=/devices/power_supply/battery\0";
+        assert!(is_power_supply_event(path));
+
+        let name = b"change@/devices/battery\0SUBSYSTEM=power_supply\0POWER_SUPPLY_NAME=battery\0";
+        assert!(is_power_supply_event(name));
+    }
+
+    #[test]
+    fn power_supply_event_rejects_substring_matches() {
+        let payload =
+            b"change@/devices/battery\0SUBSYSTEM=power_supply_extra\0DEVPATH=/devices/power_supply/battery\0";
+        assert!(!is_power_supply_event(payload));
     }
 
     #[test]
@@ -583,6 +736,46 @@ mod tests {
         assert!(!th.should_wake(true));
         // 起始状态记为未插电，现在读到插电 → 必须叫醒
         assert!(th.should_wake(false));
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn power_state_accepts_mca_not_charging_without_online() {
+        let root = fake_sysfs(&[("battery/status", "Not charging")]);
+        assert!(PowerState::read(root.to_str().unwrap()).plugged);
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn power_state_accepts_present_and_type_signals() {
+        let present = fake_sysfs(&[("usb/present", "1")]);
+        assert!(PowerState::read(present.to_str().unwrap()).plugged);
+        std::fs::remove_dir_all(&present).ok();
+
+        let type_root = fake_sysfs(&[("usb/type", "USB_PD")]);
+        assert!(PowerState::read(type_root.to_str().unwrap()).plugged);
+        std::fs::remove_dir_all(&type_root).ok();
+    }
+
+    #[test]
+    fn power_state_accepts_microvolt_and_millivolt_vbus() {
+        let microvolt = fake_sysfs(&[("usb/voltage_now", "5000000")]);
+        assert!(PowerState::read(microvolt.to_str().unwrap()).plugged);
+        std::fs::remove_dir_all(&microvolt).ok();
+
+        let millivolt = fake_sysfs(&[("usb/voltage_now", "5000")]);
+        assert!(PowerState::read(millivolt.to_str().unwrap()).plugged);
+        std::fs::remove_dir_all(&millivolt).ok();
+    }
+
+    #[test]
+    fn power_state_rejects_unknown_signals() {
+        let root = fake_sysfs(&[
+            ("battery/status", "Unknown"),
+            ("usb/type", "Unknown"),
+            ("usb/voltage_now", "0"),
+        ]);
+        assert!(!PowerState::read(root.to_str().unwrap()).plugged);
         std::fs::remove_dir_all(&root).ok();
     }
 
