@@ -345,9 +345,11 @@ impl PowerState {
             format!("{base}/usb/type"),
         ] {
             if let Some(value) = read_text(&path) {
-                match value.as_str() {
-                    "" | "Unknown" | "UNKNOWN" | "None" | "NONE" => {}
-                    _ => return Self { plugged: true },
+                if !matches!(
+                    value.as_str(),
+                    "" | "Unknown" | "UNKNOWN" | "None" | "NONE"
+                ) {
+                    return Self { plugged: true };
                 }
             }
         }
