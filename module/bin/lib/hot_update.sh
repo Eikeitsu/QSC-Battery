@@ -211,9 +211,12 @@ for f in module.prop service.sh bin/common.sh; do
 	[ -f "$NEW/$f" ] || { hu_log "abort: 暂存缺少 $f"; exit 0; }
 done
 
-# 就地覆盖（只增改不删），全程不出现空模块窗口
-if ! cp -a "$NEW"/. "$OLD"/ 2>/dev/null; then
-	hu_log "fail: 覆盖 $OLD 失败，将按重启生效"
+# 就地覆盖（只增改不删），全程不出现空模块窗口。
+# 不使用 cp -a：部分 Android toybox/第三方环境对该短选项兼容性不一致。
+_cp_err="$(cp -rfp "$NEW"/. "$OLD"/ 2>&1)"
+_cp_rc=$?
+if [ "$_cp_rc" -ne 0 ]; then
+	hu_log "fail: 覆盖 $OLD 失败 rc=$_cp_rc err=${_cp_err:-无输出}，将按重启生效"
 	exit 1
 fi
 hu_log "ok: 已就地覆盖到 $OLD"
