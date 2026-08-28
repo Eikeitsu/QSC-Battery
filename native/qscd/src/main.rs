@@ -37,8 +37,6 @@ use std::time::{Duration, Instant};
 const FEATURES: &str = "watch pkgs selftest";
 
 const NETLINK_KOBJECT_UEVENT: libc::c_int = 15;
-/// 内核 uevent 载荷里的匹配串；命中即认为电池状态可能变了
-const MATCH: &[u8] = b"SUBSYSTEM=power_supply";
 const RECV_BUF: usize = 8192;
 /// 剩余时间不足这么点就直接收工：SO_RCVTIMEO 传 0 表示「永不超时」，
 /// 把不足 1ms 的余量四舍五入成 0 会让本进程永久挂死在 recv 上
@@ -590,18 +588,20 @@ fn main() -> ExitCode {
 mod tests {
     use super::*;
 
+    const TEST_MATCH: &[u8] = b"SUBSYSTEM=power_supply";
+
     #[test]
     fn contains_finds_power_supply_subsystem() {
         let payload = b"change@/devices/battery\0ACTION=change\0SUBSYSTEM=power_supply\0";
-        assert!(contains(payload, MATCH));
+        assert!(contains(payload, TEST_MATCH));
     }
 
     #[test]
     fn contains_rejects_other_subsystems() {
         let payload = b"change@/devices/net\0ACTION=change\0SUBSYSTEM=net\0";
-        assert!(!contains(payload, MATCH));
-        assert!(!contains(b"", MATCH));
-        assert!(!contains(b"short", MATCH));
+        assert!(!contains(payload, TEST_MATCH));
+        assert!(!contains(b"", TEST_MATCH));
+        assert!(!contains(b"short", TEST_MATCH));
     }
 
     #[test]
