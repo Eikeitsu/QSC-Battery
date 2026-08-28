@@ -3,6 +3,9 @@
 MODDIR=${0%/*}
 . "$MODDIR/bin/common.sh"
 
+# 新版 worker 会在启动服务前释放锁；这里仅清理无内容的历史残留锁目录。
+rmdir /data/adb/.QSC_Battery.hot_update.lock 2>/dev/null
+
 until [ -f "$BINDIR/qsc_switch.sh" ]; do
 	qsc_log_once no_core error "核心脚本 qsc_switch.sh 丢失，请重新安装模块"
 	qsc_write_module_description "⚠️异常" "核心脚本丢失" "请重新安装模块并重启"

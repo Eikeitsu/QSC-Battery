@@ -205,6 +205,7 @@ LOCK="/data/adb/.${MODID}.hot_update.lock"
 if ! mkdir "$LOCK" 2>/dev/null; then
 	exit 0
 fi
+echo "$$" >"$LOCK/pid" 2>/dev/null
 hu_cleanup_lock() {
 	rm -rf "$LOCK" 2>/dev/null
 }
@@ -327,7 +328,9 @@ if [ -d "$PAYLOAD" ]; then
 		hu_log "warn: 热更新外部副本清理失败，将在后台再次尝试"
 	fi
 fi
-# 更新已经完成后，worker 本身也不再需要；当前进程可继续完成标记观察。
+# 更新已经完成后立即释放当前锁；当前进程只负责继续观察管理器的残留标记。
+hu_cleanup_lock
+# worker 本身也不再需要。
 rm -f /data/adb/.qsc_hot_update.sh 2>/dev/null
 if [ -f "$OLD/$SCRIPT" ]; then
 	sh "$OLD/$SCRIPT" >/dev/null 2>&1 &
@@ -374,6 +377,7 @@ hot_update_spawn_worker() {
 	_sw_script="${2:-hotinstall.sh}"
 	_sw_payload="${3:-/data/adb/.qsc_hot_update_payload/$_sw_modid}"
 	[ -n "$_sw_modid" ] || return 1
+	hot_update_clear_stale_lock "$_sw_modid" || return 1
 	# 放在两个模块目录之外：worker 要删掉 modules_update，不能跟着被删；
 	# 也不能落在 MODPATH 里，否则会被打包进模块目录
 	_sw_path="/data/adb/.qsc_hot_update.sh"
@@ -389,6 +393,25 @@ hot_update_spawn_worker() {
 
 hot_update_versioncode() {
 	sed -n 's/^versionCode=//p' "$1" 2>/dev/null | head -n1 | tr -d ' \r'
+}
+
+hot_update_clear_stale_lock() {
+	_stale_lock="/data/adb/.$1.hot_update.lock"
+	[ -d "$_stale_lock" ] || return 0
+	if [ -f "$_stale_lock/pid" ]; then
+		_stale_pid="$(cat "$_stale_lock/pid" 2>/dev/null | tr -d ' \r\n')"
+		case "$_stale_pid" in
+			""|*[!0-9]*) ;;
+			*)
+				kill -0 "$_stale_pid" 2>/dev/null && return 1
+				rm -rf "$_stale_lock" 2>/dev/null
+				[ ! -e "$_stale_lock" ] && return 0
+				return 1
+				;;
+		esac
+	fi
+	# 兼容旧版留下的空锁目录；有内容但无法确认归属时不强删。
+	rmdir "$_stale_lock" 2>/dev/null
 }
 
 # 运行期兜底：安装器把我们脱离出去的收尾作业杀掉时，由常驻服务重新拉起。
