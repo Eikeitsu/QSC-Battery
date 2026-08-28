@@ -24,16 +24,6 @@ const modules = [
     worker: "/data/adb/.qsc_hot_update.sh",
     staged: "/data/adb/modules_update/QSC_Battery",
   },
-  {
-    name: "CACertStore",
-    hot: join(root, "../CACertStore/module/bin/lib/hot_update.sh"),
-    service: join(root, "../CACertStore/module/service.sh"),
-    uninstall: join(root, "../CACertStore/module/uninstall.sh"),
-    payload: "/data/adb/.certbridge_hot_update_payload",
-    lock: "/data/adb/.CACertStore.hot_update.lock",
-    worker: "/data/adb/.certbridge_hot_update.sh",
-    staged: "/data/adb/modules_update/CACertStore",
-  },
 ];
 
 function read(path) {
