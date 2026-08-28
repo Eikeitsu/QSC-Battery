@@ -215,6 +215,8 @@ requireText(chart, "useSampledHistory", "WebUI charge source selection");
 requireText(chart, "dataSource === 'sampled'", "WebUI sampled chart mode");
 requireText(chart, "loadSystemBatteryHistory", "WebUI unplugged history source");
 requireText(chart, "chartNow", "WebUI moving time axis");
+requireText(historyApi, "RESET:TIME", "system history reset anchor");
+requireText(historyApi, "count < 1200", "system history bounded tail");
 requireText(appShell, "PageLoading", "WebUI page loading state");
 requireText(appShell, "<Suspense", "WebUI async page fallback");
 requireText(routes, "component: AppShell", "WebUI synchronous root layout");

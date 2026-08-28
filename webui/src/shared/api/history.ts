@@ -74,14 +74,32 @@ function parseResetTime(text: string): number | null {
  * 代价是没有充电电流（系统不记该字段），故仅用于补齐放电段。
  */
 export async function loadSystemBatteryHistory(): Promise<HistoryPoint[]> {
+  // RESET:TIME 通常位于输出最前面，不能在 grep 后直接 tail，否则历史稍长
+  // 时基准行会被截掉，解析器就只能返回空数组。
+  const keepRecent = `awk '
+/RESET:TIME:/ { reset = $0; count = 0; next }
+/^[[:space:]]*[+0]/ {
+  if (count < 1200) {
+    lines[++count] = $0;
+  } else {
+    for (i = 1; i < 1200; i++) lines[i] = lines[i + 1];
+    lines[1200] = $0;
+  }
+}
+END {
+  if (reset != "") print reset;
+  for (i = 1; i <= count; i++) print lines[i];
+}'`;
   let text = "";
   const primary = await exec(
-    "dumpsys batterystats --history 2>/dev/null | grep -E 'RESET:TIME|^ *[+0]' | tail -n 1200",
+    `dumpsys batterystats --history 2>/dev/null | ${keepRecent}`,
+    15_000,
   );
   text = primary.stdout.trim();
   if (!text) {
     const fallback = await exec(
-      "dumpsys batterystats 2>/dev/null | sed -n '/Battery History/,/^$/p' | tail -n 1200",
+      `dumpsys batterystats 2>/dev/null | sed -n '/Battery History/,$p' | ${keepRecent}`,
+      15_000,
     );
     text = fallback.stdout.trim();
   }
