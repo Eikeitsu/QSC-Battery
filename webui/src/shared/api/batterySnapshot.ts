@@ -43,7 +43,7 @@ export async function loadBatterySnapshot(): Promise<{
   result: ExecResult;
 }> {
   const result = await exec(
-    `. '${PATHS.MODDIR}/bin/common.sh' && qsc_battery_snapshot_print`,
+    `MODDIR='${PATHS.MODDIR}'; . '${PATHS.MODDIR}/bin/common.sh' && qsc_battery_snapshot_print`,
   );
   if (result.errno !== 0) return { value: EMPTY_SNAPSHOT, result };
   return { value: parseBatterySnapshot(result.stdout), result };

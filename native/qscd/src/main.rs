@@ -38,8 +38,7 @@ const FEATURES: &str = "watch pkgs selftest";
 
 const NETLINK_KOBJECT_UEVENT: libc::c_int = 15;
 const RECV_BUF: usize = 8192;
-/// 剩余时间不足这么点就直接收工：SO_RCVTIMEO 传 0 表示「永不超时」，
-/// 把不足 1ms 的余量四舍五入成 0 会让本进程永久挂死在 recv 上
+/// 剩余时间不足这么点就直接收工，避免极短的 poll 超时造成忙等。
 const RECV_MIN_TIMEOUT: Duration = Duration::from_millis(1);
 
 const EXIT_OK: u8 = 0;
@@ -84,7 +83,7 @@ impl UeventSocket {
             return None;
         }
 
-        // 超时由 wait_event 按剩余时间逐次设定，这里不预设
+        // wait/watch 通过 poll 按剩余时间控制阻塞，这里不预设 socket 超时
         Some(sock)
     }
 
@@ -106,12 +105,39 @@ impl UeventSocket {
         }
     }
 
+    /// 先用 poll 明确控制超时，再接收一个 uevent。
+    ///
+    /// Android 部分内核对 netlink socket 的 SO_RCVTIMEO 行为并不稳定，
+    /// 不能只依赖 recv 自身超时，否则 service 可能永远卡在第一轮。
     /// Ok(Some(true))=命中 power_supply 事件；Ok(Some(false))=其它事件；
-    /// Ok(None)=接收超时；Err=套接字不可用
-    fn poll_once(&self, buf: &mut [u8]) -> std::io::Result<Option<bool>> {
+    /// Ok(None)=接收超时或被信号打断；Err=套接字不可用
+    fn poll_once(
+        &self,
+        buf: &mut [u8],
+        timeout: Duration,
+    ) -> std::io::Result<Option<bool>> {
+        let timeout_ms = timeout.as_millis().clamp(1, i32::MAX as u128) as libc::c_int;
+        let mut descriptor = libc::pollfd {
+            fd: self.fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // SAFETY: descriptor 指向一个有效的 pollfd，数量为 1。
+        let ready = unsafe { libc::poll(&mut descriptor, 1, timeout_ms) };
+        if ready == 0 {
+            return Ok(None);
+        }
+        if ready < 0 {
+            let err = std::io::Error::last_os_error();
+            return if err.raw_os_error() == Some(libc::EINTR) {
+                Ok(None)
+            } else {
+                Err(err)
+            };
+        }
         let ptr = buf.as_mut_ptr() as *mut libc::c_void;
         // SAFETY: ptr 与长度来自同一 buf，recv 最多写入 buf.len() 字节。
-        let n = unsafe { libc::recv(self.fd, ptr, buf.len(), 0) };
+        let n = unsafe { libc::recv(self.fd, ptr, buf.len(), libc::MSG_DONTWAIT) };
         if n > 0 {
             return Ok(Some(is_power_supply_event(&buf[..n as usize])));
         }
@@ -134,10 +160,7 @@ impl UeventSocket {
             if left < RECV_MIN_TIMEOUT {
                 return Ok(());
             }
-            if self.set_recv_timeout(left).is_none() {
-                return Err(std::io::Error::last_os_error());
-            }
-            match self.poll_once(buf)? {
+            match self.poll_once(buf, left)? {
                 Some(_) => {}
                 None => return Ok(()),
             }
@@ -195,18 +218,14 @@ fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
     let deadline = Instant::now() + Duration::from_secs(remaining);
     let mut buf = [0u8; RECV_BUF];
     loop {
-        // 接收超时一次设满剩余时间：整段等待只在截止时刻醒一次。
+        // poll 一次设满剩余时间：整段等待只在截止时刻醒一次。
         // 早先按固定 2 秒切片轮流复查截止时间，30 秒窗口要醒 15 次，
         // 白让 CPU 进不了深层 idle，而事件到达本来就是立即返回、与超时无关。
         let left = deadline.saturating_duration_since(Instant::now());
         if left < RECV_MIN_TIMEOUT {
             return EXIT_OK;
         }
-        if sock.set_recv_timeout(left).is_none() {
-            eprintln!("qscd: reason=set_recv_timeout");
-            return EXIT_UNUSABLE;
-        }
-        match sock.poll_once(&mut buf) {
+        match sock.poll_once(&mut buf, left) {
             Ok(Some(true)) => {
                 if sock.drain_event_burst(&mut buf).is_err() {
                     eprintln!("qscd: reason=event_drain");
@@ -474,11 +493,7 @@ fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
         if left < RECV_MIN_TIMEOUT {
             return EXIT_OK;
         }
-        if sock.set_recv_timeout(left).is_none() {
-            eprintln!("qscd: reason=set_recv_timeout");
-            return EXIT_UNUSABLE;
-        }
-        match sock.poll_once(&mut buf) {
+        match sock.poll_once(&mut buf, left) {
             // 命中电池事件：只有确实需要 shell 干活时才返回
             Ok(Some(true)) => {
                 if th.should_wake(plugged_at_start) {
@@ -654,7 +669,7 @@ fn main() -> ExitCode {
             ExitCode::from(EXIT_OK)
         }
         Some("probe") => {
-            // 顺带验一次 SO_RCVTIMEO：wait_event 的截止时间全靠它
+            // 保留 socket 超时能力诊断；实际 wait/watch 截止时间由 poll 控制
             let ok = UeventSocket::open()
                 .map(|s| s.set_recv_timeout(Duration::from_secs(1)).is_some())
                 .unwrap_or(false);

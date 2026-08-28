@@ -166,6 +166,7 @@ const powerSaver = read(join(root, "module/bin/lib/power_saver.sh"));
 const serviceSource = read(join(root, "module/service.sh"));
 const daemonApi = read(join(root, "webui/src/shared/api/daemon.ts"));
 const daemonCard = read(join(root, "webui/src/pages/config/ui/DaemonCard.vue"));
+const batterySnapshotApi = read(join(root, "webui/src/shared/api/batterySnapshot.ts"));
 const installGuide = read(join(root, "docs/guide/install.md"));
 const webuiGuide = read(join(root, "docs/guide/webui.md"));
 const configGuide = read(join(root, "docs/guide/config.md"));
@@ -208,6 +209,7 @@ requireText(daemonApi, "waitFailure", "WebUI native wait failure status");
 requireText(daemonApi, "waitFailureTime", "WebUI native wait failure time");
 requireText(daemonCard, "等待器退避重试", "WebUI native wait recovery hint");
 requireText(daemonCard, "updateDaemon", "WebUI remote repair action");
+requireText(batterySnapshotApi, "MODDIR='${PATHS.MODDIR}'", "WebUI snapshot module path");
 requireText(installGuide, "Rust 版额外提供阈值事件过滤", "install guide Rust capability");
 requireText(webuiGuide, "只读快照与诊断", "WebUI guide snapshot capability");
 requireText(webuiGuide, "升级继承", "WebUI guide inherited source");
@@ -221,6 +223,8 @@ if (webuiGuide.includes("不写任何充电节点、不做阈值判定")) {
 requireText(qscdSource, "struct BatterySnapshot", "Rust snapshot layer");
 requireText(qscdSource, "snapshot_source=", "Rust snapshot diagnostics");
 requireText(qscdSource, "snapshot_failure=", "Rust snapshot failure diagnostics");
+requireText(qscdSource, "libc::poll", "Rust bounded netlink wait");
+requireText(qscdSource, "libc::MSG_DONTWAIT", "Rust non-blocking netlink receive");
 requireText(qscdSource, "reason=netlink_open", "Rust netlink failure reason");
 simulateHotUpdateContract();
 
