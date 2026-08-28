@@ -6,7 +6,7 @@
 2. WebUI 中确认模块总开关已打开
 3. 查看 `data/log.log` 是否有「未找到有效充电控制节点」
 4. 红米 K90U（骁龙8至尊版）等 MCA 机型：安装/启动后查看 `data/device.profile` 应为 `mca=1` 且含 `handle_state` 路径；日志停充条目含 `MCA`。建议 `power_stop` 与 `power_start` 间隔至少 10
-5. 若机型较新或停充无效：模块管理器 **Action** → 音量上刷新；**音量下**在已插电时快速测开关（未插电则写诊断报告 `/sdcard/qsc_diagnose.txt`）。也可在 WebUI「策略 → 测开关与缓存」，将有效节点写入 `device.profile` 的 `preferred_switch`。或在「策略 → 自定义供电开关」/ `config.conf` 填写 `power_switch`。升级后闪充可到「策略 → 测开关与缓存」清除开关缓存后重启。手动执行：
+5. 若机型较新或停充无效：模块管理器 **Action** → 音量上刷新；**音量下**在已插电时快速测开关（未插电则写诊断报告 `/sdcard/qsc_diagnose.txt`）。也可在 WebUI「策略 → 测开关与缓存」，将有效节点写入 `device.profile` 的 `preferred_switch`。或在「策略 → 自定义供电开关」/ `config.conf` 填写 `power_switch`。升级后若出现充电反复启停，可到「策略 → 测开关与缓存」清除开关缓存后重启。手动执行：
 
 ```bash
 sh /data/adb/modules/QSC_Battery/bin/diagnose.sh

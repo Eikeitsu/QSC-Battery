@@ -6,7 +6,7 @@
       "id": "safe.clear_preferred",
       "name": "回退到探测（清空 preferred）",
       "matches": ["*"],
-      "note": "升级后闪充 / 手填失效时用；会触发重新探测（含 MCA）。",
+      "note": "升级后出现充电反复启停 / 手填失效时用；会触发重新探测（含 MCA）。",
       "profile": {
         "preferred_switch": "",
         "preferred_start": "",

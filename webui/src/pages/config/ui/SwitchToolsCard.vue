@@ -12,7 +12,7 @@ async function onClearCache() {
     await showConfirmDialog({
       title: "清除开关缓存",
       message:
-        "将删除 list_switch / device.profile，重启后重新探测。用于升级后闪充或停充无效。",
+        "将删除 list_switch / device.profile，重启后重新探测。用于升级后出现充电反复启停或停充无效。",
     });
   } catch {
     return;

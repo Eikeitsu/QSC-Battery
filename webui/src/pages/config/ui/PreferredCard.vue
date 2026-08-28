@@ -40,7 +40,7 @@ async function onSave() {
       await showConfirmDialog({
         title: "策略类节点警告",
         message:
-          "该路径可能是策略/温控节点（如 night_charging），易与系统互抢导致闪充。确认仍要保存为 preferred？",
+          "该路径可能是策略/温控节点（如 night_charging），易与系统互抢导致充电反复启停。确认仍要保存为 preferred？",
       });
     } catch {
       return;

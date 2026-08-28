@@ -34,7 +34,7 @@ async function onConfirm(text: string) {
       await showConfirmDialog({
         title: "策略类节点警告",
         message:
-          "内容含 night_charging / cool_mode 等策略节点，小米等机型易闪充。确认仍要保存？",
+          "内容含 night_charging / cool_mode 等策略节点，小米等机型易出现充电反复启停。确认仍要保存？",
       });
     } catch {
       return;
@@ -66,11 +66,11 @@ async function onConfirm(text: string) {
       ::。保存后优先于全量扫描；留空则仅用自动探测。
     </p>
     <p v-if="policyWarn" class="field-hint pad-x warn">
-      当前含策略类节点，可能引起闪充；优先用「首选停充开关」或测开关结果。
+      当前含策略类节点，可能引起充电反复启停；优先用「首选停充开关」或测开关结果。
     </p>
     <p class="field-hint pad-x warn">
-      升级后若闪充或停充无效：到下方「测开关与缓存」清除并重启，或插电后 Action
-      音量下测开关。
+      升级后若出现充电反复启停或停充无效：到下方「测开关与缓存」清除并重启，或插电后
+      Action 音量下测开关。
     </p>
   </ThemedCard>
 
