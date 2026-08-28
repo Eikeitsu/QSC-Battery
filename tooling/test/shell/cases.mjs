@@ -80,6 +80,25 @@ export const cases = [
   },
 
   {
+    // K90U 的 online 节点可能在 MCA 接管后为 0；仅修 charge_eval 不够，
+    // 省电快路径也必须先把 Not charging 识别为仍插线，不能跳过整轮。
+    name: "MCA status=Not charging 且无 online → 仍应执行停充",
+    sysfs: {
+      "battery/capacity": "85",
+      "battery/status": "Not charging",
+      "battery/temp": COOL,
+      "battery/current_now": "0",
+    },
+    config: { ...FAST, power_stop: "80", power_start: "75", temperature_switch: "0" },
+    node: { initial: "0", stop: "1", start: "0" },
+    expect: {
+      node: "1",
+      files: { power_switch: true },
+      descIncludes: "已停充",
+    },
+  },
+
+  {
     name: "电量低于阈值 → 不停充",
     sysfs: {
       "battery/capacity": "70",

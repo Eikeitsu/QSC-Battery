@@ -349,6 +349,18 @@ fi
 if [ "$charge_eval" = "1" ] && [ "$battery_status_data" != "1" ]; then
 	qsc_log_once st_odd debug "插电但 status=${battery_status:-?}（非充电中），仍按供电评估停充"
 fi
+if qsc_debug_enabled; then
+	_dbg_online=""
+	_dbg_present=""
+	_dbg_type=""
+	_dbg_vbus=""
+	qsc_read_node "$PSDIR/usb/online" && _dbg_online="$QSC_NODE_VAL"
+	qsc_read_node "$PSDIR/usb/present" && _dbg_present="$QSC_NODE_VAL"
+	qsc_read_node "$PSDIR/usb/type" && _dbg_type="$QSC_NODE_VAL"
+	qsc_read_node "$PSDIR/usb/voltage_now" && _dbg_vbus="$QSC_NODE_VAL"
+	qsc_log_once mca_decision debug \
+		"停充评估：level=$battery_level stop=$power_stop status=$battery_status raw_status=${_sf_status:-?} powered=$([ -n "$battery_powered" ] && echo 1 || echo 0) eval=$charge_eval switch=$([ -f "$DATADIR/power_switch" ] && echo 1 || echo 0) mca=$(qsc_profile_get mca 2>/dev/null) mca_path=$(qsc_profile_get mca_path 2>/dev/null) usb_online=${_dbg_online:-?} usb_present=${_dbg_present:-?} usb_type=${_dbg_type:-?} usb_vbus=${_dbg_vbus:-?}"
+fi
 
 # 按 App 停充命中。前台检测要跑 ps / dumpsys window，是本模块最贵的一步：
 # 只在「该评估停充」或「已因 App 停充需维持」时执行，且至少间隔

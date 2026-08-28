@@ -420,7 +420,13 @@ qsc_mca_write() {
 		done
 	fi
 
-	[ -n "$path" ] || return 1
+	if [ -z "$path" ]; then
+		if qsc_debug_enabled; then
+			qsc_log_once mca_path_missing debug \
+				"MCA节点探测失败：profile_mca=$(qsc_profile_get mca 2>/dev/null) profile_path=$(qsc_profile_get mca_path 2>/dev/null)"
+		fi
+		return 1
+	fi
 
 	QSC_MCA=1
 	QSC_MCA_PATH="$path"
@@ -428,6 +434,12 @@ qsc_mca_write() {
 	QSC_MCA_START=0
 	if [ "$(qsc_profile_get mca_path 2>/dev/null)" != "$path" ]; then
 		qsc_write_device_profile "$path" >/dev/null 2>&1 || true
+	fi
+	if qsc_debug_enabled; then
+		_mca_readback=""
+		qsc_read_node "$path" && _mca_readback="$QSC_NODE_VAL"
+		qsc_log_once "mca_write_$label" debug \
+			"MCA写入：mode=$label path=$path request=$val readback=${_mca_readback:-?}"
 	fi
 
 	if [ "$label" = "stop" ]; then

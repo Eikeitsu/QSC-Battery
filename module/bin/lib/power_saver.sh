@@ -5,6 +5,12 @@
 
 QSC_PS_CONF_LOADED=0
 
+# 仅在用户开启 debug_on 时落盘；默认路径不增加日志写入。
+qsc_ps_dbg() {
+	qsc_debug_enabled || return 0
+	qsc_log_once "$@"
+}
+
 # 无 fork 读取单行文件；成功置 QSC_PS_VAL
 qsc_ps_read() {
 	QSC_PS_VAL=""
@@ -100,18 +106,62 @@ qsc_ps_now() {
 	esac
 }
 
-# 插电判定：只读 online 节点，无 fork
+# 插电判定：只读 power_supply 节点，无 fork
 qsc_ps_plugged() {
-	local p
+	local p v
 	for p in "$PSDIR/usb/online" \
 		"$PSDIR/qc_usb/online" \
 		"$PSDIR/ac/online" \
 		"$PSDIR/dc/online" \
 		"$PSDIR/wireless/online"; do
 		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
+			qsc_ps_dbg ps_online debug "插电信号: $p=1"
 			return 0
 		fi
 	done
+	# K90U / MCA 停充时 online 可能被驱动压成 0，不能因此跳过整轮。
+	for p in "$PSDIR/usb/present" "$PSDIR/qc_usb/present" \
+		"$PSDIR/wireless/present" "$PSDIR/ac/present"; do
+		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
+			qsc_ps_dbg ps_present debug "插电信号: $p=1（online 可能为 0）"
+			return 0
+		fi
+	done
+	for p in "$PSDIR/usb/real_type" "$PSDIR/usb/type"; do
+		if qsc_ps_read "$p"; then
+			v="$QSC_PS_VAL"
+			case "$v" in
+				""|Unknown|UNKNOWN|None|NONE) ;;
+				*)
+					qsc_ps_dbg ps_type debug "插电信号: $p=$v（online 可能为 0）"
+					return 0
+					;;
+			esac
+		fi
+	done
+	if qsc_ps_read "$PSDIR/usb/voltage_now"; then
+		v="$QSC_PS_VAL"
+		case "$v" in
+			""|*[!0-9]*) ;;
+			*)
+				# 单位可能是 µV 或 mV，取 3V 作门槛。
+				if [ "$v" -gt 3000000 ] 2>/dev/null || \
+					{ [ "$v" -gt 3000 ] 2>/dev/null && [ "$v" -lt 100000 ] 2>/dev/null; }; then
+					qsc_ps_dbg ps_voltage debug "插电信号: usb/voltage_now=$v（online 可能为 0）"
+					return 0
+				fi
+				;;
+		esac
+	fi
+	# MCA 的 battery/status 常为 Not charging，但此时仍是插线状态。
+	if qsc_ps_read "$PSDIR/battery/status"; then
+		case "$QSC_PS_VAL" in
+			Charging|Full|"Not charging")
+				qsc_ps_dbg ps_status debug "插电信号: battery/status=$QSC_PS_VAL（MCA 兼容）"
+				return 0
+				;;
+		esac
+	fi
 	return 1
 }
 
