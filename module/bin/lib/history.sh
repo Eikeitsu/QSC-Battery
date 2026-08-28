@@ -115,6 +115,33 @@ qsc_detect_compat_modules() {
 	return 1
 }
 
+qsc_history_flush_pending() {
+	local n now
+	[ -s "$QSC_HISTORY_BUFFER" ] || return 0
+	mkdir -p "$DATADIR" 2>/dev/null
+	if [ ! -f "$QSC_HISTORY_FILE" ]; then
+		echo "ts,level,temp,current_ua,status,source" >"$QSC_HISTORY_FILE"
+	fi
+	cat "$QSC_HISTORY_BUFFER" >>"$QSC_HISTORY_FILE" 2>/dev/null || return 1
+	: >"$QSC_HISTORY_BUFFER"
+	n="$(wc -l <"$QSC_HISTORY_FILE" 2>/dev/null | tr -d ' ')"
+	case "$n" in ""|*[!0-9]*) n=0 ;; esac
+	if [ -n "$n" ] && [ "$n" -gt "$QSC_HISTORY_MAX_LINES" ] 2>/dev/null; then
+		{
+			head -n 1 "$QSC_HISTORY_FILE"
+			tail -n $((QSC_HISTORY_MAX_LINES - 1)) "$QSC_HISTORY_FILE"
+		} >"$QSC_HISTORY_FILE.tmp" 2>/dev/null &&
+			mv -f "$QSC_HISTORY_FILE.tmp" "$QSC_HISTORY_FILE"
+	fi
+	now="$(date +%s 2>/dev/null)"
+	if [ -n "$now" ]; then
+		awk -F, -v cut="$((now - 129600))" 'NR==1 || $1+0>=cut' \
+			"$QSC_HISTORY_FILE" >"$QSC_HISTORY_FILE.trim" 2>/dev/null &&
+			mv -f "$QSC_HISTORY_FILE.trim" "$QSC_HISTORY_FILE"
+	fi
+	return 0
+}
+
 qsc_history_sample() {
 	local enable="$1" interval="$2" level="$3" temp="$4"
 	local now last cur status src line n
@@ -156,24 +183,7 @@ qsc_history_sample() {
 	if [ "$n" -lt "$QSC_HISTORY_BATCH" ]; then
 		return 0
 	fi
-	if [ ! -f "$QSC_HISTORY_FILE" ]; then
-		echo "ts,level,temp,current_ua,status,source" >"$QSC_HISTORY_FILE"
-	fi
-	cat "$QSC_HISTORY_BUFFER" >>"$QSC_HISTORY_FILE" 2>/dev/null
-	: >"$QSC_HISTORY_BUFFER"
-	n="$(wc -l <"$QSC_HISTORY_FILE" 2>/dev/null | tr -d ' ')"
-	if [ -n "$n" ] && [ "$n" -gt "$QSC_HISTORY_MAX_LINES" ] 2>/dev/null; then
-		# 保留表头 + 末尾
-		{
-			head -n 1 "$QSC_HISTORY_FILE"
-			tail -n $((QSC_HISTORY_MAX_LINES - 1)) "$QSC_HISTORY_FILE"
-		} >"$QSC_HISTORY_FILE.tmp" 2>/dev/null && mv -f "$QSC_HISTORY_FILE.tmp" "$QSC_HISTORY_FILE"
-	fi
-	# 丢弃 36h 以前
-	if [ -n "$now" ]; then
-		awk -F, -v cut="$((now - 129600))" 'NR==1 || $1+0>=cut' "$QSC_HISTORY_FILE" >"$QSC_HISTORY_FILE.trim" 2>/dev/null \
-			&& mv -f "$QSC_HISTORY_FILE.trim" "$QSC_HISTORY_FILE"
-	fi
+	qsc_history_flush_pending
 }
 
 # 根据是否停充维持，写入本轮建议 sleep 秒数

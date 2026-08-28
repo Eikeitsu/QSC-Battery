@@ -238,6 +238,11 @@ while true ; do
 		if type qsc_ps_refresh_desc >/dev/null 2>&1; then
 			qsc_ps_refresh_desc "$_now"
 		fi
+		# 拔电后立即落盘未满批次的充电采样，避免最近几条电流数据只留在
+		# pending 文件里；仍在充电时不调用，保持批量写盘的省电收益。
+		if ! qsc_ps_plugged && type qsc_history_flush_pending >/dev/null 2>&1; then
+			qsc_history_flush_pending
+		fi
 		if qsc_ps_can_skip_round "$_now"; then
 			if type qsc_ps_idle_secs >/dev/null 2>&1; then
 				qsc_ps_idle_secs

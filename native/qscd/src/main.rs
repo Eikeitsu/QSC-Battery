@@ -111,11 +111,7 @@ impl UeventSocket {
     /// 不能只依赖 recv 自身超时，否则 service 可能永远卡在第一轮。
     /// Ok(Some(true))=命中 power_supply 事件；Ok(Some(false))=其它事件；
     /// Ok(None)=接收超时或被信号打断；Err=套接字不可用
-    fn poll_once(
-        &self,
-        buf: &mut [u8],
-        timeout: Duration,
-    ) -> std::io::Result<Option<bool>> {
+    fn poll_once(&self, buf: &mut [u8], timeout: Duration) -> std::io::Result<Option<bool>> {
         let timeout_ms = timeout.as_millis().clamp(1, i32::MAX as u128) as libc::c_int;
         let mut descriptor = libc::pollfd {
             fd: self.fd,

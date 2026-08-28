@@ -12,7 +12,7 @@ export interface HistoryPoint {
 
 export async function loadChargeHistory(maxPoints = 240): Promise<HistoryPoint[]> {
   const result = await exec(
-    `tail -n ${maxPoints + 1} '${PATHS.CHARGE_HISTORY}' 2>/dev/null`,
+    `{ cat '${PATHS.CHARGE_HISTORY}' 2>/dev/null; cat '${PATHS.CHARGE_HISTORY}.pending' 2>/dev/null; } | tail -n ${maxPoints + 1}`,
   );
   const text = result.stdout.trim();
   if (!text) return [];

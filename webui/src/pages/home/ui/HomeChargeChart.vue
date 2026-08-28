@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import SectionHead from "@/shared/ui/SectionHead.vue";
 import ThemedCard from "@/shared/ui/ThemedCard.vue";
 import * as api from "@/shared/api";
@@ -21,6 +21,7 @@ const PAD_T = 8;
 const PAD_B = 16;
 
 const sysCount = ref(0);
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 async function reload() {
   loading.value = true;
@@ -34,8 +35,10 @@ async function reload() {
       api.loadSystemBatteryHistory(),
     ]);
     const merged = api.mergeHistory(sampled, system);
-    sysCount.value = merged.length - sampled.length;
-    points.value = merged.slice(-480);
+    const visible = merged.slice(-480);
+    const sampledTimes = new Set(sampled.map((point) => point.ts));
+    sysCount.value = visible.filter((point) => !sampledTimes.has(point.ts)).length;
+    points.value = visible;
   } finally {
     loading.value = false;
   }
@@ -134,14 +137,42 @@ const summary = computed(() => {
   if (!list.length) return samplingOff.value ? "仅系统记录" : "暂无数据";
   const first = list[0];
   const last = list[list.length - 1];
-  const hours = Math.max(0.1, (last.ts - first.ts) / 3600);
-  const temp = last.temp != null ? ` · ${last.temp}°C` : "";
+  const seconds = Math.max(0, last.ts - first.ts);
+  const duration =
+    seconds >= 3600 ? `${(seconds / 3600).toFixed(1)}h` : `${Math.floor(seconds / 60)}m`;
+  const currentLevel = /^\d+$/.test(app.status.level)
+    ? app.status.level
+    : String(last.level);
+  const currentTemp = /^\d+$/.test(app.status.temp)
+    ? ` · ${app.status.temp}°C`
+    : last.temp != null
+      ? ` · ${last.temp}°C`
+      : "";
   const sys = sysCount.value > 0 ? ` · 含系统记录 ${sysCount.value} 点` : "";
-  return `${list.length} 点 · 约 ${hours.toFixed(1)}h · ${last.level}%${temp}${sys}`;
+  return `${list.length} 点 · ${duration} · 当前 ${currentLevel}%${currentTemp}${sys}`;
 });
 
 onMounted(() => {
   void reload();
+  refreshTimer = setInterval(() => {
+    void reload();
+  }, 30_000);
+});
+
+watch(
+  () => [app.status.updatedAt, app.settings.history_enable] as const,
+  ([updatedAt, historyEnable], previous) => {
+    if (
+      updatedAt !== "--" &&
+      (updatedAt !== previous?.[0] || historyEnable !== previous?.[1])
+    ) {
+      void reload();
+    }
+  },
+);
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer);
 });
 
 defineExpose({ reload });
