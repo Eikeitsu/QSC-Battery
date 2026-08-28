@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2026.08.28.3
+
 - **扩展统一电池快照**：Shell、Rust 与 WebUI 统一优先读取 `battery` / `bms` / `soc` 节点并规范化温度，缺项时保留 fallback；Rust 自检新增快照来源、电量、温度、状态和缺失原因诊断
 - **增强 Rust 只读事件引擎**：保留 Shell 负责停充决策和节点写入，Rust 增加 `watch` 阈值过滤、事件风暴合并、严格的 `/proc` 包名匹配和 MCA `Not charging` / fake sysfs fixture 覆盖，不直接修改充电节点
 - **修复原生等待器失败后的恢复路径**：记录 `netlink` / 超时 / 接收失败原因、返回码和时间；失败时退回轮询并按 30s、60s、300s、900s 递增退避，后续可自动重试恢复，不再永久锁死在单一状态
