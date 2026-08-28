@@ -587,11 +587,15 @@ fn selftest(root: &str) -> u8 {
     println!("snapshot_source={snapshot_source}");
     println!(
         "snapshot_level={}",
-        snapshot.level.map_or_else(|| "missing".to_string(), |v| v.to_string())
+        snapshot
+            .level
+            .map_or_else(|| "missing".to_string(), |v| v.to_string())
     );
     println!(
         "snapshot_temp={}",
-        snapshot.temp.map_or_else(|| "missing".to_string(), |v| v.to_string())
+        snapshot
+            .temp
+            .map_or_else(|| "missing".to_string(), |v| v.to_string())
     );
     println!(
         "snapshot_status={}",
