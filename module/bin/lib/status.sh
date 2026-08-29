@@ -25,7 +25,7 @@ qsc_write_module_description() {
 	local major="$1"
 	local inner="$2"
 	local outer="$3"
-	local prop desc old tmp line
+	local prop desc old tmp line found
 
 	prop="$MODDIR/module.prop"
 	[ -f "$prop" ] || return 0
@@ -41,14 +41,35 @@ qsc_write_module_description() {
 	[ "$old" = "$desc" ] && return 0
 
 	tmp="$prop.tmp.$$"
-	if ! awk -F= -v desc="$desc" '
-		BEGIN { done=0 }
-		$1 == "description" { print "description=" desc; done=1; next }
-		{ print }
-		END { if (!done) print "description=" desc }
-	' "$prop" >"$tmp"; then
+	found=0
+	if ! : >"$tmp"; then
 		rm -f "$tmp" 2>/dev/null
 		return 1
+	fi
+	while IFS= read -r line || [ -n "$line" ]; do
+		case "$line" in
+			description=*)
+				if [ "$found" = "0" ]; then
+					printf '%s\n' "description=$desc" >>"$tmp" || {
+						rm -f "$tmp" 2>/dev/null
+						return 1
+					}
+					found=1
+				fi
+				;;
+			*)
+				printf '%s\n' "$line" >>"$tmp" || {
+					rm -f "$tmp" 2>/dev/null
+					return 1
+				}
+				;;
+		esac
+	done <"$prop"
+	if [ "$found" = "0" ]; then
+		printf '%s\n' "description=$desc" >>"$tmp" || {
+			rm -f "$tmp" 2>/dev/null
+			return 1
+		}
 	fi
 	if ! mv -f "$tmp" "$prop" 2>/dev/null; then
 		rm -f "$tmp" 2>/dev/null
