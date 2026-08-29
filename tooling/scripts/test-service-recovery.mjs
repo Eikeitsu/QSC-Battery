@@ -108,7 +108,9 @@ if (!shell) {
     [
       '. "$MODDIR/bin/common.sh"',
       "export DATADIR BINDIR",
-      "QSC_PS_DESC_MIN_GAP=30",
+      "QSC_PS_DESC_SIG=",
+      "QSC_PS_DESC_TS=0",
+      "QSC_PS_DESC_MIN_GAP=0",
       'printf "test_psdir=%s\\n" "$PSDIR"',
       "qsc_battery_snapshot_print",
       "QSC_PS_NOW=100",
