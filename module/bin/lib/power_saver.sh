@@ -471,6 +471,10 @@ qsc_ps_native_wait() {
 	fi
 	[ -n "$QSC_PS_NATIVE_ERROR" ] || QSC_PS_NATIVE_ERROR=wait_failed
 	rm -f "$error_file" 2>/dev/null
+	# region agent log
+	type qsc_runtime_trace >/dev/null 2>&1 &&
+		qsc_runtime_trace "H3" "native_wait_reason" "$QSC_PS_NATIVE_MODE:$rc:$QSC_PS_NATIVE_ERROR"
+	# endregion
 	[ "$rc" -eq 0 ] && qsc_ps_record_wake "正常返回（事件或截止时间）"
 	return "$rc"
 }

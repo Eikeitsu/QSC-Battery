@@ -273,7 +273,13 @@ requireText(batteryStore, "loadConfigValues(CONFIG_KEYS)", "batched config loadi
 requireText(powerSaver, "QSC_PS_WAIT_FAILURES", "native wait failure backoff");
 requireText(powerSaver, "reason=%s", "native wait failure reason");
 requireText(powerSaver, "QSC_PS_WAIT_NEXT_RETRY", "native wait retry deadline");
+requireText(powerSaver, "native_wait_reason", "native wait reason trace");
+requireText(serviceSource, '>>"$DATADIR/debug.log"', "persistent debug log");
+requireText(serviceSource, "service_start", "service start trace");
 requireText(serviceSource, "qscd_unusable", "native wait failure state");
+requireText(serviceSource, '"level":"%s"', "debug log severity");
+requireText(serviceSource, '"category":"%s"', "debug log category");
+requireText(serviceSource, "qscd 等待结果及错误原因", "Chinese debug explanation");
 requireText(serviceSource, "switch_enter", "bounded decision round start");
 requireText(serviceSource, "switch_exit", "bounded decision round result");
 requireText(serviceSource, "qsc_ps_native_exec 45", "bounded decision round timeout");
@@ -281,6 +287,16 @@ requireText(
   serviceSource,
   "post_switch_description",
   "post-decision description refresh",
+);
+requireText(
+  serviceSource,
+  "qsc_description_refresh_worker",
+  "independent description refresh worker",
+);
+requireText(
+  serviceSource,
+  "description_worker.pid",
+  "description worker lifecycle marker",
 );
 requireText(powerSaver, "description_file", "description write verification");
 requireText(powerSaver, "fallback_sleep_exit", "native failure fallback completion");

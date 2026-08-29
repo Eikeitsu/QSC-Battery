@@ -111,8 +111,9 @@ else
 fi
 rm -f "$DATADIR/now_c"
 rm -f "$DATADIR/history_last_lv"
-# 旧版本每轮都写这两个文件，可能已积到很大；调试时会重新生成
-rm -f "$DATADIR/startup.log" "$DATADIR/debug.log"
+# 启动日志只保留本次服务入口；debug.log 要跨服务重启保留，才能追踪 PID
+# 变化与服务中断前后的完整链路。
+rm -f "$DATADIR/startup.log"
 rm -f "$DATADIR/service_diag"
 rm -f "$DATADIR/off_d"
 rm -f "$DATADIR/power_on"
@@ -133,11 +134,111 @@ QSC_SERVICE_DIAG_LAST=0
 # region agent log
 qsc_runtime_trace() {
 	local hypothesis="$1" message="$2" value="$3" now="${QSC_PS_NOW:-0}"
+	local note level category
+	qsc_debug_enabled || return 0
 	case "$now" in ""|*[!0-9]*) now=0 ;; esac
-	printf '{"sessionId":"cb37f9","runId":"initial","hypothesisId":"%s","location":"service.sh","message":"%s","data":{"value":"%s","pid":"%s"},"timestamp":%s}\n' \
-		"$hypothesis" "$message" "$value" "$$" "$now" >>"$DATADIR/debug-cb37f9.log" 2>/dev/null
+	case "$message" in
+		service_start)
+			note="服务启动"; level=info; category=service
+			;;
+		description_worker_start)
+			note="简介刷新 worker 启动"; level=info; category=worker
+			;;
+		description_worker_tick)
+			note="简介刷新 worker 心跳"; level=trace; category=worker
+			;;
+		description_worker_refresh)
+			note="简介刷新 worker 执行结果"; level=debug; category=worker
+			;;
+		description_worker_exit)
+			note="简介刷新 worker 退出"; level=warn; category=worker
+			;;
+		loop_enter)
+			note="主循环开始"; level=trace; category=service
+			;;
+		after_description)
+			note="简介刷新完成，准备判断后续流程"; level=trace; category=description
+			;;
+		flush_check)
+			note="检查是否需要落盘历史数据"; level=trace; category=history
+			;;
+		flush_enter)
+			note="开始落盘待处理历史数据"; level=debug; category=history
+			;;
+		flush_exit)
+			note="历史数据落盘结束"; level=debug; category=history
+			;;
+		skip_result)
+			note="判断本轮是否可以跳过完整决策"; level=debug; category=decision
+			;;
+		switch_enter)
+			note="开始执行停充决策脚本"; level=debug; category=decision
+			;;
+		switch_exit)
+			note="停充决策脚本执行结束"; level=debug; category=decision
+			;;
+		post_switch_description)
+			note="停充决策后再次刷新简介"; level=debug; category=description
+			;;
+		wait_enter)
+			note="开始等待下一轮"
+			level="trace"
+			category="wait"
+			;;
+		wait_exit)
+			note="等待下一轮结束"
+			level="trace"
+			category="wait"
+			;;
+		snapshot)
+			note="读取电池快照"; level=debug; category=snapshot
+			;;
+		description_file)
+			note="校验 module.prop 是否包含当前电量"; level=debug; category=description
+			;;
+		description_refresh)
+			note="简介刷新函数返回"; level=debug; category=description
+			;;
+		native_launcher)
+			note="启动 qscd 等待器"; level=debug; category=qscd
+			;;
+		native_wait_enter)
+			note="进入 qscd 等待"; level=trace; category=qscd
+			;;
+		native_wait_exit)
+			note="qscd 等待结束"; level=debug; category=qscd
+			;;
+		native_wait_reason)
+			note="qscd 等待结果及错误原因"; level=warn; category=qscd
+			;;
+		native_failure_enter)
+			note="qscd 失败，进入回退流程"; level=warn; category=fallback
+			;;
+		failure_marker_exit)
+			note="写入 qscd 失败标记结束"; level=debug; category=fallback
+			;;
+		failure_log_exit)
+			note="记录 qscd 失败日志结束"; level=debug; category=fallback
+			;;
+		failure_wake_exit)
+			note="记录回退唤醒原因结束"; level=debug; category=fallback
+			;;
+		fallback_sleep_enter)
+			note="开始定时轮询回退等待"; level=info; category=fallback
+			;;
+		fallback_sleep_exit)
+			note="定时轮询回退等待结束"; level=info; category=fallback
+			;;
+		*)
+			note="未分类调试事件"; level=debug; category=unknown
+			;;
+	esac
+	printf '{"level":"%s","category":"%s","hypothesisId":"%s","location":"service.sh","message":"%s","note":"%s","data":{"value":"%s","pid":"%s"},"timestamp":%s,"wall":"%s"}\n' \
+		"$level" "$category" "$hypothesis" "$message" "$note" "$value" "$$" "$now" \
+		"$(date +%F_%T 2>/dev/null)" >>"$DATADIR/debug.log" 2>/dev/null
 }
 # endregion
+qsc_runtime_trace "H0" "service_start" "$$"
 qsc_service_heartbeat() {
 	local now pending
 	now="${QSC_PS_NOW:-$(date +%s 2>/dev/null)}"
@@ -233,6 +334,39 @@ qsc_hot_finalize_maybe() {
 }
 
 qsc_hot_finalize_maybe
+
+# 简介刷新不应与 qscd 等待器绑定在同一条执行链上。主循环进入等待器、
+# 决策脚本异常或被系统短暂重启时，独立 worker 仍能更新 module.prop；
+# 父服务退出后 worker 会自动结束，避免留下常驻孤儿进程。
+qsc_description_refresh_worker() {
+	local parent_pid="$1" worker_pid refresh_secs
+	worker_pid="$DATADIR/description_worker.pid"
+	refresh_secs="${QSC_PS_DESC_MIN_GAP:-30}"
+	case "$refresh_secs" in ""|*[!0-9]*) refresh_secs=30 ;; esac
+	[ "$refresh_secs" -ge 10 ] 2>/dev/null || refresh_secs=10
+	printf '%s\n' "$parent_pid" >"$worker_pid" 2>/dev/null
+	qsc_runtime_trace "H0" "description_worker_start" "$parent_pid:$refresh_secs"
+	while [ -d "/proc/$parent_pid" ]; do
+		sleep "$refresh_secs"
+		[ -d "/proc/$parent_pid" ] || break
+		qsc_runtime_trace "H0" "description_worker_tick" "$parent_pid"
+		if type qsc_ps_load_conf >/dev/null 2>&1 &&
+			type qsc_ps_refresh_desc >/dev/null 2>&1; then
+			qsc_ps_load_conf
+			qsc_ps_now
+			qsc_ps_refresh_desc "${QSC_PS_NOW:-0}"
+			qsc_runtime_trace "H0" "description_worker_refresh" "$?"
+		fi
+	done
+	if [ -r "$worker_pid" ] &&
+		[ "$(cat "$worker_pid" 2>/dev/null | tr -d ' \r\n')" = "$parent_pid" ]; then
+		rm -f "$worker_pid" 2>/dev/null
+	fi
+	qsc_runtime_trace "H0" "description_worker_exit" "$parent_pid"
+}
+if [ -d "/proc/$$" ]; then
+	qsc_description_refresh_worker "$$" &
+fi
 
 # power_saver.sh 缺失（如手动裁剪安装）时退化为普通 sleep
 if ! type qsc_ps_wait >/dev/null 2>&1; then
