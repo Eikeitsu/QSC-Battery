@@ -372,8 +372,16 @@ qsc_ps_native_exec() {
 	local secs="$1"
 	shift
 	if command -v timeout >/dev/null 2>&1; then
+		# region agent log
+		type qsc_runtime_trace >/dev/null 2>&1 &&
+			qsc_runtime_trace "H3" "native_launcher" "timeout"
+		# endregion
 		timeout "$((secs + 5))" "$@"
 	else
+		# region agent log
+		type qsc_runtime_trace >/dev/null 2>&1 &&
+			qsc_runtime_trace "H3" "native_launcher" "direct"
+		# endregion
 		"$@"
 	fi
 }
