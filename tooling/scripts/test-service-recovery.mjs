@@ -47,14 +47,18 @@ function posix(path) {
 }
 
 function run(shell, moduleDir, body, sysfsRoot) {
+  const modulePath = posix(moduleDir).replaceAll("'", "'\"'\"'");
+  const sysfsPath = posix(sysfsRoot || moduleDir).replaceAll("'", "'\"'\"'");
+  const env = {
+    ...process.env,
+    MODDIR: modulePath,
+    QSC_SYSFS_ROOT: sysfsPath,
+  };
+  delete env.QSC_LIBS_LOADED;
   return spawnSync(shell.cmd, [...shell.args, "-c", body], {
     encoding: "utf8",
     timeout: 30_000,
-    env: {
-      ...process.env,
-      MODDIR: posix(moduleDir),
-      QSC_SYSFS_ROOT: posix(sysfsRoot || moduleDir),
-    },
+    env,
   });
 }
 
@@ -98,6 +102,7 @@ if (!shell) {
     '. "$MODDIR/bin/common.sh"',
     "export DATADIR BINDIR",
     "QSC_PS_NATIVE=1",
+    "QSC_NATIVE_FEATURES=watch",
     "QSC_PS_WAIT_HELPER_OK=1",
     "QSC_PS_NOW=100",
     "qsc_ps_wait 0",
@@ -126,6 +131,7 @@ if (!shell) {
       '. "$MODDIR/bin/common.sh"',
       "export DATADIR BINDIR",
       "QSC_PS_NATIVE=1",
+      "QSC_NATIVE_FEATURES=watch",
       "QSC_PS_WAIT_HELPER_OK=0",
       "QSC_PS_WAIT_NEXT_RETRY=0",
       "QSC_PS_NOW=101",
