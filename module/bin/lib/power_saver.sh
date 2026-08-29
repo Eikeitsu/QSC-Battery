@@ -203,6 +203,8 @@ qsc_ps_can_skip_round() {
 # 每 30 秒改一次 prop，所以再压一道最小间隔：省电的关键是别唤醒 CPU、别乱写盘。
 QSC_PS_DESC_SIG=""
 QSC_PS_DESC_TS=0
+# 简介是用户可见的运行状态，最长允许按省电策略等待；真正没有变化时
+# qsc_ps_refresh_desc 仍会被指纹短路，不会产生重复 module.prop 写入。
 QSC_PS_DESC_MIN_GAP=30
 
 # 参数: 当前单调秒（service.sh 已经读过 /proc/uptime，不再重复读）
@@ -385,21 +387,45 @@ qsc_ps_watch_supported() {
 }
 
 qsc_ps_native_exec() {
-	local secs="$1"
+	local secs="$1" limit marker i rc
 	shift
-	if command -v timeout >/dev/null 2>&1; then
-		# region agent log
-		type qsc_runtime_trace >/dev/null 2>&1 &&
-			qsc_runtime_trace "H3" "native_launcher" "timeout"
-		# endregion
-		timeout "$((secs + 5))" "$@"
-	else
-		# region agent log
-		type qsc_runtime_trace >/dev/null 2>&1 &&
-			qsc_runtime_trace "H3" "native_launcher" "direct"
-		# endregion
+	case "$secs" in ""|*[!0-9]*) secs=30 ;; esac
+	limit=$((secs + 5))
+	marker="$DATADIR/.qsc_exec_done.$$"
+	rm -f "$marker" 2>/dev/null
+	# 不依赖 Android 各版本 timeout 的信号/等待语义：用完成标记判断子进程
+	# 是否真的返回，超时后直接 SIGKILL，避免 qscd 永远占住 service。
+	(
 		"$@"
+		rc="$?"
+		printf '%s\n' "$rc" >"$marker" 2>/dev/null
+		exit "$rc"
+	) &
+	local pid=$!
+	i=0
+	while [ ! -f "$marker" ] && [ "$i" -lt "$limit" ]; do
+		sleep 1
+		i=$((i + 1))
+	done
+	if [ -f "$marker" ]; then
+		rc="$(cat "$marker" 2>/dev/null | tr -d ' \r\n')"
+		rm -f "$marker" 2>/dev/null
+		case "$rc" in ""|*[!0-9]*) rc=124 ;; esac
+		wait "$pid" 2>/dev/null || true
+		# region agent log
+		type qsc_runtime_trace >/dev/null 2>&1 &&
+			qsc_runtime_trace "H3" "native_launcher" "watchdog:$rc"
+		# endregion
+		return "$rc"
 	fi
+	kill -9 "$pid" 2>/dev/null
+	wait "$pid" 2>/dev/null || true
+	rm -f "$marker" 2>/dev/null
+	# region agent log
+	type qsc_runtime_trace >/dev/null 2>&1 &&
+		qsc_runtime_trace "H3" "native_launcher" "watchdog:124"
+	# endregion
+	return 124
 }
 
 # 交给守护等待。支持 watch 时把阈值一起交下去：充电中「离阈值还远」的
