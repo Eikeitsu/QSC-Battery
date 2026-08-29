@@ -515,11 +515,32 @@ qsc_ps_wait() {
 		now="${QSC_PS_NOW:-0}"
 		case "$now" in ""|*[!0-9]*) now=0 ;; esac
 		QSC_PS_WAIT_NEXT_RETRY=$((now + backoff))
+		# region agent log
+		type qsc_runtime_trace >/dev/null 2>&1 &&
+			qsc_runtime_trace "H9" "native_failure_enter" "$rc:$backoff"
+		# endregion
 		qsc_ps_mark_native_failure "$rc"
+		# region agent log
+		type qsc_runtime_trace >/dev/null 2>&1 &&
+			qsc_runtime_trace "H9" "failure_marker_exit" "$?"
+		# endregion
 		qsc_log_once qscd warn "事件等待器不可用，已退回定时轮询"
+		# region agent log
+		type qsc_runtime_trace >/dev/null 2>&1 &&
+			qsc_runtime_trace "H9" "failure_log_exit" "$?"
+		# endregion
 		qsc_ps_record_wake "守护不可用，已退回定时轮询"
+		# region agent log
+		qsc_runtime_trace "H9" "failure_wake_exit" "$?"
+		# endregion
 	fi
+	# region agent log
+	qsc_runtime_trace "H9" "fallback_sleep_enter" "$secs"
+	# endregion
 	sleep "$secs"
+	# region agent log
+	qsc_runtime_trace "H9" "fallback_sleep_exit" "$?"
+	# endregion
 }
 
 # 本轮结束后应睡多久

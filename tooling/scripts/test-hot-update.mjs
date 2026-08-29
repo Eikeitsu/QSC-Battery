@@ -283,6 +283,7 @@ requireText(
   "post-decision description refresh",
 );
 requireText(powerSaver, "description_file", "description write verification");
+requireText(powerSaver, "fallback_sleep_exit", "native failure fallback completion");
 requireText(serviceSource, "正在读取实时充电状态", "hot update live status");
 requireText(
   serviceSource,
