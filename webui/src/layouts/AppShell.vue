@@ -22,19 +22,19 @@ const store = useAppStore();
     <AppTopbar />
 
     <main class="app-main" :aria-busy="store.initializing">
-      <div v-if="routeLoading" class="route-loading" role="status" aria-live="polite">
-        <PageLoading text="正在打开页面…" />
-      </div>
       <div
-        v-if="store.initializing"
-        class="data-loading"
+        v-if="routeLoading"
+        class="route-loading-page"
         role="status"
         aria-live="polite"
       >
-        <span class="data-loading__spinner" aria-hidden="true"></span>
-        <span>页面已打开，正在后台读取设备数据…</span>
+        <div class="route-loader">
+          <span class="route-loader__spinner" aria-hidden="true"></span>
+          <span class="route-loader__text">正在切换页面</span>
+          <span class="route-loader__dots" aria-hidden="true">···</span>
+        </div>
       </div>
-      <Suspense timeout="0">
+      <Suspense v-else timeout="0">
         <template #default>
           <RouterView v-slot="{ Component, route: viewRoute }">
             <Transition :name="slideDir === 'forward' ? 'slide-left' : 'slide-right'">
@@ -70,48 +70,113 @@ const store = useAppStore();
   padding-top: calc(48px + var(--qsc-inset-top, 0px));
 }
 
-.route-loading {
-  position: fixed;
-  z-index: 20;
-  inset: 0;
+.route-loading-page {
+  min-height: calc(100dvh - 56px - var(--qsc-inset-top, 0px) - var(--dock-pad, 72px));
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--qsc-bg) 72%, transparent);
-  pointer-events: none;
+  padding: 24px;
+  background: var(--qsc-bg);
 }
 
-.route-loading :deep(.page-loading) {
-  min-width: 150px;
-  border-radius: 12px;
+.route-loader {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  min-width: 156px;
+  padding: 20px 24px;
   background: var(--qsc-surface);
+  border: 1px solid color-mix(in srgb, var(--qsc-primary) 16%, transparent);
+  border-radius: 18px;
   box-shadow: var(--qsc-shadow);
 }
 
-.data-loading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 12px 8px;
-  padding: 8px 12px;
-  border: 1px solid color-mix(in srgb, var(--qsc-primary) 18%, transparent);
-  border-radius: 10px;
-  color: var(--qsc-text-2);
-  font-size: 12px;
-}
-
-.data-loading__spinner {
-  width: 13px;
-  height: 13px;
-  flex: 0 0 auto;
-  border: 2px solid color-mix(in srgb, var(--qsc-primary) 22%, transparent);
+.route-loader__spinner {
+  width: 26px;
+  height: 26px;
+  border: 3px solid color-mix(in srgb, var(--qsc-primary) 18%, transparent);
   border-top-color: var(--qsc-primary);
   border-radius: 50%;
-  animation: data-loading-spin 0.8s linear infinite;
+  animation: route-loader-spin 0.75s linear infinite;
 }
 
-@keyframes data-loading-spin {
+.route-loader__text {
+  color: var(--qsc-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.route-loader__dots {
+  color: var(--qsc-text-2);
+  font-size: 18px;
+  line-height: 10px;
+  letter-spacing: 3px;
+  animation: route-loader-dots 1s ease-in-out infinite;
+}
+
+.shell-md3 .route-loader {
+  min-width: 188px;
+  border-radius: 28px;
+  box-shadow: none;
+}
+
+.shell-md3 .route-loader__spinner {
+  width: 140px;
+  height: 5px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--qsc-primary) 18%, transparent);
+  animation: none;
+}
+
+.shell-md3 .route-loader__spinner::after {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--qsc-primary);
+  content: "";
+  animation: route-loader-progress 1.1s ease-in-out infinite;
+}
+
+.shell-miuix .route-loader {
+  min-width: 148px;
+  border: 0;
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--qsc-surface) 86%, transparent);
+  box-shadow: 0 12px 36px color-mix(in srgb, var(--qsc-primary) 16%, transparent);
+}
+
+.shell-miuix .route-loader__spinner {
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+}
+
+@keyframes route-loader-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes route-loader-dots {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes route-loader-progress {
+  0% {
+    transform: translateX(-120%);
+  }
+
+  100% {
+    transform: translateX(340%);
   }
 }
 </style>

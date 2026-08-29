@@ -226,9 +226,10 @@ requireText(historyApi, "RESET:TIME", "system history reset anchor");
 requireText(historyApi, "count < 1200", "system history bounded tail");
 requireText(appShell, "PageLoading", "WebUI page loading state");
 requireText(appShell, "<Suspense", "WebUI async page fallback");
-requireText(appShell, "data-loading", "WebUI non-blocking data loading state");
-requireText(appShell, "页面已打开，正在后台读取设备数据", "WebUI data loading message");
+requireText(appShell, "route-loading-page", "WebUI route loading replacement");
+requireText(appShell, ':aria-busy="store.initializing"', "WebUI non-blocking data state");
 requireText(appSource, "<Suspense", "WebUI startup page fallback");
+requireText(appSource, "router.isReady", "WebUI initial route readiness state");
 requireText(indexSource, "app-loading", "WebUI static startup loading state");
 requireText(
   routes,

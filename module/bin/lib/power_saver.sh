@@ -357,6 +357,16 @@ qsc_ps_watch_supported() {
 	qsc_native_has watch
 }
 
+qsc_ps_native_exec() {
+	local secs="$1"
+	shift
+	if command -v timeout >/dev/null 2>&1; then
+		timeout "$((secs + 5))" "$@"
+	else
+		"$@"
+	fi
+}
+
 # 交给守护等待。支持 watch 时把阈值一起交下去：充电中「离阈值还远」的
 # uevent 由它自己吞掉，不再每轮叫醒 shell；插拔与跨阈值仍立即返回。
 # 未插电或正在维持停充时不传阈值 —— 那两种场景任何电池事件都该让 shell 复算。
@@ -366,22 +376,26 @@ qsc_ps_native_wait() {
 	if qsc_ps_watch_supported; then
 		QSC_PS_NATIVE_MODE=watch
 		if [ ! -f "$DATADIR/power_switch" ] && qsc_ps_plugged; then
-			"$BINDIR/qscd" watch --max "$secs" --floor "$floor" \
+			qsc_ps_native_exec "$secs" "$BINDIR/qscd" watch --max "$secs" --floor "$floor" \
 				--stop "${QSC_PS_STOP:-101}" --near "${QSC_PS_NEAR:-3}" \
 				--temp-stop "${QSC_PS_TEMP_STOP:-999}" > /dev/null 2>"$error_file"
 			rc="$?"
 		else
-			"$BINDIR/qscd" watch --max "$secs" --floor "$floor" \
+			qsc_ps_native_exec "$secs" "$BINDIR/qscd" watch --max "$secs" --floor "$floor" \
 				> /dev/null 2>"$error_file"
 			rc="$?"
 		fi
 	else
 		QSC_PS_NATIVE_MODE=wait-event
-		"$BINDIR/qscd" wait-event "$secs" "$floor" \
+		qsc_ps_native_exec "$secs" "$BINDIR/qscd" wait-event "$secs" "$floor" \
 			> /dev/null 2>"$error_file"
 		rc="$?"
 	fi
-	QSC_PS_NATIVE_ERROR="$(awk -F= '/reason=/{print $2; exit}' "$error_file" 2>/dev/null)"
+	if [ "$rc" -eq 124 ]; then
+		QSC_PS_NATIVE_ERROR=timeout
+	else
+		QSC_PS_NATIVE_ERROR="$(awk -F= '/reason=/{print $2; exit}' "$error_file" 2>/dev/null)"
+	fi
 	[ -n "$QSC_PS_NATIVE_ERROR" ] || QSC_PS_NATIVE_ERROR=wait_failed
 	rm -f "$error_file" 2>/dev/null
 	[ "$rc" -eq 0 ] && qsc_ps_record_wake "正常返回（事件或截止时间）"
@@ -404,6 +418,9 @@ qsc_ps_wait() {
 	local secs="${1:-30}" floor
 	local rc backoff now
 	floor="${QSC_PS_WAIT_FLOOR:-3}"
+	# 简介也属于运行状态：即使 qscd 过滤掉普通电量事件，也不能让它
+	# 把下一次简介刷新推迟到 60/120 秒以后。
+	[ "$secs" -gt "$QSC_PS_DESC_MIN_GAP" ] 2>/dev/null && secs="$QSC_PS_DESC_MIN_GAP"
 	[ "$secs" -lt "$floor" ] 2>/dev/null && floor="$secs"
 	if qsc_ps_native_ready; then
 		qsc_ps_native_wait "$secs" "$floor"
