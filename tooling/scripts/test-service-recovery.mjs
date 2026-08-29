@@ -118,12 +118,18 @@ if (!shell) {
   );
   const descriptorText = readFileSync(join(moduleDir, "module.prop"), "utf8");
   if (descriptor.status !== 0 || !descriptorText.includes("55%")) {
-    console.error("[test:service-recovery] 简介未随统一电池快照刷新");
-    console.error(`[test:service-recovery] shell_status=${descriptor.status}`);
-    if (descriptor.stdout)
-      console.error(`[test:service-recovery] stdout=${descriptor.stdout}`);
-    console.error(`[test:service-recovery] module.prop:\n${descriptorText}`);
-    if (descriptor.stderr) console.error(descriptor.stderr);
+    process.stderr.write(
+      [
+        "[test:service-recovery] 简介未随统一电池快照刷新",
+        `descriptor_status=${descriptor.status}`,
+        `descriptor_signal=${descriptor.signal || "<none>"}`,
+        `descriptor_error=${descriptor.error?.message || "<none>"}`,
+        `descriptor_stdout=${descriptor.stdout || "<empty>"}`,
+        `descriptor_stderr=${descriptor.stderr || "<empty>"}`,
+        `descriptor_module_prop=${JSON.stringify(descriptorText)}`,
+        "",
+      ].join("\n"),
+    );
     rmSync(dir, { recursive: true, force: true });
     process.exit(1);
   }
