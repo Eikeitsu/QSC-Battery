@@ -261,8 +261,7 @@ requireText(appShellComposable, "navigationId", "WebUI latest navigation wins");
 requireText(appShellComposable, "drainNavigation", "WebUI serialized navigation queue");
 requireText(appShellComposable, "scrollMainToTop", "WebUI navigation scroll reset");
 requireText(appShellComposable, "requestIdleCallback", "WebUI idle route preloading");
-requireText(appDock, ':model-value="localTab"', "WebUI dock controlled by local state");
-requireText(appDock, "@pointerdown", "WebUI dock immediate press state");
+requireText(appDock, ':model-value="tab"', "WebUI dock controlled by shell state");
 requireText(
   batteryStore,
   "const initializing = ref(false)",
@@ -278,6 +277,7 @@ requireText(serviceSource, "qscd_unusable", "native wait failure state");
 requireText(serviceSource, "switch_enter", "bounded decision round start");
 requireText(serviceSource, "switch_exit", "bounded decision round result");
 requireText(serviceSource, "qsc_ps_native_exec 45", "bounded decision round timeout");
+requireText(powerSaver, "description_file", "description write verification");
 requireText(serviceSource, "正在读取实时充电状态", "hot update live status");
 requireText(
   serviceSource,

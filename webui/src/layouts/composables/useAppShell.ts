@@ -43,6 +43,16 @@ export function useAppShell() {
     () => pendingTab.value ?? (isTabName(route.name) ? route.name : TabName.Home),
   );
 
+  function waitForPaint(): Promise<void> {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        // rAF 回调发生在浏览器绘制前；再等一帧，才能确保上一状态
+        // 已经真正呈现在屏幕上，避免懒加载解析抢在绘制前开始。
+        requestAnimationFrame(() => resolve());
+      });
+    });
+  }
+
   function setTab(name: string | number) {
     const next = String(name);
     // #region agent log
@@ -74,17 +84,13 @@ export function useAppShell() {
         // 先让 Vue 把选中态和 loading 绘制出来，再启动首次懒加载。
         // 首次 chunk 的解析可能占用主线程；没有这一帧时，点击反馈会被推迟到路由完成。
         await nextTick();
-        await new Promise<void>((resolve) => {
-          requestAnimationFrame(() => resolve());
-        });
+        await waitForPaint();
         if (requestId !== navigationId || pendingTab.value !== target) continue;
         // 选中态先单独完成一次绘制，再显示遮罩；这样首次懒加载时用户能
         // 清楚看到点击已经生效，而不是等页面 chunk 加载完成后才变色。
         routeLoading.value = true;
         await nextTick();
-        await new Promise<void>((resolve) => {
-          requestAnimationFrame(() => resolve());
-        });
+        await waitForPaint();
         if (requestId !== navigationId || pendingTab.value !== target) {
           if (!pendingTab.value) routeLoading.value = false;
           continue;

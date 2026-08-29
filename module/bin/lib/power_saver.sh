@@ -300,6 +300,16 @@ qsc_ps_refresh_desc() {
 		# 后续轮次不会重试，module.prop 会永久停在旧值。
 		QSC_PS_DESC_SIG=""
 	fi
+	# 写入后重新读取目标文件，区分「文件已更新但管理器缓存旧值」和
+	# 「module.prop 实际没有写入/被覆盖」。
+	_desc_file_match=0
+	while IFS= read -r _desc_line || [ -n "$_desc_line" ]; do
+		case "$_desc_line" in
+			description=*"$lv"%*) _desc_file_match=1; break ;;
+		esac
+	done <"$MODDIR/module.prop"
+	type qsc_runtime_trace >/dev/null 2>&1 &&
+		qsc_runtime_trace "H7" "description_file" "$_desc_file_match:$lv"
 	type qsc_runtime_trace >/dev/null 2>&1 &&
 		qsc_runtime_trace "H4" "description_refresh" "$_desc_rc:$lv:$temp:$plugged:$stopped"
 	return "$_desc_rc"
