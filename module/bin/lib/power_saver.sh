@@ -535,15 +535,18 @@ qsc_ps_wait() {
 		# endregion
 		qsc_ps_record_wake "守护不可用，已退回定时轮询"
 		# region agent log
-		qsc_runtime_trace "H9" "failure_wake_exit" "$?"
+		type qsc_runtime_trace >/dev/null 2>&1 &&
+			qsc_runtime_trace "H9" "failure_wake_exit" "$?"
 		# endregion
 	fi
 	# region agent log
-	qsc_runtime_trace "H9" "fallback_sleep_enter" "$secs"
+	type qsc_runtime_trace >/dev/null 2>&1 &&
+		qsc_runtime_trace "H9" "fallback_sleep_enter" "$secs"
 	# endregion
 	sleep "$secs"
 	# region agent log
-	qsc_runtime_trace "H9" "fallback_sleep_exit" "$?"
+	type qsc_runtime_trace >/dev/null 2>&1 &&
+		qsc_runtime_trace "H9" "fallback_sleep_exit" "$?"
 	# endregion
 }
 
