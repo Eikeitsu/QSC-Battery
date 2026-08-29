@@ -56,6 +56,8 @@ export const useAppStore = defineStore("app", () => {
   const ready = ref(false);
 
   let statusTimer: ReturnType<typeof setInterval> | null = null;
+  let refreshInFlight: Promise<boolean> | null = null;
+  let refreshTipPending = false;
 
   const powerPlan = computed(() => {
     const stop = settings.power_stop;
@@ -315,13 +317,13 @@ export const useAppStore = defineStore("app", () => {
     return applyBundle(bundle);
   }
 
-  async function refreshStatus(showTip = false): Promise<void> {
+  async function refreshStatusInternal(): Promise<boolean> {
     if (!api.hasBridge()) {
       bridgeOk.value = false;
       deviceName.value = "未检测到 WebUI 桥接";
       status.badge = "请用 KernelSU 等支持 WebUI 的管理器打开";
       status.badgeType = BadgeType.Danger;
-      return;
+      return false;
     }
 
     const [snapshotR, offR, switchR, descR, voltR, currR, verR, battR, failR] =
@@ -348,8 +350,7 @@ export const useAppStore = defineStore("app", () => {
     if (snapshotR.result.errno === -2) {
       status.badge = "状态读取超时，下拉重试";
       status.badgeType = BadgeType.Warning;
-      if (showTip) showToast("状态读取超时");
-      return;
+      return false;
     }
 
     bridgeOk.value = true;
@@ -451,7 +452,33 @@ export const useAppStore = defineStore("app", () => {
       String(now.getSeconds()).padStart(2, "0"),
     ].join(":");
 
-    if (showTip) showSuccessToast("状态已刷新");
+    return true;
+  }
+
+  async function refreshStatus(showTip = false): Promise<void> {
+    if (showTip) refreshTipPending = true;
+    if (refreshInFlight) {
+      await refreshInFlight;
+      return;
+    }
+
+    const request = refreshStatusInternal();
+    refreshInFlight = request;
+    try {
+      const ok = await request;
+      if (refreshTipPending) {
+        refreshTipPending = false;
+        if (ok) showSuccessToast({ message: "状态已刷新", duration: 1200 });
+        else showToast("状态读取超时");
+      }
+    } catch {
+      if (refreshTipPending) {
+        refreshTipPending = false;
+        showToast("状态读取失败");
+      }
+    } finally {
+      if (refreshInFlight === request) refreshInFlight = null;
+    }
   }
 
   async function refreshLog(showTip = false): Promise<void> {

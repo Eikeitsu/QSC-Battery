@@ -57,23 +57,31 @@ const store = useAppStore();
 
 <style scoped lang="scss">
 .shell-default .app-main {
+  --qsc-topbar-h: 56px;
+
   padding-top: calc(56px + var(--qsc-inset-top, 0px));
 }
 
 .shell-md3 .app-main {
+  --qsc-topbar-h: 72px;
+
   padding-top: calc(72px + var(--qsc-inset-top, 0px));
 }
 
 .shell-miuix .app-main {
+  --qsc-topbar-h: 48px;
+
   padding-top: calc(48px + var(--qsc-inset-top, 0px));
 }
 
 .route-content {
-  min-height: calc(100dvh - 56px - var(--qsc-inset-top, 0px) - var(--dock-pad, 72px));
+  min-height: calc(
+    100dvh - var(--qsc-topbar-h, 56px) - var(--qsc-inset-top, 0px) - var(--dock-pad, 72px)
+  );
 }
 
 .route-content--hidden {
-  visibility: hidden;
+  display: none;
   pointer-events: none;
 }
 

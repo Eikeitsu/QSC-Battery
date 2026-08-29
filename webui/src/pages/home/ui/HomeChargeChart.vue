@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import {
+  computed,
+  onActivated,
+  onDeactivated,
+  onMounted,
+  onUnmounted,
+  ref,
+  watch,
+} from "vue";
 import SectionHead from "@/shared/ui/SectionHead.vue";
 import ThemedCard from "@/shared/ui/ThemedCard.vue";
 import * as api from "@/shared/api";
@@ -23,6 +31,7 @@ const PAD_B = 16;
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let reloadId = 0;
+let chartActive = false;
 const dataSource = ref<"sampled" | "system">("system");
 const chartNow = ref(Math.floor(Date.now() / 1000));
 
@@ -162,6 +171,7 @@ const summary = computed(() => {
 });
 
 onMounted(() => {
+  chartActive = true;
   void reload();
   refreshTimer = setInterval(() => {
     chartNow.value = Math.floor(Date.now() / 1000);
@@ -173,6 +183,7 @@ watch(
   () =>
     [app.status.updatedAt, app.status.chargeLabel, app.settings.history_enable] as const,
   ([updatedAt, chargeLabel, historyEnable], previous) => {
+    if (!chartActive) return;
     if (
       updatedAt !== "--" &&
       (updatedAt !== previous?.[0] ||
@@ -184,8 +195,25 @@ watch(
   },
 );
 
+onActivated(() => {
+  if (chartActive) return;
+  chartActive = true;
+  void reload();
+  refreshTimer = setInterval(() => {
+    chartNow.value = Math.floor(Date.now() / 1000);
+    void reload();
+  }, 30_000);
+});
+
+onDeactivated(() => {
+  chartActive = false;
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = null;
+});
+
 onUnmounted(() => {
   if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = null;
 });
 
 defineExpose({ reload });

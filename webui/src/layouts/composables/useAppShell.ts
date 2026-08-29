@@ -15,34 +15,53 @@ export function useAppShell() {
   const routeLoading = ref(false);
   const pendingTab = ref<TabName | null>(null);
   let navigationId = 0;
+  let navigationRunning = false;
   let warmTimer: number | null = null;
   let warmIdle: number | null = null;
   let warmCancelled = false;
+  let warmPaused = false;
 
   const tab = computed<TabName>(
     () => pendingTab.value ?? (isTabName(route.name) ? route.name : TabName.Home),
   );
 
-  async function setTab(name: string | number) {
+  function setTab(name: string | number) {
     const next = String(name);
     if (!isTabName(next) || next === tab.value) return;
     // replace：Tab 不入历史栈，侧滑/虚拟返回可直接退出 WebUI
-    const currentNavigationId = ++navigationId;
+    navigationId += 1;
     pendingTab.value = next;
     routeLoading.value = true;
+    cancelWarmup();
     scrollMainToTop();
+    void drainNavigation();
+  }
+
+  async function drainNavigation() {
+    if (navigationRunning) return;
+    navigationRunning = true;
     try {
-      await router.replace({ name: next });
-      await nextTick();
-      if (currentNavigationId === navigationId) scrollMainToTop();
-      requestAnimationFrame(() => theme.syncStatusBar());
-    } catch {
-      // 导航被取消时保留当前页面，不让加载状态卡住。
-    } finally {
-      if (currentNavigationId === navigationId) {
+      while (pendingTab.value) {
+        const target = pendingTab.value;
+        const requestId = navigationId;
+        try {
+          await router.replace({ name: target });
+          await nextTick();
+        } catch {
+          // 失败时由下面的最新请求继续接管，避免 loading 永久卡住。
+        }
+        if (requestId !== navigationId || pendingTab.value !== target) continue;
+
+        if (router.currentRoute.value.name === target) {
+          scrollMainToTop();
+          requestAnimationFrame(() => theme.syncStatusBar());
+        }
         pendingTab.value = null;
         routeLoading.value = false;
       }
+    } finally {
+      navigationRunning = false;
+      if (pendingTab.value) void drainNavigation();
     }
   }
 
@@ -53,8 +72,9 @@ export function useAppShell() {
   }
 
   function scheduleWarmup(callback: () => void, delay: number) {
+    if (warmCancelled || warmPaused) return;
     warmTimer = window.setTimeout(() => {
-      if (warmCancelled) return;
+      if (warmCancelled || warmPaused) return;
       const idleWindow = window as Window & {
         requestIdleCallback?: (
           callback: () => void,
@@ -70,6 +90,7 @@ export function useAppShell() {
   }
 
   function warmRouteChunks() {
+    if (warmCancelled || warmPaused) return;
     const queue = TAB_ORDER.filter((name) => name !== tab.value);
     const next = () => {
       if (warmCancelled) return;
@@ -80,6 +101,19 @@ export function useAppShell() {
       });
     };
     scheduleWarmup(next, 500);
+  }
+
+  function cancelWarmup() {
+    warmPaused = true;
+    if (warmTimer) clearTimeout(warmTimer);
+    warmTimer = null;
+    const idleWindow = window as Window & {
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    if (warmIdle !== null && idleWindow.cancelIdleCallback) {
+      idleWindow.cancelIdleCallback(warmIdle);
+    }
+    warmIdle = null;
   }
 
   async function onRefreshHome() {
@@ -96,6 +130,8 @@ export function useAppShell() {
   onMounted(async () => {
     theme.load();
     theme.bindSystemListener();
+    const main = document.querySelector<HTMLElement>(".app-main");
+    main?.addEventListener("scroll", cancelWarmup, { passive: true, once: true });
     await store.init();
     warmRouteChunks();
     theme.syncStatusBar();
@@ -104,13 +140,7 @@ export function useAppShell() {
 
   onUnmounted(() => {
     warmCancelled = true;
-    if (warmTimer) clearTimeout(warmTimer);
-    const idleWindow = window as Window & {
-      cancelIdleCallback?: (handle: number) => void;
-    };
-    if (warmIdle !== null && idleWindow.cancelIdleCallback) {
-      idleWindow.cancelIdleCallback(warmIdle);
-    }
+    cancelWarmup();
   });
 
   return {

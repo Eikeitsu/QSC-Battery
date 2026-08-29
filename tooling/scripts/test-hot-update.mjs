@@ -226,6 +226,8 @@ requireText(chart, "useSampledHistory", "WebUI charge source selection");
 requireText(chart, "dataSource === 'sampled'", "WebUI sampled chart mode");
 requireText(chart, "loadSystemBatteryHistory", "WebUI unplugged history source");
 requireText(chart, "chartNow", "WebUI moving time axis");
+requireText(chart, "onDeactivated", "WebUI inactive chart pause");
+requireText(chart, "chartActive", "WebUI chart active lifecycle state");
 requireText(historyApi, "RESET:TIME", "system history reset anchor");
 requireText(historyApi, "count < 1200", "system history bounded tail");
 requireText(appShell, "PageLoading", "WebUI page loading state");
@@ -235,6 +237,7 @@ requireText(appShell, ':aria-busy="store.initializing"', "WebUI non-blocking dat
 requireText(appShell, "正在读取设备信息", "WebUI device information loading text");
 requireText(appShell, "position: fixed", "WebUI viewport route loading");
 requireText(appShell, "<KeepAlive", "WebUI loaded page cache");
+requireText(appShell, "display: none", "WebUI hidden route content leaves layout");
 requireText(appSource, "<Suspense", "WebUI startup page fallback");
 requireText(appSource, "router.isReady", "WebUI initial route readiness state");
 requireText(appSource, "app-start-loading", "WebUI centered startup loading");
@@ -251,13 +254,17 @@ if (/<Transition/.test(appShell)) {
 requireText(appShell, "routeLoading", "WebUI immediate navigation feedback");
 requireText(appShellComposable, "pendingTab", "WebUI single pending navigation state");
 requireText(appShellComposable, "navigationId", "WebUI latest navigation wins");
+requireText(appShellComposable, "drainNavigation", "WebUI serialized navigation queue");
 requireText(appShellComposable, "scrollMainToTop", "WebUI navigation scroll reset");
+requireText(appShellComposable, "requestIdleCallback", "WebUI idle route preloading");
 requireText(appDock, ':model-value="tab"', "WebUI dock controlled by shell state");
 requireText(
   batteryStore,
   "const initializing = ref(false)",
   "WebUI bootstrap loading state",
 );
+requireText(batteryStore, "refreshInFlight", "WebUI refresh single flight");
+requireText(batteryStore, "duration: 1200", "WebUI bounded refresh toast");
 requireText(batteryStore, "loadConfigValues(CONFIG_KEYS)", "batched config loading");
 requireText(powerSaver, "QSC_PS_WAIT_FAILURES", "native wait failure backoff");
 requireText(powerSaver, "reason=%s", "native wait failure reason");
