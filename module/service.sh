@@ -294,6 +294,45 @@ else
 	qsc_write_module_description "🔎启动中" "服务已拉起" "$DESC_INTRO"
 fi
 
+# 简介刷新 worker 要在所有可能阻塞的初始化任务之前启动。
+# 否则 list_curr/detect_device 或兼容模块扫描只要卡住，热更新后的过渡文案
+# 就会先成功变成一轮电量，随后没有任何进程继续刷新。
+qsc_stop_description_worker() {
+	local pid_file="$DATADIR/description_worker.pid" pid i
+	pid="$(cat "$pid_file" 2>/dev/null | tr -d ' \r\n')"
+	case "$pid" in
+		""|*[!0-9]*) ;;
+		*)
+			kill "$pid" 2>/dev/null || true
+			i=0
+			while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 5 ]; do
+				sleep 1
+				i=$((i + 1))
+			done
+			kill -9 "$pid" 2>/dev/null || true
+			;;
+	esac
+	rm -f "$pid_file" 2>/dev/null
+	rm -rf "$DATADIR/.description_worker.lock" 2>/dev/null
+}
+
+qsc_start_description_worker() {
+	# 用 sh 显式解释，不能把执行权限当成 worker 是否存在的判断条件。
+	# 某些热更新器解压新文件时会暂时丢失 0755；这不应让简介刷新静默失效。
+	[ -f "$BINDIR/description_worker.sh" ] || return 0
+	qsc_stop_description_worker
+	if command -v setsid >/dev/null 2>&1; then
+		setsid sh "$BINDIR/description_worker.sh" "$$" \
+			</dev/null >/dev/null 2>&1 &
+	else
+		nohup sh "$BINDIR/description_worker.sh" "$$" \
+			</dev/null >/dev/null 2>&1 &
+	fi
+	qsc_runtime_trace "H0" "description_worker_start" "$!"
+}
+
+qsc_start_description_worker
+
 # 探测 AccA 等限流模块（提示开兼容模式）
 if type qsc_detect_compat_modules >/dev/null 2>&1; then
 	qsc_detect_compat_modules >/dev/null 2>&1 || true
@@ -334,43 +373,6 @@ qsc_hot_finalize_maybe() {
 }
 
 qsc_hot_finalize_maybe
-
-# 简介刷新不应与 qscd 等待器绑定在同一条执行链上。主循环进入等待器、
-# 决策脚本异常或被系统短暂重启时，独立 worker 仍能更新 module.prop；
-# 父服务退出后 worker 会自动结束，避免留下常驻孤儿进程。
-qsc_stop_description_worker() {
-	local pid_file="$DATADIR/description_worker.pid" pid i
-	pid="$(cat "$pid_file" 2>/dev/null | tr -d ' \r\n')"
-	case "$pid" in
-		""|*[!0-9]*) ;;
-		*)
-			kill "$pid" 2>/dev/null || true
-			i=0
-			while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 5 ]; do
-				sleep 1
-				i=$((i + 1))
-			done
-			kill -9 "$pid" 2>/dev/null || true
-			;;
-	esac
-	rm -f "$pid_file" 2>/dev/null
-	rm -rf "$DATADIR/.description_worker.lock" 2>/dev/null
-}
-
-qsc_start_description_worker() {
-	[ -x "$BINDIR/description_worker.sh" ] || return 0
-	qsc_stop_description_worker
-	if command -v setsid >/dev/null 2>&1; then
-		setsid sh "$BINDIR/description_worker.sh" "$$" \
-			</dev/null >/dev/null 2>&1 &
-	else
-		nohup sh "$BINDIR/description_worker.sh" "$$" \
-			</dev/null >/dev/null 2>&1 &
-	fi
-	qsc_runtime_trace "H0" "description_worker_start" "$!"
-}
-
-qsc_start_description_worker
 
 # power_saver.sh 缺失（如手动裁剪安装）时退化为普通 sleep
 if ! type qsc_ps_wait >/dev/null 2>&1; then

@@ -45,15 +45,32 @@ trap worker_cleanup 0 1 2 3 15
 
 worker_parent_alive() {
 	[ "$PARENT_PID" -gt 0 ] 2>/dev/null || return 1
-	[ -d "/proc/$PARENT_PID" ]
+	kill -0 "$PARENT_PID" 2>/dev/null
+}
+
+worker_state() {
+	local rc="$1" now
+	now="$(date +%s 2>/dev/null)"
+	case "$now" in ""|*[!0-9]*) now=0 ;; esac
+	printf 'pid=%s\nparent=%s\nlast_refresh=%s\nrc=%s\n' \
+		"$$" "$PARENT_PID" "$now" "$rc" \
+		>"$DATADIR/description_worker.state.tmp" 2>/dev/null &&
+		mv -f "$DATADIR/description_worker.state.tmp" \
+			"$DATADIR/description_worker.state" 2>/dev/null
 }
 
 worker_refresh() {
-	type qsc_ps_load_conf >/dev/null 2>&1 || return 0
-	type qsc_ps_refresh_desc >/dev/null 2>&1 || return 0
+	if ! type qsc_ps_load_conf >/dev/null 2>&1 ||
+		! type qsc_ps_refresh_desc >/dev/null 2>&1; then
+		worker_state 127
+		return 127
+	fi
 	qsc_ps_load_conf
 	qsc_ps_now
 	qsc_ps_refresh_desc "${QSC_PS_NOW:-0}"
+	_rc="$?"
+	worker_state "$_rc"
+	return "$_rc"
 }
 
 # 热更新文案写入后立即刷新一次，之后按配置周期更新。

@@ -166,6 +166,12 @@ for (const mod of modules) {
     "qsc_stop_description_worker",
     `${mod.name} description worker restart guard`,
   );
+  requireOrder(
+    service,
+    "qsc_start_description_worker",
+    "qsc_detect_compat_modules",
+    `${mod.name} worker starts before slow initialization`,
+  );
   requireText(
     hotinstall,
     "qsc_hot_stop_description_worker",
@@ -183,6 +189,16 @@ for (const mod of modules) {
     `${mod.name} worker lock ownership`,
   );
   requireText(descriptionWorker, "worker_cleanup", `${mod.name} worker cleanup trap`);
+  requireText(
+    descriptionWorker,
+    'kill -0 "$PARENT_PID"',
+    `${mod.name} worker parent liveness check`,
+  );
+  requireText(
+    descriptionWorker,
+    "description_worker.state",
+    `${mod.name} worker refresh state`,
+  );
   requireText(packageSource, '"description_worker.sh"', `${mod.name} worker packaging`);
 }
 

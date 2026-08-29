@@ -20,6 +20,8 @@ qsc_uninstall_stop_description_worker() {
 	rm -f "$pid_file" 2>/dev/null
 	rm -rf "$MODDIR/data/.description_worker.lock" \
 		"$MODDIR/data/.description.lock" 2>/dev/null
+	rm -f "$MODDIR/data/description_worker.state" \
+		"$MODDIR/data/description_worker.state.tmp" 2>/dev/null
 }
 
 qsc_uninstall_stop_description_worker
