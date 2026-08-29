@@ -109,11 +109,15 @@ if (!shell) {
       '. "$MODDIR/bin/common.sh"',
       "export DATADIR BINDIR",
       "QSC_PS_DESC_MIN_GAP=30",
+      'printf "test_psdir=%s\\n" "$PSDIR"',
+      "qsc_battery_snapshot_print",
       "QSC_PS_NOW=100",
       'qsc_ps_refresh_desc "$QSC_PS_NOW"',
+      'printf "test_desc_after_50=%s\\n" "$(qsc_safe_cat "$MODDIR/module.prop" | tr "\\n" "|")"',
       'printf "55\\n" > "$QSC_SYSFS_ROOT/sys/class/power_supply/battery/capacity"',
       "QSC_PS_NOW=140",
       'qsc_ps_refresh_desc "$QSC_PS_NOW"',
+      'printf "test_desc_after_55=%s\\n" "$(qsc_safe_cat "$MODDIR/module.prop" | tr "\\n" "|")"',
     ].join("\n"),
     fakeRoot,
   );
@@ -135,7 +139,7 @@ if (!shell) {
       ),
     );
     rmSync(dir, { recursive: true, force: true });
-    process.exit(1);
+    throw new Error("service recovery descriptor assertion failed");
   }
 
   const source = [
