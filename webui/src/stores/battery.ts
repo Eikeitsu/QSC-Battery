@@ -105,13 +105,18 @@ export const useAppStore = defineStore("app", () => {
   }
 
   async function loadConfig(): Promise<void> {
-    for (const key of CONFIG_KEYS) {
-      const value = await api.getConf(key);
-      settings[key] = value || DEFAULTS[key];
-    }
-    powerSwitches.value = await api.loadPowerSwitches();
-    powerStopSchedule.value = await api.loadPowerStopSchedule();
-    notifyQuietSchedule.value = await api.loadNotifyQuietSchedule();
+    const [values, switches, stopSchedule, quietSchedule] = await Promise.all([
+      api.loadConfigValues(CONFIG_KEYS),
+      api.loadPowerSwitches(),
+      api.loadPowerStopSchedule(),
+      api.loadNotifyQuietSchedule(),
+    ]);
+    CONFIG_KEYS.forEach((key) => {
+      settings[key] = values[key] || DEFAULTS[key];
+    });
+    powerSwitches.value = switches;
+    powerStopSchedule.value = stopSchedule;
+    notifyQuietSchedule.value = quietSchedule;
   }
 
   async function loadCurrentConfig(): Promise<void> {

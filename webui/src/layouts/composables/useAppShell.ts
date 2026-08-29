@@ -1,9 +1,10 @@
-import { computed, onMounted, provide, ref } from "vue";
+import { computed, onMounted, onUnmounted, provide, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useThemePackClass } from "@/composables";
 import { useAppStore } from "@/stores";
-import { isTabName } from "@/router/routes";
+import { isTabName, preloadTab } from "@/router/routes";
 import { TabName } from "@/shared";
+import { TAB_ORDER } from "@/shared/config/navigation";
 
 export function useAppShell() {
   const store = useAppStore();
@@ -11,21 +12,50 @@ export function useAppShell() {
   const route = useRoute();
   const router = useRouter();
   const refreshing = ref(false);
+  const routeLoading = ref(false);
+  const pendingTab = ref<TabName | null>(null);
+  let navigationId = 0;
+  let warmTimer: number | null = null;
+  let warmCancelled = false;
 
-  const tab = computed<TabName>(() =>
-    isTabName(route.name) ? route.name : TabName.Home,
+  const tab = computed<TabName>(
+    () => pendingTab.value ?? (isTabName(route.name) ? route.name : TabName.Home),
   );
 
-  function setTab(name: string | number) {
+  async function setTab(name: string | number) {
     const next = String(name);
     if (!isTabName(next) || next === tab.value) return;
     // replace：Tab 不入历史栈，侧滑/虚拟返回可直接退出 WebUI
-    void router.replace({ name: next }).then(() => {
+    const currentNavigationId = ++navigationId;
+    pendingTab.value = next;
+    routeLoading.value = true;
+    try {
+      await router.replace({ name: next });
       requestAnimationFrame(() => theme.syncStatusBar());
-    });
+    } catch {
+      // 导航被取消时保留当前页面，不让加载状态卡住。
+    } finally {
+      if (currentNavigationId === navigationId) {
+        pendingTab.value = null;
+        routeLoading.value = false;
+      }
+    }
   }
 
   provide("setTab", setTab);
+
+  function warmRouteChunks() {
+    const queue = TAB_ORDER.filter((name) => name !== tab.value);
+    const next = () => {
+      if (warmCancelled) return;
+      const name = queue.shift();
+      if (!name) return;
+      void preloadTab(name).finally(() => {
+        warmTimer = window.setTimeout(next, 250);
+      });
+    };
+    warmTimer = window.setTimeout(next, 1200);
+  }
 
   async function onRefreshHome() {
     refreshing.value = true;
@@ -41,9 +71,15 @@ export function useAppShell() {
   onMounted(async () => {
     theme.load();
     theme.bindSystemListener();
+    warmRouteChunks();
     await store.init();
     theme.syncStatusBar();
     window.setTimeout(() => theme.syncStatusBar(), 200);
+  });
+
+  onUnmounted(() => {
+    warmCancelled = true;
+    if (warmTimer) clearTimeout(warmTimer);
   });
 
   return {
@@ -51,6 +87,7 @@ export function useAppShell() {
     shellClass,
     tab,
     refreshing,
+    routeLoading,
     setTab,
     onRefreshHome,
   };

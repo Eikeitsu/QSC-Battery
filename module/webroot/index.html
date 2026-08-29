@@ -51,10 +51,54 @@
         } catch (e) {}
       })();
     </script>
-    <script type="module" crossorigin src="./js/app-bo8LWjaU.js"></script>
-    <link rel="stylesheet" crossorigin href="./css/style-BR6s9Dy2.css">
+    <script type="module" crossorigin src="./js/app-u1bFyDzI.js"></script>
+    <link rel="stylesheet" crossorigin href="./css/style-CLSpU1iW.css">
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div id="app-loading" role="status" aria-live="polite">
+        <span id="app-loading-spinner" aria-hidden="true"></span>
+        <span>正在打开 QSC-Battery…</span>
+      </div>
+    </div>
+    <style>
+      #app-loading {
+        min-height: 100vh;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 12px;
+        color: #596574;
+        background: #eef1f5;
+        font:
+          14px/1.4 system-ui,
+          sans-serif;
+      }
+
+      #app-loading-spinner {
+        width: 26px;
+        height: 26px;
+        border: 3px solid rgb(89 101 116 / 20%);
+        border-top-color: #596574;
+        border-radius: 50%;
+        animation: app-loading-spin 0.8s linear infinite;
+      }
+
+      @keyframes app-loading-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      [data-theme="dark"] #app-loading {
+        color: #b7c0cc;
+        background: #0f1216;
+      }
+
+      [data-theme="dark"] #app-loading-spinner {
+        border-color: rgb(183 192 204 / 20%);
+        border-top-color: #b7c0cc;
+      }
+    </style>
   </body>
 </html>

@@ -74,9 +74,12 @@ if (!shell) {
   mkdirSync(dataDir, { recursive: true });
   mkdirSync(join(moduleDir, "config"), { recursive: true });
   cpSync(join(root, "module/bin"), join(moduleDir, "bin"), { recursive: true });
+  cpSync(join(root, "module/module.prop"), join(moduleDir, "module.prop"));
   cpSync(join(root, "module/config/config.conf"), join(moduleDir, "config/config.conf"));
   mkdirSync(join(fakeRoot, "sys/class/power_supply/battery"), { recursive: true });
   writeFileSync(join(fakeRoot, "sys/class/power_supply/battery/capacity"), "50\n");
+  writeFileSync(join(fakeRoot, "sys/class/power_supply/battery/status"), "Discharging\n");
+  writeFileSync(join(fakeRoot, "sys/class/power_supply/battery/temp"), "300\n");
 
   const fakeDaemon = join(moduleDir, "bin/qscd");
   writeFileSync(
@@ -96,6 +99,29 @@ if (!shell) {
     ].join("\n"),
   );
   chmodSync(fakeDaemon, 0o755);
+
+  const descriptor = run(
+    shell,
+    moduleDir,
+    [
+      '. "$MODDIR/bin/common.sh"',
+      "export DATADIR BINDIR",
+      "QSC_PS_DESC_MIN_GAP=30",
+      "QSC_PS_NOW=100",
+      'qsc_ps_refresh_desc "$QSC_PS_NOW"',
+      'printf "55\\n" > "$QSC_SYSFS_ROOT/sys/class/power_supply/battery/capacity"',
+      "QSC_PS_NOW=140",
+      'qsc_ps_refresh_desc "$QSC_PS_NOW"',
+    ].join("\n"),
+    fakeRoot,
+  );
+  const descriptorText = readFileSync(join(moduleDir, "module.prop"), "utf8");
+  if (descriptor.status !== 0 || !descriptorText.includes("55%")) {
+    console.error("[test:service-recovery] 简介未随统一电池快照刷新");
+    if (descriptor.stderr) console.error(descriptor.stderr);
+    rmSync(dir, { recursive: true, force: true });
+    process.exit(1);
+  }
 
   const source = [
     '. "$MODDIR/bin/common.sh"',

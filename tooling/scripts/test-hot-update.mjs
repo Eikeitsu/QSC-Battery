@@ -169,6 +169,8 @@ const daemonCard = read(join(root, "webui/src/pages/config/ui/DaemonCard.vue"));
 const batterySnapshotApi = read(join(root, "webui/src/shared/api/batterySnapshot.ts"));
 const historyApi = read(join(root, "webui/src/shared/api/history.ts"));
 const chart = read(join(root, "webui/src/pages/home/ui/HomeChargeChart.vue"));
+const indexSource = read(join(root, "webui/index.html"));
+const appSource = read(join(root, "webui/src/app/App.vue"));
 const appShell = read(join(root, "webui/src/layouts/AppShell.vue"));
 const routes = read(join(root, "webui/src/router/routes.ts"));
 const batteryStore = read(join(root, "webui/src/stores/battery.ts"));
@@ -185,7 +187,11 @@ for (const key of configKeys) {
   }
 }
 const store = read(join(root, "webui/src/stores/battery.ts"));
-requireText(store, "settings[key] = value || DEFAULTS[key]", "config migration fallback");
+requireText(
+  store,
+  "settings[key] = values[key] || DEFAULTS[key]",
+  "config migration fallback",
+);
 requireText(qscdFetch, "qscd.new.$$", "native temporary candidate");
 requireText(qscdFetch, 'mv -f "$_candidate" "$BINDIR/qscd"', "native atomic replacement");
 requireText(qscdFetch, 'rm -rf "$TMPDIR"', "native temporary cleanup");
@@ -207,6 +213,7 @@ requireText(history, "QSC_HISTORY_BATCH", "batched history sampling");
 requireText(history, "QSC_HISTORY_BUFFER", "history pending buffer");
 requireText(history, "qsc_history_flush_pending", "history pending flush");
 requireText(serviceSource, "qsc_history_flush_pending", "unplugged history flush");
+requireText(powerSaver, "qsc_battery_snapshot_read", "status snapshot fallback");
 requireText(historyApi, ".pending", "WebUI pending history read");
 requireText(chart, "setInterval", "WebUI chart refresh timer");
 requireText(chart, "当前 ${currentLevel}%", "WebUI live chart summary");
@@ -219,15 +226,26 @@ requireText(historyApi, "RESET:TIME", "system history reset anchor");
 requireText(historyApi, "count < 1200", "system history bounded tail");
 requireText(appShell, "PageLoading", "WebUI page loading state");
 requireText(appShell, "<Suspense", "WebUI async page fallback");
-requireText(routes, "component: AppShell", "WebUI synchronous root layout");
+requireText(appShell, "data-loading", "WebUI non-blocking data loading state");
+requireText(appShell, "页面已打开，正在后台读取设备数据", "WebUI data loading message");
+requireText(appSource, "<Suspense", "WebUI startup page fallback");
+requireText(indexSource, "app-loading", "WebUI static startup loading state");
+requireText(
+  routes,
+  'component: () => import("@/layouts/AppShell.vue")',
+  "WebUI lazy root layout",
+);
+requireText(routes, "preloadTab", "WebUI route chunk preloading");
 if (/mode="(?:out-in|in-out)"/.test(appShell)) {
   throw new Error("WebUI route transition must not wait for async page chunks");
 }
+requireText(appShell, "routeLoading", "WebUI immediate navigation feedback");
 requireText(
   batteryStore,
   "const initializing = ref(false)",
   "WebUI bootstrap loading state",
 );
+requireText(batteryStore, "loadConfigValues(CONFIG_KEYS)", "batched config loading");
 requireText(powerSaver, "QSC_PS_WAIT_FAILURES", "native wait failure backoff");
 requireText(powerSaver, "reason=%s", "native wait failure reason");
 requireText(powerSaver, "QSC_PS_WAIT_NEXT_RETRY", "native wait retry deadline");

@@ -198,9 +198,9 @@ qsc_ps_can_skip_round() {
 # 省电路径下的简介刷新。
 # 跳过整轮时 qsc_switch.sh 不会跑，而简介只在满轮里刷新，未插电时最长要等
 # QSC_PS_FULL_MAX_GAP 才动一次，管理器里看着像电量/温度卡住了。
-# 这里只用内建 read 取两个 sysfs 值，且仅在显示值变化时才真正改写 module.prop。
-# 温度待机时会在两三度间来回抖，只靠「值变了就写」会变成每 30 秒改一次 prop，
-# 所以再压一道最小间隔：省电的关键是别唤醒 CPU、别乱写盘，这一路两样都要守住。
+# 优先复用统一电池快照，只有 sysfs 不完整时才走 dumpsys 兜底；仅在显示值变化时
+# 真正改写 module.prop。温度待机时会在两三度间来回抖，只靠「值变了就写」会变成
+# 每 30 秒改一次 prop，所以再压一道最小间隔：省电的关键是别唤醒 CPU、别乱写盘。
 QSC_PS_DESC_SIG=""
 QSC_PS_DESC_TS=0
 QSC_PS_DESC_MIN_GAP=30
@@ -216,44 +216,55 @@ qsc_ps_refresh_desc() {
 	fi
 
 	lv=""
-	for p in "$PSDIR/battery/capacity" \
-		"$PSDIR/bms/capacity" \
-		"$PSDIR/battery/soc"; do
-		if qsc_ps_read "$p"; then
-			case "$QSC_PS_VAL" in
-				*[!0-9]*) ;;
-				*) lv="$QSC_PS_VAL"; break ;;
+	temp=""
+	plugged=0
+	if type qsc_battery_snapshot_read >/dev/null 2>&1; then
+		# 与 qsc_switch.sh / WebUI 共用同一套 sysfs→dumpsys 兜底，
+		# 避免「首次能读到，后续快路径却读不到」导致简介停在热更新后的数值。
+		qsc_battery_snapshot_read >/dev/null 2>&1 || true
+		lv="${QSC_BATTERY_LEVEL:-}"
+		temp="${QSC_BATTERY_TEMP:-}"
+		[ -n "${QSC_BATTERY_POWERED:-}" ] && plugged=1
+	else
+		# 兼容被裁剪、没有 battery_snapshot.sh 的旧安装包。
+		for p in "$PSDIR/battery/capacity" \
+			"$PSDIR/bms/capacity" \
+			"$PSDIR/battery/soc"; do
+			if qsc_ps_read "$p"; then
+				case "$QSC_PS_VAL" in
+					*[!0-9]*) ;;
+					*) lv="$QSC_PS_VAL"; break ;;
+				esac
+			fi
+		done
+
+		for p in "$PSDIR/battery/temp" \
+			"$PSDIR/bms/temp" \
+			"$PSDIR/battery/batt_temp"; do
+			qsc_ps_read "$p" && { temp="$QSC_PS_VAL"; break; }
+		done
+		if [ -n "$temp" ]; then
+			digits="${temp#-}"
+			case "$temp" in
+				""|"-"|*[!0-9-]*) temp="" ;;
+				*)
+					case "$digits" in
+						""|*[!0-9]*) temp="" ;;
+						*)
+							if [ "$digits" -ge 10000 ]; then
+								temp=$((temp / 1000))
+							elif [ "$digits" -ge 1000 ]; then
+								temp=$((temp / 100))
+							elif [ "$digits" -ge 100 ]; then
+								temp=$((temp / 10))
+							fi
+							[ "$temp" -ge -20 ] && [ "$temp" -le 100 ] || temp=""
+							;;
+					esac
+					;;
 			esac
 		fi
-	done
-
-	temp=""
-	for p in "$PSDIR/battery/temp" \
-		"$PSDIR/bms/temp" \
-		"$PSDIR/battery/batt_temp"; do
-		qsc_ps_read "$p" && { temp="$QSC_PS_VAL"; break; }
-	done
-	if [ -n "$temp" ]; then
-		# 与 qsc_normalize_temperature 同一套换算，但走内建算术以免每轮 fork
-		case "$temp" in
-			""|"-"|*[!0-9-]*) temp="" ;;
-			*)
-				digits="${temp#-}"
-				case "$digits" in
-					""|*[!0-9]*) temp="" ;;
-					*)
-						if [ "$digits" -ge 10000 ]; then
-							temp=$((temp / 1000))
-						elif [ "$digits" -ge 1000 ]; then
-							temp=$((temp / 100))
-						elif [ "$digits" -ge 100 ]; then
-							temp=$((temp / 10))
-						fi
-						[ "$temp" -ge -20 ] && [ "$temp" -le 100 ] || temp=""
-						;;
-				esac
-				;;
-		esac
+		qsc_ps_plugged && plugged=1
 	fi
 
 	# 总开关也进指纹：关掉后最迟下一次刷新就显示「已关闭」，不用等满轮
@@ -261,8 +272,6 @@ qsc_ps_refresh_desc() {
 	if [ -f "$OFF_FLAG" ] || [ -f "$MODDIR/disable" ]; then
 		off=1
 	fi
-	plugged=0
-	qsc_ps_plugged && plugged=1
 	stopped=0
 	[ -f "$DATADIR/power_switch" ] && stopped=1
 

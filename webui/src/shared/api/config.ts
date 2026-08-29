@@ -13,6 +13,22 @@ export async function getConf(key: string): Promise<string> {
   return result.stdout.trim();
 }
 
+/** 一次读取配置，避免启动时为每个键单独发起一条 shell 请求。 */
+export async function loadConfigValues(
+  keys: readonly string[],
+): Promise<Record<string, string>> {
+  const wanted = new Set(keys);
+  const result = await exec(`cat '${PATHS.CONF}' 2>/dev/null`);
+  const values: Record<string, string> = {};
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const index = line.indexOf("=");
+    if (index <= 0) continue;
+    const key = line.slice(0, index);
+    if (wanted.has(key)) values[key] = line.slice(index + 1).trim();
+  }
+  return values;
+}
+
 export async function setConf(key: string, value: string | number): Promise<void> {
   const safeKey = String(key).replace(/[^a-zA-Z0-9_]/g, "");
   const safeVal = String(value).replace(/[^0-9A-Za-z._:,-]/g, "");

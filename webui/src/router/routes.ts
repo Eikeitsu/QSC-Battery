@@ -1,7 +1,6 @@
 import type { RouteRecordRaw } from "vue-router";
 import { TabName, isTabName } from "@/shared/config/enums";
 import { TABS, TAB_ORDER } from "@/shared/config/navigation";
-import AppShell from "@/layouts/AppShell.vue";
 
 const TAB_PAGES = {
   [TabName.Home]: () => import("@/pages/home/HomePage.vue"),
@@ -13,7 +12,7 @@ const TAB_PAGES = {
 export const routes: RouteRecordRaw[] = [
   {
     path: "/",
-    component: AppShell,
+    component: () => import("@/layouts/AppShell.vue"),
     redirect: { name: TabName.Home },
     children: TABS.map((t) => ({
       path: t.name,
@@ -27,5 +26,10 @@ export const routes: RouteRecordRaw[] = [
     redirect: { name: TabName.Home },
   },
 ];
+
+/** 预热路由代码块，但仍保持按需加载和独立分包。 */
+export function preloadTab(name: TabName): Promise<unknown> {
+  return TAB_PAGES[name]();
+}
 
 export { isTabName };
