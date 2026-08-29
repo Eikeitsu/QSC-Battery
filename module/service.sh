@@ -312,6 +312,16 @@ while true ; do
 	_switch_rc="$?"
 	qsc_runtime_trace "H6" "switch_exit" "$_switch_rc"
 	# endregion
+	# qsc_switch 期间电量/供电状态可能已经变化；等待前再刷新一次，
+	# 避免 module.prop 在下一次 qscd 唤醒前继续显示旧快照。
+	if type qsc_ps_load_conf >/dev/null 2>&1 && type qsc_ps_refresh_desc >/dev/null 2>&1; then
+		qsc_ps_load_conf
+		qsc_ps_now
+		qsc_ps_refresh_desc "${QSC_PS_NOW:-0}"
+		# region agent log
+		qsc_runtime_trace "H8" "post_switch_description" "$?"
+		# endregion
+	fi
 	_sleep="$(cat "$DATADIR/loop_sleep" 2>/dev/null | tr -d ' \r\n')"
 	case "$_sleep" in
 		""|*[!0-9]*) _sleep=3 ;;

@@ -277,6 +277,11 @@ requireText(serviceSource, "qscd_unusable", "native wait failure state");
 requireText(serviceSource, "switch_enter", "bounded decision round start");
 requireText(serviceSource, "switch_exit", "bounded decision round result");
 requireText(serviceSource, "qsc_ps_native_exec 45", "bounded decision round timeout");
+requireText(
+  serviceSource,
+  "post_switch_description",
+  "post-decision description refresh",
+);
 requireText(powerSaver, "description_file", "description write verification");
 requireText(serviceSource, "正在读取实时充电状态", "hot update live status");
 requireText(
