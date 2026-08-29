@@ -163,6 +163,7 @@ const customize = read(join(root, "module/customize.sh"));
 const qscdFetch = read(join(root, "module/bin/qscd_fetch.sh"));
 const qscdSource = read(join(root, "native/qscd/src/main.rs"));
 const powerSaver = read(join(root, "module/bin/lib/power_saver.sh"));
+const status = read(join(root, "module/bin/lib/status.sh"));
 const serviceSource = read(join(root, "module/service.sh"));
 const daemonApi = read(join(root, "webui/src/shared/api/daemon.ts"));
 const daemonCard = read(join(root, "webui/src/pages/config/ui/DaemonCard.vue"));
@@ -217,6 +218,8 @@ requireText(history, "QSC_HISTORY_BATCH", "batched history sampling");
 requireText(history, "QSC_HISTORY_BUFFER", "history pending buffer");
 requireText(history, "qsc_history_flush_pending", "history pending flush");
 requireText(serviceSource, "qsc_history_flush_pending", "unplugged history flush");
+requireText(status, "if ! mv -f", "description atomic write result");
+requireText(powerSaver, 'QSC_PS_DESC_SIG=""', "description write retry");
 requireText(powerSaver, "qsc_battery_snapshot_read", "status snapshot fallback");
 requireText(historyApi, ".pending", "WebUI pending history read");
 requireText(chart, "setInterval", "WebUI chart refresh timer");
@@ -258,7 +261,8 @@ requireText(appShellComposable, "navigationId", "WebUI latest navigation wins");
 requireText(appShellComposable, "drainNavigation", "WebUI serialized navigation queue");
 requireText(appShellComposable, "scrollMainToTop", "WebUI navigation scroll reset");
 requireText(appShellComposable, "requestIdleCallback", "WebUI idle route preloading");
-requireText(appDock, ':model-value="tab"', "WebUI dock controlled by shell state");
+requireText(appDock, ':model-value="localTab"', "WebUI dock controlled by local state");
+requireText(appDock, "@pointerdown", "WebUI dock immediate press state");
 requireText(
   batteryStore,
   "const initializing = ref(false)",

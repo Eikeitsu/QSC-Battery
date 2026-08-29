@@ -282,9 +282,6 @@ qsc_ps_refresh_desc() {
 
 	sig="${off}:${plugged}:${stopped}:${lv}:${temp}"
 	[ "$sig" = "$QSC_PS_DESC_SIG" ] && return 0
-	QSC_PS_DESC_SIG="$sig"
-	QSC_PS_DESC_TS="$now"
-	QSC_PS_DESC_WRITES=$((QSC_PS_DESC_WRITES + 1))
 
 	# 该函数也由 service.sh 在满轮前调用，不能假定一定是未插电。
 	battery_level="$lv"
@@ -294,6 +291,15 @@ qsc_ps_refresh_desc() {
 	# region agent log
 	qsc_refresh_module_description
 	_desc_rc="$?"
+	if [ "$_desc_rc" -eq 0 ]; then
+		QSC_PS_DESC_SIG="$sig"
+		QSC_PS_DESC_TS="$now"
+		QSC_PS_DESC_WRITES=$((QSC_PS_DESC_WRITES + 1))
+	else
+		# 写入失败不能把失败的指纹缓存起来，否则同一电量/温度下
+		# 后续轮次不会重试，module.prop 会永久停在旧值。
+		QSC_PS_DESC_SIG=""
+	fi
 	type qsc_runtime_trace >/dev/null 2>&1 &&
 		qsc_runtime_trace "H4" "description_refresh" "$_desc_rc:$lv:$temp:$plugged:$stopped"
 	return "$_desc_rc"

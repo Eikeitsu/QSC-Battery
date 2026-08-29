@@ -41,13 +41,21 @@ qsc_write_module_description() {
 	[ "$old" = "$desc" ] && return 0
 
 	tmp="$prop.tmp.$$"
-	awk -F= -v desc="$desc" '
+	if ! awk -F= -v desc="$desc" '
 		BEGIN { done=0 }
 		$1 == "description" { print "description=" desc; done=1; next }
 		{ print }
 		END { if (!done) print "description=" desc }
-	' "$prop" >"$tmp" && mv -f "$tmp" "$prop"
-	chmod 0644 "$prop" 2>/dev/null
+	' "$prop" >"$tmp"; then
+		rm -f "$tmp" 2>/dev/null
+		return 1
+	fi
+	if ! mv -f "$tmp" "$prop" 2>/dev/null; then
+		rm -f "$tmp" 2>/dev/null
+		return 1
+	fi
+	chmod 0644 "$prop" 2>/dev/null || return 1
+	return 0
 }
 
 # 根据运行标志刷新简介。依赖 qsc_switch 已算出的变量（可缺省）。
