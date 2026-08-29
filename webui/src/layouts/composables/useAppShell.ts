@@ -6,6 +6,24 @@ import { isTabName, preloadTab } from "@/router/routes";
 import { TabName } from "@/shared";
 import { TAB_ORDER } from "@/shared/config/navigation";
 
+// #region agent log
+function debugUi(message: string, data: Record<string, unknown>, hypothesisId: string) {
+  fetch("http://127.0.0.1:7292/ingest/058f1405-c7dd-4f7b-a005-ac16f2aae169", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cb37f9" },
+    body: JSON.stringify({
+      sessionId: "cb37f9",
+      runId: "ui-initial",
+      hypothesisId,
+      location: "useAppShell.ts",
+      message,
+      data,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+}
+// #endregion
+
 export function useAppShell() {
   const store = useAppStore();
   const { theme, packClass: shellClass } = useThemePackClass("shell");
@@ -27,11 +45,21 @@ export function useAppShell() {
 
   function setTab(name: string | number) {
     const next = String(name);
+    // #region agent log
+    debugUi(
+      "tab_request",
+      { next, currentTab: tab.value, route: String(route.name) },
+      "U1",
+    );
+    // #endregion
     if (!isTabName(next) || next === tab.value) return;
     // replace：Tab 不入历史栈，侧滑/虚拟返回可直接退出 WebUI
     navigationId += 1;
     pendingTab.value = next;
     routeLoading.value = true;
+    // #region agent log
+    debugUi("tab_pending", { next, navigationId }, "U1");
+    // #endregion
     cancelWarmup();
     scrollMainToTop();
     void drainNavigation();
@@ -44,9 +72,23 @@ export function useAppShell() {
       while (pendingTab.value) {
         const target = pendingTab.value;
         const requestId = navigationId;
+        // 先让 Vue 把选中态和 loading 绘制出来，再启动首次懒加载。
+        // 首次 chunk 的解析可能占用主线程；没有这一帧时，点击反馈会被推迟到路由完成。
+        await nextTick();
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve());
+        });
+        if (requestId !== navigationId || pendingTab.value !== target) continue;
         try {
           await router.replace({ name: target });
           await nextTick();
+          // #region agent log
+          debugUi(
+            "route_resolved",
+            { target, route: String(router.currentRoute.value.name), requestId },
+            "U2",
+          );
+          // #endregion
         } catch {
           // 失败时由下面的最新请求继续接管，避免 loading 永久卡住。
         }
