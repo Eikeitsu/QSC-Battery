@@ -130,6 +130,14 @@ QSC_SERVICE_HEARTBEAT_LAST=0
 QSC_SERVICE_LOOP_COUNT=0
 QSC_SERVICE_FULL_ROUNDS=0
 QSC_SERVICE_DIAG_LAST=0
+# region agent log
+qsc_runtime_trace() {
+	local hypothesis="$1" message="$2" value="$3" now="${QSC_PS_NOW:-0}"
+	case "$now" in ""|*[!0-9]*) now=0 ;; esac
+	printf '{"sessionId":"cb37f9","runId":"initial","hypothesisId":"%s","location":"service.sh","message":"%s","data":{"value":"%s","pid":"%s"},"timestamp":%s}\n' \
+		"$hypothesis" "$message" "$value" "$$" "$now" >>"$DATADIR/debug-cb37f9.log" 2>/dev/null
+}
+# endregion
 qsc_service_heartbeat() {
 	local now pending
 	now="${QSC_PS_NOW:-$(date +%s 2>/dev/null)}"
@@ -240,6 +248,9 @@ while true ; do
 		qsc_ps_load_conf
 		qsc_ps_now
 		_now="$QSC_PS_NOW"
+		# region agent log
+		qsc_runtime_trace "H1" "loop_enter" "$QSC_SERVICE_LOOP_COUNT:$_now"
+		# endregion
 		qsc_service_heartbeat
 		# 即使本轮准备跳过 qsc_switch，也要用当前供电状态刷新模块简介。
 		if type qsc_ps_refresh_desc >/dev/null 2>&1; then
@@ -257,6 +268,10 @@ while true ; do
 				QSC_PS_IDLE_EFF="${QSC_PS_IDLE:-30}"
 			fi
 			qsc_ps_wait "$QSC_PS_IDLE_EFF"
+			# region agent log
+			_wait_rc="$?"
+			qsc_runtime_trace "H1" "wait_exit" "$_wait_rc"
+			# endregion
 			continue
 		fi
 		[ "$_now" -gt 0 ] 2>/dev/null && QSC_PS_LAST_FULL="$_now"
@@ -272,5 +287,12 @@ while true ; do
 	esac
 	[ "$_sleep" -ge 2 ] 2>/dev/null || _sleep=3
 	[ "$_sleep" -le 300 ] 2>/dev/null || _sleep=300
+	# region agent log
+	qsc_runtime_trace "H1" "wait_enter" "$_sleep"
+	# endregion
 	qsc_ps_wait "$_sleep"
+	# region agent log
+	_wait_rc="$?"
+	qsc_runtime_trace "H1" "wait_exit" "$_wait_rc"
+	# endregion
 done

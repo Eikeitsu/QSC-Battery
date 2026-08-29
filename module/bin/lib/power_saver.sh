@@ -222,6 +222,11 @@ qsc_ps_refresh_desc() {
 		# 与 qsc_switch.sh / WebUI 共用同一套 sysfs→dumpsys 兜底，
 		# 避免「首次能读到，后续快路径却读不到」导致简介停在热更新后的数值。
 		qsc_battery_snapshot_read >/dev/null 2>&1 || true
+		# region agent log
+		type qsc_runtime_trace >/dev/null 2>&1 &&
+			qsc_runtime_trace "H2" "snapshot" \
+				"${QSC_BATTERY_LEVEL:-}:${QSC_BATTERY_TEMP:-}:${QSC_BATTERY_STATUS:-}:${QSC_BATTERY_SOURCE:-}"
+		# endregion
 		lv="${QSC_BATTERY_LEVEL:-}"
 		temp="${QSC_BATTERY_TEMP:-}"
 		[ -n "${QSC_BATTERY_POWERED:-}" ] && plugged=1
@@ -286,7 +291,13 @@ qsc_ps_refresh_desc() {
 	temperature="$temp"
 	battery_powered=""
 	[ "$plugged" = "1" ] && battery_powered="powered: true"
+	# region agent log
 	qsc_refresh_module_description
+	_desc_rc="$?"
+	type qsc_runtime_trace >/dev/null 2>&1 &&
+		qsc_runtime_trace "H4" "description_refresh" "$_desc_rc:$lv:$temp:$plugged:$stopped"
+	return "$_desc_rc"
+	# endregion
 }
 
 # 等待下一轮。native_daemon=1 且存在 bin/qscd 时交给它阻塞在内核
@@ -375,6 +386,10 @@ qsc_ps_native_wait() {
 	error_file="$DATADIR/qscd_wait_error.$$"
 	if qsc_ps_watch_supported; then
 		QSC_PS_NATIVE_MODE=watch
+		# region agent log
+		type qsc_runtime_trace >/dev/null 2>&1 &&
+			qsc_runtime_trace "H3" "native_wait_enter" "$QSC_PS_NATIVE_MODE:$secs:$floor"
+		# endregion
 		if [ ! -f "$DATADIR/power_switch" ] && qsc_ps_plugged; then
 			qsc_ps_native_exec "$secs" "$BINDIR/qscd" watch --max "$secs" --floor "$floor" \
 				--stop "${QSC_PS_STOP:-101}" --near "${QSC_PS_NEAR:-3}" \
@@ -387,10 +402,18 @@ qsc_ps_native_wait() {
 		fi
 	else
 		QSC_PS_NATIVE_MODE=wait-event
+		# region agent log
+		type qsc_runtime_trace >/dev/null 2>&1 &&
+			qsc_runtime_trace "H3" "native_wait_enter" "$QSC_PS_NATIVE_MODE:$secs:$floor"
+		# endregion
 		qsc_ps_native_exec "$secs" "$BINDIR/qscd" wait-event "$secs" "$floor" \
 			> /dev/null 2>"$error_file"
 		rc="$?"
 	fi
+	# region agent log
+	type qsc_runtime_trace >/dev/null 2>&1 &&
+		qsc_runtime_trace "H3" "native_wait_exit" "$QSC_PS_NATIVE_MODE:$rc"
+	# endregion
 	if [ "$rc" -eq 124 ]; then
 		QSC_PS_NATIVE_ERROR=timeout
 	else
