@@ -22,35 +22,45 @@ const store = useAppStore();
     <AppTopbar />
 
     <main class="app-main" :aria-busy="store.initializing">
-      <div
-        v-if="routeLoading"
-        class="route-loading-page"
-        role="status"
-        aria-live="polite"
-      >
-        <div class="route-loader">
-          <span class="route-loader__spinner" aria-hidden="true"></span>
-          <span class="route-loader__text">正在切换页面</span>
-          <span class="route-loader__dots" aria-hidden="true">···</span>
+      <div class="route-stage">
+        <div class="route-content" :class="{ 'route-content--hidden': routeLoading }">
+          <Suspense timeout="0">
+            <template #default>
+              <RouterView v-slot="{ Component, route: viewRoute }">
+                <Transition :name="slideDir === 'forward' ? 'slide-left' : 'slide-right'">
+                  <KeepAlive :max="4">
+                    <component
+                      :is="Component"
+                      :key="viewRoute.name"
+                      :refreshing="
+                        viewRoute.name === 'home'
+                          ? refreshing || store.initializing
+                          : undefined
+                      "
+                      @refresh="onRefreshHome()"
+                    />
+                  </KeepAlive>
+                </Transition>
+              </RouterView>
+            </template>
+            <template #fallback>
+              <PageLoading text="正在打开页面…" />
+            </template>
+          </Suspense>
+        </div>
+        <div
+          v-if="routeLoading"
+          class="route-loading-page"
+          role="status"
+          aria-live="polite"
+        >
+          <div class="route-loader">
+            <span class="route-loader__spinner" aria-hidden="true"></span>
+            <span class="route-loader__text">正在切换页面</span>
+            <span class="route-loader__dots" aria-hidden="true">···</span>
+          </div>
         </div>
       </div>
-      <Suspense v-else timeout="0">
-        <template #default>
-          <RouterView v-slot="{ Component, route: viewRoute }">
-            <Transition :name="slideDir === 'forward' ? 'slide-left' : 'slide-right'">
-              <component
-                :is="Component"
-                :key="viewRoute.name"
-                :refreshing="viewRoute.name === 'home' ? refreshing : undefined"
-                @refresh="onRefreshHome()"
-              />
-            </Transition>
-          </RouterView>
-        </template>
-        <template #fallback>
-          <PageLoading text="正在打开页面…" />
-        </template>
-      </Suspense>
     </main>
 
     <AppDock :tab="tab" @update:tab="setTab" />
@@ -70,8 +80,27 @@ const store = useAppStore();
   padding-top: calc(48px + var(--qsc-inset-top, 0px));
 }
 
-.route-loading-page {
+.route-stage {
+  position: relative;
   min-height: calc(100dvh - 56px - var(--qsc-inset-top, 0px) - var(--dock-pad, 72px));
+}
+
+.route-content {
+  min-height: inherit;
+  transition: opacity 0.12s ease;
+}
+
+.route-content--hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.route-loading-page {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  min-height: inherit;
   display: grid;
   place-items: center;
   padding: 24px;
