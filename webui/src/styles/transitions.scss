@@ -1,27 +1,3 @@
-@use "./tokens" as *;
-
-@mixin page-slide($name, $enter-x, $leave-x) {
-  .#{$name}-enter-active,
-  .#{$name}-leave-active {
-    transition:
-      transform $ease-page,
-      opacity $ease-page;
-  }
-
-  .#{$name}-enter-from {
-    transform: translateX($enter-x);
-    opacity: 0;
-  }
-
-  .#{$name}-leave-to {
-    transform: translateX($leave-x);
-    opacity: 0;
-  }
-}
-
-@include page-slide("slide-left", 18px, -12px);
-@include page-slide("slide-right", -18px, 12px);
-
 /* 配置项开关显隐 */
 .cfg-reveal-enter-active,
 .cfg-reveal-leave-active {

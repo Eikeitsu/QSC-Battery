@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { RouterView } from "vue-router";
-import { slideDir } from "@/router/state";
 import { useAppShell } from "./composables/useAppShell";
 import AppTopbar from "./ui/AppTopbar.vue";
 import AppDock from "./ui/AppDock.vue";
@@ -22,46 +21,35 @@ const store = useAppStore();
     <AppTopbar />
 
     <main class="app-main" :aria-busy="store.initializing">
-      <div class="route-stage">
-        <div class="route-content" :class="{ 'route-content--hidden': routeLoading }">
-          <Suspense timeout="0">
-            <template #default>
-              <RouterView v-slot="{ Component, route: viewRoute }">
-                <Transition :name="slideDir === 'forward' ? 'slide-left' : 'slide-right'">
-                  <KeepAlive :max="4">
-                    <component
-                      :is="Component"
-                      :key="viewRoute.name"
-                      :refreshing="
-                        viewRoute.name === 'home'
-                          ? refreshing || store.initializing
-                          : undefined
-                      "
-                      @refresh="onRefreshHome()"
-                    />
-                  </KeepAlive>
-                </Transition>
-              </RouterView>
-            </template>
-            <template #fallback>
-              <PageLoading text="正在打开页面…" />
-            </template>
-          </Suspense>
-        </div>
-        <div
-          v-if="routeLoading"
-          class="route-loading-page"
-          role="status"
-          aria-live="polite"
-        >
-          <div class="route-loader">
-            <span class="route-loader__spinner" aria-hidden="true"></span>
-            <span class="route-loader__text">正在切换页面</span>
-            <span class="route-loader__dots" aria-hidden="true">···</span>
-          </div>
-        </div>
+      <PageLoading v-if="store.initializing" text="正在读取设备信息…" />
+      <div class="route-content" :class="{ 'route-content--hidden': routeLoading }">
+        <Suspense timeout="0">
+          <template #default>
+            <RouterView v-slot="{ Component, route: viewRoute }">
+              <KeepAlive :max="4">
+                <component
+                  :is="Component"
+                  :key="viewRoute.name"
+                  :refreshing="viewRoute.name === 'home' ? refreshing : undefined"
+                  @refresh="onRefreshHome()"
+                />
+              </KeepAlive>
+            </RouterView>
+          </template>
+          <template #fallback>
+            <PageLoading text="正在打开页面…" />
+          </template>
+        </Suspense>
       </div>
     </main>
+
+    <div v-if="routeLoading" class="route-loading-page" role="status" aria-live="polite">
+      <div class="route-loader">
+        <span class="route-loader__spinner" aria-hidden="true"></span>
+        <span class="route-loader__text">正在切换页面</span>
+        <span class="route-loader__dots" aria-hidden="true">···</span>
+      </div>
+    </div>
 
     <AppDock :tab="tab" @update:tab="setTab" />
   </div>
@@ -80,31 +68,24 @@ const store = useAppStore();
   padding-top: calc(48px + var(--qsc-inset-top, 0px));
 }
 
-.route-stage {
-  position: relative;
-  min-height: calc(100dvh - 56px - var(--qsc-inset-top, 0px) - var(--dock-pad, 72px));
-}
-
 .route-content {
-  min-height: inherit;
-  transition: opacity 0.12s ease;
+  min-height: calc(100dvh - 56px - var(--qsc-inset-top, 0px) - var(--dock-pad, 72px));
 }
 
 .route-content--hidden {
   visibility: hidden;
-  opacity: 0;
   pointer-events: none;
 }
 
 .route-loading-page {
-  position: absolute;
-  z-index: 2;
+  position: fixed;
+  z-index: 30;
   inset: 0;
-  min-height: inherit;
   display: grid;
   place-items: center;
   padding: 24px;
-  background: var(--qsc-bg);
+  background: color-mix(in srgb, var(--qsc-bg) 92%, transparent);
+  pointer-events: none;
 }
 
 .route-loader {

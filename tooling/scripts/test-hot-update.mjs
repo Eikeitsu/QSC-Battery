@@ -172,6 +172,10 @@ const chart = read(join(root, "webui/src/pages/home/ui/HomeChargeChart.vue"));
 const indexSource = read(join(root, "webui/index.html"));
 const appSource = read(join(root, "webui/src/app/App.vue"));
 const appShell = read(join(root, "webui/src/layouts/AppShell.vue"));
+const appShellComposable = read(
+  join(root, "webui/src/layouts/composables/useAppShell.ts"),
+);
+const appDock = read(join(root, "webui/src/layouts/ui/AppDock.vue"));
 const routes = read(join(root, "webui/src/router/routes.ts"));
 const batteryStore = read(join(root, "webui/src/stores/battery.ts"));
 const installGuide = read(join(root, "docs/guide/install.md"));
@@ -228,8 +232,12 @@ requireText(appShell, "PageLoading", "WebUI page loading state");
 requireText(appShell, "<Suspense", "WebUI async page fallback");
 requireText(appShell, "route-loading-page", "WebUI route loading replacement");
 requireText(appShell, ':aria-busy="store.initializing"', "WebUI non-blocking data state");
+requireText(appShell, "正在读取设备信息", "WebUI device information loading text");
+requireText(appShell, "position: fixed", "WebUI viewport route loading");
+requireText(appShell, "<KeepAlive", "WebUI loaded page cache");
 requireText(appSource, "<Suspense", "WebUI startup page fallback");
 requireText(appSource, "router.isReady", "WebUI initial route readiness state");
+requireText(appSource, "app-start-loading", "WebUI centered startup loading");
 requireText(indexSource, "app-loading", "WebUI static startup loading state");
 requireText(
   routes,
@@ -237,10 +245,14 @@ requireText(
   "WebUI lazy root layout",
 );
 requireText(routes, "preloadTab", "WebUI route chunk preloading");
-if (/mode="(?:out-in|in-out)"/.test(appShell)) {
-  throw new Error("WebUI route transition must not wait for async page chunks");
+if (/<Transition/.test(appShell)) {
+  throw new Error("WebUI route transition must not animate heavy pages");
 }
 requireText(appShell, "routeLoading", "WebUI immediate navigation feedback");
+requireText(appShellComposable, "pendingTab", "WebUI single pending navigation state");
+requireText(appShellComposable, "navigationId", "WebUI latest navigation wins");
+requireText(appShellComposable, "scrollMainToTop", "WebUI navigation scroll reset");
+requireText(appDock, ':model-value="tab"', "WebUI dock controlled by shell state");
 requireText(
   batteryStore,
   "const initializing = ref(false)",

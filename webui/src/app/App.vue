@@ -20,7 +20,9 @@ onMounted(() => {
   <Suspense v-else timeout="0">
     <RouterView />
     <template #fallback>
-      <PageLoading text="正在打开页面…" />
+      <div class="app-start-loading">
+        <PageLoading text="正在打开页面…" />
+      </div>
     </template>
   </Suspense>
 </template>
