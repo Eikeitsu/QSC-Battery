@@ -13,6 +13,7 @@
   color: var(--qsc-text);
   overscroll-behavior: none;
   overflow: hidden;
+  touch-action: pan-y;
 
   /* 非悬浮：底色铺满系统导航区 */
   padding-bottom: var(--dock-pad);
@@ -54,7 +55,8 @@ html.pack-miuix.bar-blur .app-topbar {
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: none;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
   padding-top: calc(56px + var(--qsc-inset-top, 0px));
   isolation: isolate;
 }

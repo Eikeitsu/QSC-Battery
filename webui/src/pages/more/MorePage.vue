@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { useThemePackClass } from "@/composables";
-import AppearanceCard from "./ui/AppearanceCard.vue";
-import ProfilesCard from "./ui/ProfilesCard.vue";
-import CommunityShareCard from "./ui/CommunityShareCard.vue";
-import ShortcutsCard from "./ui/ShortcutsCard.vue";
-import GuideCard from "./ui/GuideCard.vue";
-import AboutBrand from "./ui/AboutBrand.vue";
-import AboutLinks from "./ui/AboutLinks.vue";
-import CreditsCard from "./ui/CreditsCard.vue";
+import { lazyComponent } from "@/shared/lib/lazyComponent";
+
+const AppearanceCard = lazyComponent(() => import("./ui/AppearanceCard.vue"));
+const ProfilesCard = lazyComponent(() => import("./ui/ProfilesCard.vue"));
+const CommunityShareCard = lazyComponent(() => import("./ui/CommunityShareCard.vue"));
+const ShortcutsCard = lazyComponent(() => import("./ui/ShortcutsCard.vue"));
+const GuideCard = lazyComponent(() => import("./ui/GuideCard.vue"));
+const AboutBrand = lazyComponent(() => import("./ui/AboutBrand.vue"));
+const AboutLinks = lazyComponent(() => import("./ui/AboutLinks.vue"));
+const CreditsCard = lazyComponent(() => import("./ui/CreditsCard.vue"));
 
 const { packClass } = useThemePackClass();
 </script>

@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { provideConfigForm, useThemePackClass } from "@/composables";
-import PowerStopCard from "./ui/PowerStopCard.vue";
-import StopBehaviorCard from "./ui/StopBehaviorCard.vue";
-import TempStopCard from "./ui/TempStopCard.vue";
-import CurrentControlCard from "./ui/CurrentControlCard.vue";
-import AdvancedRuntimeCard from "./ui/AdvancedRuntimeCard.vue";
-import PreferredCard from "./ui/PreferredCard.vue";
-import PowerSwitchCard from "./ui/PowerSwitchCard.vue";
-import SwitchToolsCard from "./ui/SwitchToolsCard.vue";
-import DaemonCard from "./ui/DaemonCard.vue";
+import { lazyComponent } from "@/shared/lib/lazyComponent";
+
+const PowerStopCard = lazyComponent(() => import("./ui/PowerStopCard.vue"));
+const StopBehaviorCard = lazyComponent(() => import("./ui/StopBehaviorCard.vue"));
+const TempStopCard = lazyComponent(() => import("./ui/TempStopCard.vue"));
+const CurrentControlCard = lazyComponent(() => import("./ui/CurrentControlCard.vue"));
+const AdvancedRuntimeCard = lazyComponent(() => import("./ui/AdvancedRuntimeCard.vue"));
+const PreferredCard = lazyComponent(() => import("./ui/PreferredCard.vue"));
+const PowerSwitchCard = lazyComponent(() => import("./ui/PowerSwitchCard.vue"));
+const SwitchToolsCard = lazyComponent(() => import("./ui/SwitchToolsCard.vue"));
+const DaemonCard = lazyComponent(() => import("./ui/DaemonCard.vue"));
 
 const { packClass } = useThemePackClass();
 provideConfigForm();

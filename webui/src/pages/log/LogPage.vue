@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ThemePack } from "@/shared";
 import { useLogPage } from "./composables/useLogPage";
-import LogMd3 from "./ui/LogMd3.vue";
-import LogMiuix from "./ui/LogMiuix.vue";
-import LogDefault from "./ui/LogDefault.vue";
+import { lazyComponent } from "@/shared/lib/lazyComponent";
+
+const LogMd3 = lazyComponent(() => import("./ui/LogMd3.vue"));
+const LogMiuix = lazyComponent(() => import("./ui/LogMiuix.vue"));
+const LogDefault = lazyComponent(() => import("./ui/LogDefault.vue"));
 
 const {
   theme,
@@ -66,13 +68,5 @@ const {
 <style scoped lang="scss">
 .page {
   min-height: calc(100dvh - 56px - var(--qsc-inset-top, 0px) - var(--dock-pad, 72px));
-}
-
-:deep(.van-pull-refresh) {
-  overflow: clip;
-}
-
-:deep(.van-pull-refresh__track) {
-  will-change: auto;
 }
 </style>

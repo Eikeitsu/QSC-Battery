@@ -4,3 +4,4 @@ export * from "./apps";
 export * from "./history";
 export * from "./daemon";
 export * from "./batterySnapshot";
+export * from "./statusBundle";

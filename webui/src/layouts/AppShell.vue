@@ -20,9 +20,25 @@ const store = useAppStore();
   >
     <AppTopbar />
 
-    <main class="app-main" :aria-busy="store.initializing">
-      <PageLoading v-if="store.initializing" text="正在读取设备信息…" />
-      <div class="route-content" :class="{ 'route-content--hidden': routeLoading }">
+    <main
+      class="app-main"
+      :aria-busy="store.initializing || store.hydrating || routeLoading"
+    >
+      <div
+        v-if="store.initializing || store.hydrating || routeLoading"
+        class="app-main-loading"
+        role="status"
+      >
+        <span class="app-main-loading__bar" aria-hidden="true"></span>
+        <span>{{
+          routeLoading
+            ? "正在打开页面…"
+            : store.hydrating
+              ? "正在同步页面数据…"
+              : "正在读取设备信息…"
+        }}</span>
+      </div>
+      <div class="route-content">
         <Suspense timeout="0">
           <template #default>
             <RouterView v-slot="{ Component, route: viewRoute }">
@@ -37,19 +53,11 @@ const store = useAppStore();
             </RouterView>
           </template>
           <template #fallback>
-            <PageLoading text="正在打开页面…" />
+            <PageLoading text="正在准备页面…" />
           </template>
         </Suspense>
       </div>
     </main>
-
-    <div v-if="routeLoading" class="route-loading-page" role="status" aria-live="polite">
-      <div class="route-loader">
-        <span class="route-loader__spinner" aria-hidden="true"></span>
-        <span class="route-loader__text">正在切换页面</span>
-        <span class="route-loader__dots" aria-hidden="true">···</span>
-      </div>
-    </div>
 
     <AppDock :tab="tab" @update:tab="setTab" />
   </div>
@@ -80,121 +88,45 @@ const store = useAppStore();
   );
 }
 
-.route-content--hidden {
-  display: none;
-  pointer-events: none;
-}
-
-.route-loading-page {
-  position: fixed;
-  z-index: 30;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 24px;
+.app-main-loading {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 16px;
   background: color-mix(in srgb, var(--qsc-bg) 92%, transparent);
+  color: var(--qsc-text);
+  font-size: 12px;
   pointer-events: none;
 }
 
-.route-loader {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  min-width: 156px;
-  padding: 20px 24px;
-  background: var(--qsc-surface);
-  border: 1px solid color-mix(in srgb, var(--qsc-primary) 16%, transparent);
-  border-radius: 18px;
-  box-shadow: var(--qsc-shadow);
-}
-
-.route-loader__spinner {
-  width: 26px;
-  height: 26px;
-  border: 3px solid color-mix(in srgb, var(--qsc-primary) 18%, transparent);
-  border-top-color: var(--qsc-primary);
-  border-radius: 50%;
-  animation: route-loader-spin 0.75s linear infinite;
-}
-
-.route-loader__text {
-  color: var(--qsc-text);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.route-loader__dots {
-  color: var(--qsc-text-2);
-  font-size: 18px;
-  line-height: 10px;
-  letter-spacing: 3px;
-  animation: route-loader-dots 1s ease-in-out infinite;
-}
-
-.shell-md3 .route-loader {
-  min-width: 188px;
-  border-radius: 28px;
-  box-shadow: none;
-}
-
-.shell-md3 .route-loader__spinner {
-  width: 140px;
-  height: 5px;
+.app-main-loading__bar {
+  width: 36px;
+  height: 3px;
   overflow: hidden;
-  border: 0;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--qsc-primary) 18%, transparent);
-  animation: none;
+  background: color-mix(in srgb, var(--qsc-primary) 20%, transparent);
 }
 
-.shell-md3 .route-loader__spinner::after {
+.app-main-loading__bar::after {
   display: block;
-  width: 42%;
+  width: 45%;
   height: 100%;
-  border-radius: inherit;
   background: var(--qsc-primary);
   content: "";
-  animation: route-loader-progress 1.1s ease-in-out infinite;
+  animation: app-main-loading-progress 1s ease-in-out infinite;
 }
 
-.shell-miuix .route-loader {
-  min-width: 148px;
-  border: 0;
-  border-radius: 24px;
-  background: color-mix(in srgb, var(--qsc-surface) 86%, transparent);
-  box-shadow: 0 12px 36px color-mix(in srgb, var(--qsc-primary) 16%, transparent);
-}
-
-.shell-miuix .route-loader__spinner {
-  width: 12px;
-  height: 12px;
-  border-width: 2px;
-}
-
-@keyframes route-loader-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes route-loader-dots {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-
-  50% {
-    opacity: 1;
-  }
-}
-
-@keyframes route-loader-progress {
-  0% {
+@keyframes app-main-loading-progress {
+  from {
     transform: translateX(-120%);
   }
 
-  100% {
-    transform: translateX(340%);
+  to {
+    transform: translateX(240%);
   }
 }
 </style>

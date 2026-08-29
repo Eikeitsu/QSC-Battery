@@ -237,6 +237,12 @@ const appShellComposable = read(
 const appDock = read(join(root, "webui/src/layouts/ui/AppDock.vue"));
 const routes = read(join(root, "webui/src/router/routes.ts"));
 const batteryStore = read(join(root, "webui/src/stores/battery.ts"));
+const lazyComponent = read(join(root, "webui/src/shared/lib/lazyComponent.ts"));
+const statusBundle = read(join(root, "webui/src/shared/api/statusBundle.ts"));
+const homePage = read(join(root, "webui/src/pages/home/HomePage.vue"));
+const configPage = read(join(root, "webui/src/pages/config/ConfigPage.vue"));
+const logPage = read(join(root, "webui/src/pages/log/LogPage.vue"));
+const morePage = read(join(root, "webui/src/pages/more/MorePage.vue"));
 const installGuide = read(join(root, "docs/guide/install.md"));
 const webuiGuide = read(join(root, "docs/guide/webui.md"));
 const configGuide = read(join(root, "docs/guide/config.md"));
@@ -301,12 +307,18 @@ requireText(historyApi, "RESET:TIME", "system history reset anchor");
 requireText(historyApi, "count < 1200", "system history bounded tail");
 requireText(appShell, "PageLoading", "WebUI page loading state");
 requireText(appShell, "<Suspense", "WebUI async page fallback");
-requireText(appShell, "route-loading-page", "WebUI route loading replacement");
-requireText(appShell, ':aria-busy="store.initializing"', "WebUI non-blocking data state");
+requireText(appShell, "app-main-loading", "WebUI non-blocking data state");
+requireText(
+  appShell,
+  ':aria-busy="store.initializing || store.hydrating || routeLoading"',
+  "WebUI non-blocking data state",
+);
 requireText(appShell, "正在读取设备信息", "WebUI device information loading text");
-requireText(appShell, "position: fixed", "WebUI viewport route loading");
+requireText(appShell, "position: sticky", "WebUI inline route loading");
 requireText(appShell, "<KeepAlive", "WebUI loaded page cache");
-requireText(appShell, "display: none", "WebUI hidden route content leaves layout");
+if (appShell.includes("route-loading-page") || appShell.includes("display: none")) {
+  throw new Error("WebUI route loading must not hide or cover the scroll content");
+}
 requireText(appSource, "<Suspense", "WebUI startup page fallback");
 requireText(appSource, "router.isReady", "WebUI initial route readiness state");
 requireText(appSource, "app-start-loading", "WebUI centered startup loading");
@@ -326,6 +338,8 @@ requireText(appShellComposable, "navigationId", "WebUI latest navigation wins");
 requireText(appShellComposable, "drainNavigation", "WebUI serialized navigation queue");
 requireText(appShellComposable, "scrollMainToTop", "WebUI navigation scroll reset");
 requireText(appShellComposable, "requestIdleCallback", "WebUI idle route preloading");
+requireText(appShellComposable, "warmNextRouteChunk", "WebUI bounded route preloading");
+requireText(appShellComposable, "preloadTab(target)", "WebUI click route preloading");
 requireText(appDock, ':model-value="tab"', "WebUI dock controlled by shell state");
 requireText(
   batteryStore,
@@ -333,6 +347,8 @@ requireText(
   "WebUI bootstrap loading state",
 );
 requireText(batteryStore, "refreshInFlight", "WebUI refresh single flight");
+requireText(batteryStore, "loadStatusBundle", "WebUI combined status bridge request");
+requireText(statusBundle, "parseStatusBundle", "WebUI combined status parser");
 requireText(batteryStore, "duration: 1200", "WebUI bounded refresh toast");
 requireText(batteryStore, "loadConfigValues(CONFIG_KEYS)", "batched config loading");
 requireText(powerSaver, "QSC_PS_WAIT_FAILURES", "native wait failure backoff");
@@ -346,6 +362,15 @@ requireText(serviceSource, "qscd_unusable", "native wait failure state");
 requireText(serviceSource, '"level":"%s"', "debug log severity");
 requireText(serviceSource, '"category":"%s"', "debug log category");
 requireText(serviceSource, "qscd 等待结果及错误原因", "Chinese debug explanation");
+requireText(lazyComponent, "suspensible: false", "WebUI non-blocking async components");
+for (const [page, name] of [
+  [homePage, "home"],
+  [configPage, "config"],
+  [logPage, "log"],
+  [morePage, "more"],
+]) {
+  requireText(page, "lazyComponent", `WebUI ${name} component splitting`);
+}
 requireText(serviceSource, "switch_enter", "bounded decision round start");
 requireText(serviceSource, "switch_exit", "bounded decision round result");
 requireText(serviceSource, "qsc_ps_native_exec 45", "bounded decision round timeout");

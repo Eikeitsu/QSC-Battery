@@ -53,6 +53,7 @@ export const useAppStore = defineStore("app", () => {
   const logLines = ref(0);
   const logSize = ref("--");
   const initializing = ref(false);
+  const hydrating = ref(false);
   const ready = ref(false);
 
   let statusTimer: ReturnType<typeof setInterval> | null = null;
@@ -326,59 +327,40 @@ export const useAppStore = defineStore("app", () => {
       return false;
     }
 
-    const [snapshotR, offR, switchR, descR, voltR, currR, verR, battR, failR] =
-      await Promise.all([
-        api.loadBatterySnapshot(),
-        api.exec(
-          `[ -f '${PATHS.OFF_FLAG}' ] || [ -f '${PATHS.MODDIR}/disable' ] && echo 1 || echo 0`,
-        ),
-        api.exec(`[ -f '${PATHS.DATADIR}/power_switch' ] && echo 1 || echo 0`),
-        api.exec(
-          `grep '^description=' '${PATHS.MODDIR}/module.prop' 2>/dev/null | cut -d= -f2-`,
-        ),
-        api.exec(`cat /sys/class/power_supply/battery/voltage_now 2>/dev/null`),
-        api.exec(`cat /sys/class/power_supply/battery/current_now 2>/dev/null`),
-        api.exec(
-          `grep '^version=' '${PATHS.MODDIR}/module.prop' 2>/dev/null | cut -d= -f2-`,
-        ),
-        api.exec(`sh '${PATHS.BATTERY_INFO}' 2>/dev/null`),
-        api.exec(
-          `[ -f '${PATHS.STOP_FAIL_HINT}' ] || [ -f '${PATHS.NO_NODE_LOGGED}' ] && echo 1 || echo 0`,
-        ),
-      ]);
+    const { value: bundle, result: statusResult } = await api.loadStatusBundle();
 
-    if (snapshotR.result.errno === -2) {
+    if (statusResult.errno === -2) {
       status.badge = "状态读取超时，下拉重试";
       status.badgeType = BadgeType.Warning;
       return false;
     }
 
     bridgeOk.value = true;
-    const level = snapshotR.value.level;
-    const rawTemp = parseInt(snapshotR.value.temp, 10);
+    const level = bundle.snapshot.level;
+    const rawTemp = parseInt(bundle.snapshot.temp, 10);
     const tempC = Number.isNaN(rawTemp)
       ? null
       : rawTemp > 200
         ? Math.round(rawTemp / 10)
         : rawTemp;
-    const moduleOff = offR.stdout.trim() === BinaryFlag.On;
-    const chargingStopped = switchR.stdout.trim() === BinaryFlag.On;
+    const moduleOff = bundle.moduleOff === BinaryFlag.On;
+    const chargingStopped = bundle.chargingStopped === BinaryFlag.On;
     const chargeStatus =
-      snapshotR.value.status === "2"
+      bundle.snapshot.status === "2"
         ? "Charging"
-        : snapshotR.value.status === "5"
+        : bundle.snapshot.status === "5"
           ? "Full"
-          : snapshotR.value.status === "3"
+          : bundle.snapshot.status === "3"
             ? "Discharging"
-            : snapshotR.value.status === "4"
+            : bundle.snapshot.status === "4"
               ? "Not charging"
-              : snapshotR.value.status;
+              : bundle.snapshot.status;
 
     status.level = level || "--";
     status.temp = tempC !== null ? String(tempC) : "--";
     status.moduleOn = !moduleOff;
 
-    const descRaw = descR.stdout.trim();
+    const descRaw = bundle.description;
     const bracket = descRaw.match(/\[([^\]]+)\]/);
     const bracketBody = bracket ? bracket[1].trim() : "";
     const [majorPart, ...innerParts] = bracketBody ? bracketBody.split("|") : [""];
@@ -395,7 +377,7 @@ export const useAppStore = defineStore("app", () => {
     } else if (chargingStopped) {
       status.badge = majorDesc || "已停充，等待恢复";
       badgeType = BadgeType.Warning;
-    } else if (failR.stdout.trim() === BinaryFlag.On) {
+    } else if (bundle.failed === BinaryFlag.On) {
       status.badge = majorDesc || "停充可能未生效";
       badgeType = BadgeType.Warning;
       status.desc = "请插电后 Action 音量下测开关，或到「策略 → 测开关与缓存」清除后重启";
@@ -419,22 +401,22 @@ export const useAppStore = defineStore("app", () => {
     else if (chargingStopped) status.chargeLabel = "已停充";
     else status.chargeLabel = statusMap[chargeStatus] || chargeStatus || "--";
 
-    const voltRaw = parseInt(voltR.stdout.trim(), 10);
+    const voltRaw = parseInt(bundle.voltage, 10);
     status.voltage = Number.isNaN(voltRaw)
       ? "--"
       : voltRaw > 100000
         ? (voltRaw / 1000000).toFixed(2)
         : (voltRaw / 1000).toFixed(2);
 
-    const currRaw = parseInt(currR.stdout.trim(), 10);
+    const currRaw = parseInt(bundle.current, 10);
     status.currentMa = Number.isNaN(currRaw)
       ? "--"
       : String(Math.round(Math.abs(currRaw) > 10000 ? currRaw / 1000 : currRaw));
 
-    status.version = verR.stdout.trim() || "--";
+    status.version = bundle.version || "--";
 
     const battMap: Record<string, string> = {};
-    for (const line of battR.stdout.split("\n")) {
+    for (const line of bundle.batteryInfo.split("\n")) {
       const i = line.indexOf("=");
       if (i <= 0) continue;
       battMap[line.slice(0, i).trim()] = line.slice(i + 1).trim();
@@ -519,17 +501,16 @@ export const useAppStore = defineStore("app", () => {
       return;
     }
     try {
-      await Promise.allSettled([
-        loadDeviceInfo(),
-        loadConfig(),
-        loadCurrentConfig(),
-        refreshStatus(),
-        refreshLog(),
-      ]);
+      // 先完成首页和策略页需要的核心数据，日志与可选电流配置后台加载。
+      await Promise.allSettled([loadDeviceInfo(), loadConfig(), refreshStatus()]);
       if (statusTimer) clearInterval(statusTimer);
       statusTimer = setInterval(() => {
         void refreshStatus();
       }, STATUS_INTERVAL);
+      hydrating.value = true;
+      void Promise.allSettled([loadCurrentConfig(), refreshLog()]).finally(() => {
+        hydrating.value = false;
+      });
     } finally {
       initializing.value = false;
       ready.value = true;
@@ -550,6 +531,7 @@ export const useAppStore = defineStore("app", () => {
     logLines,
     logSize,
     initializing,
+    hydrating,
     ready,
     powerPlan,
     tempPlan,

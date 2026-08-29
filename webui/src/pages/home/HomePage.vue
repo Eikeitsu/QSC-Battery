@@ -2,22 +2,7 @@
 import { computed, inject } from "vue";
 import { BinaryFlag, TabName, ThemePack } from "@/shared";
 import { useAppStore, useTheme } from "@/stores";
-import Md3HomeStatus from "./ui/md3/HomeStatus.vue";
-import Md3HomeMetrics from "./ui/md3/HomeMetrics.vue";
-import Md3HomeStrategy from "./ui/md3/HomeStrategy.vue";
-import Md3HomeBattery from "./ui/md3/HomeBattery.vue";
-import Md3HomeInfo from "./ui/md3/HomeInfo.vue";
-import MiuixHomeOverview from "./ui/miuix/HomeOverview.vue";
-import MiuixHomeStrategy from "./ui/miuix/HomeStrategy.vue";
-import MiuixHomeDetail from "./ui/miuix/HomeDetail.vue";
-import MiuixHomeBattery from "./ui/miuix/HomeBattery.vue";
-import DefaultHomeHero from "./ui/default/HomeHero.vue";
-import DefaultHomeSwitch from "./ui/default/HomeSwitch.vue";
-import DefaultHomeStrategy from "./ui/default/HomeStrategy.vue";
-import DefaultHomeDetail from "./ui/default/HomeDetail.vue";
-import DefaultHomeStake from "./ui/default/HomeStake.vue";
-import DefaultHomeTips from "./ui/default/HomeTips.vue";
-import HomeChargeChart from "./ui/HomeChargeChart.vue";
+import { lazyComponent } from "@/shared/lib/lazyComponent";
 
 defineProps<{
   refreshing?: boolean;
@@ -25,6 +10,23 @@ defineProps<{
 defineEmits<{
   refresh: [];
 }>();
+
+const Md3HomeStatus = lazyComponent(() => import("./ui/md3/HomeStatus.vue"));
+const Md3HomeMetrics = lazyComponent(() => import("./ui/md3/HomeMetrics.vue"));
+const Md3HomeStrategy = lazyComponent(() => import("./ui/md3/HomeStrategy.vue"));
+const Md3HomeBattery = lazyComponent(() => import("./ui/md3/HomeBattery.vue"));
+const Md3HomeInfo = lazyComponent(() => import("./ui/md3/HomeInfo.vue"));
+const MiuixHomeOverview = lazyComponent(() => import("./ui/miuix/HomeOverview.vue"));
+const MiuixHomeStrategy = lazyComponent(() => import("./ui/miuix/HomeStrategy.vue"));
+const MiuixHomeDetail = lazyComponent(() => import("./ui/miuix/HomeDetail.vue"));
+const MiuixHomeBattery = lazyComponent(() => import("./ui/miuix/HomeBattery.vue"));
+const DefaultHomeHero = lazyComponent(() => import("./ui/default/HomeHero.vue"));
+const DefaultHomeSwitch = lazyComponent(() => import("./ui/default/HomeSwitch.vue"));
+const DefaultHomeStrategy = lazyComponent(() => import("./ui/default/HomeStrategy.vue"));
+const DefaultHomeDetail = lazyComponent(() => import("./ui/default/HomeDetail.vue"));
+const DefaultHomeStake = lazyComponent(() => import("./ui/default/HomeStake.vue"));
+const DefaultHomeTips = lazyComponent(() => import("./ui/default/HomeTips.vue"));
+const HomeChargeChart = lazyComponent(() => import("./ui/HomeChargeChart.vue"));
 
 const theme = useTheme();
 const app = useAppStore();

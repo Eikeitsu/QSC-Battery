@@ -6,24 +6,6 @@ import { isTabName, preloadTab } from "@/router/routes";
 import { TabName } from "@/shared";
 import { TAB_ORDER } from "@/shared/config/navigation";
 
-// #region agent log
-function debugUi(message: string, data: Record<string, unknown>, hypothesisId: string) {
-  fetch("http://127.0.0.1:7292/ingest/058f1405-c7dd-4f7b-a005-ac16f2aae169", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cb37f9" },
-    body: JSON.stringify({
-      sessionId: "cb37f9",
-      runId: "ui-initial",
-      hypothesisId,
-      location: "useAppShell.ts",
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-}
-// #endregion
-
 export function useAppShell() {
   const store = useAppStore();
   const { theme, packClass: shellClass } = useThemePackClass("shell");
@@ -37,7 +19,6 @@ export function useAppShell() {
   let warmTimer: number | null = null;
   let warmIdle: number | null = null;
   let warmCancelled = false;
-  let warmPaused = false;
 
   const tab = computed<TabName>(
     () => pendingTab.value ?? (isTabName(route.name) ? route.name : TabName.Home),
@@ -46,31 +27,19 @@ export function useAppShell() {
   function waitForPaint(): Promise<void> {
     return new Promise((resolve) => {
       requestAnimationFrame(() => {
-        // rAF 回调发生在浏览器绘制前；再等一帧，才能确保上一状态
-        // 已经真正呈现在屏幕上，避免懒加载解析抢在绘制前开始。
-        requestAnimationFrame(() => resolve());
+        resolve();
       });
     });
   }
 
   function setTab(name: string | number) {
     const next = String(name);
-    // #region agent log
-    debugUi(
-      "tab_request",
-      { next, currentTab: tab.value, route: String(route.name) },
-      "U1",
-    );
-    // #endregion
     if (!isTabName(next) || next === tab.value) return;
-    // replace：Tab 不入历史栈，侧滑/虚拟返回可直接退出 WebUI
+    // 先更新选中态和顶部 loading，再异步解析目标页面；不隐藏当前滚动内容。
     navigationId += 1;
     pendingTab.value = next;
-    // #region agent log
-    debugUi("tab_pending", { next, navigationId }, "U1");
-    // #endregion
+    routeLoading.value = true;
     cancelWarmup();
-    scrollMainToTop();
     void drainNavigation();
   }
 
@@ -81,32 +50,24 @@ export function useAppShell() {
       while (pendingTab.value) {
         const target = pendingTab.value;
         const requestId = navigationId;
-        // 先让 Vue 把选中态和 loading 绘制出来，再启动首次懒加载。
-        // 首次 chunk 的解析可能占用主线程；没有这一帧时，点击反馈会被推迟到路由完成。
+        // 只让出一帧给选中态和顶部 loading，避免连续两帧等待放大点击延迟。
         await nextTick();
         await waitForPaint();
         if (requestId !== navigationId || pendingTab.value !== target) continue;
-        // 选中态先单独完成一次绘制，再显示遮罩；这样首次懒加载时用户能
-        // 清楚看到点击已经生效，而不是等页面 chunk 加载完成后才变色。
-        routeLoading.value = true;
-        await nextTick();
-        await waitForPaint();
-        if (requestId !== navigationId || pendingTab.value !== target) {
-          if (!pendingTab.value) routeLoading.value = false;
-          continue;
-        }
+
+        // 预取和 router.replace 共享同一个动态 import 缓存；用户点击后立即开始
+        // 下载目标 chunk，已加载页面则几乎同步完成。
+        void preloadTab(target).catch(() => {});
         try {
           await router.replace({ name: target });
           await nextTick();
-          // #region agent log
-          debugUi(
-            "route_resolved",
-            { target, route: String(router.currentRoute.value.name), requestId },
-            "U2",
-          );
-          // #endregion
         } catch {
-          // 失败时由下面的最新请求继续接管，避免 loading 永久卡住。
+          // 当前目标加载失败时回到当前有效路由，不能留下永久 loading。
+          if (requestId === navigationId && pendingTab.value === target) {
+            pendingTab.value = null;
+            routeLoading.value = false;
+          }
+          continue;
         }
         if (requestId !== navigationId || pendingTab.value !== target) continue;
 
@@ -130,9 +91,9 @@ export function useAppShell() {
   }
 
   function scheduleWarmup(callback: () => void, delay: number) {
-    if (warmCancelled || warmPaused) return;
+    if (warmCancelled) return;
     warmTimer = window.setTimeout(() => {
-      if (warmCancelled || warmPaused) return;
+      if (warmCancelled) return;
       const idleWindow = window as Window & {
         requestIdleCallback?: (
           callback: () => void,
@@ -147,22 +108,13 @@ export function useAppShell() {
     }, delay);
   }
 
-  function warmRouteChunks() {
-    if (warmCancelled || warmPaused) return;
-    const queue = TAB_ORDER.filter((name) => name !== tab.value);
-    const next = () => {
-      if (warmCancelled) return;
-      const name = queue.shift();
-      if (!name) return;
-      void preloadTab(name).finally(() => {
-        scheduleWarmup(next, 250);
-      });
-    };
-    scheduleWarmup(next, 500);
+  function warmNextRouteChunk() {
+    if (warmCancelled) return;
+    const name = TAB_ORDER.find((candidate) => candidate !== tab.value);
+    if (name) void preloadTab(name).catch(() => {});
   }
 
   function cancelWarmup() {
-    warmPaused = true;
     if (warmTimer) clearTimeout(warmTimer);
     warmTimer = null;
     const idleWindow = window as Window & {
@@ -191,7 +143,8 @@ export function useAppShell() {
     const main = document.querySelector<HTMLElement>(".app-main");
     main?.addEventListener("scroll", cancelWarmup, { passive: true, once: true });
     await store.init();
-    warmRouteChunks();
+    // 让首屏和滚动先稳定，再只预取一个相邻页面；不连续解析全部 Tab。
+    scheduleWarmup(warmNextRouteChunk, 2500);
     theme.syncStatusBar();
     window.setTimeout(() => theme.syncStatusBar(), 200);
   });

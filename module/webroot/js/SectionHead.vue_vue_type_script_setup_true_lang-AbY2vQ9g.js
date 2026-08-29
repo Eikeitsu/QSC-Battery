@@ -1,0 +1,1 @@
+import{d as n,o as t,a as s,b as o,Q as a,f as c}from"./app-BCBv5ZJL.js";const i={class:"section-head"},d={class:"title"},l={key:0,class:"hint"},m=n({__name:"SectionHead",props:{title:{},hint:{default:""}},setup(e){return(r,h)=>(t(),s("div",i,[o("p",d,a(e.title),1),e.hint?(t(),s("p",l,a(e.hint),1)):c("",!0)]))}});export{m as _};

@@ -1,0 +1,1 @@
+import{h as s,T as e}from"./app-BCBv5ZJL.js";import{u}from"./theme-CswjJxqi.js";function h(t="page"){const a=u(),m=s(()=>({[`${t}-${e.Md3}`]:a.themePack===e.Md3,[`${t}-${e.Miuix}`]:a.themePack===e.Miuix,[`${t}-${e.Default}`]:a.themePack===e.Default}));return{theme:a,packClass:m}}export{h as u};

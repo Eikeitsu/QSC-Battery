@@ -1,0 +1,1 @@
+import{k as o,o as a,a as c,b as e,g as t}from"./app-BCBv5ZJL.js";const n={},r={class:"tips card"};function l(_,s){return a(),c("section",r,[...s[0]||(s[0]=[e("p",null,[e("b",null,"过夜"),t("：停止 80–90%，恢复间隔 5–10%。")],-1),e("p",null,[e("b",null,"游戏 / 导航"),t("：开启温控，高温自动停充。")],-1)])])}const p=o(n,[["render",l],["__scopeId","data-v-c7ebbe60"]]);export{p as default};

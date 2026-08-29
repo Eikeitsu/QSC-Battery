@@ -14,14 +14,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-if="!routerReady" class="app-start-loading">
+  <div v-if="!routerReady" class="app-start-loading" role="status">
     <PageLoading text="正在打开 QSC-Battery…" />
   </div>
   <Suspense v-else timeout="0">
     <RouterView />
     <template #fallback>
-      <div class="app-start-loading">
-        <PageLoading text="正在打开页面…" />
+      <div class="app-start-loading" role="status">
+        <PageLoading text="正在准备页面…" />
       </div>
     </template>
   </Suspense>
@@ -29,18 +29,22 @@ onMounted(() => {
 
 <style scoped>
 .app-start-loading {
-  min-height: 100dvh;
-  display: grid;
-  place-items: center;
+  min-height: 56px;
+  padding-top: var(--qsc-inset-top, 0);
+  border-bottom: 1px solid var(--qsc-hairline, rgb(0 0 0 / 8%));
   background: var(--qsc-bg, #eef1f5);
+  color: var(--qsc-text, #2d333b);
 }
 
 .app-start-loading :deep(.page-loading) {
-  min-width: 156px;
-  padding: 20px 24px;
-  border: 1px solid color-mix(in srgb, var(--qsc-primary, #596574) 16%, transparent);
-  border-radius: 18px;
-  background: var(--qsc-surface, #fff);
-  box-shadow: var(--qsc-shadow, 0 12px 36px rgb(15 18 22 / 10%));
+  justify-content: flex-start;
+  min-height: 56px;
+  padding: 0 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-start-loading :deep(.page-loading__spinner) {
+    animation-duration: 1.6s;
+  }
 }
 </style>
