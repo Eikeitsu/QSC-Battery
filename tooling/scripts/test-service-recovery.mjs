@@ -76,6 +76,7 @@ if (!shell) {
   cpSync(join(root, "module/bin"), join(moduleDir, "bin"), { recursive: true });
   cpSync(join(root, "module/module.prop"), join(moduleDir, "module.prop"));
   cpSync(join(root, "module/config/config.conf"), join(moduleDir, "config/config.conf"));
+  writeFileSync(join(dataDir, "list_switch"), "fake,battery\n");
   mkdirSync(join(fakeRoot, "sys/class/power_supply/battery"), { recursive: true });
   writeFileSync(join(fakeRoot, "sys/class/power_supply/battery/capacity"), "50\n");
   writeFileSync(join(fakeRoot, "sys/class/power_supply/battery/status"), "Discharging\n");
@@ -118,6 +119,10 @@ if (!shell) {
   const descriptorText = readFileSync(join(moduleDir, "module.prop"), "utf8");
   if (descriptor.status !== 0 || !descriptorText.includes("55%")) {
     console.error("[test:service-recovery] 简介未随统一电池快照刷新");
+    console.error(`[test:service-recovery] shell_status=${descriptor.status}`);
+    if (descriptor.stdout)
+      console.error(`[test:service-recovery] stdout=${descriptor.stdout}`);
+    console.error(`[test:service-recovery] module.prop:\n${descriptorText}`);
     if (descriptor.stderr) console.error(descriptor.stderr);
     rmSync(dir, { recursive: true, force: true });
     process.exit(1);
