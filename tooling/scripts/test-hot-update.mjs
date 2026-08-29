@@ -222,8 +222,9 @@ requireText(historyApi, ".pending", "WebUI pending history read");
 requireText(chart, "setInterval", "WebUI chart refresh timer");
 requireText(chart, "当前 ${currentLevel}%", "WebUI live chart summary");
 requireText(chart, "正在读取曲线数据", "WebUI chart loading state");
-requireText(chart, "useSampledHistory", "WebUI charge source selection");
-requireText(chart, "dataSource === 'sampled'", "WebUI sampled chart mode");
+requireText(chart, "Promise.all", "WebUI parallel history loading");
+requireText(chart, "mergeHistory", "WebUI unified history merge");
+requireText(chart, 'dataSource.value === "merged"', "WebUI merged chart mode");
 requireText(chart, "loadSystemBatteryHistory", "WebUI unplugged history source");
 requireText(chart, "chartNow", "WebUI moving time axis");
 requireText(chart, "onDeactivated", "WebUI inactive chart pause");
@@ -270,6 +271,9 @@ requireText(powerSaver, "QSC_PS_WAIT_FAILURES", "native wait failure backoff");
 requireText(powerSaver, "reason=%s", "native wait failure reason");
 requireText(powerSaver, "QSC_PS_WAIT_NEXT_RETRY", "native wait retry deadline");
 requireText(serviceSource, "qscd_unusable", "native wait failure state");
+requireText(serviceSource, "switch_enter", "bounded decision round start");
+requireText(serviceSource, "switch_exit", "bounded decision round result");
+requireText(serviceSource, "qsc_ps_native_exec 45", "bounded decision round timeout");
 requireText(serviceSource, "正在读取实时充电状态", "hot update live status");
 requireText(
   serviceSource,

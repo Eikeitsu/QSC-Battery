@@ -298,7 +298,20 @@ while true ; do
 	fi
 
 	QSC_SERVICE_FULL_ROUNDS=$((QSC_SERVICE_FULL_ROUNDS + 1))
-	"$BINDIR/qsc_switch.sh" > /dev/null 2>&1
+	# 停充决策属于可恢复的单轮任务，不能让某个 sysfs/系统服务调用把
+	# 主循环永久占住；超时后下一轮会继续刷新简介和重新评估。
+	# region agent log
+	qsc_runtime_trace "H6" "switch_enter" "$QSC_SERVICE_FULL_ROUNDS"
+	# endregion
+	if type qsc_ps_native_exec >/dev/null 2>&1; then
+		qsc_ps_native_exec 45 "$BINDIR/qsc_switch.sh" > /dev/null 2>&1
+	else
+		"$BINDIR/qsc_switch.sh" > /dev/null 2>&1
+	fi
+	# region agent log
+	_switch_rc="$?"
+	qsc_runtime_trace "H6" "switch_exit" "$_switch_rc"
+	# endregion
 	_sleep="$(cat "$DATADIR/loop_sleep" 2>/dev/null | tr -d ' \r\n')"
 	case "$_sleep" in
 		""|*[!0-9]*) _sleep=3 ;;

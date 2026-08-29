@@ -32,31 +32,24 @@ const PAD_B = 16;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let reloadId = 0;
 let chartActive = false;
-const dataSource = ref<"sampled" | "system">("system");
+const dataSource = ref<"merged" | "sampled" | "system">("system");
 const chartNow = ref(Math.floor(Date.now() / 1000));
-
-const useSampledHistory = computed(
-  () => !samplingOff.value && ["充电中", "已充满"].includes(app.status.chargeLabel),
-);
 
 async function reload() {
   const requestId = ++reloadId;
   loading.value = true;
   try {
-    // 未充电只读系统 batterystats，充电时只读模块采样，避免把旧充电电流
-    // 线带到拔电后的曲线中。
-    const sampled = useSampledHistory.value;
-    let next = sampled
-      ? await api.loadChargeHistory(480)
-      : await api.loadSystemBatteryHistory();
-    // 充电刚开始时可能还没有第一条采样，临时用系统历史避免整块空白；
-    // 一旦采样产生，下一次刷新自动切回采样数据。
-    if (!next.length && sampled) {
-      next = await api.loadSystemBatteryHistory();
-    }
+    // 两套历史始终按同一时间轴合并：系统记录负责补齐放电段，模块采样
+    // 负责提供充电段的电流，插拔时不再把整条曲线替换成另一套数据。
+    const [sampled, system] = await Promise.all([
+      samplingOff.value ? Promise.resolve([]) : api.loadChargeHistory(480),
+      api.loadSystemBatteryHistory(),
+    ]);
     if (requestId !== reloadId) return;
-    dataSource.value = sampled && next.length ? "sampled" : "system";
-    points.value = next.slice(-480);
+    const next = api.mergeHistory(sampled, system).slice(-480);
+    dataSource.value =
+      sampled.length && system.length ? "merged" : sampled.length ? "sampled" : "system";
+    points.value = next;
   } finally {
     if (requestId === reloadId) loading.value = false;
   }
@@ -166,7 +159,12 @@ const summary = computed(() => {
     : last.temp != null
       ? ` · ${last.temp}°C`
       : "";
-  const source = dataSource.value === "sampled" ? "模块采样" : "系统历史";
+  const source =
+    dataSource.value === "merged"
+      ? "系统+模块合并"
+      : dataSource.value === "sampled"
+        ? "模块采样"
+        : "系统历史";
   return `${list.length} 点 · ${duration} · 当前 ${currentLevel}%${currentTemp} · ${source}`;
 });
 
@@ -287,12 +285,13 @@ defineExpose({ reload });
         <template v-if="samplingOff">
           已关闭「充放电历史」采样：曲线全部来自系统电池记录，没有充电电流线。
         </template>
+        <template v-else-if="dataSource === 'merged'">
+          系统记录与模块采样已按时间合并，插拔时保持曲线连续；电流仅在模块采样点显示。
+        </template>
         <template v-else-if="dataSource === 'sampled'">
-          当前充电中：使用模块采样数据，包含充电电流。
+          当前仅有模块采样数据，包含充电电流。
         </template>
-        <template v-else>
-          当前未充电：使用系统电池历史数据，不显示旧充电电流线。
-        </template>
+        <template v-else> 当前仅有系统电池历史数据，暂时没有模块电流采样点。 </template>
       </p>
     </div>
   </ThemedCard>

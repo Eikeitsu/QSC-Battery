@@ -56,7 +56,6 @@ export function useAppShell() {
     // replace：Tab 不入历史栈，侧滑/虚拟返回可直接退出 WebUI
     navigationId += 1;
     pendingTab.value = next;
-    routeLoading.value = true;
     // #region agent log
     debugUi("tab_pending", { next, navigationId }, "U1");
     // #endregion
@@ -79,6 +78,17 @@ export function useAppShell() {
           requestAnimationFrame(() => resolve());
         });
         if (requestId !== navigationId || pendingTab.value !== target) continue;
+        // 选中态先单独完成一次绘制，再显示遮罩；这样首次懒加载时用户能
+        // 清楚看到点击已经生效，而不是等页面 chunk 加载完成后才变色。
+        routeLoading.value = true;
+        await nextTick();
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve());
+        });
+        if (requestId !== navigationId || pendingTab.value !== target) {
+          if (!pendingTab.value) routeLoading.value = false;
+          continue;
+        }
         try {
           await router.replace({ name: target });
           await nextTick();
