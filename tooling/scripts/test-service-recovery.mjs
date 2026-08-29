@@ -128,13 +128,14 @@ if (!shell) {
       Buffer.from(
         [
           "[test:service-recovery] 简介未随统一电池快照刷新",
-          `descriptor_status=${descriptor.status}`,
-          `descriptor_signal=${descriptor.signal || "<none>"}`,
-          `descriptor_error=${descriptor.error?.message || "<none>"}`,
-          `descriptor_stdout=${descriptor.stdout || "<empty>"}`,
-          `descriptor_stderr=${descriptor.stderr || "<empty>"}`,
-          `descriptor_module_prop=${JSON.stringify(descriptorText)}`,
-          "",
+          JSON.stringify({
+            status: descriptor.status,
+            signal: descriptor.signal,
+            error: descriptor.error?.message,
+            stdout: descriptor.stdout,
+            stderr: descriptor.stderr,
+            moduleProp: descriptorText,
+          }),
         ].join("\n"),
       ),
     );
