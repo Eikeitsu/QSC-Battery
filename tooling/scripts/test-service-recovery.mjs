@@ -14,6 +14,7 @@ import {
   readFileSync,
   rmSync,
   writeFileSync,
+  writeSync,
   chmodSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -118,17 +119,20 @@ if (!shell) {
   );
   const descriptorText = readFileSync(join(moduleDir, "module.prop"), "utf8");
   if (descriptor.status !== 0 || !descriptorText.includes("55%")) {
-    process.stderr.write(
-      [
-        "[test:service-recovery] 简介未随统一电池快照刷新",
-        `descriptor_status=${descriptor.status}`,
-        `descriptor_signal=${descriptor.signal || "<none>"}`,
-        `descriptor_error=${descriptor.error?.message || "<none>"}`,
-        `descriptor_stdout=${descriptor.stdout || "<empty>"}`,
-        `descriptor_stderr=${descriptor.stderr || "<empty>"}`,
-        `descriptor_module_prop=${JSON.stringify(descriptorText)}`,
-        "",
-      ].join("\n"),
+    writeSync(
+      2,
+      Buffer.from(
+        [
+          "[test:service-recovery] 简介未随统一电池快照刷新",
+          `descriptor_status=${descriptor.status}`,
+          `descriptor_signal=${descriptor.signal || "<none>"}`,
+          `descriptor_error=${descriptor.error?.message || "<none>"}`,
+          `descriptor_stdout=${descriptor.stdout || "<empty>"}`,
+          `descriptor_stderr=${descriptor.stderr || "<empty>"}`,
+          `descriptor_module_prop=${JSON.stringify(descriptorText)}`,
+          "",
+        ].join("\n"),
+      ),
     );
     rmSync(dir, { recursive: true, force: true });
     process.exit(1);
