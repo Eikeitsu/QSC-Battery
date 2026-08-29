@@ -350,6 +350,7 @@ qsc_ps_native_ready() {
 # 否则插上充电器要等满一个间隔才被发现。
 qsc_ps_idle_secs() {
 	QSC_PS_IDLE_EFF="${QSC_PS_IDLE:-30}"
+	QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
 	qsc_ps_native_ready || return 0
 	[ "${QSC_PS_IDLE_NATIVE:-0}" -gt "$QSC_PS_IDLE_EFF" ] 2>/dev/null \
 		&& QSC_PS_IDLE_EFF="$QSC_PS_IDLE_NATIVE"
@@ -492,13 +493,13 @@ qsc_ps_mark_native_failure() {
 }
 
 qsc_ps_wait() {
-	local secs="${1:-30}" floor
+	local secs="${1:-30}" floor fallback_secs
 	local rc backoff now
 	floor="${QSC_PS_WAIT_FLOOR:-3}"
-	# 简介也属于运行状态：即使 qscd 过滤掉普通电量事件，也不能让它
-	# 把下一次简介刷新推迟到 60/120 秒以后。
-	[ "$secs" -gt "$QSC_PS_DESC_MIN_GAP" ] 2>/dev/null && secs="$QSC_PS_DESC_MIN_GAP"
 	[ "$secs" -lt "$floor" ] 2>/dev/null && floor="$secs"
+	fallback_secs="${QSC_PS_WAIT_FALLBACK:-${QSC_PS_LOOP:-3}}"
+	case "$fallback_secs" in ""|*[!0-9]*) fallback_secs=3 ;;
+	esac
 	if qsc_ps_native_ready; then
 		qsc_ps_native_wait "$secs" "$floor"
 		rc="$?"
@@ -541,9 +542,9 @@ qsc_ps_wait() {
 	fi
 	# region agent log
 	type qsc_runtime_trace >/dev/null 2>&1 &&
-		qsc_runtime_trace "H9" "fallback_sleep_enter" "$secs"
+		qsc_runtime_trace "H9" "fallback_sleep_enter" "$fallback_secs"
 	# endregion
-	sleep "$secs"
+	sleep "$fallback_secs"
 	# region agent log
 	type qsc_runtime_trace >/dev/null 2>&1 &&
 		qsc_runtime_trace "H9" "fallback_sleep_exit" "$?"
@@ -555,11 +556,13 @@ qsc_ps_wait() {
 qsc_ps_next_sleep() {
 	local level="$1" stop="$2" plugged="$3" temp="$4" temp_stop="$5" _pl
 	if [ "${QSC_PS_ENABLE:-1}" != "1" ]; then
+		QSC_PS_WAIT_FALLBACK="${QSC_PS_LOOP:-3}"
 		echo "${QSC_PS_LOOP:-3}"
 		return 0
 	fi
 	# 维持停充：按维持间隔
 	if [ -f "$DATADIR/power_switch" ] && [ ! -f "$OFF_FLAG" ]; then
+		QSC_PS_WAIT_FALLBACK="${QSC_PS_MAINTAIN:-8}"
 		echo "${QSC_PS_MAINTAIN:-8}"
 		return 0
 	fi
@@ -575,6 +578,7 @@ qsc_ps_next_sleep() {
 	esac
 	if [ "$stop" -le 100 ] 2>/dev/null \
 		&& [ "$((stop - level))" -le "${QSC_PS_NEAR:-3}" ] 2>/dev/null; then
+		QSC_PS_WAIT_FALLBACK="${QSC_PS_LOOP:-3}"
 		echo "${QSC_PS_LOOP:-3}"
 		return 0
 	fi
@@ -584,6 +588,7 @@ qsc_ps_next_sleep() {
 		""|*[!0-9]*) ;;
 		*)
 			if [ "$((temp_stop - temp))" -le 3 ] 2>/dev/null; then
+				QSC_PS_WAIT_FALLBACK="${QSC_PS_LOOP:-3}"
 				echo "${QSC_PS_LOOP:-3}"
 				return 0
 			fi
@@ -597,5 +602,6 @@ qsc_ps_next_sleep() {
 		&& qsc_ps_native_ready && qsc_ps_watch_supported; then
 		_pl="$QSC_PS_PLUGGED_NATIVE"
 	fi
+	QSC_PS_WAIT_FALLBACK="${QSC_PS_PLUGGED:-10}"
 	echo "$_pl"
 }

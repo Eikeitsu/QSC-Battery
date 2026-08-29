@@ -21,6 +21,33 @@ qsc_format_module_description() {
 	QSC_DESC="${QSC_DESC} ${outer}"
 }
 
+qsc_description_lock_acquire() {
+	local lock="$DATADIR/.description.lock"
+	local owner i
+	i=0
+	while ! mkdir "$lock" 2>/dev/null; do
+		owner="$(cat "$lock/pid" 2>/dev/null | tr -d ' \r\n')"
+		case "$owner" in
+			""|*[!0-9]*) rm -rf "$lock" 2>/dev/null ;;
+			*) kill -0 "$owner" 2>/dev/null || rm -rf "$lock" 2>/dev/null ;;
+		esac
+		i=$((i + 1))
+		[ "$i" -ge 5 ] && return 1
+		sleep 1
+	done
+	printf '%s\n' "$$" >"$lock/pid" 2>/dev/null || {
+		rm -rf "$lock" 2>/dev/null
+		return 1
+	}
+	return 0
+}
+
+qsc_description_lock_release() {
+	local lock="$DATADIR/.description.lock" owner
+	owner="$(cat "$lock/pid" 2>/dev/null | tr -d ' \r\n')"
+	[ "$owner" = "$$" ] && rm -rf "$lock" 2>/dev/null
+}
+
 qsc_write_module_description() {
 	local major="$1"
 	local inner="$2"
@@ -31,6 +58,7 @@ qsc_write_module_description() {
 	[ -f "$prop" ] || return 0
 	qsc_format_module_description "$major" "$inner" "$outer"
 	desc="$QSC_DESC"
+	qsc_description_lock_acquire || return 1
 	# 取旧值用内建遍历：文案绝大多数时候没变，不值得为一次比对 fork grep+sed
 	old=""
 	while IFS= read -r line || [ -n "$line" ]; do
@@ -38,12 +66,16 @@ qsc_write_module_description() {
 			description=*) old="${line#description=}"; break ;;
 		esac
 	done <"$prop"
-	[ "$old" = "$desc" ] && return 0
+	if [ "$old" = "$desc" ]; then
+		qsc_description_lock_release
+		return 0
+	fi
 
 	tmp="$prop.tmp.$$"
 	found=0
 	if ! : >"$tmp"; then
 		rm -f "$tmp" 2>/dev/null
+		qsc_description_lock_release
 		return 1
 	fi
 	while IFS= read -r line || [ -n "$line" ]; do
@@ -52,6 +84,7 @@ qsc_write_module_description() {
 				if [ "$found" = "0" ]; then
 					printf '%s\n' "description=$desc" >>"$tmp" || {
 						rm -f "$tmp" 2>/dev/null
+						qsc_description_lock_release
 						return 1
 					}
 					found=1
@@ -60,6 +93,7 @@ qsc_write_module_description() {
 			*)
 				printf '%s\n' "$line" >>"$tmp" || {
 					rm -f "$tmp" 2>/dev/null
+					qsc_description_lock_release
 					return 1
 				}
 				;;
@@ -68,14 +102,20 @@ qsc_write_module_description() {
 	if [ "$found" = "0" ]; then
 		printf '%s\n' "description=$desc" >>"$tmp" || {
 			rm -f "$tmp" 2>/dev/null
+			qsc_description_lock_release
 			return 1
 		}
 	fi
 	if ! mv -f "$tmp" "$prop" 2>/dev/null; then
 		rm -f "$tmp" 2>/dev/null
+		qsc_description_lock_release
 		return 1
 	fi
-	chmod 0644 "$prop" 2>/dev/null || return 1
+	if ! chmod 0644 "$prop" 2>/dev/null; then
+		qsc_description_lock_release
+		return 1
+	fi
+	qsc_description_lock_release
 	return 0
 }
 

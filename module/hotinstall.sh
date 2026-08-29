@@ -3,6 +3,28 @@
 PATH=/data/adb/ap/bin:/data/adb/ksu/bin:/data/adb/magisk:$PATH
 MODDIR="${0%/*}"
 
+qsc_hot_stop_description_worker() {
+	local root="$1" pid_file pid i
+	pid_file="$root/data/description_worker.pid"
+	pid="$(cat "$pid_file" 2>/dev/null | tr -d ' \r\n')"
+	case "$pid" in
+		""|*[!0-9]*) ;;
+		*)
+			kill "$pid" 2>/dev/null || true
+			i=0
+			while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 5 ]; do
+				sleep 1
+				i=$((i + 1))
+			done
+			kill -9 "$pid" 2>/dev/null || true
+			;;
+	esac
+	rm -f "$pid_file" 2>/dev/null
+	rm -rf "$root/data/.description_worker.lock" "$root/data/.description.lock" 2>/dev/null
+}
+
+# 先停止旧 worker，避免它在热更新过渡文案之后又用旧代码覆盖 module.prop。
+qsc_hot_stop_description_worker "$MODDIR"
 rm -f "$MODDIR/update" 2>/dev/null
 
 # 先给出即时反馈：管理器列表不会停留在「等待开机就绪」

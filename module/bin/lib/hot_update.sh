@@ -91,6 +91,8 @@ hot_update_write_desc() {
 	_prop="$MODPATH/module.prop"
 	[ -n "$HOT_UPDATE_DESC" ] || return 0
 	[ -f "$_prop" ] || return 0
+	type qsc_description_lock_acquire >/dev/null 2>&1 &&
+		qsc_description_lock_acquire || return 1
 	_tmp="$_prop.tmp.$$"
 	awk -F= -v desc="$HOT_UPDATE_DESC" '
 		BEGIN { done=0 }
@@ -98,7 +100,14 @@ hot_update_write_desc() {
 		{ print }
 		END { if (!done) print "description=" desc }
 	' "$_prop" >"$_tmp" && mv -f "$_tmp" "$_prop"
-	chmod 0644 "$_prop" 2>/dev/null
+	_rc="$?"
+	if [ "$_rc" -eq 0 ]; then
+		chmod 0644 "$_prop" 2>/dev/null || _rc="$?"
+	fi
+	[ "$_rc" -eq 0 ] || rm -f "$_tmp" 2>/dev/null
+	type qsc_description_lock_release >/dev/null 2>&1 &&
+		qsc_description_lock_release
+	return "$_rc"
 }
 
 # 把完整的新模块先保存到管理器不会清理的目录。

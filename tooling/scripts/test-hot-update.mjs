@@ -29,6 +29,8 @@ const modules = [
     hotinstall: join(root, "module/hotinstall.sh"),
     service: join(root, "module/service.sh"),
     uninstall: join(root, "module/uninstall.sh"),
+    descriptionWorker: join(root, "module/bin/description_worker.sh"),
+    package: join(root, "tooling/scripts/package-module.mjs"),
     payload: "/data/adb/.qsc_hot_update_payload",
     lock: "/data/adb/.QSC_Battery.hot_update.lock",
     worker: "/data/adb/.qsc_hot_update.sh",
@@ -105,6 +107,8 @@ for (const mod of modules) {
   const hotinstall = read(mod.hotinstall);
   const service = read(mod.service);
   const uninstall = read(mod.uninstall);
+  const descriptionWorker = read(mod.descriptionWorker);
+  const packageSource = read(mod.package);
 
   requireText(
     hotinstall,
@@ -133,6 +137,16 @@ for (const mod of modules) {
   requireText(uninstall, mod.payload, `${mod.name} uninstall payload cleanup`);
   requireText(uninstall, mod.lock, `${mod.name} uninstall lock cleanup`);
   requireText(uninstall, mod.worker, `${mod.name} uninstall worker cleanup`);
+  requireText(
+    uninstall,
+    "description_worker.pid",
+    `${mod.name} uninstall description worker`,
+  );
+  requireText(
+    uninstall,
+    ".description_worker.lock",
+    `${mod.name} uninstall description lock`,
+  );
   requireText(uninstall, mod.staged, `${mod.name} uninstall staged cleanup`);
   requireText(service, mod.lock, `${mod.name} service stale-lock cleanup`);
   requireText(service, "QSC_SCAN_LOCK", `${mod.name} scan lock`);
@@ -142,6 +156,34 @@ for (const mod of modules) {
   requireText(service, "service_metrics", `${mod.name} service metrics`);
   requireText(service, "diagnostic_on", `${mod.name} optional diagnostic sampling`);
   requireText(service, "history_pending", `${mod.name} history pending metric`);
+  requireText(
+    service,
+    'sh "$BINDIR/description_worker.sh"',
+    `${mod.name} standalone description worker`,
+  );
+  requireText(
+    service,
+    "qsc_stop_description_worker",
+    `${mod.name} description worker restart guard`,
+  );
+  requireText(
+    hotinstall,
+    "qsc_hot_stop_description_worker",
+    `${mod.name} hot update worker stop`,
+  );
+  requireText(hotinstall, "description_worker.pid", `${mod.name} hot update worker pid`);
+  requireText(
+    descriptionWorker,
+    "description_worker.pid",
+    `${mod.name} worker pid ownership`,
+  );
+  requireText(
+    descriptionWorker,
+    ".description_worker.lock",
+    `${mod.name} worker lock ownership`,
+  );
+  requireText(descriptionWorker, "worker_cleanup", `${mod.name} worker cleanup trap`);
+  requireText(packageSource, '"description_worker.sh"', `${mod.name} worker packaging`);
 }
 
 const update = JSON.parse(read(join(root, "docs/public/update.json")));
@@ -219,6 +261,13 @@ requireText(history, "QSC_HISTORY_BUFFER", "history pending buffer");
 requireText(history, "qsc_history_flush_pending", "history pending flush");
 requireText(serviceSource, "qsc_history_flush_pending", "unplugged history flush");
 requireText(status, "if ! mv -f", "description atomic write result");
+requireText(status, "qsc_description_lock_acquire", "description cross-process lock");
+requireText(status, ".description.lock", "description lock path");
+requireText(
+  read(modules[0].hot),
+  "qsc_description_lock_acquire",
+  "hot update description lock",
+);
 requireText(powerSaver, 'QSC_PS_DESC_SIG=""', "description write retry");
 requireText(powerSaver, "qsc_battery_snapshot_read", "status snapshot fallback");
 requireText(historyApi, ".pending", "WebUI pending history read");
@@ -273,6 +322,7 @@ requireText(batteryStore, "loadConfigValues(CONFIG_KEYS)", "batched config loadi
 requireText(powerSaver, "QSC_PS_WAIT_FAILURES", "native wait failure backoff");
 requireText(powerSaver, "reason=%s", "native wait failure reason");
 requireText(powerSaver, "QSC_PS_WAIT_NEXT_RETRY", "native wait retry deadline");
+requireText(powerSaver, "QSC_PS_WAIT_FALLBACK", "native wait fallback interval");
 requireText(powerSaver, "native_wait_reason", "native wait reason trace");
 requireText(serviceSource, '>>"$DATADIR/debug.log"', "persistent debug log");
 requireText(serviceSource, "service_start", "service start trace");
@@ -290,7 +340,7 @@ requireText(
 );
 requireText(
   serviceSource,
-  "qsc_description_refresh_worker",
+  "description_worker.sh",
   "independent description refresh worker",
 );
 requireText(

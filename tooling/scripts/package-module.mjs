@@ -34,6 +34,7 @@ const ROOT_FILES = [
 const BIN_RELEASE = [
   "common.sh",
   "qsc_switch.sh",
+  "description_worker.sh",
   "list_switch.sh",
   "list_curr.sh",
   "detect_device.sh",

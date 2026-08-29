@@ -338,35 +338,39 @@ qsc_hot_finalize_maybe
 # 简介刷新不应与 qscd 等待器绑定在同一条执行链上。主循环进入等待器、
 # 决策脚本异常或被系统短暂重启时，独立 worker 仍能更新 module.prop；
 # 父服务退出后 worker 会自动结束，避免留下常驻孤儿进程。
-qsc_description_refresh_worker() {
-	local parent_pid="$1" worker_pid refresh_secs
-	worker_pid="$DATADIR/description_worker.pid"
-	refresh_secs="${QSC_PS_DESC_MIN_GAP:-30}"
-	case "$refresh_secs" in ""|*[!0-9]*) refresh_secs=30 ;; esac
-	[ "$refresh_secs" -ge 10 ] 2>/dev/null || refresh_secs=10
-	printf '%s\n' "$parent_pid" >"$worker_pid" 2>/dev/null
-	qsc_runtime_trace "H0" "description_worker_start" "$parent_pid:$refresh_secs"
-	while [ -d "/proc/$parent_pid" ]; do
-		sleep "$refresh_secs"
-		[ -d "/proc/$parent_pid" ] || break
-		qsc_runtime_trace "H0" "description_worker_tick" "$parent_pid"
-		if type qsc_ps_load_conf >/dev/null 2>&1 &&
-			type qsc_ps_refresh_desc >/dev/null 2>&1; then
-			qsc_ps_load_conf
-			qsc_ps_now
-			qsc_ps_refresh_desc "${QSC_PS_NOW:-0}"
-			qsc_runtime_trace "H0" "description_worker_refresh" "$?"
-		fi
-	done
-	if [ -r "$worker_pid" ] &&
-		[ "$(cat "$worker_pid" 2>/dev/null | tr -d ' \r\n')" = "$parent_pid" ]; then
-		rm -f "$worker_pid" 2>/dev/null
-	fi
-	qsc_runtime_trace "H0" "description_worker_exit" "$parent_pid"
+qsc_stop_description_worker() {
+	local pid_file="$DATADIR/description_worker.pid" pid i
+	pid="$(cat "$pid_file" 2>/dev/null | tr -d ' \r\n')"
+	case "$pid" in
+		""|*[!0-9]*) ;;
+		*)
+			kill "$pid" 2>/dev/null || true
+			i=0
+			while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 5 ]; do
+				sleep 1
+				i=$((i + 1))
+			done
+			kill -9 "$pid" 2>/dev/null || true
+			;;
+	esac
+	rm -f "$pid_file" 2>/dev/null
+	rm -rf "$DATADIR/.description_worker.lock" 2>/dev/null
 }
-if [ -d "/proc/$$" ]; then
-	qsc_description_refresh_worker "$$" &
-fi
+
+qsc_start_description_worker() {
+	[ -x "$BINDIR/description_worker.sh" ] || return 0
+	qsc_stop_description_worker
+	if command -v setsid >/dev/null 2>&1; then
+		setsid sh "$BINDIR/description_worker.sh" "$$" \
+			</dev/null >/dev/null 2>&1 &
+	else
+		nohup sh "$BINDIR/description_worker.sh" "$$" \
+			</dev/null >/dev/null 2>&1 &
+	fi
+	qsc_runtime_trace "H0" "description_worker_start" "$!"
+}
+
+qsc_start_description_worker
 
 # power_saver.sh 缺失（如手动裁剪安装）时退化为普通 sleep
 if ! type qsc_ps_wait >/dev/null 2>&1; then
@@ -462,6 +466,7 @@ while true ; do
 	esac
 	[ "$_sleep" -ge 2 ] 2>/dev/null || _sleep=3
 	[ "$_sleep" -le 300 ] 2>/dev/null || _sleep=300
+	QSC_PS_WAIT_FALLBACK="$_sleep"
 	# region agent log
 	qsc_runtime_trace "H1" "wait_enter" "$_sleep"
 	# endregion

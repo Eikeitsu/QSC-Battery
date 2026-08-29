@@ -2,6 +2,28 @@
 
 MODDIR=${0%/*}
 
+qsc_uninstall_stop_description_worker() {
+	local pid_file="$MODDIR/data/description_worker.pid" pid i
+	pid="$(cat "$pid_file" 2>/dev/null | tr -d ' \r\n')"
+	case "$pid" in
+		""|*[!0-9]*) ;;
+		*)
+			kill "$pid" 2>/dev/null || true
+			i=0
+			while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 5 ]; do
+				sleep 1
+				i=$((i + 1))
+			done
+			kill -9 "$pid" 2>/dev/null || true
+			;;
+	esac
+	rm -f "$pid_file" 2>/dev/null
+	rm -rf "$MODDIR/data/.description_worker.lock" \
+		"$MODDIR/data/.description.lock" 2>/dev/null
+}
+
+qsc_uninstall_stop_description_worker
+
 # 卸载前尝试恢复充电（若模块曾触发停充）
 if [ -f "$MODDIR/bin/common.sh" ]; then
 	. "$MODDIR/bin/common.sh" 2>/dev/null
