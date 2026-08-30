@@ -3,8 +3,61 @@
 MODDIR=${0%/*}
 . "$MODDIR/bin/common.sh"
 
+if [ -f "$LIBDIR/hot_update.sh" ]; then
+	# shellcheck disable=SC1090
+	. "$LIBDIR/hot_update.sh" 2>/dev/null || true
+	type hot_update_migrate_legacy_paths >/dev/null 2>&1 &&
+		hot_update_migrate_legacy_paths || true
+fi
+
+mkdir -p "$DATADIR"
+QSC_SERVICE_BOOT_AT="$(date +%s 2>/dev/null)"
+case "$QSC_SERVICE_BOOT_AT" in ""|*[!0-9]*) QSC_SERVICE_BOOT_AT=0 ;; esac
+printf '%s\n' "$$" >"$DATADIR/service_pid" 2>/dev/null
+printf 'pid=%s\nstarted_at=%s\nstate=starting\n' "$$" "$QSC_SERVICE_BOOT_AT" \
+	>"$DATADIR/service_start.state.tmp" 2>/dev/null &&
+	mv -f "$DATADIR/service_start.state.tmp" "$DATADIR/service_start.state" 2>/dev/null
+printf '%s\n' "$QSC_SERVICE_BOOT_AT" >"$DATADIR/service_start_at" 2>/dev/null
+QSC_HEARTBEAT_PID=0
+qsc_service_exit() {
+	[ "$QSC_HEARTBEAT_PID" -gt 0 ] 2>/dev/null &&
+		kill "$QSC_HEARTBEAT_PID" 2>/dev/null || true
+	if [ "$(cat "$DATADIR/service_pid" 2>/dev/null | tr -d ' \r\n')" = "$$" ]; then
+		printf 'pid=%s\nstarted_at=%s\nstate=stopped\n' "$$" "$QSC_SERVICE_BOOT_AT" \
+			>"$DATADIR/service_start.state.tmp" 2>/dev/null &&
+			mv -f "$DATADIR/service_start.state.tmp" "$DATADIR/service_start.state" 2>/dev/null
+		rm -f "$DATADIR/service_pid" 2>/dev/null
+		rm -f "$DATADIR/service_heartbeat_pid" 2>/dev/null
+	fi
+}
+trap qsc_service_exit 0 1 2 3 15
+
+qsc_start_heartbeat_loop() {
+	local parent="$1" file="$2"
+	_hb_loop='
+		parent="$1"
+		file="$2"
+		while kill -0 "$parent" 2>/dev/null; do
+			now="$(date +%s 2>/dev/null)"
+			case "$now" in ""|*[!0-9]*) now=0 ;; esac
+			printf "%s\n" "$now" >"$file" 2>/dev/null
+			sleep 5
+		done
+	'
+	if command -v setsid >/dev/null 2>&1; then
+		setsid sh -c "$_hb_loop" sh "$parent" "$file" \
+			</dev/null >/dev/null 2>&1 &
+	else
+		nohup sh -c "$_hb_loop" sh "$parent" "$file" \
+			</dev/null >/dev/null 2>&1 &
+	fi
+	QSC_HEARTBEAT_PID=$!
+	printf '%s\n' "$QSC_HEARTBEAT_PID" >"$DATADIR/service_heartbeat_pid" 2>/dev/null
+}
+qsc_start_heartbeat_loop "$$" "$DATADIR/service_heartbeat"
+
 # 新版 worker 会在启动服务前释放锁；这里仅清理无内容的历史残留锁目录。
-rmdir /data/adb/.QSC_Battery.hot_update.lock 2>/dev/null
+rmdir /data/adb/qsc/hot_update/lock 2>/dev/null
 
 until [ -f "$BINDIR/qsc_switch.sh" ]; do
 	qsc_log_once no_core error "核心脚本 qsc_switch.sh 丢失，请重新安装模块"
@@ -131,6 +184,18 @@ QSC_SERVICE_HEARTBEAT_LAST=0
 QSC_SERVICE_LOOP_COUNT=0
 QSC_SERVICE_FULL_ROUNDS=0
 QSC_SERVICE_DIAG_LAST=0
+printf '%s\n' "$QSC_SERVICE_BOOT_AT" >"$DATADIR/service_heartbeat" 2>/dev/null
+
+QSC_HOT_TXN_STATE="/data/adb/qsc/hot_update/transactions/QSC_Battery/state"
+if [ -f "$QSC_HOT_TXN_STATE" ] && [ ! -f "$DATADIR/hot_update_at" ]; then
+	_hot_state="$(sed -n 's/^state=//p' "$QSC_HOT_TXN_STATE" 2>/dev/null | head -n1 | tr -d ' \r')"
+	case "$_hot_state" in
+		prepare|apply)
+			sed -i 's/^state=.*/state=fallback/' "$QSC_HOT_TXN_STATE" 2>/dev/null || true
+			touch "$DATADIR/hot_update_fallback_reboot" 2>/dev/null
+			;;
+	esac
+fi
 # region agent log
 qsc_runtime_trace() {
 	local hypothesis="$1" message="$2" value="$3" now="${QSC_PS_NOW:-0}"
@@ -244,7 +309,7 @@ qsc_service_heartbeat() {
 	now="${QSC_PS_NOW:-$(date +%s 2>/dev/null)}"
 	case "$now" in ""|*[!0-9]*) return 0 ;; esac
 	if [ "$QSC_SERVICE_HEARTBEAT_LAST" -eq 0 ] ||
-		[ "$((now - QSC_SERVICE_HEARTBEAT_LAST))" -ge 60 ] 2>/dev/null; then
+		[ "$((now - QSC_SERVICE_HEARTBEAT_LAST))" -ge 5 ] 2>/dev/null; then
 		printf '%s\n' "$now" >"$DATADIR/service_heartbeat" 2>/dev/null
 		printf '%s\n' "$QSC_SERVICE_LOOP_COUNT" >"$DATADIR/service_loop_count" 2>/dev/null
 		printf 'timestamp=%s\nloops=%s\nfull_rounds=%s\nnative_wakes=%s\nwake_reason=%s\n' \
@@ -252,6 +317,9 @@ qsc_service_heartbeat() {
 			"${QSC_PS_WAKE_COUNT:-0}" "${QSC_PS_LAST_WAKE_REASON:-}" \
 			>"$DATADIR/service_metrics.tmp" 2>/dev/null &&
 			mv -f "$DATADIR/service_metrics.tmp" "$DATADIR/service_metrics" 2>/dev/null
+		printf 'pid=%s\nstarted_at=%s\nstate=running\n' "$$" "$QSC_SERVICE_BOOT_AT" \
+			>"$DATADIR/service_start.state.tmp" 2>/dev/null &&
+			mv -f "$DATADIR/service_start.state.tmp" "$DATADIR/service_start.state" 2>/dev/null
 		if qsc_debug_enabled; then
 			printf '%s\n' "${QSC_PS_LAST_WAKE_REASON:-}" \
 				>"$DATADIR/qscd_last_wake_reason" 2>/dev/null
@@ -279,7 +347,10 @@ qsc_service_heartbeat() {
 		QSC_SERVICE_DIAG_LAST="$now"
 	fi
 }
-if [ -f "$DATADIR/hot_update_at" ]; then
+if [ -f "$DATADIR/hot_update_fallback_reboot" ]; then
+	qsc_write_module_description "⚠️热更新未完成" "请重启设备完成更新" \
+		"服务接管未确认，已保留标准更新流程"
+elif [ -f "$DATADIR/hot_update_at" ]; then
 		qsc_write_module_description "♻️更新中" "服务已重启" \
 			"本次更新无需重启；正在读取实时充电状态"
 	rm -f "$DATADIR/hot_update_at"
@@ -347,17 +418,16 @@ QSC_PS_LAST_FULL=0
 # 脱离出去的收尾作业，留下 modules_update 暂存与 update 标记，用户就看到
 # 「还是要重启」。常驻服务活得比任何安装器都久，由它复查一遍最稳。
 # 热路径只多一次 [ -f update ] 判断，命中才做后面那些事。
-if [ -f "$LIBDIR/hot_update.sh" ]; then
-	# shellcheck disable=SC1090
-	. "$LIBDIR/hot_update.sh" 2>/dev/null || true
-fi
 QSC_HOT_FIN_TS=0
 QSC_HOT_FIN_TRIES=0
 
 qsc_hot_finalize_maybe() {
 	local now
+	# 热更新事务由外部 worker 负责 verify/commit；服务不能在首轮运行时
+	# 抢先清掉 update 和 payload，否则失败后就失去标准重启来源。
+	[ -f "/data/adb/qsc/hot_update/transactions/QSC_Battery/state" ] && return 0
 	[ -f "$MODDIR/update" ] || \
-		[ -d "/data/adb/.qsc_hot_update_payload/QSC_Battery" ] || return 0
+		[ -d "/data/adb/qsc/hot_update/payload/QSC_Battery" ] || return 0
 	type qsc_hot_finalize >/dev/null 2>&1 || return 0
 	# 失败时别每轮重试：最多 5 次，每次至少隔 60 秒
 	[ "$QSC_HOT_FIN_TRIES" -ge 5 ] 2>/dev/null && return 0

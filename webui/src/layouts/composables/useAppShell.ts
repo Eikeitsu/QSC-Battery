@@ -1,10 +1,9 @@
-import { computed, nextTick, onMounted, onUnmounted, provide, ref } from "vue";
+import { computed, nextTick, onMounted, provide, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useThemePackClass } from "@/composables";
 import { useAppStore } from "@/stores";
 import { isTabName, preloadTab } from "@/router/routes";
 import { TabName } from "@/shared";
-import { TAB_ORDER } from "@/shared/config/navigation";
 
 export function useAppShell() {
   const store = useAppStore();
@@ -16,9 +15,7 @@ export function useAppShell() {
   const pendingTab = ref<TabName | null>(null);
   let navigationId = 0;
   let navigationRunning = false;
-  let warmTimer: number | null = null;
-  let warmIdle: number | null = null;
-  let warmCancelled = false;
+  const NAVIGATION_TIMEOUT_MS = 8_000;
 
   const tab = computed<TabName>(
     () => pendingTab.value ?? (isTabName(route.name) ? route.name : TabName.Home),
@@ -32,6 +29,24 @@ export function useAppShell() {
     });
   }
 
+  function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const timer = window.setTimeout(() => {
+        reject(new Error("navigation_timeout"));
+      }, timeoutMs);
+      promise.then(
+        (value) => {
+          window.clearTimeout(timer);
+          resolve(value);
+        },
+        (error: unknown) => {
+          window.clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
+  }
+
   function setTab(name: string | number) {
     const next = String(name);
     if (!isTabName(next) || next === tab.value) return;
@@ -39,7 +54,6 @@ export function useAppShell() {
     navigationId += 1;
     pendingTab.value = next;
     routeLoading.value = true;
-    cancelWarmup();
     void drainNavigation();
   }
 
@@ -57,9 +71,20 @@ export function useAppShell() {
 
         // 预取和 router.replace 共享同一个动态 import 缓存；用户点击后立即开始
         // 下载目标 chunk，已加载页面则几乎同步完成。
-        void preloadTab(target).catch(() => {});
         try {
-          await router.replace({ name: target });
+          // 先加载 chunk，再交给 router 切换；这样 chunk 超时时不会把
+          // RouterView 留在半切换状态，后续点击仍可正常接管。
+          await withTimeout(preloadTab(target), NAVIGATION_TIMEOUT_MS);
+        } catch {
+          if (requestId === navigationId && pendingTab.value === target) {
+            pendingTab.value = null;
+            routeLoading.value = false;
+          }
+          continue;
+        }
+        if (requestId !== navigationId || pendingTab.value !== target) continue;
+        try {
+          await withTimeout(router.replace({ name: target }), NAVIGATION_TIMEOUT_MS);
           await nextTick();
         } catch {
           // 当前目标加载失败时回到当前有效路由，不能留下永久 loading。
@@ -90,42 +115,6 @@ export function useAppShell() {
     document.querySelector<HTMLElement>(".app-main")?.scrollTo(0, 0);
   }
 
-  function scheduleWarmup(callback: () => void, delay: number) {
-    if (warmCancelled) return;
-    warmTimer = window.setTimeout(() => {
-      if (warmCancelled) return;
-      const idleWindow = window as Window & {
-        requestIdleCallback?: (
-          callback: () => void,
-          options?: { timeout: number },
-        ) => number;
-      };
-      if (idleWindow.requestIdleCallback) {
-        warmIdle = idleWindow.requestIdleCallback(callback, { timeout: 1200 });
-      } else {
-        callback();
-      }
-    }, delay);
-  }
-
-  function warmNextRouteChunk() {
-    if (warmCancelled) return;
-    const name = TAB_ORDER.find((candidate) => candidate !== tab.value);
-    if (name) void preloadTab(name).catch(() => {});
-  }
-
-  function cancelWarmup() {
-    if (warmTimer) clearTimeout(warmTimer);
-    warmTimer = null;
-    const idleWindow = window as Window & {
-      cancelIdleCallback?: (handle: number) => void;
-    };
-    if (warmIdle !== null && idleWindow.cancelIdleCallback) {
-      idleWindow.cancelIdleCallback(warmIdle);
-    }
-    warmIdle = null;
-  }
-
   async function onRefreshHome() {
     refreshing.value = true;
     try {
@@ -140,18 +129,9 @@ export function useAppShell() {
   onMounted(async () => {
     theme.load();
     theme.bindSystemListener();
-    const main = document.querySelector<HTMLElement>(".app-main");
-    main?.addEventListener("scroll", cancelWarmup, { passive: true, once: true });
     await store.init();
-    // 让首屏和滚动先稳定，再只预取一个相邻页面；不连续解析全部 Tab。
-    scheduleWarmup(warmNextRouteChunk, 2500);
     theme.syncStatusBar();
     window.setTimeout(() => theme.syncStatusBar(), 200);
-  });
-
-  onUnmounted(() => {
-    warmCancelled = true;
-    cancelWarmup();
   });
 
   return {

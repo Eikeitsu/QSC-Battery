@@ -196,6 +196,14 @@ SukiSU 等环境 Action 总时长有限，完整测开关请用 WebUI「策略 �
 
 ---
 
+### 真机回归检查
+
+- 从模块列表首次进入 WebUI：应先看到顶部局部 loading，页面内容不被白屏遮住。
+- 连续快速点击四个 Tab：选中态应立即变化，旧页面不会挡住滚动，目标页面超时后仍可继续点击。
+- 在概览页下拉、策略页长列表和日志页分别上下滑动：loading 期间触摸不应被拦截。
+- 热更新后确认 `data/service_pid`、`data/service_heartbeat`、`data/service_start.state`、
+  `data/description_worker.state` 持续更新；若接管失败，应看到「请重启设备完成更新」并保留标准更新标记。
+
 ## 常见问题（WebUI）
 
 **状态一直加载失败**  

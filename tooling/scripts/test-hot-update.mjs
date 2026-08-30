@@ -31,12 +31,15 @@ const modules = [
     uninstall: join(root, "module/uninstall.sh"),
     descriptionWorker: join(root, "module/bin/description_worker.sh"),
     package: join(root, "tooling/scripts/package-module.mjs"),
-    payload: "/data/adb/.qsc_hot_update_payload",
-    lock: "/data/adb/.QSC_Battery.hot_update.lock",
-    worker: "/data/adb/.qsc_hot_update.sh",
+    payload: "/data/adb/qsc/hot_update/payload",
+    transaction: "/data/adb/qsc/hot_update/transactions",
+    verifier: "/data/adb/qsc/hot_update/verify.sh",
+    lock: "/data/adb/qsc/hot_update/lock",
+    worker: "/data/adb/qsc/hot_update/worker.sh",
     staged: "/data/adb/modules_update/QSC_Battery",
   },
 ];
+const hotSource = readFileSync(modules[0].hot, "utf8");
 
 function read(path) {
   return readFileSync(path, "utf8");
@@ -120,22 +123,47 @@ for (const mod of modules) {
     'nohup sh "$MODDIR/service.sh"',
     `${mod.name} fallback service`,
   );
+  requireText(
+    hotinstall,
+    "hot_update_start_verifier",
+    `${mod.name} service takeover verifier launch`,
+  );
+  if (hotinstall.includes('rm -f "$MODDIR/update"')) {
+    throw new Error(`${mod.name} hotinstall clears update before verification`);
+  }
   requireText(hot, mod.payload, `${mod.name} external payload`);
-  requireText(hot, `LOCK="/data/adb/.`, `${mod.name} lock`);
+  requireText(hot, "hot_update_transaction_write", `${mod.name} transaction prepare`);
+  requireText(hot, mod.transaction, `${mod.name} transaction directory`);
+  requireText(hot, "hot_update_start_verifier", `${mod.name} takeover verifier`);
+  requireText(hot, "QSC_HOT_VERIFY_SCRIPT", `${mod.name} detached verifier`);
+  requireText(hot, `LOCK="/data/adb/qsc/hot_update/lock"`, `${mod.name} lock`);
   requireText(hot, `echo "$$" >"$LOCK/pid"`, `${mod.name} lock owner`);
   requireText(hot, "hu_verify_file", `${mod.name} post-copy verification`);
   requireText(hot, "保留标准更新标记", `${mod.name} failure fallback`);
-  requireText(hot, `rm -rf "$PAYLOAD"`, `${mod.name} payload cleanup`);
+  requireText(hot, "fallback", `${mod.name} fallback transaction state`);
+  requireText(
+    hot,
+    'rm -rf /data/adb/qsc/hot_update/payload/"$MODID"',
+    `${mod.name} payload cleanup`,
+  );
   requireText(hot, mod.worker, `${mod.name} worker cleanup`);
   requireOrder(
     hot,
-    "hu_verify_file",
+    "hu_txn_state commit",
     'rm -f "$OLD/update"',
-    `${mod.name} verification before marker cleanup`,
+    `${mod.name} commit before marker cleanup`,
   );
 
-  requireText(uninstall, mod.payload, `${mod.name} uninstall payload cleanup`);
-  requireText(uninstall, mod.lock, `${mod.name} uninstall lock cleanup`);
+  requireText(
+    uninstall,
+    "/data/adb/qsc/hot_update",
+    `${mod.name} uninstall payload cleanup`,
+  );
+  requireText(
+    uninstall,
+    "/data/adb/qsc/hot_update",
+    `${mod.name} uninstall lock cleanup`,
+  );
   requireText(uninstall, mod.worker, `${mod.name} uninstall worker cleanup`);
   requireText(
     uninstall,
@@ -153,6 +181,8 @@ for (const mod of modules) {
   requireText(service, "QSC_SCAN_STATE", `${mod.name} scan state`);
   requireText(service, "failed:$rc", `${mod.name} scan failure state`);
   requireText(service, "service_heartbeat", `${mod.name} service heartbeat`);
+  requireText(service, "qsc_start_heartbeat_loop", `${mod.name} detached heartbeat`);
+  requireText(service, "service_heartbeat_pid", `${mod.name} heartbeat ownership`);
   requireText(service, "service_metrics", `${mod.name} service metrics`);
   requireText(service, "diagnostic_on", `${mod.name} optional diagnostic sampling`);
   requireText(service, "history_pending", `${mod.name} history pending metric`);
@@ -199,6 +229,11 @@ for (const mod of modules) {
     "description_worker.state",
     `${mod.name} worker refresh state`,
   );
+  requireText(
+    descriptionWorker,
+    "worker_service_ready",
+    `${mod.name} worker service heartbeat gate`,
+  );
   requireText(packageSource, '"description_worker.sh"', `${mod.name} worker packaging`);
 }
 
@@ -234,6 +269,7 @@ const appShell = read(join(root, "webui/src/layouts/AppShell.vue"));
 const appShellComposable = read(
   join(root, "webui/src/layouts/composables/useAppShell.ts"),
 );
+const baseStyles = read(join(root, "webui/src/styles/base.scss"));
 const appDock = read(join(root, "webui/src/layouts/ui/AppDock.vue"));
 const routes = read(join(root, "webui/src/router/routes.ts"));
 const batteryStore = read(join(root, "webui/src/stores/battery.ts"));
@@ -243,6 +279,7 @@ const homePage = read(join(root, "webui/src/pages/home/HomePage.vue"));
 const configPage = read(join(root, "webui/src/pages/config/ConfigPage.vue"));
 const logPage = read(join(root, "webui/src/pages/log/LogPage.vue"));
 const morePage = read(join(root, "webui/src/pages/more/MorePage.vue"));
+const homeTips = read(join(root, "webui/src/pages/home/ui/HomeTips.vue"));
 const installGuide = read(join(root, "docs/guide/install.md"));
 const webuiGuide = read(join(root, "docs/guide/webui.md"));
 const configGuide = read(join(root, "docs/guide/config.md"));
@@ -314,7 +351,7 @@ requireText(
   "WebUI non-blocking data state",
 );
 requireText(appShell, "正在读取设备信息", "WebUI device information loading text");
-requireText(appShell, "position: sticky", "WebUI inline route loading");
+requireText(appShell, "position: fixed", "WebUI out-of-flow route loading");
 requireText(appShell, "<KeepAlive", "WebUI loaded page cache");
 if (appShell.includes("route-loading-page") || appShell.includes("display: none")) {
   throw new Error("WebUI route loading must not hide or cover the scroll content");
@@ -337,9 +374,12 @@ requireText(appShellComposable, "pendingTab", "WebUI single pending navigation s
 requireText(appShellComposable, "navigationId", "WebUI latest navigation wins");
 requireText(appShellComposable, "drainNavigation", "WebUI serialized navigation queue");
 requireText(appShellComposable, "scrollMainToTop", "WebUI navigation scroll reset");
-requireText(appShellComposable, "requestIdleCallback", "WebUI idle route preloading");
-requireText(appShellComposable, "warmNextRouteChunk", "WebUI bounded route preloading");
+requireText(appShellComposable, "NAVIGATION_TIMEOUT_MS", "WebUI route timeout");
+requireText(appShellComposable, "withTimeout", "WebUI route timeout cleanup");
 requireText(appShellComposable, "preloadTab(target)", "WebUI click route preloading");
+if (baseStyles.includes("content-visibility")) {
+  throw new Error("WebUI scroll path must not use content-visibility");
+}
 requireText(appDock, ':model-value="tab"', "WebUI dock controlled by shell state");
 requireText(
   batteryStore,
@@ -371,6 +411,8 @@ for (const [page, name] of [
 ]) {
   requireText(page, "lazyComponent", `WebUI ${name} component splitting`);
 }
+requireText(homeTips, "variant", "WebUI theme-neutral home tips");
+requireText(homePage, "HomeTips", "WebUI lazy home tips");
 requireText(serviceSource, "switch_enter", "bounded decision round start");
 requireText(serviceSource, "switch_exit", "bounded decision round result");
 requireText(serviceSource, "qsc_ps_native_exec 45", "bounded decision round timeout");
@@ -396,6 +438,22 @@ requireText(
   serviceSource,
   'qsc_ps_refresh_desc "${QSC_PS_NOW:-0}"',
   "hot update early status refresh",
+);
+requireText(serviceSource, "service_pid", "service takeover PID marker");
+requireText(serviceSource, "service_start.state", "service startup transaction state");
+requireText(
+  serviceSource,
+  "/data/adb/qsc/hot_update/transactions/QSC_Battery/state",
+  "hot update transaction gate",
+);
+requireText(hotSource, "hot_update_transaction_write", "hot update transaction record");
+requireText(hotSource, "hu_fallback", "hot update reboot fallback");
+requireText(hotSource, "hot_update_fallback_reboot", "hot update fallback marker");
+requireText(hotSource, "hot_update_migrate_legacy_paths", "legacy hidden path migration");
+requireText(
+  serviceSource,
+  "hot_update_migrate_legacy_paths",
+  "service legacy path migration",
 );
 requireText(daemonApi, "snapshotFailure", "WebUI snapshot failure status");
 requireText(daemonApi, "waitFailure", "WebUI native wait failure status");

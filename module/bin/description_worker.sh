@@ -48,6 +48,20 @@ worker_parent_alive() {
 	kill -0 "$PARENT_PID" 2>/dev/null
 }
 
+worker_service_ready() {
+	local service_pid service_state heartbeat now
+	service_pid="$(cat "$DATADIR/service_pid" 2>/dev/null | tr -d ' \r\n')"
+	[ "$service_pid" = "$PARENT_PID" ] || return 1
+	service_state="$(sed -n 's/^state=//p' "$DATADIR/service_start.state" 2>/dev/null | head -n1 | tr -d ' \r')"
+	[ "$service_state" = "running" ] || return 1
+	heartbeat="$(cat "$DATADIR/service_heartbeat" 2>/dev/null | tr -d ' \r\n')"
+	now="$(date +%s 2>/dev/null)"
+	[ -n "$heartbeat" ] && [ -n "$now" ] || return 1
+	case "$heartbeat:$now" in *[!0-9:]*) return 1 ;; esac
+	[ "$now" -ge "$heartbeat" ] 2>/dev/null &&
+		[ "$((now - heartbeat))" -le 15 ] 2>/dev/null
+}
+
 worker_state() {
 	local rc="$1" now
 	now="$(date +%s 2>/dev/null)"
@@ -60,6 +74,14 @@ worker_state() {
 }
 
 worker_refresh() {
+	if [ -f "$DATADIR/hot_update_fallback_reboot" ]; then
+		worker_state 125
+		return 125
+	fi
+	if ! worker_service_ready; then
+		worker_state 126
+		return 0
+	fi
 	if ! type qsc_ps_load_conf >/dev/null 2>&1 ||
 		! type qsc_ps_refresh_desc >/dev/null 2>&1; then
 		worker_state 127

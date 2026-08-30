@@ -25,7 +25,7 @@ const DefaultHomeSwitch = lazyComponent(() => import("./ui/default/HomeSwitch.vu
 const DefaultHomeStrategy = lazyComponent(() => import("./ui/default/HomeStrategy.vue"));
 const DefaultHomeDetail = lazyComponent(() => import("./ui/default/HomeDetail.vue"));
 const DefaultHomeStake = lazyComponent(() => import("./ui/default/HomeStake.vue"));
-const DefaultHomeTips = lazyComponent(() => import("./ui/default/HomeTips.vue"));
+const HomeTips = lazyComponent(() => import("./ui/HomeTips.vue"));
 const HomeChargeChart = lazyComponent(() => import("./ui/HomeChargeChart.vue"));
 
 const theme = useTheme();
@@ -56,10 +56,7 @@ function goConfig() {
         <Md3HomeBattery />
         <div class="md3-label">运行详情</div>
         <Md3HomeInfo />
-        <section class="md3-tonal md3-tips">
-          <p><b>过夜</b>：停止 80–90%，恢复间隔 5–10%。</p>
-          <p><b>游戏 / 导航</b>：开启温控，高温自动停充。</p>
-        </section>
+        <HomeTips variant="md3" />
       </div>
     </div>
 
@@ -76,9 +73,7 @@ function goConfig() {
       <MiuixHomeDetail />
       <div class="miuix-label">电池</div>
       <MiuixHomeBattery />
-      <section class="miuix-card miuix-tips">
-        <p>过夜建议停止 80–90%；游戏导航请开温控。</p>
-      </section>
+      <HomeTips variant="miuix" />
     </div>
 
     <div v-else class="page page-default">
@@ -88,7 +83,7 @@ function goConfig() {
       <DefaultHomeStrategy @open-config="goConfig" />
       <DefaultHomeDetail />
       <DefaultHomeStake />
-      <DefaultHomeTips />
+      <HomeTips />
     </div>
   </van-pull-refresh>
 </template>
@@ -111,21 +106,6 @@ function goConfig() {
   color: var(--qsc-text-2);
 }
 
-.md3-tips {
-  padding: 14px 16px;
-  font-size: 13px;
-  color: var(--qsc-text-2);
-  line-height: 1.5;
-
-  p {
-    margin: 0 0 6px;
-
-    &:last-child {
-      margin-bottom: 0;
-    }
-  }
-}
-
 .miuix-label {
   margin: 14px 10px 8px;
   font-size: 13px;
@@ -134,18 +114,6 @@ function goConfig() {
 
   &:first-child {
     margin-top: 4px;
-  }
-}
-
-.miuix-tips {
-  margin-top: 12px;
-  padding: 12px 14px;
-  font-size: 12px;
-  color: var(--qsc-text-2);
-  line-height: 1.45;
-
-  p {
-    margin: 0;
   }
 }
 
