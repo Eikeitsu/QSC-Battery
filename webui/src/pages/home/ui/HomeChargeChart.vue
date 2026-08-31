@@ -1,13 +1,5 @@
 <script setup lang="ts">
-import {
-  computed,
-  onActivated,
-  onDeactivated,
-  onMounted,
-  onUnmounted,
-  ref,
-  watch,
-} from "vue";
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from "vue";
 import SectionHead from "@/shared/ui/SectionHead.vue";
 import ThemedCard from "@/shared/ui/ThemedCard.vue";
 import * as api from "@/shared/api";
@@ -31,27 +23,40 @@ const PAD_B = 16;
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let reloadId = 0;
+let reloadInFlight: Promise<void> | null = null;
 let chartActive = false;
 const dataSource = ref<"merged" | "sampled" | "system">("system");
 const chartNow = ref(Math.floor(Date.now() / 1000));
 
 async function reload() {
+  if (reloadInFlight) return reloadInFlight;
   const requestId = ++reloadId;
   loading.value = true;
+  reloadInFlight = (async () => {
+    try {
+      // 两套历史始终按同一时间轴合并：系统记录负责补齐放电段，模块采样
+      // 负责提供充电段的电流，插拔时不再把整条曲线替换成另一套数据。
+      const [sampled, system] = await Promise.all([
+        samplingOff.value ? Promise.resolve([]) : api.loadChargeHistory(480),
+        api.loadSystemBatteryHistory(),
+      ]);
+      if (requestId !== reloadId) return;
+      const next = api.mergeHistory(sampled, system).slice(-480);
+      dataSource.value =
+        sampled.length && system.length
+          ? "merged"
+          : sampled.length
+            ? "sampled"
+            : "system";
+      points.value = next;
+    } finally {
+      if (requestId === reloadId) loading.value = false;
+    }
+  })();
   try {
-    // 两套历史始终按同一时间轴合并：系统记录负责补齐放电段，模块采样
-    // 负责提供充电段的电流，插拔时不再把整条曲线替换成另一套数据。
-    const [sampled, system] = await Promise.all([
-      samplingOff.value ? Promise.resolve([]) : api.loadChargeHistory(480),
-      api.loadSystemBatteryHistory(),
-    ]);
-    if (requestId !== reloadId) return;
-    const next = api.mergeHistory(sampled, system).slice(-480);
-    dataSource.value =
-      sampled.length && system.length ? "merged" : sampled.length ? "sampled" : "system";
-    points.value = next;
+    await reloadInFlight;
   } finally {
-    if (requestId === reloadId) loading.value = false;
+    reloadInFlight = null;
   }
 }
 
@@ -176,22 +181,6 @@ onMounted(() => {
     void reload();
   }, 30_000);
 });
-
-watch(
-  () =>
-    [app.status.updatedAt, app.status.chargeLabel, app.settings.history_enable] as const,
-  ([updatedAt, chargeLabel, historyEnable], previous) => {
-    if (!chartActive) return;
-    if (
-      updatedAt !== "--" &&
-      (updatedAt !== previous?.[0] ||
-        chargeLabel !== previous?.[1] ||
-        historyEnable !== previous?.[2])
-    ) {
-      void reload();
-    }
-  },
-);
 
 onActivated(() => {
   if (chartActive) return;

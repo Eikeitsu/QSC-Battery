@@ -187,8 +187,12 @@ fi
 echo "  免重启热更新:" >> "$OUT"
 echo "    modules_update 残留 = $([ -d /data/adb/modules_update/QSC_Battery ] && echo yes || echo no)" >> "$OUT"
 echo "    模块目录 update 标记 = $([ -f /data/adb/modules/QSC_Battery/update ] && echo yes || echo no)" >> "$OUT"
-if [ -n "$DATADIR" ] && [ -f "$DATADIR/hot_update.log" ]; then
-  tail -n 5 "$DATADIR/hot_update.log" 2>/dev/null | while IFS= read -r line; do
+HOT_UPDATE_LOG="/data/adb/qsc/runtime/diagnostics/hot_update.log"
+if [ ! -f "$HOT_UPDATE_LOG" ] && [ -n "$DATADIR" ] && [ -f "$DATADIR/hot_update.log" ]; then
+  HOT_UPDATE_LOG="$DATADIR/hot_update.log"
+fi
+if [ -f "$HOT_UPDATE_LOG" ]; then
+  tail -n 5 "$HOT_UPDATE_LOG" 2>/dev/null | while IFS= read -r line; do
     echo "    $line" >> "$OUT"
   done
 else

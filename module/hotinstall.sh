@@ -42,8 +42,15 @@ fi
 if [ -f "$MODDIR/bin/lib/hot_update.sh" ]; then
 	# shellcheck disable=SC1090
 	. "$MODDIR/bin/lib/hot_update.sh" 2>/dev/null || true
-	type hot_update_migrate_legacy_paths >/dev/null 2>&1 &&
-		hot_update_migrate_legacy_paths || true
+	if type hot_update_migrate_legacy_paths >/dev/null 2>&1 &&
+		! hot_update_migrate_legacy_paths; then
+		sed -i 's/^state=.*/state=fallback/' \
+			/data/adb/qsc/hot_update/transactions/QSC_Battery/state 2>/dev/null || true
+		touch "$MODDIR/data/hot_update_fallback_reboot" "$MODDIR/update" 2>/dev/null
+		qsc_write_module_description "⚠️热更新未完成" "请重启设备完成更新" \
+			"外部恢复目录迁移失败，已保留旧副本"
+		exit 0
+	fi
 fi
 qsc_hot_mark_transaction_apply
 if type qsc_write_module_description >/dev/null 2>&1; then

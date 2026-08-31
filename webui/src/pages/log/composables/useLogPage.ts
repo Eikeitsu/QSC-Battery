@@ -28,7 +28,6 @@ function readViewMode(): "flat" | "session" {
 export function useLogPage() {
   const store = useAppStore();
   const { theme, packClass } = useThemePackClass();
-  const pullLoading = ref(false);
   const levelFilter = ref(readLevelFilter());
   const viewMode = ref<"flat" | "session">(readViewMode());
 
@@ -46,18 +45,6 @@ export function useLogPage() {
 
   async function doRefresh(showTip: boolean) {
     await store.refreshLog(showTip);
-    theme.restoreChromeInsets?.();
-    theme.syncStatusBar();
-  }
-
-  async function onPullRefresh() {
-    pullLoading.value = true;
-    try {
-      await doRefresh(true);
-    } finally {
-      pullLoading.value = false;
-      theme.restoreChromeInsets?.();
-    }
   }
 
   async function onButtonRefresh() {
@@ -81,13 +68,11 @@ export function useLogPage() {
     store,
     theme,
     packClass,
-    pullLoading,
     levelFilter,
     viewMode,
     visibleLogLines,
     logSessions,
     filterActive,
-    onPullRefresh,
     onButtonRefresh,
     onClear,
   };

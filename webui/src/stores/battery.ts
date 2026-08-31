@@ -59,6 +59,51 @@ export const useAppStore = defineStore("app", () => {
   let statusTimer: ReturnType<typeof setInterval> | null = null;
   let refreshInFlight: Promise<boolean> | null = null;
   let refreshTipPending = false;
+  let interactivePage = true;
+  let pageVisible = true;
+  let visibilityBound = false;
+
+  function pollingAllowed() {
+    return ready.value && interactivePage && pageVisible;
+  }
+
+  function stopStatusPolling() {
+    if (statusTimer) clearInterval(statusTimer);
+    statusTimer = null;
+  }
+
+  function startStatusPolling() {
+    if (statusTimer || !pollingAllowed()) return;
+    statusTimer = setInterval(() => {
+      void refreshStatus();
+    }, STATUS_INTERVAL);
+  }
+
+  function setInteractiveTab(active: boolean) {
+    const changed = interactivePage !== active;
+    interactivePage = active;
+    if (pollingAllowed()) {
+      startStatusPolling();
+      if (changed) void refreshStatus();
+    } else {
+      stopStatusPolling();
+    }
+  }
+
+  function bindVisibilityListener() {
+    if (visibilityBound || typeof document === "undefined") return;
+    visibilityBound = true;
+    pageVisible = !document.hidden;
+    document.addEventListener("visibilitychange", () => {
+      pageVisible = !document.hidden;
+      if (pollingAllowed()) {
+        startStatusPolling();
+        void refreshStatus();
+      } else {
+        stopStatusPolling();
+      }
+    });
+  }
 
   const powerPlan = computed(() => {
     const stop = settings.power_stop;
@@ -490,6 +535,7 @@ export const useAppStore = defineStore("app", () => {
   async function init(): Promise<void> {
     if (initializing.value || ready.value) return;
     initializing.value = true;
+    bindVisibilityListener();
     if (!api.hasBridge()) {
       bridgeOk.value = false;
       deviceName.value = "未检测到 WebUI 桥接";
@@ -503,10 +549,6 @@ export const useAppStore = defineStore("app", () => {
     try {
       // 先完成首页和策略页需要的核心数据，日志与可选电流配置后台加载。
       await Promise.allSettled([loadDeviceInfo(), loadConfig(), refreshStatus()]);
-      if (statusTimer) clearInterval(statusTimer);
-      statusTimer = setInterval(() => {
-        void refreshStatus();
-      }, STATUS_INTERVAL);
       hydrating.value = true;
       void Promise.allSettled([loadCurrentConfig(), refreshLog()]).finally(() => {
         hydrating.value = false;
@@ -514,6 +556,7 @@ export const useAppStore = defineStore("app", () => {
     } finally {
       initializing.value = false;
       ready.value = true;
+      startStatusPolling();
     }
   }
 
@@ -547,6 +590,7 @@ export const useAppStore = defineStore("app", () => {
     saveCurrent,
     toggleModule,
     resetDefaults,
+    setInteractiveTab,
     snapshotBundle,
     snapshotBundleAsync,
     applyBundle,

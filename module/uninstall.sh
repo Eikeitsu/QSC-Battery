@@ -37,8 +37,9 @@ if [ -f "$MODDIR/bin/common.sh" ]; then
 	qsc_clear_active_switch 2>/dev/null || true
 fi
 
-# 清理免重启更新产生的外部副本、worker、锁和模块专属暂存。
-# 不使用通配的 modules_update 清理，避免影响其它模块。
+# 清理本模块免重启更新产生的外部副本、worker、锁和诊断。
+# qsc 是可共享命名空间，只删除 QSC_Battery 自己的目录；若没有其它内容，
+# 再逐级 rmdir，最终会删除整个 /data/adb/qsc，不留下本模块残留。
 command -v pkill >/dev/null 2>&1 && {
 	pkill -f '/data/adb/qsc/hot_update/worker.sh' 2>/dev/null
 	pkill -f '/data/adb/qsc/hot_update/verify.sh' 2>/dev/null
@@ -46,12 +47,15 @@ command -v pkill >/dev/null 2>&1 && {
 }
 rm -rf \
 	/data/adb/qsc/hot_update \
+	/data/adb/qsc/runtime/diagnostics \
 	/data/adb/.qsc_hot_update_payload \
 	/data/adb/.qsc_hot_update_txn \
 	/data/adb/.qsc_hot_update_verify.sh \
 	/data/adb/.qsc_hot_update.sh \
 	/data/adb/.QSC_Battery.hot_update.lock \
 	/data/adb/modules_update/QSC_Battery 2>/dev/null
+rmdir /data/adb/qsc/runtime/diagnostics 2>/dev/null
+rmdir /data/adb/qsc/runtime 2>/dev/null
 rmdir /data/adb/qsc 2>/dev/null
 rm -f "$MODDIR/update" 2>/dev/null
 

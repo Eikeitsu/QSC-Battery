@@ -161,8 +161,13 @@ for (const mod of modules) {
   );
   requireText(
     uninstall,
-    "/data/adb/qsc/hot_update",
+    "/data/adb/qsc/runtime/diagnostics",
     `${mod.name} uninstall lock cleanup`,
+  );
+  requireText(
+    uninstall,
+    "rmdir /data/adb/qsc",
+    `${mod.name} empty external root cleanup`,
   );
   requireText(uninstall, mod.worker, `${mod.name} uninstall worker cleanup`);
   requireText(
@@ -272,7 +277,10 @@ const appShellComposable = read(
 const baseStyles = read(join(root, "webui/src/styles/base.scss"));
 const appDock = read(join(root, "webui/src/layouts/ui/AppDock.vue"));
 const routes = read(join(root, "webui/src/router/routes.ts"));
+const routeLoaders = read(join(root, "webui/src/router/loaders.ts"));
 const batteryStore = read(join(root, "webui/src/stores/battery.ts"));
+const themeStore = read(join(root, "webui/src/stores/theme.ts"));
+const chromeStyles = read(join(root, "webui/src/styles/chrome.scss"));
 const lazyComponent = read(join(root, "webui/src/shared/lib/lazyComponent.ts"));
 const statusBundle = read(join(root, "webui/src/shared/api/statusBundle.ts"));
 const homePage = read(join(root, "webui/src/pages/home/HomePage.vue"));
@@ -356,27 +364,52 @@ requireText(appShell, "<KeepAlive", "WebUI loaded page cache");
 if (appShell.includes("route-loading-page") || appShell.includes("display: none")) {
   throw new Error("WebUI route loading must not hide or cover the scroll content");
 }
-requireText(appSource, "<Suspense", "WebUI startup page fallback");
-requireText(appSource, "router.isReady", "WebUI initial route readiness state");
-requireText(appSource, "app-start-loading", "WebUI centered startup loading");
+requireText(appSource, "<RouterView", "WebUI shell renders before data hydration");
+if (appSource.includes("router.isReady") || appSource.includes("app-start-loading")) {
+  throw new Error("WebUI startup must not wait for the whole route tree");
+}
 requireText(indexSource, "app-loading", "WebUI static startup loading state");
-requireText(
-  routes,
-  'component: () => import("@/layouts/AppShell.vue")',
-  "WebUI lazy root layout",
-);
-requireText(routes, "preloadTab", "WebUI route chunk preloading");
+requireText(routes, "component: AppShell", "WebUI eager interactive shell");
+requireText(routeLoaders, "preloadTab", "WebUI route chunk preloading");
+requireText(routeLoaders, 'import("@/pages/home/HomePage.vue")', "WebUI lazy home route");
 if (/<Transition/.test(appShell)) {
   throw new Error("WebUI route transition must not animate heavy pages");
 }
 requireText(appShell, "routeLoading", "WebUI immediate navigation feedback");
 requireText(appShellComposable, "pendingTab", "WebUI single pending navigation state");
 requireText(appShellComposable, "navigationId", "WebUI latest navigation wins");
-requireText(appShellComposable, "drainNavigation", "WebUI serialized navigation queue");
-requireText(appShellComposable, "scrollMainToTop", "WebUI navigation scroll reset");
+requireText(appShellComposable, "navigateTo", "WebUI latest navigation task");
+requireText(appShellComposable, "saveScrollPosition", "WebUI navigation scroll save");
+requireText(
+  appShellComposable,
+  "restoreScrollPosition",
+  "WebUI navigation scroll restore",
+);
 requireText(appShellComposable, "NAVIGATION_TIMEOUT_MS", "WebUI route timeout");
 requireText(appShellComposable, "withTimeout", "WebUI route timeout cleanup");
-requireText(appShellComposable, "preloadTab(target)", "WebUI click route preloading");
+requireText(
+  appShellComposable,
+  "void preloadTab(next).catch",
+  "WebUI non-blocking route preloading",
+);
+requireOrder(
+  appShellComposable,
+  "void preloadTab(next).catch",
+  "void navigateTo(next, requestId)",
+  "WebUI click starts navigation immediately",
+);
+requireText(homePage, "home-refresh", "WebUI lightweight home refresh");
+requireText(homePage, "event.cancelable", "WebUI conditional refresh gesture capture");
+if (homePage.includes("van-pull-refresh")) {
+  throw new Error("WebUI home must not use global PullRefresh");
+}
+if (logPage.includes("van-pull-refresh")) {
+  throw new Error("WebUI log must use explicit refresh only");
+}
+requireText(chart, "reloadInFlight", "WebUI chart single-flight reload");
+if (chart.includes("app.status.updatedAt")) {
+  throw new Error("WebUI chart must not reload on every status tick");
+}
 if (baseStyles.includes("content-visibility")) {
   throw new Error("WebUI scroll path must not use content-visibility");
 }
@@ -386,11 +419,20 @@ requireText(
   "const initializing = ref(false)",
   "WebUI bootstrap loading state",
 );
+requireText(batteryStore, "setInteractiveTab", "WebUI tab-aware status polling");
+requireText(batteryStore, "visibilitychange", "WebUI background polling pause");
 requireText(batteryStore, "refreshInFlight", "WebUI refresh single flight");
 requireText(batteryStore, "loadStatusBundle", "WebUI combined status bridge request");
 requireText(statusBundle, "parseStatusBundle", "WebUI combined status parser");
 requireText(batteryStore, "duration: 1200", "WebUI bounded refresh toast");
 requireText(batteryStore, "loadConfigValues(CONFIG_KEYS)", "batched config loading");
+if (
+  themeStore.includes('"touchend"') ||
+  themeStore.includes('vv.addEventListener("scroll"')
+) {
+  throw new Error("WebUI theme must not resync in high-frequency touch/viewport events");
+}
+requireText(chromeStyles, ".app-main", "WebUI unique scroll owner");
 requireText(powerSaver, "QSC_PS_WAIT_FAILURES", "native wait failure backoff");
 requireText(powerSaver, "reason=%s", "native wait failure reason");
 requireText(powerSaver, "QSC_PS_WAIT_NEXT_RETRY", "native wait retry deadline");
@@ -454,6 +496,31 @@ requireText(
   serviceSource,
   "hot_update_migrate_legacy_paths",
   "service legacy path migration",
+);
+requireText(
+  hotSource,
+  "/data/adb/qsc/runtime/diagnostics",
+  "external diagnostics directory",
+);
+requireText(
+  hotSource,
+  'QSC_RUNTIME_DIAGNOSTICS_DIR="$QSC_ADB_DIR/runtime/diagnostics"',
+  "flat diagnostics directory",
+);
+requireText(hotSource, "tail -c 131072", "bounded external diagnostics log");
+requireText(hotSource, "hot_update_move_legacy_path", "safe legacy path mover");
+requireText(hotSource, '[ -e "$_new_path" ] && return 1', "legacy conflict fallback");
+requireText(hotSource, "hot_update_stop_legacy_worker", "owned legacy worker stop");
+requireText(
+  hotSource,
+  '[ "$_legacy_found" -eq 1 ] || return 0',
+  "lazy hot update workspace",
+);
+requireText(serviceSource, "外部恢复目录迁移失败", "service migration fallback");
+requireText(
+  read(modules[0].hotinstall),
+  "外部恢复目录迁移失败",
+  "hotinstall migration fallback",
 );
 requireText(daemonApi, "snapshotFailure", "WebUI snapshot failure status");
 requireText(daemonApi, "waitFailure", "WebUI native wait failure status");

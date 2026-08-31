@@ -9,41 +9,68 @@ QSC_HOT_TXN_DIR="$QSC_HOT_UPDATE_DIR/transactions"
 QSC_HOT_VERIFY_SCRIPT="$QSC_HOT_UPDATE_DIR/verify.sh"
 QSC_HOT_WORKER_SCRIPT="$QSC_HOT_UPDATE_DIR/worker.sh"
 QSC_HOT_LOCK_DIR="$QSC_HOT_UPDATE_DIR/lock"
+QSC_RUNTIME_DIAGNOSTICS_DIR="$QSC_ADB_DIR/runtime/diagnostics"
+
+hot_update_move_legacy_path() {
+	_legacy_path="$1"
+	_new_path="$2"
+	[ -e "$_legacy_path" ] || return 0
+	# 目标已存在时报告冲突，不删除任何一边，交给标准重启流程恢复。
+	[ -e "$_new_path" ] && return 1
+	mv -f "$_legacy_path" "$_new_path" 2>/dev/null
+}
+
+hot_update_stop_legacy_worker() {
+	_lock_path="$1"
+	_legacy_pid="$(cat "$_lock_path/pid" 2>/dev/null | tr -d ' \r\n')"
+	case "$_legacy_pid" in
+		""|*[!0-9]*) return 0 ;;
+	esac
+	kill "$_legacy_pid" 2>/dev/null || true
+	_i=0
+	while kill -0 "$_legacy_pid" 2>/dev/null && [ "$_i" -lt 5 ]; do
+		sleep 1
+		_i=$((_i + 1))
+	done
+	kill -9 "$_legacy_pid" 2>/dev/null || true
+}
 
 hot_update_migrate_legacy_paths() {
-	# 旧版本把热更新临时资源散落在 /data/adb 根目录。先终止旧收尾脚本，
-	# 再整体迁移，避免新旧 worker 同时操作两套状态。
-	if command -v pkill >/dev/null 2>&1; then
-		pkill -f '/data/adb/.qsc_hot_update.sh' 2>/dev/null || true
-		pkill -f '/data/adb/.qsc_hot_update_verify.sh' 2>/dev/null || true
-	fi
+	# 仅在发现旧状态时迁移；正常服务启动不创建 hot_update 工作区。
+	_legacy_found=0
+	for _legacy_path in \
+		"/data/adb/.qsc_hot_update_payload" \
+		"/data/adb/.qsc_hot_update_txn" \
+		"/data/adb/.qsc_hot_update_verify.sh" \
+		"/data/adb/.qsc_hot_update.sh" \
+		"/data/adb/.QSC_Battery.hot_update.lock"
+	do
+		[ -e "$_legacy_path" ] && _legacy_found=1
+	done
+	[ "$_legacy_found" -eq 1 ] || return 0
+	for _legacy_pair in \
+		"/data/adb/.qsc_hot_update_payload:$QSC_HOT_PAYLOAD_DIR" \
+		"/data/adb/.qsc_hot_update_txn:$QSC_HOT_TXN_DIR" \
+		"/data/adb/.qsc_hot_update_verify.sh:$QSC_HOT_VERIFY_SCRIPT" \
+		"/data/adb/.qsc_hot_update.sh:$QSC_HOT_WORKER_SCRIPT" \
+		"/data/adb/.QSC_Battery.hot_update.lock:$QSC_HOT_LOCK_DIR"
+	do
+		_legacy_source="${_legacy_pair%%:*}"
+		_legacy_target="${_legacy_pair#*:}"
+		[ -e "$_legacy_source" ] && [ -e "$_legacy_target" ] && return 1
+	done
+	hot_update_stop_legacy_worker "/data/adb/.QSC_Battery.hot_update.lock"
 	mkdir -p "$QSC_HOT_UPDATE_DIR" 2>/dev/null || return 1
-	if [ -d "/data/adb/.qsc_hot_update_payload" ] &&
-		[ ! -e "$QSC_HOT_PAYLOAD_DIR" ]; then
-		mv -f /data/adb/.qsc_hot_update_payload "$QSC_HOT_PAYLOAD_DIR" 2>/dev/null || true
-	fi
-	if [ -d "/data/adb/.qsc_hot_update_txn" ] &&
-		[ ! -e "$QSC_HOT_TXN_DIR" ]; then
-		mv -f /data/adb/.qsc_hot_update_txn "$QSC_HOT_TXN_DIR" 2>/dev/null || true
-	fi
-	if [ -f "/data/adb/.qsc_hot_update_verify.sh" ] &&
-		[ ! -e "$QSC_HOT_VERIFY_SCRIPT" ]; then
-		mv -f /data/adb/.qsc_hot_update_verify.sh "$QSC_HOT_VERIFY_SCRIPT" 2>/dev/null || true
-	fi
-	if [ -f "/data/adb/.qsc_hot_update.sh" ] &&
-		[ ! -e "$QSC_HOT_WORKER_SCRIPT" ]; then
-		mv -f /data/adb/.qsc_hot_update.sh "$QSC_HOT_WORKER_SCRIPT" 2>/dev/null || true
-	fi
-	if [ -d "/data/adb/.QSC_Battery.hot_update.lock" ] &&
-		[ ! -e "$QSC_HOT_LOCK_DIR" ]; then
-		mv -f /data/adb/.QSC_Battery.hot_update.lock "$QSC_HOT_LOCK_DIR" 2>/dev/null || true
-	fi
-	rm -rf /data/adb/.qsc_hot_update_payload \
-		/data/adb/.qsc_hot_update_txn \
-		/data/adb/.qsc_hot_update_verify.sh \
-		/data/adb/.qsc_hot_update.sh \
-		/data/adb/.QSC_Battery.hot_update.lock 2>/dev/null
-	rmdir /data/adb/qsc 2>/dev/null
+	hot_update_move_legacy_path \
+		"/data/adb/.qsc_hot_update_payload" "$QSC_HOT_PAYLOAD_DIR" || return 1
+	hot_update_move_legacy_path \
+		"/data/adb/.qsc_hot_update_txn" "$QSC_HOT_TXN_DIR" || return 1
+	hot_update_move_legacy_path \
+		"/data/adb/.qsc_hot_update_verify.sh" "$QSC_HOT_VERIFY_SCRIPT" || return 1
+	hot_update_move_legacy_path \
+		"/data/adb/.qsc_hot_update.sh" "$QSC_HOT_WORKER_SCRIPT" || return 1
+	hot_update_move_legacy_path \
+		"/data/adb/.QSC_Battery.hot_update.lock" "$QSC_HOT_LOCK_DIR" || return 1
 }
 
 hot_update_modid() {
@@ -165,7 +192,8 @@ hot_update_transaction_write() {
 	_txn_now="$(date +%s 2>/dev/null)"
 	case "$_txn_now" in ""|*[!0-9]*) _txn_now=0 ;; esac
 	[ -n "$_txn_modid" ] && [ -n "$_txn_state" ] || return 1
-	mkdir -p "$_txn_base" "$_txn_dir" 2>/dev/null || return 1
+	mkdir -p "$_txn_base" "$_txn_dir" "$QSC_RUNTIME_DIAGNOSTICS_DIR" \
+		2>/dev/null || return 1
 	_txn_id="$_txn_modid.$_txn_now.$$"
 	{
 		printf 'id=%s\n' "$_txn_id"
@@ -235,10 +263,20 @@ OLD="$2"
 NEW="$3"
 TXN="$4"
 SELF="$0"
-LOG="$OLD/data/hot_update.log"
+LOG="/data/adb/qsc/runtime/diagnostics/hot_update.log"
 PAYLOAD="$(sed -n 's/^payload=//p' "$TXN" 2>/dev/null | head -n1)"
 hu_log() {
+	mkdir -p "/data/adb/qsc/runtime/diagnostics" 2>/dev/null
 	echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >>"$LOG" 2>/dev/null
+	_size="$(wc -c <"$LOG" 2>/dev/null | tr -d ' ')"
+	if [ -n "$_size" ]; then
+		case "$_size" in
+			*[!0-9]*) ;;
+			*) [ "$_size" -gt 262144 ] 2>/dev/null &&
+				tail -c 131072 "$LOG" >"$LOG.tmp.$$" 2>/dev/null &&
+				mv -f "$LOG.tmp.$$" "$LOG" 2>/dev/null ;;
+		esac
+	fi
 }
 hu_txn_state() {
 	_state="$1"
@@ -321,10 +359,11 @@ rm -f "$OLD/update" "$OLD/remove" 2>/dev/null
 }
 rm -rf /data/adb/qsc/hot_update/payload/"$MODID" 2>/dev/null
 rmdir /data/adb/qsc/hot_update/payload 2>/dev/null
-rmdir /data/adb/qsc/hot_update 2>/dev/null
 rm -f /data/adb/qsc/hot_update/worker.sh 2>/dev/null
+rm -f "$SELF" 2>/dev/null
 rm -rf "$(dirname "$TXN")" 2>/dev/null
-rm -f "$SELF" /data/adb/qsc/hot_update/worker.sh 2>/dev/null
+rmdir /data/adb/qsc/hot_update/transactions 2>/dev/null
+rmdir /data/adb/qsc/hot_update 2>/dev/null
 hu_log "commit: verifier 确认 service 心跳、主循环和简介 worker 均正常"
 HOT_UPDATE_VERIFY
 	chmod 0700 "$_verify_path" 2>/dev/null || return 1
@@ -415,7 +454,7 @@ SCRIPT="$2"
 PAYLOAD="${3:-/data/adb/qsc/hot_update/payload/$MODID}"
 OLD="/data/adb/modules/$MODID"
 NEW="/data/adb/modules_update/$MODID"
-LOG="$OLD/data/hot_update.log"
+LOG="/data/adb/qsc/runtime/diagnostics/hot_update.log"
 LOCK="/data/adb/qsc/hot_update/lock"
 TXN_DIR="/data/adb/qsc/hot_update/transactions/$MODID"
 TXN_STATE="$TXN_DIR/state"
@@ -430,8 +469,17 @@ hu_cleanup_lock() {
 trap hu_cleanup_lock 0 1 2 15
 
 hu_log() {
-	mkdir -p "$OLD/data" 2>/dev/null
+	mkdir -p "/data/adb/qsc/runtime/diagnostics" 2>/dev/null
 	echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >>"$LOG" 2>/dev/null
+	_size="$(wc -c <"$LOG" 2>/dev/null | tr -d ' ')"
+	if [ -n "$_size" ]; then
+		case "$_size" in
+			*[!0-9]*) ;;
+			*) [ "$_size" -gt 262144 ] 2>/dev/null &&
+				tail -c 131072 "$LOG" >"$LOG.tmp.$$" 2>/dev/null &&
+				mv -f "$LOG.tmp.$$" "$LOG" 2>/dev/null ;;
+		esac
+	fi
 }
 
 hu_txn_set() {
@@ -645,7 +693,9 @@ hot_update_clear_stale_lock() {
 # 返回 0 = 做了处理
 qsc_hot_finalize() {
 	local modid new payload source mine theirs f
-	[ -f "$MODDIR/update" ] || [ -d "/data/adb/qsc/hot_update/payload/QSC_Battery" ] || return 1
+	[ -f "$MODDIR/update" ] ||
+		[ -d "/data/adb/qsc/hot_update/payload/QSC_Battery" ] ||
+		return 1
 	modid="$(sed -n 's/^id=//p' "$MODDIR/module.prop" 2>/dev/null | head -n1 | tr -d ' \r')"
 	[ -n "$modid" ] || return 1
 	new="/data/adb/modules_update/$modid"
@@ -692,9 +742,10 @@ qsc_hot_finalize() {
 		if [ "$source" = "$payload" ]; then
 			rm -rf "$payload" 2>/dev/null
 			rmdir /data/adb/qsc/hot_update/payload 2>/dev/null
-			rmdir /data/adb/qsc/hot_update 2>/dev/null
 		fi
 		rm -f /data/adb/qsc/hot_update/worker.sh 2>/dev/null
+		rmdir /data/adb/qsc/hot_update/transactions 2>/dev/null
+		rmdir /data/adb/qsc/hot_update 2>/dev/null
 		qsc_log info "已确认热更新完成并清理残留标记（版本 $mine）"
 		return 0
 	fi

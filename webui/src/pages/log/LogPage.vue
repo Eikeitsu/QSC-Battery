@@ -10,59 +10,55 @@ const LogDefault = lazyComponent(() => import("./ui/LogDefault.vue"));
 const {
   theme,
   packClass,
-  pullLoading,
   levelFilter,
   viewMode,
   visibleLogLines,
   logSessions,
   filterActive,
-  onPullRefresh,
   onButtonRefresh,
   onClear,
 } = useLogPage();
 </script>
 
 <template>
-  <van-pull-refresh v-model="pullLoading" :success-duration="0" @refresh="onPullRefresh">
-    <div class="page" :class="packClass">
-      <LogMd3
-        v-if="theme.themePack === ThemePack.Md3"
-        :lines="visibleLogLines"
-        :sessions="logSessions"
-        :view-mode="viewMode"
-        :level-filter="levelFilter"
-        :filter-active="filterActive"
-        @update:level-filter="levelFilter = $event"
-        @update:view-mode="viewMode = $event"
-        @refresh="onButtonRefresh"
-        @clear="onClear"
-      />
-      <LogMiuix
-        v-else-if="theme.themePack === ThemePack.Miuix"
-        :lines="visibleLogLines"
-        :sessions="logSessions"
-        :view-mode="viewMode"
-        :level-filter="levelFilter"
-        :filter-active="filterActive"
-        @update:level-filter="levelFilter = $event"
-        @update:view-mode="viewMode = $event"
-        @refresh="onButtonRefresh"
-        @clear="onClear"
-      />
-      <LogDefault
-        v-else
-        :lines="visibleLogLines"
-        :sessions="logSessions"
-        :view-mode="viewMode"
-        :level-filter="levelFilter"
-        :filter-active="filterActive"
-        @update:level-filter="levelFilter = $event"
-        @update:view-mode="viewMode = $event"
-        @refresh="onButtonRefresh"
-        @clear="onClear"
-      />
-    </div>
-  </van-pull-refresh>
+  <div class="page" :class="packClass">
+    <LogMd3
+      v-if="theme.themePack === ThemePack.Md3"
+      :lines="visibleLogLines"
+      :sessions="logSessions"
+      :view-mode="viewMode"
+      :level-filter="levelFilter"
+      :filter-active="filterActive"
+      @update:level-filter="levelFilter = $event"
+      @update:view-mode="viewMode = $event"
+      @refresh="onButtonRefresh"
+      @clear="onClear"
+    />
+    <LogMiuix
+      v-else-if="theme.themePack === ThemePack.Miuix"
+      :lines="visibleLogLines"
+      :sessions="logSessions"
+      :view-mode="viewMode"
+      :level-filter="levelFilter"
+      :filter-active="filterActive"
+      @update:level-filter="levelFilter = $event"
+      @update:view-mode="viewMode = $event"
+      @refresh="onButtonRefresh"
+      @clear="onClear"
+    />
+    <LogDefault
+      v-else
+      :lines="visibleLogLines"
+      :sessions="logSessions"
+      :view-mode="viewMode"
+      :level-filter="levelFilter"
+      :filter-active="filterActive"
+      @update:level-filter="levelFilter = $event"
+      @update:view-mode="viewMode = $event"
+      @refresh="onButtonRefresh"
+      @clear="onClear"
+    />
+  </div>
 </template>
 
 <style scoped lang="scss">

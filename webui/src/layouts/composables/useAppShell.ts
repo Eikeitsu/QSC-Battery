@@ -2,8 +2,8 @@ import { computed, nextTick, onMounted, provide, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useThemePackClass } from "@/composables";
 import { useAppStore } from "@/stores";
-import { isTabName, preloadTab } from "@/router/routes";
-import { TabName } from "@/shared";
+import { isTabName, TabName } from "@/shared";
+import { preloadTab } from "@/router/loaders";
 
 export function useAppShell() {
   const store = useAppStore();
@@ -14,20 +14,12 @@ export function useAppShell() {
   const routeLoading = ref(false);
   const pendingTab = ref<TabName | null>(null);
   let navigationId = 0;
-  let navigationRunning = false;
   const NAVIGATION_TIMEOUT_MS = 8_000;
+  const scrollPositions = new Map<TabName, number>();
 
   const tab = computed<TabName>(
     () => pendingTab.value ?? (isTabName(route.name) ? route.name : TabName.Home),
   );
-
-  function waitForPaint(): Promise<void> {
-    return new Promise((resolve) => {
-      requestAnimationFrame(() => {
-        resolve();
-      });
-    });
-  }
 
   function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
     return new Promise((resolve, reject) => {
@@ -50,69 +42,53 @@ export function useAppShell() {
   function setTab(name: string | number) {
     const next = String(name);
     if (!isTabName(next) || next === tab.value) return;
-    // 先更新选中态和顶部 loading，再异步解析目标页面；不隐藏当前滚动内容。
-    navigationId += 1;
+    const requestId = ++navigationId;
+    saveScrollPosition();
     pendingTab.value = next;
     routeLoading.value = true;
-    void drainNavigation();
+    store.setInteractiveTab(next === TabName.Home);
+    // 预取只是 best-effort；它和 router.replace 共享 import 缓存，不能阻塞点击。
+    void preloadTab(next).catch(() => undefined);
+    void navigateTo(next, requestId);
   }
 
-  async function drainNavigation() {
-    if (navigationRunning) return;
-    navigationRunning = true;
+  async function navigateTo(target: TabName, requestId: number) {
     try {
-      while (pendingTab.value) {
-        const target = pendingTab.value;
-        const requestId = navigationId;
-        // 只让出一帧给选中态和顶部 loading，避免连续两帧等待放大点击延迟。
-        await nextTick();
-        await waitForPaint();
-        if (requestId !== navigationId || pendingTab.value !== target) continue;
-
-        // 预取和 router.replace 共享同一个动态 import 缓存；用户点击后立即开始
-        // 下载目标 chunk，已加载页面则几乎同步完成。
-        try {
-          // 先加载 chunk，再交给 router 切换；这样 chunk 超时时不会把
-          // RouterView 留在半切换状态，后续点击仍可正常接管。
-          await withTimeout(preloadTab(target), NAVIGATION_TIMEOUT_MS);
-        } catch {
-          if (requestId === navigationId && pendingTab.value === target) {
-            pendingTab.value = null;
-            routeLoading.value = false;
-          }
-          continue;
-        }
-        if (requestId !== navigationId || pendingTab.value !== target) continue;
-        try {
-          await withTimeout(router.replace({ name: target }), NAVIGATION_TIMEOUT_MS);
-          await nextTick();
-        } catch {
-          // 当前目标加载失败时回到当前有效路由，不能留下永久 loading。
-          if (requestId === navigationId && pendingTab.value === target) {
-            pendingTab.value = null;
-            routeLoading.value = false;
-          }
-          continue;
-        }
-        if (requestId !== navigationId || pendingTab.value !== target) continue;
-
-        if (router.currentRoute.value.name === target) {
-          scrollMainToTop();
-          requestAnimationFrame(() => theme.syncStatusBar());
-        }
+      // 路由切换必须在点击处理的同一轮开始，动态 chunk 由 RouterView 自己懒加载。
+      await withTimeout(router.replace({ name: target }), NAVIGATION_TIMEOUT_MS);
+      await nextTick();
+      if (requestId !== navigationId || pendingTab.value !== target) return;
+      restoreScrollPosition(target);
+      pendingTab.value = null;
+      routeLoading.value = false;
+      requestAnimationFrame(() => theme.syncStatusBar());
+    } catch {
+      // 旧导航被快速点击取消时，不得清掉新导航的 loading 或选中态。
+      if (requestId === navigationId && pendingTab.value === target) {
         pendingTab.value = null;
         routeLoading.value = false;
+        store.setInteractiveTab(route.name === TabName.Home);
       }
-    } finally {
-      navigationRunning = false;
-      if (pendingTab.value) void drainNavigation();
     }
   }
 
   provide("setTab", setTab);
 
-  function scrollMainToTop() {
-    document.querySelector<HTMLElement>(".app-main")?.scrollTo(0, 0);
+  function saveScrollPosition() {
+    const current = route.name;
+    const main = document.querySelector<HTMLElement>(".app-main");
+    if (isTabName(current) && main) {
+      scrollPositions.set(current, main.scrollTop);
+    }
+  }
+
+  function restoreScrollPosition(target: TabName) {
+    const top = scrollPositions.get(target) ?? 0;
+    requestAnimationFrame(() => {
+      if (router.currentRoute.value.name === target) {
+        document.querySelector<HTMLElement>(".app-main")?.scrollTo(0, top);
+      }
+    });
   }
 
   async function onRefreshHome() {
@@ -121,8 +97,6 @@ export function useAppShell() {
       await store.refreshStatus(true);
     } finally {
       refreshing.value = false;
-      theme.restoreChromeInsets?.();
-      theme.syncStatusBar();
     }
   }
 
@@ -130,8 +104,8 @@ export function useAppShell() {
     theme.load();
     theme.bindSystemListener();
     await store.init();
+    store.setInteractiveTab(route.name === TabName.Home);
     theme.syncStatusBar();
-    window.setTimeout(() => theme.syncStatusBar(), 200);
   });
 
   return {

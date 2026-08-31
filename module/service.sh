@@ -6,8 +6,12 @@ MODDIR=${0%/*}
 if [ -f "$LIBDIR/hot_update.sh" ]; then
 	# shellcheck disable=SC1090
 	. "$LIBDIR/hot_update.sh" 2>/dev/null || true
-	type hot_update_migrate_legacy_paths >/dev/null 2>&1 &&
-		hot_update_migrate_legacy_paths || true
+	if type hot_update_migrate_legacy_paths >/dev/null 2>&1 &&
+		! hot_update_migrate_legacy_paths; then
+		touch "$MODDIR/data/hot_update_fallback_reboot" "$MODDIR/update" 2>/dev/null
+		qsc_write_module_description "⚠️热更新未完成" "请重启设备完成更新" \
+			"外部恢复目录迁移失败，已保留旧副本"
+	fi
 fi
 
 mkdir -p "$DATADIR"
@@ -425,7 +429,8 @@ qsc_hot_finalize_maybe() {
 	local now
 	# 热更新事务由外部 worker 负责 verify/commit；服务不能在首轮运行时
 	# 抢先清掉 update 和 payload，否则失败后就失去标准重启来源。
-	[ -f "/data/adb/qsc/hot_update/transactions/QSC_Battery/state" ] && return 0
+	[ -f "/data/adb/qsc/hot_update/transactions/QSC_Battery/state" ] &&
+		return 0
 	[ -f "$MODDIR/update" ] || \
 		[ -d "/data/adb/qsc/hot_update/payload/QSC_Battery" ] || return 0
 	type qsc_hot_finalize >/dev/null 2>&1 || return 0

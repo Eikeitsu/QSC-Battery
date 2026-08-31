@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed, inject } from "vue";
+import { computed, inject, ref } from "vue";
 import { BinaryFlag, TabName, ThemePack } from "@/shared";
 import { useAppStore, useTheme } from "@/stores";
 import { lazyComponent } from "@/shared/lib/lazyComponent";
 
-defineProps<{
+const props = defineProps<{
   refreshing?: boolean;
 }>();
-defineEmits<{
+const emit = defineEmits<{
   refresh: [];
 }>();
 
@@ -34,6 +34,55 @@ const setTab = inject<(name: TabName) => void>("setTab");
 
 // 采样与显示解耦：采样只决定有没有电流线，这里只看显示开关
 const showChart = computed(() => app.settings.chart_show !== BinaryFlag.Off);
+const pullDistance = ref(0);
+const touchStart = ref<{ x: number; y: number } | null>(null);
+const PULL_THRESHOLD = 64;
+
+function isAtScrollTop() {
+  return (document.querySelector<HTMLElement>(".app-main")?.scrollTop ?? 0) <= 0;
+}
+
+function isInteractiveTarget(target: EventTarget | null) {
+  return (
+    target instanceof Element &&
+    Boolean(
+      target.closest(
+        "button, a, input, textarea, select, .van-switch, .van-cell, .van-field, [role='button'], [role='switch']",
+      ),
+    )
+  );
+}
+
+function onTouchStart(event: TouchEvent) {
+  if (!isAtScrollTop() || isInteractiveTarget(event.target)) {
+    touchStart.value = null;
+    return;
+  }
+  const touch = event.touches[0];
+  touchStart.value = touch ? { x: touch.clientX, y: touch.clientY } : null;
+  pullDistance.value = 0;
+}
+
+function onTouchMove(event: TouchEvent) {
+  const start = touchStart.value;
+  const touch = event.touches[0];
+  if (!start || !touch || !isAtScrollTop()) return;
+  const dx = touch.clientX - start.x;
+  const dy = touch.clientY - start.y;
+  if (dy <= 0 || dy <= Math.abs(dx)) return;
+  pullDistance.value = Math.min(dy, 96);
+  if (pullDistance.value >= PULL_THRESHOLD && event.cancelable) {
+    event.preventDefault();
+  }
+}
+
+function finishPull() {
+  if (pullDistance.value >= PULL_THRESHOLD && !props.refreshing) {
+    emit("refresh");
+  }
+  touchStart.value = null;
+  pullDistance.value = 0;
+}
 
 function goConfig() {
   setTab?.(TabName.Config);
@@ -41,11 +90,22 @@ function goConfig() {
 </script>
 
 <template>
-  <van-pull-refresh
-    :model-value="refreshing"
-    :success-duration="0"
-    @refresh="$emit('refresh')"
+  <div
+    class="home-refresh"
+    :class="{
+      'home-refresh--pulling': pullDistance > 0,
+      'home-refresh--loading': refreshing,
+    }"
+    :style="{ '--qsc-pull-distance': `${pullDistance}px` }"
+    @touchstart.passive="onTouchStart"
+    @touchmove="onTouchMove"
+    @touchend="finishPull"
+    @touchcancel="finishPull"
   >
+    <div class="home-refresh__indicator" role="status" aria-live="polite">
+      <span class="home-refresh__spinner" aria-hidden="true"></span>
+      <span>{{ refreshing ? "正在刷新…" : "下拉刷新" }}</span>
+    </div>
     <div v-if="theme.themePack === ThemePack.Md3" class="page page-md3">
       <div class="md3-stack">
         <Md3HomeStatus />
@@ -85,12 +145,59 @@ function goConfig() {
       <DefaultHomeStake />
       <HomeTips />
     </div>
-  </van-pull-refresh>
+  </div>
 </template>
 
 <style scoped lang="scss">
 .page {
   min-height: calc(100dvh - 56px - var(--qsc-inset-top, 0px) - var(--dock-pad, 72px));
+}
+
+.home-refresh {
+  position: relative;
+  touch-action: pan-y;
+}
+
+.home-refresh__indicator {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 28px;
+  gap: 6px;
+  color: var(--qsc-text-3);
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(calc(var(--qsc-pull-distance) - 36px));
+  transition: opacity 120ms ease;
+}
+
+.home-refresh--pulling .home-refresh__indicator,
+.home-refresh--loading .home-refresh__indicator {
+  opacity: 1;
+}
+
+.home-refresh__spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid color-mix(in srgb, var(--qsc-primary) 22%, transparent);
+  border-top-color: var(--qsc-primary);
+  border-radius: 50%;
+}
+
+.home-refresh--loading .home-refresh__spinner {
+  animation: home-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes home-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .md3-stack {

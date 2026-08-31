@@ -1,18 +1,14 @@
 import type { RouteRecordRaw } from "vue-router";
 import { TabName, isTabName } from "@/shared/config/enums";
 import { TABS, TAB_ORDER } from "@/shared/config/navigation";
-
-const TAB_PAGES = {
-  [TabName.Home]: () => import("@/pages/home/HomePage.vue"),
-  [TabName.Config]: () => import("@/pages/config/ConfigPage.vue"),
-  [TabName.Log]: () => import("@/pages/log/LogPage.vue"),
-  [TabName.More]: () => import("@/pages/more/MorePage.vue"),
-} as const;
+import AppShell from "@/layouts/AppShell.vue";
+import { TAB_PAGES } from "./loaders";
 
 export const routes: RouteRecordRaw[] = [
   {
     path: "/",
-    component: () => import("@/layouts/AppShell.vue"),
+    // 壳层很小且必须立即出现；页面组件仍按 Tab 路由懒加载。
+    component: AppShell,
     redirect: { name: TabName.Home },
     children: TABS.map((t) => ({
       path: t.name,
@@ -26,10 +22,5 @@ export const routes: RouteRecordRaw[] = [
     redirect: { name: TabName.Home },
   },
 ];
-
-/** 预热路由代码块，但仍保持按需加载和独立分包。 */
-export function preloadTab(name: TabName): Promise<unknown> {
-  return TAB_PAGES[name]();
-}
 
 export { isTabName };

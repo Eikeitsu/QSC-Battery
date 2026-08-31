@@ -238,9 +238,6 @@ export const useTheme = defineStore("theme", () => {
     // 同步 van 主色
     root.style.setProperty("--van-primary-color", "var(--qsc-primary)");
     syncSystemChrome();
-    requestAnimationFrame(() => syncSystemChrome());
-    window.setTimeout(() => syncSystemChrome(), 120);
-    window.setTimeout(() => syncSystemChrome(), 480);
   }
 
   function load(): void {
@@ -373,7 +370,6 @@ export const useTheme = defineStore("theme", () => {
     const vv = window.visualViewport;
     if (vv) {
       vv.addEventListener("resize", onViewportGlitch);
-      vv.addEventListener("scroll", onViewportGlitch);
     }
     window.addEventListener("orientationchange", () => {
       window.setTimeout(() => pinSafeInsets(true), 300);
@@ -383,20 +379,6 @@ export const useTheme = defineStore("theme", () => {
         window.setTimeout(() => pinSafeInsets(true), 100);
       }
     });
-    document.addEventListener(
-      "touchend",
-      () => {
-        scheduleInsetRestore();
-      },
-      { passive: true },
-    );
-    document.addEventListener(
-      "touchcancel",
-      () => {
-        scheduleInsetRestore();
-      },
-      { passive: true },
-    );
   }
 
   const accentOptions = computed(() =>
