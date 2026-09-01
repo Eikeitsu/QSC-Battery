@@ -453,6 +453,7 @@ qsc_hot_finalize_maybe
 if ! type qsc_ps_wait >/dev/null 2>&1; then
 	qsc_ps_wait() { sleep "${1:-3}"; }
 fi
+type qsc_ps_log_startup >/dev/null 2>&1 && qsc_ps_log_startup
 
 while true ; do
 	QSC_SERVICE_LOOP_COUNT=$((QSC_SERVICE_LOOP_COUNT + 1))

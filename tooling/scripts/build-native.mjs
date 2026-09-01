@@ -87,8 +87,14 @@ if (!ndk) skip("Android NDK not found (set ANDROID_NDK_ROOT)");
 const bin = toolchainBin(ndk);
 if (!bin) skip(`NDK toolchain bin not found under ${ndk}`);
 
+const cargoVer = spawnSync("cargo", ["--version"], { encoding: "utf8", shell: true });
+log(
+  `start: api=${API} ndk=${ndk} out=${outDir}${cargoVer.stdout ? ` cargo=${cargoVer.stdout.trim()}` : ""}`,
+);
+
 mkdirSync(outDir, { recursive: true });
 let built = 0;
+const startedAt = Date.now();
 
 for (const target of TARGETS) {
   const clang = clangFor(bin, target.clang);
@@ -107,7 +113,9 @@ for (const target of TARGETS) {
       flag;
   }
 
-  log(`building ${target.triple} (API ${API})`);
+  log(
+    `building ${target.triple} -> ${target.out} linker=${clang.cc}${clang.target ? ` target=${clang.target}` : ""}`,
+  );
   const args = ["build", "--release", "--target", target.triple];
   // 有 Cargo.lock 就锁版本，保证 CI 与本地一致
   if (existsSync(join(crateDir, "Cargo.lock"))) args.splice(2, 0, "--locked");
@@ -129,8 +137,8 @@ for (const target of TARGETS) {
   }
   const dest = join(outDir, target.out);
   copyFileSync(artifact, dest);
-  log(`${target.out}: ${(statSync(dest).size / 1024).toFixed(1)} KB`);
+  log(`ok ${target.out}: ${dest} (${(statSync(dest).size / 1024).toFixed(1)} KB)`);
   built += 1;
 }
 
-log(`done (${built} binaries)`);
+log(`done (${built} binaries, ${((Date.now() - startedAt) / 1000).toFixed(1)}s)`);

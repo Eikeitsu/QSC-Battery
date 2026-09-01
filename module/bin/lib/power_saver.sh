@@ -17,6 +17,44 @@ qsc_ps_dbg() {
 	qsc_log_once "$@"
 }
 
+qsc_ps_native_impl_label() {
+	case "$(cat "$DATADIR/native_impl_used" 2>/dev/null | tr -d ' \r\n')" in
+		c|C) echo "C" ;;
+		rust|Rust) echo "Rust" ;;
+		*) echo "未知" ;;
+	esac
+}
+
+# 服务启动时写一条 INFO，WebUI 日志页默认可见。
+qsc_ps_log_startup() {
+	local mode impl
+	if [ ! -x "$BINDIR/qscd" ]; then
+		qsc_log info "事件等待器未安装，主循环使用定时轮询"
+		return 0
+	fi
+	impl="$(qsc_ps_native_impl_label)"
+	mode="wait-event"
+	qsc_ps_watch_supported && mode="watch"
+	qsc_log info "事件等待器已启用（${impl} 版，${mode}）"
+}
+
+qsc_ps_native_parse_stderr() {
+	local file="$1"
+	QSC_PS_NATIVE_WAKE=""
+	QSC_PS_NATIVE_ERROR=""
+	[ -n "$file" ] && [ -f "$file" ] || return 0
+	QSC_PS_NATIVE_WAKE="$(awk -F= '/wake=/{print $2; exit}' "$file" 2>/dev/null | tr -d ' \r\n')"
+	QSC_PS_NATIVE_ERROR="$(awk -F= '/reason=/{print $2; exit}' "$file" 2>/dev/null | tr -d ' \r\n')"
+}
+
+qsc_ps_log_native_wake() {
+	local wake="${QSC_PS_NATIVE_WAKE:-ok}"
+	local msg="${QSC_PS_NATIVE_MODE:-wait}: ${wake}"
+	qsc_ps_record_wake "$msg"
+	# 唤醒细节走 DEBUG，避免主循环每轮刷屏；日志页切到 Debug 可见。
+	qsc_log debug "qscd ${msg}"
+}
+
 qsc_ps_record_wake() {
 	QSC_PS_WAKE_COUNT=$((QSC_PS_WAKE_COUNT + 1))
 	QSC_PS_LAST_WAKE_REASON="$1"
@@ -469,15 +507,18 @@ qsc_ps_native_wait() {
 	if [ "$rc" -eq 124 ]; then
 		QSC_PS_NATIVE_ERROR=timeout
 	else
-		QSC_PS_NATIVE_ERROR="$(awk -F= '/reason=/{print $2; exit}' "$error_file" 2>/dev/null)"
+		qsc_ps_native_parse_stderr "$error_file"
 	fi
 	[ -n "$QSC_PS_NATIVE_ERROR" ] || QSC_PS_NATIVE_ERROR=wait_failed
 	rm -f "$error_file" 2>/dev/null
 	# region agent log
 	type qsc_runtime_trace >/dev/null 2>&1 &&
-		qsc_runtime_trace "H3" "native_wait_reason" "$QSC_PS_NATIVE_MODE:$rc:$QSC_PS_NATIVE_ERROR"
+		qsc_runtime_trace "H3" "native_wait_reason" "$QSC_PS_NATIVE_MODE:$rc:$QSC_PS_NATIVE_ERROR:${QSC_PS_NATIVE_WAKE:-}"
 	# endregion
-	[ "$rc" -eq 0 ] && qsc_ps_record_wake "正常返回（事件或截止时间）"
+	if [ "$rc" -eq 0 ]; then
+		qsc_ps_log_native_wake
+		return 0
+	fi
 	return "$rc"
 }
 
@@ -505,6 +546,9 @@ qsc_ps_wait() {
 		qsc_ps_native_wait "$secs" "$floor"
 		rc="$?"
 		if [ "$rc" -eq 0 ]; then
+			if [ "$QSC_PS_WAIT_FAILURES" -gt 0 ] 2>/dev/null; then
+				qsc_log info "事件等待器已恢复（${QSC_PS_NATIVE_MODE:-wait}）"
+			fi
 			QSC_PS_WAIT_HELPER_OK=1
 			QSC_PS_WAIT_FAILURES=0
 			QSC_PS_WAIT_NEXT_RETRY=0
@@ -530,7 +574,7 @@ qsc_ps_wait() {
 		type qsc_runtime_trace >/dev/null 2>&1 &&
 			qsc_runtime_trace "H9" "failure_marker_exit" "$?"
 		# endregion
-		qsc_log_once qscd warn "事件等待器不可用，已退回定时轮询"
+		qsc_log_once qscd warn "事件等待器不可用（${QSC_PS_NATIVE_MODE:-?} rc=${rc} reason=${QSC_PS_NATIVE_ERROR}），已退回定时轮询"
 		# region agent log
 		type qsc_runtime_trace >/dev/null 2>&1 &&
 			qsc_runtime_trace "H9" "failure_log_exit" "$?"

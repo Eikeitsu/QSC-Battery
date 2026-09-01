@@ -108,44 +108,44 @@ function goConfig() {
     </div>
     <div class="home-refresh__body">
       <div v-if="theme.themePack === ThemePack.Md3" class="page page-md3">
-      <div class="md3-stack">
-        <Md3HomeStatus />
-        <Md3HomeMetrics />
-        <HomeChargeChart v-if="showChart" />
-        <Md3HomeStrategy @open-config="goConfig" />
-        <div class="md3-label">电池健康</div>
-        <Md3HomeBattery />
-        <div class="md3-label">运行详情</div>
-        <Md3HomeInfo />
-        <HomeTips variant="md3" />
+        <div class="md3-stack">
+          <Md3HomeStatus />
+          <Md3HomeMetrics />
+          <HomeChargeChart v-if="showChart" />
+          <Md3HomeStrategy @open-config="goConfig" />
+          <div class="md3-label">电池健康</div>
+          <Md3HomeBattery />
+          <div class="md3-label">运行详情</div>
+          <Md3HomeInfo />
+          <HomeTips variant="md3" />
+        </div>
       </div>
-    </div>
 
-    <div v-else-if="theme.themePack === ThemePack.Miuix" class="page page-miuix">
-      <div class="miuix-label">总览</div>
-      <MiuixHomeOverview />
-      <template v-if="showChart">
-        <div class="miuix-label">曲线</div>
-        <HomeChargeChart />
-      </template>
-      <div class="miuix-label">当前策略</div>
-      <MiuixHomeStrategy @open-config="goConfig" />
-      <div class="miuix-label">更多</div>
-      <MiuixHomeDetail />
-      <div class="miuix-label">电池</div>
-      <MiuixHomeBattery />
-      <HomeTips variant="miuix" />
-    </div>
+      <div v-else-if="theme.themePack === ThemePack.Miuix" class="page page-miuix">
+        <div class="miuix-label">总览</div>
+        <MiuixHomeOverview />
+        <template v-if="showChart">
+          <div class="miuix-label">曲线</div>
+          <HomeChargeChart />
+        </template>
+        <div class="miuix-label">当前策略</div>
+        <MiuixHomeStrategy @open-config="goConfig" />
+        <div class="miuix-label">更多</div>
+        <MiuixHomeDetail />
+        <div class="miuix-label">电池</div>
+        <MiuixHomeBattery />
+        <HomeTips variant="miuix" />
+      </div>
 
-    <div v-else class="page page-default">
-      <DefaultHomeHero />
-      <DefaultHomeSwitch />
-      <HomeChargeChart v-if="showChart" />
-      <DefaultHomeStrategy @open-config="goConfig" />
-      <DefaultHomeDetail />
-      <DefaultHomeStake />
-      <HomeTips />
-    </div>
+      <div v-else class="page page-default">
+        <DefaultHomeHero />
+        <DefaultHomeSwitch />
+        <HomeChargeChart v-if="showChart" />
+        <DefaultHomeStrategy @open-config="goConfig" />
+        <DefaultHomeDetail />
+        <DefaultHomeStake />
+        <HomeTips />
+      </div>
     </div>
   </div>
 </template>
@@ -161,9 +161,7 @@ function goConfig() {
 }
 
 .home-refresh__body {
-  transform: translateY(
-    var(--qsc-pull-offset, var(--qsc-pull-distance, 0px))
-  );
+  transform: translateY(var(--qsc-pull-offset, var(--qsc-pull-distance, 0)));
   transition: transform 160ms ease;
   will-change: transform;
 }

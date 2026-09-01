@@ -87,7 +87,7 @@ if (!shell) {
       'case "$1" in',
       "features) echo watch ;;",
       "watch|wait-event)",
-      '  if [ -f "$DATADIR/recover" ]; then exit 0; fi',
+      '  if [ -f "$DATADIR/recover" ]; then echo "qscd: wake=event" >&2; exit 0; fi',
       '  echo "qscd: reason=netlink_open" >&2',
       "  exit 2",
       "  ;;",

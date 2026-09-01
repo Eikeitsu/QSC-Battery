@@ -18,8 +18,20 @@ describe("downsamplePoints", () => {
 
 describe("buildSmoothPath", () => {
   it("returns empty for fewer than two points", () => {
-    expect(buildSmoothPath([], () => 0, () => 0)).toBe("");
-    expect(buildSmoothPath([{ v: 1 }], () => 0, () => 0)).toBe("");
+    expect(
+      buildSmoothPath(
+        [],
+        () => 0,
+        () => 0,
+      ),
+    ).toBe("");
+    expect(
+      buildSmoothPath(
+        [{ v: 1 }],
+        () => 0,
+        () => 0,
+      ),
+    ).toBe("");
   });
 
   it("uses line segment for exactly two points", () => {

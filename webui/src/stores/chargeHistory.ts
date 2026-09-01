@@ -10,7 +10,10 @@ const DISPLAY_LIMIT = 120;
 
 export type ChargeHistorySource = "sampled" | "system" | "merged";
 
-export function needsSystemHistory(samplingEnabled: boolean, sampled: HistoryPoint[]): boolean {
+export function needsSystemHistory(
+  samplingEnabled: boolean,
+  sampled: HistoryPoint[],
+): boolean {
   if (!samplingEnabled) return true;
   return sampled.length < 2;
 }

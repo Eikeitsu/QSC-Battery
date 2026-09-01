@@ -176,6 +176,11 @@ qscd_activate() {
 	echo "$_version" >"$DATADIR/native_version" 2>/dev/null
 	qscd_conf_set native_impl "$_impl"
 	qscd_conf_set native_daemon 1
+	case "$_impl" in
+		c) _impl_label="C" ;;
+		*) _impl_label="Rust" ;;
+	esac
+	qsc_log info "事件等待器已切换为 ${_impl_label} 版（来源：${_from:-unknown}）"
 	qscd_restart_service
 	return 0
 }

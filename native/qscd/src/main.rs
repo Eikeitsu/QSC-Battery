@@ -203,6 +203,7 @@ fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
     }
     let remaining = max_secs.saturating_sub(floor);
     if remaining == 0 {
+        eprintln!("qscd: wake=floor_only");
         return EXIT_OK;
     }
 
@@ -219,6 +220,7 @@ fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
         // 白让 CPU 进不了深层 idle，而事件到达本来就是立即返回、与超时无关。
         let left = deadline.saturating_duration_since(Instant::now());
         if left < RECV_MIN_TIMEOUT {
+            eprintln!("qscd: wake=timeout");
             return EXIT_OK;
         }
         match sock.poll_once(&mut buf, left) {
@@ -227,6 +229,7 @@ fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
                     eprintln!("qscd: reason=event_drain");
                     return EXIT_UNUSABLE;
                 }
+                eprintln!("qscd: wake=event");
                 return EXIT_OK;
             }
             // 超时或与电池无关的事件：回到循环按新的剩余时间重设超时
@@ -359,26 +362,29 @@ impl Thresholds {
 
     /// 拿到事件后判断值不值得叫醒 shell
     fn should_wake(&self, plugged_at_start: bool) -> bool {
+        self.wake_reason(plugged_at_start).is_some()
+    }
+
+    /// 命中 power_supply 事件且应叫醒 shell 时的原因；否则 None 表示继续等
+    fn wake_reason(&self, plugged_at_start: bool) -> Option<&'static str> {
         if self.is_empty() {
-            return true;
+            return Some("event");
         }
         let snapshot = BatterySnapshot::read(&self.root);
-        // 插拔必须立刻交给 shell：停充/恢复的整套判定都在那边
         if snapshot.plugged != plugged_at_start {
-            return true;
+            return Some("plug_changed");
         }
         if let (Some(stop), Some(level)) = (self.stop, snapshot.level) {
             if level >= stop - self.near {
-                return true;
+                return Some("near_level");
             }
         }
         if let (Some(ts), Some(temp)) = (self.temp_stop, snapshot.temp) {
-            // 温度涨得比电量快，留 3°C 余量，与 shell 侧收紧间隔的阈值一致
             if temp >= ts - 3 {
-                return true;
+                return Some("near_temp");
             }
         }
-        false
+        None
     }
 }
 
@@ -475,6 +481,7 @@ fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
     }
     let remaining = max_secs.saturating_sub(floor_secs);
     if remaining == 0 {
+        eprintln!("qscd: wake=floor_only");
         return EXIT_OK;
     }
     let Some(sock) = UeventSocket::open() else {
@@ -487,16 +494,18 @@ fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
     loop {
         let left = deadline.saturating_duration_since(Instant::now());
         if left < RECV_MIN_TIMEOUT {
+            eprintln!("qscd: wake=timeout");
             return EXIT_OK;
         }
         match sock.poll_once(&mut buf, left) {
             // 命中电池事件：只有确实需要 shell 干活时才返回
             Ok(Some(true)) => {
-                if th.should_wake(plugged_at_start) {
+                if let Some(reason) = th.wake_reason(plugged_at_start) {
                     if sock.drain_event_burst(&mut buf).is_err() {
                         eprintln!("qscd: reason=event_drain");
                         return EXIT_UNUSABLE;
                     }
+                    eprintln!("qscd: wake={reason}");
                     return EXIT_OK;
                 }
             }

@@ -19,19 +19,14 @@ const store = useAppStore();
   >
     <AppTopbar />
 
-    <main
-      class="app-main"
-      :aria-busy="store.initializing || routeLoading"
-    >
+    <main class="app-main" :aria-busy="store.initializing || routeLoading">
       <div
         v-if="store.initializing || routeLoading"
         class="app-main-loading"
         role="status"
       >
         <span class="app-main-loading__bar" aria-hidden="true"></span>
-        <span>{{
-          routeLoading ? "正在打开页面…" : "正在读取设备信息…"
-        }}</span>
+        <span>{{ routeLoading ? "正在打开页面…" : "正在读取设备信息…" }}</span>
       </div>
       <div class="route-content">
         <Suspense timeout="0">

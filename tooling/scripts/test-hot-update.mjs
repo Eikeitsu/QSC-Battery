@@ -260,6 +260,7 @@ const configTemplate = read(join(root, "module/config/config.conf"));
 const customize = read(join(root, "module/customize.sh"));
 const qscdFetch = read(join(root, "module/bin/qscd_fetch.sh"));
 const qscdSource = read(join(root, "native/qscd/src/main.rs"));
+const qscdCSource = read(join(root, "native/qscd-c/qscd.c"));
 const powerSaver = read(join(root, "module/bin/lib/power_saver.sh"));
 const status = read(join(root, "module/bin/lib/status.sh"));
 const serviceSource = read(join(root, "module/service.sh"));
@@ -268,6 +269,7 @@ const daemonCard = read(join(root, "webui/src/pages/config/ui/DaemonCard.vue"));
 const batterySnapshotApi = read(join(root, "webui/src/shared/api/batterySnapshot.ts"));
 const historyApi = read(join(root, "webui/src/shared/api/history.ts"));
 const chart = read(join(root, "webui/src/pages/home/ui/HomeChargeChart.vue"));
+const chargeHistoryStore = read(join(root, "webui/src/stores/chargeHistory.ts"));
 const indexSource = read(join(root, "webui/index.html"));
 const appSource = read(join(root, "webui/src/app/App.vue"));
 const appShell = read(join(root, "webui/src/layouts/AppShell.vue"));
@@ -341,21 +343,26 @@ requireText(historyApi, ".pending", "WebUI pending history read");
 requireText(chart, "setInterval", "WebUI chart refresh timer");
 requireText(chart, "当前 ${currentLevel}%", "WebUI live chart summary");
 requireText(chart, "正在读取曲线数据", "WebUI chart loading state");
-requireText(chart, "Promise.all", "WebUI parallel history loading");
-requireText(chart, "mergeHistory", "WebUI unified history merge");
-requireText(chart, 'dataSource.value === "merged"', "WebUI merged chart mode");
-requireText(chart, "loadSystemBatteryHistory", "WebUI unplugged history source");
+requireText(chart, "useChargeHistoryStore", "WebUI chart history store");
+requireText(chart, "refreshAll", "WebUI chart manual refresh");
+requireText(chargeHistoryStore, "mergeHistory", "WebUI unified history merge");
+requireText(chargeHistoryStore, 'source: "merged"', "WebUI merged chart mode");
+requireText(
+  chargeHistoryStore,
+  "loadSystemBatteryHistory",
+  "WebUI system history source",
+);
+requireText(chart, "buildSmoothPath", "WebUI smooth chart path");
 requireText(chart, "chartNow", "WebUI moving time axis");
 requireText(chart, "onDeactivated", "WebUI inactive chart pause");
 requireText(chart, "chartActive", "WebUI chart active lifecycle state");
 requireText(historyApi, "RESET:TIME", "system history reset anchor");
 requireText(historyApi, "count < 1200", "system history bounded tail");
-requireText(appShell, "PageLoading", "WebUI page loading state");
 requireText(appShell, "<Suspense", "WebUI async page fallback");
 requireText(appShell, "app-main-loading", "WebUI non-blocking data state");
 requireText(
   appShell,
-  ':aria-busy="store.initializing || store.hydrating || routeLoading"',
+  ':aria-busy="store.initializing || routeLoading"',
   "WebUI non-blocking data state",
 );
 requireText(appShell, "正在读取设备信息", "WebUI device information loading text");
@@ -398,7 +405,7 @@ requireOrder(
   "void navigateTo(next, requestId)",
   "WebUI click starts navigation immediately",
 );
-requireText(homePage, "home-refresh", "WebUI lightweight home refresh");
+requireText(homePage, "home-refresh__body", "WebUI pull refresh content motion");
 requireText(homePage, "event.cancelable", "WebUI conditional refresh gesture capture");
 if (homePage.includes("van-pull-refresh")) {
   throw new Error("WebUI home must not use global PullRefresh");
@@ -406,7 +413,8 @@ if (homePage.includes("van-pull-refresh")) {
 if (logPage.includes("van-pull-refresh")) {
   throw new Error("WebUI log must use explicit refresh only");
 }
-requireText(chart, "reloadInFlight", "WebUI chart single-flight reload");
+requireText(chargeHistoryStore, "loadingFast", "WebUI chart fast-path loading state");
+requireText(chargeHistoryStore, "deactivate", "WebUI chart abort on tab leave");
 if (chart.includes("app.status.updatedAt")) {
   throw new Error("WebUI chart must not reload on every status tick");
 }
@@ -445,6 +453,8 @@ requireText(serviceSource, '"level":"%s"', "debug log severity");
 requireText(serviceSource, '"category":"%s"', "debug log category");
 requireText(serviceSource, "qscd 等待结果及错误原因", "Chinese debug explanation");
 requireText(lazyComponent, "suspensible: false", "WebUI non-blocking async components");
+requireText(lazyComponent, "BlockSkeleton", "WebUI lightweight async placeholder");
+requireText(lazyComponent, "delay: 150", "WebUI async loading delay");
 for (const [page, name] of [
   [homePage, "home"],
   [configPage, "config"],
@@ -544,6 +554,13 @@ requireText(qscdSource, "snapshot_failure=", "Rust snapshot failure diagnostics"
 requireText(qscdSource, "libc::poll", "Rust bounded netlink wait");
 requireText(qscdSource, "libc::MSG_DONTWAIT", "Rust non-blocking netlink receive");
 requireText(qscdSource, "reason=netlink_open", "Rust netlink failure reason");
+requireText(qscdSource, "wake=timeout", "Rust wake diagnostics");
+requireText(qscdCSource, "wake=event", "C wake diagnostics");
+requireText(qscdCSource, "reason=netlink_open", "C netlink failure reason");
+requireText(powerSaver, "qsc_ps_log_startup", "native startup log");
+requireText(powerSaver, "wake=", "native wake token parsing");
+requireText(powerSaver, "qscd ${msg}", "native wake log line");
+requireText(serviceSource, "qsc_ps_log_startup", "service native startup log");
 simulateHotUpdateContract();
 
 console.log(

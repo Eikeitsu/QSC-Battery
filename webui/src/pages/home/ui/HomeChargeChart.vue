@@ -46,7 +46,11 @@ function yAt(ratio: number) {
 }
 
 function smoothPath(list: HistoryPoint[], ratio: (p: HistoryPoint) => number) {
-  return buildSmoothPath(list, (p) => xAt(p.ts), (p) => yAt(ratio(p)));
+  return buildSmoothPath(
+    list,
+    (p) => xAt(p.ts),
+    (p) => yAt(ratio(p)),
+  );
 }
 
 const levelPath = computed(() =>
@@ -237,7 +241,12 @@ defineExpose({ reload: refreshAll });
         <span class="lg level">电量 %</span>
         <span class="lg temp">温度 °C</span>
         <span v-if="currentPath" class="lg current">电流 A</span>
-        <button type="button" class="refresh" :disabled="history.loading" @click="refreshAll">
+        <button
+          type="button"
+          class="refresh"
+          :disabled="history.loading"
+          @click="refreshAll"
+        >
           {{ history.loadingSystem ? "补齐中…" : "刷新" }}
         </button>
       </div>

@@ -15,7 +15,10 @@ describe("exec priority queue", () => {
 
     (globalThis as typeof globalThis & { ksu: { exec: KsuExec } }).ksu = {
       exec(cmd: string, _opts: string, cb: string) {
-        const win = globalThis as unknown as Record<string, (errno: number, stdout: string) => void>;
+        const win = globalThis as unknown as Record<
+          string,
+          (errno: number, stdout: string) => void
+        >;
         const run = () => {
           order.push(cmd);
           win[cb]?.(0, cmd);

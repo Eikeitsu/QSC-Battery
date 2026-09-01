@@ -97,15 +97,20 @@ if (!ndk) skip("Android NDK not found (set ANDROID_NDK_ROOT)");
 const bin = toolchainBin(ndk);
 if (!bin) skip(`NDK toolchain bin not found under ${ndk}`);
 
+log(`start: api=${API} ndk=${ndk} src=${srcFile} out=${outDir}`);
+
 mkdirSync(outDir, { recursive: true });
 let built = 0;
+const startedAt = Date.now();
 
 for (const target of TARGETS) {
   const clang = clangFor(bin, target.clang);
   if (!clang) skip(`missing NDK clang for ${target.clang} (API ${API})`);
 
   const dest = join(outDir, target.out);
-  log(`building ${target.out} (API ${API})`);
+  log(
+    `building ${target.out} cc=${clang.cc}${clang.args.length ? ` args=${clang.args.join(" ")}` : ""}`,
+  );
   const r = spawnSync(clang.cc, [...clang.args, ...CFLAGS, srcFile, "-o", dest], {
     cwd: srcDir,
     stdio: "inherit",
@@ -119,8 +124,8 @@ for (const target of TARGETS) {
     console.error(`[build-native-c] missing artifact: ${dest}`);
     process.exit(1);
   }
-  log(`${target.out}: ${(statSync(dest).size / 1024).toFixed(1)} KB`);
+  log(`ok ${target.out}: ${dest} (${(statSync(dest).size / 1024).toFixed(1)} KB)`);
   built += 1;
 }
 
-log(`done (${built} binaries)`);
+log(`done (${built} binaries, ${((Date.now() - startedAt) / 1000).toFixed(1)}s)`);

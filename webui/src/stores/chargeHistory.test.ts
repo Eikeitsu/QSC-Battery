@@ -21,7 +21,11 @@ vi.mock("@/shared/api", async (importOriginal) => {
 
 import * as api from "@/shared/api";
 
-const point = (ts: number, level: number, currentUa: number | null = null): HistoryPoint => ({
+const point = (
+  ts: number,
+  level: number,
+  currentUa: number | null = null,
+): HistoryPoint => ({
   ts,
   level,
   temp: 30,
@@ -100,10 +104,7 @@ describe("useChargeHistoryStore", () => {
   });
 
   it("respects fast TTL on tab re-activation", async () => {
-    vi.mocked(api.loadChargeHistory).mockResolvedValue([
-      point(1, 90),
-      point(2, 89),
-    ]);
+    vi.mocked(api.loadChargeHistory).mockResolvedValue([point(1, 90), point(2, 89)]);
 
     const store = useChargeHistoryStore();
     store.activate(true);

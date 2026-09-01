@@ -179,14 +179,17 @@ static int wait_event(unsigned long max_secs, unsigned long floor_secs) {
   }
   remaining = max_secs - floor;
   if (remaining == 0) {
+    fprintf(stderr, "qscd: wake=floor_only\n");
     return EXIT_OK;
   }
 
   if (!monotonic_sec(&now)) {
+    fprintf(stderr, "qscd: reason=monotonic_clock\n");
     return EXIT_UNUSABLE;
   }
   fd = uevent_socket_open();
   if (fd < 0) {
+    fprintf(stderr, "qscd: reason=netlink_open\n");
     return EXIT_UNUSABLE;
   }
 
@@ -200,6 +203,7 @@ static int wait_event(unsigned long max_secs, unsigned long floor_secs) {
      * 白让 CPU 进不了深层 idle，而事件到达本来就是立即返回、与超时无关。
      * 时钟读失败必须退出：截止时间失效会让本进程一直挂在 recv 上。 */
     if (!monotonic_sec(&now)) {
+      fprintf(stderr, "qscd: reason=monotonic_clock\n");
       close(fd);
       return EXIT_UNUSABLE;
     }
@@ -209,22 +213,26 @@ static int wait_event(unsigned long max_secs, unsigned long floor_secs) {
     }
     /* SO_RCVTIMEO 传 0 表示永不超时，所以 left 必须严格为正 */
     if (!set_recv_timeout(fd, left)) {
+      fprintf(stderr, "qscd: reason=netlink_recv\n");
       close(fd);
       return EXIT_UNUSABLE;
     }
 
     rc = uevent_poll_once(fd, buf, sizeof(buf));
     if (rc > 0) {
+      fprintf(stderr, "qscd: wake=event\n");
       close(fd);
       return EXIT_OK;
     }
     if (rc < 0) {
+      fprintf(stderr, "qscd: reason=netlink_recv\n");
       close(fd);
       return EXIT_UNUSABLE;
     }
     /* 超时或与电池无关的事件：回到循环按新的剩余时间重设超时 */
   }
   close(fd);
+  fprintf(stderr, "qscd: wake=timeout\n");
   return EXIT_OK;
 }
 
