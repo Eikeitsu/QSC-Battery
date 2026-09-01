@@ -106,7 +106,8 @@ function goConfig() {
       <span class="home-refresh__spinner" aria-hidden="true"></span>
       <span>{{ refreshing ? "正在刷新…" : "下拉刷新" }}</span>
     </div>
-    <div v-if="theme.themePack === ThemePack.Md3" class="page page-md3">
+    <div class="home-refresh__body">
+      <div v-if="theme.themePack === ThemePack.Md3" class="page page-md3">
       <div class="md3-stack">
         <Md3HomeStatus />
         <Md3HomeMetrics />
@@ -145,6 +146,7 @@ function goConfig() {
       <DefaultHomeStake />
       <HomeTips />
     </div>
+    </div>
   </div>
 </template>
 
@@ -158,22 +160,38 @@ function goConfig() {
   touch-action: pan-y;
 }
 
+.home-refresh__body {
+  transform: translateY(
+    var(--qsc-pull-offset, var(--qsc-pull-distance, 0px))
+  );
+  transition: transform 160ms ease;
+  will-change: transform;
+}
+
+.home-refresh--pulling .home-refresh__body {
+  transition: none;
+}
+
+.home-refresh--loading {
+  --qsc-pull-offset: 36px;
+}
+
 .home-refresh__indicator {
-  position: absolute;
-  top: 8px;
-  left: 0;
+  position: sticky;
+  top: 0;
   z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
   height: 28px;
+  margin-bottom: -28px;
   gap: 6px;
   color: var(--qsc-text-3);
   font-size: 12px;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(calc(var(--qsc-pull-distance) - 36px));
+  transform: translateY(calc(var(--qsc-pull-distance, 0px) - 28px));
   transition: opacity 120ms ease;
 }
 

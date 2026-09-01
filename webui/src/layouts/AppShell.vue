@@ -3,7 +3,6 @@ import { RouterView } from "vue-router";
 import { useAppShell } from "./composables/useAppShell";
 import AppTopbar from "./ui/AppTopbar.vue";
 import AppDock from "./ui/AppDock.vue";
-import PageLoading from "@/shared/ui/PageLoading.vue";
 import { useAppStore } from "@/stores";
 
 const { shellClass, theme, tab, refreshing, routeLoading, setTab, onRefreshHome } =
@@ -22,20 +21,16 @@ const store = useAppStore();
 
     <main
       class="app-main"
-      :aria-busy="store.initializing || store.hydrating || routeLoading"
+      :aria-busy="store.initializing || routeLoading"
     >
       <div
-        v-if="store.initializing || store.hydrating || routeLoading"
+        v-if="store.initializing || routeLoading"
         class="app-main-loading"
         role="status"
       >
         <span class="app-main-loading__bar" aria-hidden="true"></span>
         <span>{{
-          routeLoading
-            ? "正在打开页面…"
-            : store.hydrating
-              ? "正在同步页面数据…"
-              : "正在读取设备信息…"
+          routeLoading ? "正在打开页面…" : "正在读取设备信息…"
         }}</span>
       </div>
       <div class="route-content">
@@ -53,7 +48,7 @@ const store = useAppStore();
             </RouterView>
           </template>
           <template #fallback>
-            <PageLoading text="正在准备页面…" />
+            <div class="route-fallback" aria-hidden="true"></div>
           </template>
         </Suspense>
       </div>
@@ -86,6 +81,10 @@ const store = useAppStore();
   min-height: calc(
     100dvh - var(--qsc-topbar-h, 56px) - var(--qsc-inset-top, 0) - var(--dock-pad, 72px)
   );
+}
+
+.route-fallback {
+  min-height: 1px;
 }
 
 .app-main-loading {

@@ -2,17 +2,16 @@
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from "vue";
 import SectionHead from "@/shared/ui/SectionHead.vue";
 import ThemedCard from "@/shared/ui/ThemedCard.vue";
-import * as api from "@/shared/api";
 import { BinaryFlag } from "@/shared";
-import { useAppStore } from "@/stores";
-import PageLoading from "@/shared/ui/PageLoading.vue";
+import { useAppStore, useChargeHistoryStore } from "@/stores";
+import { downsamplePoints, buildSmoothPath } from "@/shared/lib/chartPath";
+import type { HistoryPoint } from "@/shared/api/history";
 
 const app = useAppStore();
-const points = ref<api.HistoryPoint[]>([]);
-const loading = ref(false);
+const history = useChargeHistoryStore();
 
 /** 采样关闭后模块不再写入充电段，曲线只剩系统电池记录（无电流线） */
-const samplingOff = computed(() => app.settings.history_enable === BinaryFlag.Off);
+const samplingEnabled = computed(() => app.settings.history_enable !== BinaryFlag.Off);
 
 const W = 320;
 const H = 96;
@@ -22,49 +21,16 @@ const PAD_T = 8;
 const PAD_B = 16;
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
-let reloadId = 0;
-let reloadInFlight: Promise<void> | null = null;
 let chartActive = false;
-const dataSource = ref<"merged" | "sampled" | "system">("system");
 const chartNow = ref(Math.floor(Date.now() / 1000));
 
-async function reload() {
-  if (reloadInFlight) return reloadInFlight;
-  const requestId = ++reloadId;
-  loading.value = true;
-  reloadInFlight = (async () => {
-    try {
-      // 两套历史始终按同一时间轴合并：系统记录负责补齐放电段，模块采样
-      // 负责提供充电段的电流，插拔时不再把整条曲线替换成另一套数据。
-      const [sampled, system] = await Promise.all([
-        samplingOff.value ? Promise.resolve([]) : api.loadChargeHistory(480),
-        api.loadSystemBatteryHistory(),
-      ]);
-      if (requestId !== reloadId) return;
-      const next = api.mergeHistory(sampled, system).slice(-480);
-      dataSource.value =
-        sampled.length && system.length
-          ? "merged"
-          : sampled.length
-            ? "sampled"
-            : "system";
-      points.value = next;
-    } finally {
-      if (requestId === reloadId) loading.value = false;
-    }
-  })();
-  try {
-    await reloadInFlight;
-  } finally {
-    reloadInFlight = null;
-  }
-}
+const displayPoints = computed(() => downsamplePoints(history.points, 120));
 
 const timeSpan = computed(() => {
-  const list = points.value;
+  const list = history.points;
   if (list.length < 2) return null;
-  const minT = list[0].ts;
-  const maxT = Math.max(list[list.length - 1].ts, chartNow.value);
+  const minT = list[0]!.ts;
+  const maxT = Math.max(list[list.length - 1]!.ts, chartNow.value);
   return { minT, maxT, span: Math.max(1, maxT - minT) };
 });
 
@@ -79,43 +45,37 @@ function yAt(ratio: number) {
   return PAD_T + (1 - clamped) * (H - PAD_T - PAD_B);
 }
 
-function buildPath(list: api.HistoryPoint[], ratio: (p: api.HistoryPoint) => number) {
-  return list
-    .map(
-      (p, i) =>
-        `${i === 0 ? "M" : "L"}${xAt(p.ts).toFixed(1)} ${yAt(ratio(p)).toFixed(1)}`,
-    )
-    .join(" ");
+function smoothPath(list: HistoryPoint[], ratio: (p: HistoryPoint) => number) {
+  return buildSmoothPath(list, (p) => xAt(p.ts), (p) => yAt(ratio(p)));
 }
 
 const levelPath = computed(() =>
-  points.value.length < 2 ? "" : buildPath(points.value, (p) => p.level / 100),
+  displayPoints.value.length < 2
+    ? ""
+    : smoothPath(displayPoints.value, (p) => p.level / 100),
 );
 
-/** 温度与电量共用左轴 0–100 的比例位置（°C 直接映射，多数机型 20–60） */
 const tempPath = computed(() => {
-  const list = points.value.filter((p) => p.temp != null);
-  return list.length < 2 ? "" : buildPath(list, (p) => (p.temp as number) / 100);
+  const list = displayPoints.value.filter((p) => p.temp != null);
+  return list.length < 2 ? "" : smoothPath(list, (p) => (p.temp as number) / 100);
 });
 
 const currentScale = computed(() => {
-  const abs = points.value
+  const abs = history.points
     .filter((p) => p.currentUa != null)
     .map((p) => Math.abs(p.currentUa as number));
   if (!abs.length) return 0;
-  // 取整到 0.5A，右轴刻度好读
   const peak = Math.max(...abs);
   return Math.max(500_000, Math.ceil(peak / 500_000) * 500_000);
 });
 
 const currentPath = computed(() => {
-  const list = points.value.filter((p) => p.currentUa != null);
+  const list = displayPoints.value.filter((p) => p.currentUa != null);
   const max = currentScale.value;
   if (list.length < 2 || !max) return "";
-  return buildPath(list, (p) => Math.abs(p.currentUa as number) / max);
+  return smoothPath(list, (p) => Math.abs(p.currentUa as number) / max);
 });
 
-/** 左轴：电量 % / 温度 °C 共用；右轴：电流 A */
 const yTicks = computed(() =>
   [0, 50, 100].map((v) => ({
     v,
@@ -149,10 +109,13 @@ const axisNote = computed(() =>
 );
 
 const summary = computed(() => {
-  const list = points.value;
-  if (!list.length) return samplingOff.value ? "仅系统记录" : "暂无数据";
-  const first = list[0];
-  const last = list[list.length - 1];
+  const list = history.points;
+  if (!list.length) {
+    if (history.loadingFast || history.loadingSystem) return "正在读取…";
+    return samplingEnabled.value ? "暂无数据" : "仅系统记录";
+  }
+  const first = list[0]!;
+  const last = list[list.length - 1]!;
   const seconds = Math.max(0, last.ts - first.ts);
   const duration =
     seconds >= 3600 ? `${(seconds / 3600).toFixed(1)}h` : `${Math.floor(seconds / 60)}m`;
@@ -164,53 +127,63 @@ const summary = computed(() => {
     : last.temp != null
       ? ` · ${last.temp}°C`
       : "";
-  const source =
-    dataSource.value === "merged"
+  const sourceLabel =
+    history.source === "merged"
       ? "系统+模块合并"
-      : dataSource.value === "sampled"
+      : history.source === "sampled"
         ? "模块采样"
         : "系统历史";
-  return `${list.length} 点 · ${duration} · 当前 ${currentLevel}%${currentTemp} · ${source}`;
+  return `${list.length} 点 · ${duration} · 当前 ${currentLevel}%${currentTemp} · ${sourceLabel}`;
 });
+
+function refreshAll() {
+  void history.refreshAll(samplingEnabled.value);
+}
+
+function startFastTimer() {
+  refreshTimer = setInterval(() => {
+    chartNow.value = Math.floor(Date.now() / 1000);
+    void history.refreshFast(samplingEnabled.value, false);
+  }, 30_000);
+}
 
 onMounted(() => {
   chartActive = true;
-  void reload();
-  refreshTimer = setInterval(() => {
-    chartNow.value = Math.floor(Date.now() / 1000);
-    void reload();
-  }, 30_000);
+  history.activate(samplingEnabled.value);
+  startFastTimer();
 });
 
 onActivated(() => {
   if (chartActive) return;
   chartActive = true;
-  void reload();
-  refreshTimer = setInterval(() => {
-    chartNow.value = Math.floor(Date.now() / 1000);
-    void reload();
-  }, 30_000);
+  history.onTabActivated(samplingEnabled.value);
+  startFastTimer();
 });
 
 onDeactivated(() => {
   chartActive = false;
+  history.deactivate();
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = null;
 });
 
 onUnmounted(() => {
+  history.deactivate();
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = null;
 });
 
-defineExpose({ reload });
+defineExpose({ reload: refreshAll });
 </script>
 
 <template>
   <SectionHead title="充放电曲线" :hint="summary" />
   <ThemedCard>
-    <div v-if="!points.length" class="empty">
-      <PageLoading v-if="loading" text="正在读取曲线数据…" />
+    <div v-if="!history.points.length" class="empty">
+      <div v-if="history.loading" class="chart-skeleton" role="status" aria-live="polite">
+        <span class="chart-skeleton__bar" aria-hidden="true"></span>
+        <span class="chart-skeleton__text">正在读取曲线数据…</span>
+      </div>
       <template v-else>
         尚无历史数据。系统电池记录可能刚被清空，用一段时间后即有曲线。
       </template>
@@ -264,23 +237,23 @@ defineExpose({ reload });
         <span class="lg level">电量 %</span>
         <span class="lg temp">温度 °C</span>
         <span v-if="currentPath" class="lg current">电流 A</span>
-        <button type="button" class="refresh" :disabled="loading" @click="reload">
-          刷新
+        <button type="button" class="refresh" :disabled="history.loading" @click="refreshAll">
+          {{ history.loadingSystem ? "补齐中…" : "刷新" }}
         </button>
       </div>
       <p class="axis-note">
         {{ axisNote }}
         <br />
-        <template v-if="samplingOff">
-          已关闭「充放电历史」采样：曲线全部来自系统电池记录，没有充电电流线。
+        <template v-if="!samplingEnabled">
+          已关闭「充放电历史」采样：曲线来自系统电池记录，没有充电电流线。
         </template>
-        <template v-else-if="dataSource === 'merged'">
-          系统记录与模块采样已按时间合并，插拔时保持曲线连续；电流仅在模块采样点显示。
+        <template v-else-if="history.source === 'merged'">
+          模块采样与系统记录已合并；电流仅在模块采样点显示。点「刷新」可重新补齐放电段。
         </template>
-        <template v-else-if="dataSource === 'sampled'">
-          当前仅有模块采样数据，包含充电电流。
+        <template v-else-if="history.source === 'sampled'">
+          当前为模块采样数据（含充电电流）。点「刷新」可补齐系统放电段。
         </template>
-        <template v-else> 当前仅有系统电池历史数据，暂时没有模块电流采样点。 </template>
+        <template v-else> 当前仅有系统电池历史，暂时没有模块电流采样点。 </template>
       </p>
     </div>
   </ThemedCard>
@@ -292,6 +265,45 @@ defineExpose({ reload });
   font-size: 13px;
   color: var(--qsc-text-3);
   line-height: 1.45;
+}
+
+.chart-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+}
+
+.chart-skeleton__bar {
+  width: 100%;
+  height: 72px;
+  border-radius: 10px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--qsc-text) 6%, transparent) 0%,
+    color-mix(in srgb, var(--qsc-text) 12%, transparent) 50%,
+    color-mix(in srgb, var(--qsc-text) 6%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: chart-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.chart-skeleton__text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+@keyframes chart-skeleton-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: -100% 0;
+  }
 }
 
 .chart-wrap {

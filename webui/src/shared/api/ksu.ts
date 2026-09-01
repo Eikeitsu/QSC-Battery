@@ -2,11 +2,36 @@ import type { ExecResult } from "@/shared/types";
 
 const EXEC_TIMEOUT = 8000;
 
+export type ExecPriority = "high" | "low";
+
+interface QueuedExec {
+  cmd: string;
+  timeoutMs: number;
+  priority: ExecPriority;
+  resolve: (result: ExecResult) => void;
+}
+
+let pumpRunning = false;
+let pumpScheduled = false;
+const queue: QueuedExec[] = [];
+
 export function hasBridge(): boolean {
   return typeof ksu !== "undefined" && typeof ksu?.exec === "function";
 }
 
-export function exec(cmd: string, timeoutMs = EXEC_TIMEOUT): Promise<ExecResult> {
+/** 供单元测试重置队列状态 */
+export function resetExecQueueForTests(): void {
+  queue.length = 0;
+  pumpRunning = false;
+  pumpScheduled = false;
+}
+
+/** 队列中是否还有待执行的 high 任务（含正在跑的那条由 pumpRunning 体现） */
+export function hasPendingHighExec(): boolean {
+  return queue.some((task) => task.priority === "high");
+}
+
+function runExecOnce(cmd: string, timeoutMs: number): Promise<ExecResult> {
   return new Promise((resolve) => {
     let settled = false;
     const finish = (result: ExecResult) => {
@@ -48,6 +73,49 @@ export function exec(cmd: string, timeoutMs = EXEC_TIMEOUT): Promise<ExecResult>
         finish({ errno: -1, stdout: "", stderr: String(error2 || error) });
       }
     }
+  });
+}
+
+function pickNextTask(): QueuedExec | null {
+  const highIdx = queue.findIndex((task) => task.priority === "high");
+  if (highIdx >= 0) return queue.splice(highIdx, 1)[0] ?? null;
+  if (queue.length > 0) return queue.shift() ?? null;
+  return null;
+}
+
+async function pumpExecQueue(): Promise<void> {
+  if (pumpRunning) return;
+  pumpRunning = true;
+  try {
+    while (queue.length > 0) {
+      const task = pickNextTask();
+      if (!task) break;
+      const result = await runExecOnce(task.cmd, task.timeoutMs);
+      task.resolve(result);
+    }
+  } finally {
+    pumpRunning = false;
+    if (queue.length > 0) schedulePumpExec();
+  }
+}
+
+function schedulePumpExec(): void {
+  if (pumpScheduled || pumpRunning) return;
+  pumpScheduled = true;
+  queueMicrotask(() => {
+    pumpScheduled = false;
+    void pumpExecQueue();
+  });
+}
+
+export function exec(
+  cmd: string,
+  timeoutMs = EXEC_TIMEOUT,
+  priority: ExecPriority = "high",
+): Promise<ExecResult> {
+  return new Promise((resolve) => {
+    queue.push({ cmd, timeoutMs, priority, resolve });
+    schedulePumpExec();
   });
 }
 

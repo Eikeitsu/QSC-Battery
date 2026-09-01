@@ -1,5 +1,5 @@
 import { defineAsyncComponent, type Component, type AsyncComponentLoader } from "vue";
-import PageLoading from "@/shared/ui/PageLoading.vue";
+import BlockSkeleton from "@/shared/ui/BlockSkeleton.vue";
 
 /**
  * 异步组件不参与父级 Suspense，避免一个卡片的 chunk 阻塞整页。
@@ -8,8 +8,8 @@ import PageLoading from "@/shared/ui/PageLoading.vue";
 export function lazyComponent(loader: AsyncComponentLoader<Component>) {
   return defineAsyncComponent({
     loader,
-    loadingComponent: PageLoading,
-    delay: 0,
+    loadingComponent: BlockSkeleton,
+    delay: 150,
     timeout: 15_000,
     suspensible: false,
   });

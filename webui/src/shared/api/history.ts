@@ -94,12 +94,14 @@ END {
   const primary = await exec(
     `dumpsys batterystats --history 2>/dev/null | ${keepRecent}`,
     15_000,
+    "low",
   );
   text = primary.stdout.trim();
   if (!text) {
     const fallback = await exec(
       `dumpsys batterystats 2>/dev/null | sed -n '/Battery History/,$p' | ${keepRecent}`,
       15_000,
+      "low",
     );
     text = fallback.stdout.trim();
   }
