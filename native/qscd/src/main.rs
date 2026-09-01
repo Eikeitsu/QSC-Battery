@@ -360,11 +360,6 @@ impl Thresholds {
         self.stop.is_none() && self.temp_stop.is_none()
     }
 
-    /// 拿到事件后判断值不值得叫醒 shell
-    fn should_wake(&self, plugged_at_start: bool) -> bool {
-        self.wake_reason(plugged_at_start).is_some()
-    }
-
     /// 命中 power_supply 事件且应叫醒 shell 时的原因；否则 None 表示继续等
     fn wake_reason(&self, plugged_at_start: bool) -> Option<&'static str> {
         if self.is_empty() {
@@ -905,9 +900,9 @@ mod tests {
         ]);
         let th = th_for(&root, Some(80), Some(60));
         // 插电、离阈值还远、温度也低 → 吞掉事件继续等
-        assert!(!th.should_wake(true));
+        assert!(th.wake_reason(true).is_none());
         // 起始状态记为未插电，现在读到插电 → 必须叫醒
-        assert!(th.should_wake(false));
+        assert_eq!(th.wake_reason(false), Some("plug_changed"));
         std::fs::remove_dir_all(&root).ok();
     }
 
@@ -960,7 +955,10 @@ mod tests {
             ("bms/capacity", "1"),
         ]);
         // near=3，stop=80 → 78 已进入窗口
-        assert!(th_for(&root, Some(80), None).should_wake(true));
+        assert_eq!(
+            th_for(&root, Some(80), None).wake_reason(true),
+            Some("near_level")
+        );
         std::fs::remove_dir_all(&root).ok();
     }
 
@@ -973,7 +971,10 @@ mod tests {
             ("bms/temp", "1"),
         ]);
         // 58°C，停充 60°C，留 3°C 余量 → 该叫醒
-        assert!(th_for(&root, None, Some(60)).should_wake(true));
+        assert_eq!(
+            th_for(&root, None, Some(60)).wake_reason(true),
+            Some("near_temp")
+        );
         std::fs::remove_dir_all(&root).ok();
     }
 
@@ -1055,7 +1056,7 @@ mod tests {
         let root = fake_sysfs(&[("battery/capacity", "10")]);
         let th = th_for(&root, None, None);
         assert!(th.is_empty());
-        assert!(th.should_wake(true));
+        assert_eq!(th.wake_reason(true), Some("event"));
         std::fs::remove_dir_all(&root).ok();
     }
 }
