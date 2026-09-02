@@ -91,8 +91,9 @@ export const useChargeHistoryStore = defineStore("chargeHistory", () => {
     const gen = ++fastGen;
     loadingFast.value = true;
     try {
+      // force=true 时视为用户主动「刷新」：重拉整个最近窗口，避免增量遗漏
       const lastTs =
-        sampledPoints.value.length > 0
+        !force && sampledPoints.value.length > 0
           ? sampledPoints.value[sampledPoints.value.length - 1]!.ts
           : 0;
       const fresh = lastTs > 0
