@@ -5,3 +5,5 @@ export * from "./history";
 export * from "./daemon";
 export * from "./batterySnapshot";
 export * from "./statusBundle";
+export * from "./events";
+export * from "./deviceArchive";

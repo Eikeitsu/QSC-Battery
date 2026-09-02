@@ -23,6 +23,7 @@ export const PATHS = {
   CHARGE_EVENTS: `${ROOT}/data/charge_events.log`,
   HEALTH_HISTORY: `${ROOT}/data/health_history.csv`,
   COMPAT_HINT: `${ROOT}/data/compat_hint`,
+  PROFILES_DIR: `${ROOT}/data/profiles`,
   QSCD: `${ROOT}/bin/qscd`,
   QSCD_FETCH: `${ROOT}/bin/qscd_fetch.sh`,
   QSCD_PROGRESS: `${ROOT}/data/qscd_download_progress`,
