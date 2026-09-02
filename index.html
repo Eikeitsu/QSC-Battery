@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#eef1f5" />
+    <meta name="color-scheme" content="light dark" />
+    <title>充电控制</title>
+    <script>
+      (function () {
+        try {
+          var root = document.documentElement;
+          var mode = localStorage.getItem("qsc_theme_mode") || "system";
+          var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var resolved =
+            mode === "light" || mode === "dark" ? mode : dark ? "dark" : "light";
+          var pack = localStorage.getItem("qsc_theme_pack") || "default";
+          if (pack !== "md3" && pack !== "miuix") pack = "default";
+          root.setAttribute("data-theme", resolved);
+          root.setAttribute("data-pack", pack);
+          root.style.colorScheme = resolved === "dark" ? "only dark" : "only light";
+          root.style.backgroundColor = resolved === "dark" ? "#0f1216" : "#eef1f5";
+          document.body &&
+            (document.body.style.backgroundColor = root.style.backgroundColor);
+          var themeMeta = document.querySelector('meta[name="theme-color"]');
+          if (themeMeta) themeMeta.setAttribute("content", root.style.backgroundColor);
+          root.classList.toggle("pack-default", pack === "default");
+          root.classList.toggle("pack-md3", pack === "md3");
+          root.classList.toggle("pack-miuix", pack === "miuix");
+          var monet = localStorage.getItem("qsc_monet");
+          var monetOn = pack === "miuix" && (monet === null || monet === "1");
+          root.classList.toggle("monet-on", monetOn);
+          root.classList.toggle("monet-off", !monetOn);
+          var floatOn =
+            pack === "miuix" && localStorage.getItem("qsc_float_dock") !== "0";
+          root.classList.toggle("float-dock", floatOn);
+          root.classList.toggle(
+            "dock-glass",
+            pack === "miuix" && localStorage.getItem("qsc_dock_glass") !== "0",
+          );
+          root.classList.toggle("bar-blur", localStorage.getItem("qsc_bar_blur") !== "0");
+          root.classList.toggle(
+            "compact-on",
+            localStorage.getItem("qsc_compact") === "1",
+          );
+          var scale = localStorage.getItem("qsc_font_scale");
+          if (scale) root.style.setProperty("--font-scale", String(scale));
+        } catch (e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="./js/app-CNqz85z9.js"></script>
+    <link rel="stylesheet" crossorigin href="./css/style-BO4JZSdF.css">
+  </head>
+  <body>
+    <div id="app">
+      <div id="app-loading" role="status" aria-live="polite">
+        <span id="app-loading-spinner" aria-hidden="true"></span>
+        <span>正在打开 QSC-Battery…</span>
+      </div>
+    </div>
+    <style>
+      #app-loading {
+        min-height: 100vh;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 12px;
+        color: #596574;
+        background: #eef1f5;
+        font:
+          14px/1.4 system-ui,
+          sans-serif;
+      }
+
+      #app-loading-spinner {
+        width: 26px;
+        height: 26px;
+        border: 3px solid rgb(89 101 116 / 20%);
+        border-top-color: #596574;
+        border-radius: 50%;
+        animation: app-loading-spin 0.8s linear infinite;
+      }
+
+      @keyframes app-loading-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      [data-theme="dark"] #app-loading {
+        color: #b7c0cc;
+        background: #0f1216;
+      }
+
+      [data-theme="dark"] #app-loading-spinner {
+        border-color: rgb(183 192 204 / 20%);
+        border-top-color: #b7c0cc;
+      }
+    </style>
+  </body>
+</html>
