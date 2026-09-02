@@ -71,9 +71,7 @@ export async function listDeviceArchives(): Promise<DeviceArchiveItem[]> {
 
 export async function saveDeviceArchive(slug: string): Promise<boolean> {
   const safe = slug.replace(/'/g, "'\\''");
-  const r = await archiveExec(
-    `qsc_archive_init 2>/dev/null; qsc_archive_save '${safe}'`,
-  );
+  const r = await archiveExec(`qsc_archive_init 2>/dev/null; qsc_archive_save '${safe}'`);
   return r.errno === 0;
 }
 

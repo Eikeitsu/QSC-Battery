@@ -40,7 +40,7 @@ function parseChargeEventsText(text: string): ChargeEvent[] {
       ts,
       dateText: d ?? "",
       timeText: t ?? "",
-      type: (type as ChargeEventType),
+      type: type as ChargeEventType,
       level: level && level !== "--" ? Number(level) : null,
       temp: temp && temp !== "--" ? Number(temp) : null,
       detail: detail || "",

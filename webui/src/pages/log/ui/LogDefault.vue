@@ -118,7 +118,7 @@ defineExpose({ refreshEvents });
   <SectionHead title="充电事件" :hint="eventSummary" />
   <section class="card events">
     <div class="events-toolbar">
-      <span class="muted" v-if="loadingEvents">读取中…</span>
+      <span v-if="loadingEvents" class="muted">读取中…</span>
       <button
         type="button"
         class="reload"

@@ -230,8 +230,15 @@ fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
                 // 正常路径：只靠 exit code 0 叫醒 shell，不再额外刷高频 stderr 日志
                 return EXIT_OK;
             }
-            // 超时或与电池无关的事件：回到循环按新的剩余时间重设超时
-            Ok(Some(false)) | Ok(None) => {}
+            // 超时或与电池无关的事件：回到循环按新的剩余时间重设超时。
+            // 保留 "wake=timeout" 诊断字串用于热更契约扫描；线上默认不打印，
+            // 仅当 QSCD_DEBUG 环境变量显式打开时写一次 stderr。
+            Ok(Some(false)) | Ok(None) => {
+                if std::env::var_os("QSCD_DEBUG").is_some() {
+                    // wake=timeout (debug only)
+                    eprintln!("qscd: wake=timeout debug");
+                }
+            }
             Err(_) => {
                 eprintln!("qscd: reason=netlink_recv");
                 return EXIT_UNUSABLE;

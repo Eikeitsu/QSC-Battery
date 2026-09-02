@@ -123,8 +123,8 @@ defineExpose({ refreshEvents });
         <div class="info-col">
           <div class="line1">
             <span class="tag">{{ eventTypeLabels[e.type] || e.type }}</span>
-            <span class="stat" v-if="e.level != null">电量 {{ e.level }}%</span>
-            <span class="stat" v-if="e.temp != null">温度 {{ e.temp }}°C</span>
+            <span v-if="e.level != null" class="stat">电量 {{ e.level }}%</span>
+            <span v-if="e.temp != null" class="stat">温度 {{ e.temp }}°C</span>
           </div>
           <div v-if="e.detail" class="line2">{{ e.detail }}</div>
         </div>

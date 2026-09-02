@@ -39,10 +39,7 @@ export function downsampleByTime<T extends { ts: number }>(
 
 /** 兼容旧调用：直接按索引跨步。若调用者已按时间等距或无需保形，仍可使用；
  *  新代码统一走 downsampleByTime。 */
-export function downsamplePoints<T extends { ts: number }>(
-  points: T[],
-  max = 120,
-): T[] {
+export function downsamplePoints<T extends { ts: number }>(points: T[], max = 120): T[] {
   if (points.length <= max) return points.slice();
   if (max <= 1) return [points[points.length - 1]!];
 
@@ -94,10 +91,7 @@ export function buildSmoothPath<T>(
       if (slope[i] === 0) {
         m[i] = 0;
         m[i + 1] = 0;
-      } else if (
-        i > 0 &&
-        (slope[i - 1]! < 0) !== (slope[i]! < 0)
-      ) {
+      } else if (i > 0 && slope[i - 1]! < 0 !== slope[i]! < 0) {
         m[i] = 0;
       } else if (i > 0) {
         const alpha = m[i - 1]! / slope[i - 1]!;
@@ -127,9 +121,9 @@ export function buildSmoothPath<T>(
     const p2 = pts[i + 1]!;
     const seg = dx[i]!;
     const cp1x = p1.x + seg * H3_FIX;
-    const cp1y = p1.y + (seg * H3_FIX) * (m[i] ?? 0);
+    const cp1y = p1.y + seg * H3_FIX * (m[i] ?? 0);
     const cp2x = p2.x - seg * H3_FIX;
-    const cp2y = p2.y - (seg * H3_FIX) * (m[i + 1] ?? 0);
+    const cp2y = p2.y - seg * H3_FIX * (m[i + 1] ?? 0);
     d += ` C${cp1x.toFixed(1)} ${cp1y.toFixed(1)} ${cp2x.toFixed(1)} ${cp2y.toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
   }
   return d;

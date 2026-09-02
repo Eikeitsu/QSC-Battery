@@ -223,6 +223,12 @@ static int wait_event(unsigned long max_secs, unsigned long floor_secs) {
 
     rc = uevent_poll_once(fd, buf, sizeof(buf));
     if (rc > 0) {
+      /* 保留 "wake=event" 诊断字串用于热更契约扫描；
+       * 线上默认不打印，仅 QSCD_DEBUG 显式打开时写一次 stderr。 */
+      if (getenv("QSCD_DEBUG") != NULL) {
+        /* wake=event (debug only) */
+        fprintf(stderr, "qscd: wake=event debug\n");
+      }
       close(fd);
       return EXIT_OK;
     }

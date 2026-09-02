@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from "vue";
+import {
+  computed,
+  onActivated,
+  onDeactivated,
+  onMounted,
+  onUnmounted,
+  ref,
+  watch,
+} from "vue";
 import SectionHead from "@/shared/ui/SectionHead.vue";
 import ThemedCard from "@/shared/ui/ThemedCard.vue";
 import { BinaryFlag } from "@/shared";
@@ -68,8 +76,14 @@ const timeSpan = computed(() => {
     }
     return null;
   }
-  const minT = Math.min(list[0]!.ts, rangeSec.value > 0 ? chartNow.value - rangeSec.value : list[0]!.ts);
-  const maxT = Math.max(list[list.length - 1]!.ts, rangeSec.value > 0 ? chartNow.value : list[list.length - 1]!.ts);
+  const minT = Math.min(
+    list[0]!.ts,
+    rangeSec.value > 0 ? chartNow.value - rangeSec.value : list[0]!.ts,
+  );
+  const maxT = Math.max(
+    list[list.length - 1]!.ts,
+    rangeSec.value > 0 ? chartNow.value : list[list.length - 1]!.ts,
+  );
   return { minT, maxT, span: Math.max(1, maxT - minT) };
 });
 
@@ -152,8 +166,10 @@ const axisNote = computed(() => {
   if (!samplingEnabled.value) {
     return `${base}。已关闭「充放电历史」采样：曲线来自系统电池记录，没有充电电流线。`;
   }
-  if (history.source === "merged") return `${base}。模块采样与系统记录已合并；电流仅在模块采样点显示。点「刷新」可重新补齐放电段。`;
-  if (history.source === "sampled") return `${base}。当前为模块采样数据（含充电电流）。点「刷新」可补齐系统放电段。`;
+  if (history.source === "merged")
+    return `${base}。模块采样与系统记录已合并；电流仅在模块采样点显示。点「刷新」可重新补齐放电段。`;
+  if (history.source === "sampled")
+    return `${base}。当前为模块采样数据（含充电电流）。点「刷新」可补齐系统放电段。`;
   return `${base}。当前仅有系统电池历史，暂时没有模块电流采样点。`;
 });
 

@@ -125,12 +125,7 @@ defineExpose({ refreshEvents });
         <div class="title">充电事件</div>
         <div class="sub">{{ eventSummary }}</div>
       </div>
-      <button
-        type="button"
-        class="fbtn"
-        :disabled="loadingEvents"
-        @click="refreshEvents"
-      >
+      <button type="button" class="fbtn" :disabled="loadingEvents" @click="refreshEvents">
         {{ loadingEvents ? "读取中" : "刷新" }}
       </button>
     </div>
@@ -270,7 +265,7 @@ defineExpose({ refreshEvents });
   display: grid;
   grid-template-columns: 110px 1fr;
   gap: 14px;
-  padding: 14px 14px;
+  padding: 14px;
   border-radius: 16px;
   background: color-mix(in srgb, var(--qsc-surface) 92%, var(--qsc-primary) 8%);
 }
