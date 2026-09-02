@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from "vue";
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from "vue";
 import SectionHead from "@/shared/ui/SectionHead.vue";
 import ThemedCard from "@/shared/ui/ThemedCard.vue";
 import { BinaryFlag } from "@/shared";
 import { useAppStore, useChargeHistoryStore } from "@/stores";
-import { downsamplePoints, buildSmoothPath } from "@/shared/lib/chartPath";
+import { STORAGE_KEYS, readStorage, writeStorage } from "@/shared/config/storage";
+import { downsampleByTime, buildSmoothPath } from "@/shared/lib/chartPath";
 import type { HistoryPoint } from "@/shared/api/history";
+import * as api from "@/shared/api/history";
 
 const app = useAppStore();
 const history = useChargeHistoryStore();
@@ -20,17 +22,54 @@ const PAD_R = 30;
 const PAD_T = 8;
 const PAD_B = 16;
 
+const RANGE_OPTIONS = [
+  { label: "3h", seconds: 3 * 3600 },
+  { label: "12h", seconds: 12 * 3600 },
+  { label: "24h", seconds: 24 * 3600 },
+  { label: "全部", seconds: 0 },
+];
+
+const rangeSec = ref(Math.max(0, Number(readStorage(STORAGE_KEYS.chargeRange)) || 0));
+watch(rangeSec, (v) => writeStorage(STORAGE_KEYS.chargeRange, String(v)));
+
+const healthPoints = ref<api.HealthPoint[]>([]);
+(async () => {
+  healthPoints.value = await api.loadHealthHistory();
+})();
+
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let chartActive = false;
 const chartNow = ref(Math.floor(Date.now() / 1000));
 
-const displayPoints = computed(() => downsamplePoints(history.points, 120));
+function trimByRange<T extends { ts: number }>(points: T[], maxAgeSec: number): T[] {
+  if (maxAgeSec <= 0) return points;
+  const cutoff = chartNow.value - maxAgeSec;
+  let lo = 0;
+  let hi = points.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (points[mid]!.ts < cutoff) lo = mid + 1;
+    else hi = mid;
+  }
+  return points.slice(lo);
+}
+
+const timeScopedPoints = computed(() => trimByRange(history.points, rangeSec.value));
+
+const displayPoints = computed(() => downsampleByTime(timeScopedPoints.value, 120));
 
 const timeSpan = computed(() => {
-  const list = history.points;
-  if (list.length < 2) return null;
-  const minT = list[0]!.ts;
-  const maxT = Math.max(list[list.length - 1]!.ts, chartNow.value);
+  const list = displayPoints.value;
+  if (list.length < 2) {
+    // 即使没数据也按所选范围画一个空坐标轴，帮助用户理解「该范围内无曲线」
+    if (rangeSec.value > 0) {
+      const maxT = chartNow.value;
+      return { minT: maxT - rangeSec.value, maxT, span: rangeSec.value };
+    }
+    return null;
+  }
+  const minT = Math.min(list[0]!.ts, rangeSec.value > 0 ? chartNow.value - rangeSec.value : list[0]!.ts);
+  const maxT = Math.max(list[list.length - 1]!.ts, rangeSec.value > 0 ? chartNow.value : list[list.length - 1]!.ts);
   return { minT, maxT, span: Math.max(1, maxT - minT) };
 });
 
@@ -65,7 +104,7 @@ const tempPath = computed(() => {
 });
 
 const currentScale = computed(() => {
-  const abs = history.points
+  const abs = displayPoints.value
     .filter((p) => p.currentUa != null)
     .map((p) => Math.abs(p.currentUa as number));
   if (!abs.length) return 0;
@@ -106,14 +145,29 @@ const xTicks = computed(() => {
   });
 });
 
-const axisNote = computed(() =>
-  currentPath.value
+const axisNote = computed(() => {
+  const base = currentPath.value
     ? "左轴：电量 % / 温度 °C · 右轴：电流绝对值 A"
-    : "左轴：电量 % / 温度 °C",
-);
+    : "左轴：电量 % / 温度 °C";
+  if (!samplingEnabled.value) {
+    return `${base}。已关闭「充放电历史」采样：曲线来自系统电池记录，没有充电电流线。`;
+  }
+  if (history.source === "merged") return `${base}。模块采样与系统记录已合并；电流仅在模块采样点显示。点「刷新」可重新补齐放电段。`;
+  if (history.source === "sampled") return `${base}。当前为模块采样数据（含充电电流）。点「刷新」可补齐系统放电段。`;
+  return `${base}。当前仅有系统电池历史，暂时没有模块电流采样点。`;
+});
+
+const healthNote = computed(() => {
+  const list = healthPoints.value;
+  if (!list.length) return "";
+  const last = list[list.length - 1]!;
+  const soh = last.soh != null ? `SOH ${last.soh}%` : "";
+  const cc = last.cycleCount != null ? `循环 ${last.cycleCount} 次` : "";
+  return [soh, cc].filter(Boolean).join(" · ");
+});
 
 const summary = computed(() => {
-  const list = history.points;
+  const list = timeScopedPoints.value;
   if (!list.length) {
     if (history.loadingFast || history.loadingSystem) return "正在读取…";
     return samplingEnabled.value ? "暂无数据" : "仅系统记录";
@@ -142,6 +196,9 @@ const summary = computed(() => {
 
 function refreshAll() {
   void history.refreshAll(samplingEnabled.value);
+  void (async () => {
+    healthPoints.value = await api.loadHealthHistory();
+  })();
 }
 
 function startFastTimer() {
@@ -183,6 +240,18 @@ defineExpose({ reload: refreshAll });
 <template>
   <SectionHead title="充放电曲线" :hint="summary" />
   <ThemedCard>
+    <div class="range-bar" role="tablist" aria-label="曲线时间范围">
+      <button
+        v-for="opt in RANGE_OPTIONS"
+        :key="opt.label"
+        type="button"
+        class="range-chip"
+        :class="{ active: rangeSec === opt.seconds }"
+        @click="rangeSec = opt.seconds"
+      >
+        {{ opt.label }}
+      </button>
+    </div>
     <div v-if="!history.points.length" class="empty">
       <div v-if="history.loading" class="chart-skeleton" role="status" aria-live="polite">
         <span class="chart-skeleton__bar" aria-hidden="true"></span>
@@ -252,23 +321,39 @@ defineExpose({ reload: refreshAll });
       </div>
       <p class="axis-note">
         {{ axisNote }}
-        <br />
-        <template v-if="!samplingEnabled">
-          已关闭「充放电历史」采样：曲线来自系统电池记录，没有充电电流线。
+        <template v-if="healthNote">
+          <br />
+          电池健康：{{ healthNote }}
         </template>
-        <template v-else-if="history.source === 'merged'">
-          模块采样与系统记录已合并；电流仅在模块采样点显示。点「刷新」可重新补齐放电段。
-        </template>
-        <template v-else-if="history.source === 'sampled'">
-          当前为模块采样数据（含充电电流）。点「刷新」可补齐系统放电段。
-        </template>
-        <template v-else> 当前仅有系统电池历史，暂时没有模块电流采样点。 </template>
       </p>
     </div>
   </ThemedCard>
 </template>
 
 <style scoped lang="scss">
+.range-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px var(--qsc-cell-pad-x, 16px) 0;
+}
+
+.range-chip {
+  border: 1px solid color-mix(in srgb, var(--qsc-text) 12%, transparent);
+  background: transparent;
+  color: var(--qsc-text-2);
+  font-size: 12px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  line-height: 1.2;
+
+  &.active {
+    border-color: var(--qsc-primary);
+    color: var(--qsc-primary);
+    background: color-mix(in srgb, var(--qsc-primary) 10%, transparent);
+  }
+}
+
 .empty {
   padding: 16px var(--qsc-cell-pad-x, 16px);
   font-size: 13px;

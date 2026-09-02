@@ -19,6 +19,7 @@ export const STORAGE_KEYS = {
   logViewMode: "qsc_log_view_mode",
   codeEditorWrap: "qsc_code_editor_wrap",
   legacyDockPage: "qsc_dock_page",
+  chargeRange: "qsc_charge_range",
   /** 本机自建预制档 */
   devicePresetsUser: "qsc_device_presets_user",
   /** 从仓库拉取后的本地缓存 */

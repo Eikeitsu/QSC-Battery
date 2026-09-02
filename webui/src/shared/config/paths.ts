@@ -20,6 +20,8 @@ export const PATHS = {
   NO_NODE_LOGGED: `${ROOT}/data/no_node_logged`,
   SWITCH_TEST_STATUS: `${ROOT}/data/switch_test_status`,
   CHARGE_HISTORY: `${ROOT}/data/charge_history.csv`,
+  CHARGE_EVENTS: `${ROOT}/data/charge_events.log`,
+  HEALTH_HISTORY: `${ROOT}/data/health_history.csv`,
   COMPAT_HINT: `${ROOT}/data/compat_hint`,
   QSCD: `${ROOT}/bin/qscd`,
   QSCD_FETCH: `${ROOT}/bin/qscd_fetch.sh`,

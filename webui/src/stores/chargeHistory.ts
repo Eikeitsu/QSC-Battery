@@ -91,9 +91,28 @@ export const useChargeHistoryStore = defineStore("chargeHistory", () => {
     const gen = ++fastGen;
     loadingFast.value = true;
     try {
-      const sampled = await api.loadChargeHistory(DISPLAY_LIMIT);
+      const lastTs =
+        sampledPoints.value.length > 0
+          ? sampledPoints.value[sampledPoints.value.length - 1]!.ts
+          : 0;
+      const fresh = lastTs > 0
+        ? await api.loadChargeHistorySince(lastTs, DISPLAY_LIMIT)
+        : await api.loadChargeHistory(DISPLAY_LIMIT);
       if (gen !== fastGen || !active.value) return;
-      sampledPoints.value = sampled;
+      if (lastTs > 0 && fresh.length > 0) {
+        const merged = [...sampledPoints.value, ...fresh].slice(-FETCH_LIMIT * 2);
+        const seen = new Set<number>();
+        const dedup: HistoryPoint[] = [];
+        for (let i = merged.length - 1; i >= 0; i -= 1) {
+          const p = merged[i]!;
+          if (seen.has(p.ts)) continue;
+          seen.add(p.ts);
+          dedup.unshift(p);
+        }
+        sampledPoints.value = dedup.slice(-FETCH_LIMIT);
+      } else {
+        sampledPoints.value = fresh;
+      }
       sampledAt.value = Date.now();
       syncDisplay();
     } finally {

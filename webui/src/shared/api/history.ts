@@ -14,7 +14,11 @@ export async function loadChargeHistory(maxPoints = 240): Promise<HistoryPoint[]
   const result = await exec(
     `{ cat '${PATHS.CHARGE_HISTORY}' 2>/dev/null; cat '${PATHS.CHARGE_HISTORY}.pending' 2>/dev/null; } | tail -n ${maxPoints + 1}`,
   );
-  const text = result.stdout.trim();
+  return parseChargeHistoryLines(result.stdout);
+}
+
+function parseChargeHistoryLines(stdout: string): HistoryPoint[] {
+  const text = stdout.trim();
   if (!text) return [];
   const lines = text.split(/\r?\n/).filter(Boolean);
   const out: HistoryPoint[] = [];
@@ -36,6 +40,47 @@ export async function loadChargeHistory(maxPoints = 240): Promise<HistoryPoint[]
       currentUa: Number.isFinite(currentUa as number) ? (currentUa as number) : null,
       status: parts[4] || "",
       source: parts[5] || "",
+    });
+  }
+  return out;
+}
+
+/** 增量拉取：只取 ts 大于 sinceTs 的行（CSV 按时间追加，表头除外）。
+ *  sinceTs=0 时等价于全量拉取但保留最近 maxPoints 条。*/
+export async function loadChargeHistorySince(
+  sinceTs: number,
+  maxPoints = 240,
+): Promise<HistoryPoint[]> {
+  if (sinceTs <= 0) return loadChargeHistory(maxPoints);
+  const result = await exec(
+    `{ cat '${PATHS.CHARGE_HISTORY}' 2>/dev/null; cat '${PATHS.CHARGE_HISTORY}.pending' 2>/dev/null; } | awk -F, -v t=${Math.floor(sinceTs)} 'NR==1 || $1+0>t'`,
+  );
+  return parseChargeHistoryLines(result.stdout);
+}
+
+export interface HealthPoint {
+  ts: number;
+  soh: number | null;
+  cycleCount: number | null;
+}
+
+/** 电池健康趋势：data/health_history.csv（每日一条 soh/cycleCount）。 */
+export async function loadHealthHistory(): Promise<HealthPoint[]> {
+  const result = await exec(`cat '${PATHS.HEALTH_HISTORY}' 2>/dev/null`);
+  const text = result.stdout.trim();
+  if (!text) return [];
+  const out: HealthPoint[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (line.startsWith("ts,")) continue;
+    const parts = line.split(",");
+    const ts = Number(parts[0]);
+    if (!Number.isFinite(ts)) continue;
+    const soh = parts[1] && parts[1] !== "--" ? Number(parts[1]) : null;
+    const cc = parts[2] && parts[2] !== "--" ? Number(parts[2]) : null;
+    out.push({
+      ts,
+      soh: Number.isFinite(soh as number) ? (soh as number) : null,
+      cycleCount: Number.isFinite(cc as number) ? (cc as number) : null,
     });
   }
   return out;
