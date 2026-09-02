@@ -34,7 +34,7 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 /// 支持的扩展子命令；features 子命令原样打印
-const FEATURES: &str = "watch pkgs selftest";
+const FEATURES: &str = "watch pkgs selftest plugged diagnose";
 
 const NETLINK_KOBJECT_UEVENT: libc::c_int = 15;
 const RECV_BUF: usize = 8192;
@@ -203,7 +203,6 @@ fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
     }
     let remaining = max_secs.saturating_sub(floor);
     if remaining == 0 {
-        eprintln!("qscd: wake=floor_only");
         return EXIT_OK;
     }
 
@@ -220,7 +219,6 @@ fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
         // 白让 CPU 进不了深层 idle，而事件到达本来就是立即返回、与超时无关。
         let left = deadline.saturating_duration_since(Instant::now());
         if left < RECV_MIN_TIMEOUT {
-            eprintln!("qscd: wake=timeout");
             return EXIT_OK;
         }
         match sock.poll_once(&mut buf, left) {
@@ -229,7 +227,7 @@ fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
                     eprintln!("qscd: reason=event_drain");
                     return EXIT_UNUSABLE;
                 }
-                eprintln!("qscd: wake=event");
+                // 正常路径：只靠 exit code 0 叫醒 shell，不再额外刷高频 stderr 日志
                 return EXIT_OK;
             }
             // 超时或与电池无关的事件：回到循环按新的剩余时间重设超时
@@ -476,7 +474,6 @@ fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
     }
     let remaining = max_secs.saturating_sub(floor_secs);
     if remaining == 0 {
-        eprintln!("qscd: wake=floor_only");
         return EXIT_OK;
     }
     let Some(sock) = UeventSocket::open() else {
@@ -489,7 +486,6 @@ fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
     loop {
         let left = deadline.saturating_duration_since(Instant::now());
         if left < RECV_MIN_TIMEOUT {
-            eprintln!("qscd: wake=timeout");
             return EXIT_OK;
         }
         match sock.poll_once(&mut buf, left) {
@@ -500,7 +496,8 @@ fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
                         eprintln!("qscd: reason=event_drain");
                         return EXIT_UNUSABLE;
                     }
-                    eprintln!("qscd: wake={reason}");
+                    // 精简：正常叫醒路径不再额外写 wake=* 的高频 stderr 日志，
+                    // 只保留 exit code；异常原因继续输出，便于运维定位。
                     return EXIT_OK;
                 }
             }
@@ -625,10 +622,87 @@ fn selftest(root: &str) -> u8 {
     println!("snapshot_failure={snapshot_failure}");
     println!("watch=1");
     println!("pkgs=1");
+    println!("plugged=1");
+    println!("diagnose=1");
     if netlink {
         EXIT_OK
     } else {
         EXIT_UNUSABLE
+    }
+}
+
+/// `qscd plugged [--sysfs-root DIR]`：exit 0=插电，1=未插，2=不可读
+fn plugged(root: &str) -> u8 {
+    // 复用 PowerState：读 online / status / 电源 online 节点三向投票
+    let state = PowerState::read(root);
+    if state.plugged { EXIT_OK } else { EXIT_NO_HIT }
+}
+
+/// `qscd diagnose [--sysfs-root DIR]`：枚举关键电源节点是否可读/是否有缺值，
+/// 打印 k=v（含归一化后的 level/temp/status/plugged）。shell 侧可直接 grep 定位异常。
+fn diagnose(root: &str) -> u8 {
+    let base = format!("{root}/sys/class/power_supply");
+    let snapshot = BatterySnapshot::read(root);
+    let state = PowerState::read(root);
+    let snapshot_source = match &snapshot.source {
+        SnapshotSource::Battery => "battery",
+        SnapshotSource::Bms => "bms",
+        SnapshotSource::Soc => "soc",
+        SnapshotSource::Missing => "missing",
+    };
+    println!("snapshot_source={snapshot_source}");
+    println!("plugged={}", if state.plugged { 1 } else { 0 });
+    println!(
+        "level={}",
+        snapshot
+            .level
+            .map_or_else(|| "missing".to_string(), |v| v.to_string()),
+    );
+    println!(
+        "temp={}",
+        snapshot
+            .temp
+            .map_or_else(|| "missing".to_string(), |v| v.to_string()),
+    );
+    println!(
+        "status={}",
+        snapshot.status.as_deref().unwrap_or("missing")
+    );
+    // 逐节点输出关键信号原值值（缺失=missing），便于 shell 端定位某台机型
+    for name in [
+        "online",
+        "present",
+        "type",
+        "real_type",
+        "voltage_now",
+        "status",
+        "current_now",
+        "capacity",
+        "temp",
+    ] {
+        // 先 battery；失败再 bms/soc 回退
+        let mut val: Option<String> = None;
+        for sub in ["battery", "bms", "soc"] {
+            let p = format!("{base}/{sub}/{name}");
+            if let Some(v) = read_text(&p) {
+                val = Some(v);
+                break;
+            }
+        }
+        let v = val.as_deref().unwrap_or("missing");
+        println!("node.{name}={v}");
+    }
+    let failure = match snapshot.failure {
+        SnapshotFailure::None => "none",
+        SnapshotFailure::LevelMissing => "level_missing",
+        SnapshotFailure::TemperatureMissing => "temperature_missing",
+        SnapshotFailure::StatusMissing => "status_missing",
+    };
+    println!("snapshot_failure={failure}");
+    // 任何关键缺项返回 2，完全 OK=0
+    match snapshot.failure {
+        SnapshotFailure::None => EXIT_OK,
+        _ => EXIT_UNUSABLE,
     }
 }
 
@@ -688,12 +762,27 @@ fn main() -> ExitCode {
             }
             ExitCode::from(selftest(root))
         }
+        Some("plugged") => {
+            let mut root = "";
+            if let Some(i) = args.iter().position(|a| a == "--sysfs-root") {
+                root = args.get(i + 1).map(String::as_str).unwrap_or("");
+            }
+            ExitCode::from(plugged(root))
+        }
+        Some("diagnose") => {
+            let mut root = "";
+            if let Some(i) = args.iter().position(|a| a == "--sysfs-root") {
+                root = args.get(i + 1).map(String::as_str).unwrap_or("");
+            }
+            ExitCode::from(diagnose(root))
+        }
         _ => {
             eprintln!(
                 "usage: qscd wait-event <max_secs> [floor_secs]\n       \
                  qscd watch --max N [--floor N] [--stop N] [--near N] [--temp-stop N]\n       \
                  qscd pkgs <list_file> [--proc-root DIR]\n       \
-                 qscd probe | qscd features | qscd selftest [--sysfs-root DIR]"
+                 qscd plugged | qscd diagnose | qscd probe | qscd features\n       \
+                 qscd selftest [--sysfs-root DIR]"
             );
             ExitCode::from(EXIT_UNUSABLE)
         }

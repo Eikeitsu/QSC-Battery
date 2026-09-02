@@ -20,9 +20,12 @@
  */
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -44,6 +47,7 @@ static const char MATCH[] = "SUBSYSTEM=power_supply";
 
 #define EXIT_OK 0
 #define EXIT_UNUSABLE 2
+#define EXIT_NO_HIT 1
 
 #define WAIT_MAX_CAP 3600u
 #define WAIT_MAX_DEFAULT 30u
@@ -179,7 +183,6 @@ static int wait_event(unsigned long max_secs, unsigned long floor_secs) {
   }
   remaining = max_secs - floor;
   if (remaining == 0) {
-    fprintf(stderr, "qscd: wake=floor_only\n");
     return EXIT_OK;
   }
 
@@ -220,7 +223,6 @@ static int wait_event(unsigned long max_secs, unsigned long floor_secs) {
 
     rc = uevent_poll_once(fd, buf, sizeof(buf));
     if (rc > 0) {
-      fprintf(stderr, "qscd: wake=event\n");
       close(fd);
       return EXIT_OK;
     }
@@ -232,7 +234,103 @@ static int wait_event(unsigned long max_secs, unsigned long floor_secs) {
     /* 超时或与电池无关的事件：回到循环按新的剩余时间重设超时 */
   }
   close(fd);
-  fprintf(stderr, "qscd: wake=timeout\n");
+  return EXIT_OK;
+}
+
+/* qscd cat <path>：安全地把一个只读节点写到 stdout（64KB cap）。
+ * 相对 shell 多次 fork 版 `cat` 做：
+ *   • 限制单次读 64KB：避免 sysfs 怪节点无限读
+ *   • 失败 exit=2，成功 exit=0
+ */
+static int cmd_cat(const char *path) {
+  char buf[4096];
+  size_t cap = 65536u;
+  size_t total = 0;
+  int fd;
+  ssize_t n;
+
+  if (path == NULL || *path == '\0') return EXIT_UNUSABLE;
+  fd = open(path, O_RDONLY | O_CLOEXEC);
+  if (fd < 0) return EXIT_UNUSABLE;
+
+  for (;;) {
+    size_t remain = cap - total;
+    size_t want = remain < sizeof(buf) ? remain : sizeof(buf);
+    if (want == 0) {
+      close(fd);
+      return EXIT_OK;
+    }
+    n = read(fd, buf, want);
+    if (n < 0) {
+      if (errno == EINTR) continue;
+      close(fd);
+      return EXIT_UNUSABLE;
+    }
+    if (n == 0) break;
+    total += (size_t)n;
+    if (fwrite(buf, 1, (size_t)n, stdout) != (size_t)n) {
+      close(fd);
+      return EXIT_UNUSABLE;
+    }
+  }
+  close(fd);
+  return EXIT_OK;
+}
+
+/* qscd stat <path>：以 k=v 打印文件元信息（尽量少 syscall，保持 POD 输出）：
+ *   exists=0/1, readable=0/1, size=N, first_line=<head 80 bytes trim ws>
+ * 任何项缺失都写 missing，保证每一行都有。
+ * exit=0 可读，exit=1 不存在，exit=2 用法错 / 不可读
+ */
+static int cmd_stat(const char *path) {
+  struct stat st;
+  char head[81];
+  ssize_t got;
+  int fd;
+  int rc;
+
+  if (path == NULL || *path == '\0') return EXIT_UNUSABLE;
+  rc = stat(path, &st);
+  if (rc < 0) {
+    printf("exists=0\nreadable=0\nsize=0\nfirst_line=missing\n");
+    return EXIT_NO_HIT;
+  }
+  fd = open(path, O_RDONLY | O_CLOEXEC);
+  if (fd < 0) {
+    printf("exists=1\nreadable=0\nsize=%lld\nfirst_line=missing\n",
+           (long long)st.st_size);
+    return EXIT_UNUSABLE;
+  }
+  got = read(fd, head, 80);
+  close(fd);
+  if (got > 0) {
+    size_t len = (size_t)got;
+    size_t i;
+    head[len] = '\0';
+    /* 把换行和空白截掉，保持一行可读 */
+    for (i = 0; i < len; i++) {
+      if (head[i] == '\n' || head[i] == '\r') {
+        head[i] = '\0';
+        len = i;
+        break;
+      }
+    }
+    /* 首末白空格 trim：前 */
+    size_t s = 0;
+    while (s < len && (head[s] == ' ' || head[s] == '\t')) s++;
+    memmove(head, head + s, len - s + 1);
+    /* 尾 */
+    len = strlen(head);
+    while (len > 0 && (head[len - 1] == ' ' || head[len - 1] == '\t')) {
+      head[len - 1] = '\0';
+      len--;
+    }
+    printf("exists=1\nreadable=1\nsize=%lld\nfirst_line=%s\n",
+           (long long)st.st_size, head);
+  } else {
+    printf("exists=1\nreadable=1\nsize=%lld\nfirst_line=--\n",
+           (long long)st.st_size);
+  }
   return EXIT_OK;
 }
 
@@ -315,6 +413,14 @@ int main(int argc, char **argv) {
   if (cmd != NULL && strcmp(cmd, "selftest") == 0) {
     return selftest();
   }
-  fprintf(stderr, "usage: qscd wait-event <max_secs> [floor_secs] | qscd probe\n");
+  if (cmd != NULL && strcmp(cmd, "cat") == 0) {
+    return cmd_cat(argc > 2 ? argv[2] : NULL);
+  }
+  if (cmd != NULL && strcmp(cmd, "stat") == 0) {
+    return cmd_stat(argc > 2 ? argv[2] : NULL);
+  }
+  fprintf(stderr,
+          "usage: qscd wait-event <max_secs> [floor_secs] | qscd probe | "
+          "qscd cat <path> | qscd stat <path>\n");
   return EXIT_UNUSABLE;
 }
