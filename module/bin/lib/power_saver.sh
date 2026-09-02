@@ -202,11 +202,36 @@ qsc_ps_plugged() {
 				;;
 		esac
 	fi
-	# MCA 的 battery/status 常为 Not charging，但此时仍是插线状态。
+	# MCA 的 battery/status 常为 Not charging，但此时仍是插线状态；
+	# 若此时 current_now < 0 则说明电池在放电，按未插线处理，避免误判。
 	if qsc_ps_read "$PSDIR/battery/status"; then
 		case "$QSC_PS_VAL" in
-			Charging|Full|"Not charging")
+			Charging|Full)
 				qsc_ps_dbg ps_status debug "插电信号: battery/status=$QSC_PS_VAL（MCA 兼容）"
+				return 0
+				;;
+			"Not charging")
+				local cur cur_int
+				for p in "$PSDIR/battery/current_now" \
+					"$PSDIR/bms/current_now" \
+					"$PSDIR/soc/current_now"; do
+					if qsc_ps_read "$p"; then
+						cur="$QSC_PS_VAL"
+						case "$cur" in
+							-|""|*[!0-9-]*) continue ;;
+						esac
+						cur_int="${cur#-}"
+						case "$cur_int" in
+							""|*[!0-9]*) continue ;;
+						esac
+						if [ "${cur%"$cur_int"}" = "-" ] && [ "$cur_int" -gt 10000 ] 2>/dev/null; then
+							qsc_ps_dbg ps_status debug "非插电信号: status=Not charging 但 $p=$cur（电池放电）"
+							return 1
+						fi
+						break
+					fi
+				done
+				qsc_ps_dbg ps_status debug "插电信号: battery/status=Not charging（MCA 兼容，无反向电流证据）"
 				return 0
 				;;
 		esac
