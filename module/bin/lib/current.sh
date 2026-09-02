@@ -43,9 +43,16 @@ QSC_CURRENT_SAFE_FALLBACK="\
 /sys/class/power_supply/battery/current_max"
 
 # 可选硬件旁路节点（仅探测，不强制创建）
+# 正极性：写 1 进入旁路（充电器直供主板，电池休眠）
 QSC_BYPASS_NODE_CANDIDATES="\
 /sys/class/qcom-battery/bypass_charging_enable \
-/sys/class/power_supply/battery/enable_bypass_mode"
+/sys/class/power_supply/main/bypass_enable \
+/sys/class/power_supply/battery/enable_bypass_mode \
+/sys/class/power_supply/battery/bypass_charging"
+# 反极性：写 0 进入旁路（关闭充电使能即进入旁路）
+QSC_BYPASS_INV_CANDIDATES="\
+/sys/devices/virtual/oplus_chg/battery/mmi_charging_enable \
+/sys/class/oplus_chg/battery/mmi_charging_enable"
 
 # µA → 可读 mA（日志用）
 qsc_fmt_ma() {
@@ -387,15 +394,24 @@ qsc_current_build_nodes() {
 	return 0
 }
 
-# 探测可用硬件旁路节点；写入 QSC_BYPASS_NODE（可能为空）
+# 探测可用硬件旁路节点；写入 QSC_BYPASS_NODE / QSC_BYPASS_ON_VAL（可能为空）
+# 正极性节点写 1 进旁路；反极性节点写 0 进旁路
 qsc_bypass_probe_node() {
 	local node cur
 	QSC_BYPASS_NODE=""
+	QSC_BYPASS_ON_VAL=1
 	for node in $QSC_BYPASS_NODE_CANDIDATES; do
 		[ -f "$node" ] || continue
 		cur="$(cat "$node" 2>/dev/null | tr -d ' \r\n')"
 		case "$cur" in
-			0|1) QSC_BYPASS_NODE="$node"; return 0 ;;
+			0|1) QSC_BYPASS_NODE="$node"; QSC_BYPASS_ON_VAL=1; return 0 ;;
+		esac
+	done
+	for node in $QSC_BYPASS_INV_CANDIDATES; do
+		[ -f "$node" ] || continue
+		cur="$(cat "$node" 2>/dev/null | tr -d ' \r\n')"
+		case "$cur" in
+			0|1) QSC_BYPASS_NODE="$node"; QSC_BYPASS_ON_VAL=0; return 0 ;;
 		esac
 	done
 	return 1
@@ -412,10 +428,12 @@ qsc_bypass_hw_on() {
 	esac
 	echo "$prev" >"$DATADIR/bypass_node_prev" 2>/dev/null
 	echo "$node" >"$DATADIR/bypass_node_path" 2>/dev/null
+	[ -n "$QSC_BYPASS_ON_VAL" ] || QSC_BYPASS_ON_VAL=1
+	echo "$QSC_BYPASS_ON_VAL" >"$DATADIR/bypass_node_onval" 2>/dev/null
 	chmod 0644 "$node" 2>/dev/null
-	echo "1" >"$node" 2>/dev/null || return 1
+	echo "$QSC_BYPASS_ON_VAL" >"$node" 2>/dev/null || return 1
 	cur="$(cat "$node" 2>/dev/null | tr -d ' \r\n')"
-	[ "$cur" = "1" ]
+	[ "$cur" = "$QSC_BYPASS_ON_VAL" ]
 }
 
 qsc_bypass_hw_off() {
@@ -424,7 +442,7 @@ qsc_bypass_hw_off() {
 	prev="$(cat "$DATADIR/bypass_node_prev" 2>/dev/null)"
 	[ -z "$node" ] && node="$QSC_BYPASS_NODE"
 	[ -n "$node" ] && [ -f "$node" ] || {
-		rm -f "$DATADIR/bypass_node_path" "$DATADIR/bypass_node_prev"
+		rm -f "$DATADIR/bypass_node_path" "$DATADIR/bypass_node_prev" "$DATADIR/bypass_node_onval"
 		return 0
 	}
 	case "$prev" in
@@ -433,7 +451,7 @@ qsc_bypass_hw_off() {
 	esac
 	chmod 0644 "$node" 2>/dev/null
 	echo "$prev" >"$node" 2>/dev/null
-	rm -f "$DATADIR/bypass_node_path" "$DATADIR/bypass_node_prev"
+	rm -f "$DATADIR/bypass_node_path" "$DATADIR/bypass_node_prev" "$DATADIR/bypass_node_onval"
 	return 0
 }
 
