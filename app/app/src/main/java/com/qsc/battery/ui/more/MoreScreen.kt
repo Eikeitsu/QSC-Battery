@@ -57,7 +57,12 @@ fun MoreScreen(
             append(if (snap.root == PermStatus.Ok) "Root ✓  " else "Root ✗  ")
             append(if (snap.notifications == PermStatus.Ok) "通知 ✓  " else "通知 ✗  ")
             append(if (snap.installPackages == PermStatus.Ok) "安装 ✓  " else "安装 ✗  ")
-            append(if (XpRuntime.isHooked) "XP ✓" else "XP ○")
+            append(if (XpRuntime.isAvailable(container.appContext)) "XP ✓" else "XP ○")
+        }
+        // 用设备上的关闭标记对齐 DataStore（XP 侧只认文件）
+        if (container.root.isRootAvailable()) {
+            val off = container.root.exists("/data/adb/qsc/xp_power_events_off")
+            container.settingsRepository.setXpPowerEvents(!off)
         }
     }
 
@@ -86,13 +91,26 @@ fun MoreScreen(
             }
             PrefSwitch(
                 title = "XP 供电事件补强",
-                summary = if (XpRuntime.isHooked) {
-                    "框架已注入；写入提示文件供模块参考"
+                summary = if (XpRuntime.isAvailable(container.appContext)) {
+                    "LSPosed API 102；开启后由系统侧写入提示文件"
                 } else {
-                    "需在 LSPosed 启用本应用，作用域勾选系统框架"
+                    "需安装并启用 LSPosed，作用域勾选系统框架(android)"
                 },
                 checked = xpEnabled,
-                onCheckedChange = { scope.launch { container.settingsRepository.setXpPowerEvents(it) } },
+                onCheckedChange = { enabled ->
+                    scope.launch {
+                        container.settingsRepository.setXpPowerEvents(enabled)
+                        if (container.root.isRootAvailable()) {
+                            if (enabled) {
+                                container.root.rm("/data/adb/qsc/xp_power_events_off")
+                            } else {
+                                container.root.exec(
+                                    "mkdir -p /data/adb/qsc; touch /data/adb/qsc/xp_power_events_off",
+                                )
+                            }
+                        }
+                    }
+                },
             )
             PrefAction(
                 title = "快捷设置磁贴",

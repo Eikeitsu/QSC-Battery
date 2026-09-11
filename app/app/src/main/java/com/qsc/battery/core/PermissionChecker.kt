@@ -45,7 +45,7 @@ class PermissionChecker(private val context: Context) {
             } else {
                 PermStatus.Missing
             },
-            xposedActive = if (XpRuntime.isHooked) PermStatus.Ok else PermStatus.Missing,
+            xposedActive = if (XpRuntime.isAvailable(context)) PermStatus.Ok else PermStatus.Missing,
             modulePresent = modulePresent,
         )
     }

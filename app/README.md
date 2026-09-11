@@ -4,7 +4,7 @@ Kotlin + Jetpack Compose。只负责配置/状态/更新；**不挂后台保活*
 
 **可不安装模块单独使用**（主题、检查更新、下载模块）。装上模块并授予 Root 后才能读写停充配置。
 
-可选 **LSPosed 增强**：系统侧供电事件补强（不写充电节点）。
+可选 **LSPosed 增强**（现代 API 102）：系统侧供电事件补强（不写充电节点）。
 
 ## 功能
 
@@ -25,7 +25,7 @@ npm run package:app -- --skip-build   # 只刷新 app-update.json
 
 | 目标 | URL |
 |------|-----|
-| 模块 | https://eikeitsu.github.io/QSC-Battery/update.json |
-| APP | https://eikeitsu.github.io/QSC-Battery/app-update.json |
+| 模块 | [update.json](https://eikeitsu.github.io/QSC-Battery/update.json) |
+| APP | [app-update.json](https://eikeitsu.github.io/QSC-Battery/app-update.json) |
 
 桌面显示名：**充电控制** · 包名 `com.qsc.battery` · `minSdk 33`

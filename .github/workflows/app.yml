@@ -49,14 +49,16 @@ jobs:
 
       - name: Ensure Gradle Wrapper
         run: |
+          chmod +x gradlew
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
             curl -sL https://services.gradle.org/distributions/gradle-8.13-bin.zip -o /tmp/gradle.zip
             sudo unzip -q /tmp/gradle.zip -d /opt
             /opt/gradle-8.13/bin/gradle wrapper --gradle-version 8.13
+            chmod +x gradlew
           fi
 
       - name: Assemble release + debug
-        run: ./gradlew :app:assembleRelease :app:assembleDebug --stacktrace
+        run: chmod +x gradlew && ./gradlew :app:assembleRelease :app:assembleDebug --stacktrace
 
       - name: Stage APKs
         working-directory: .

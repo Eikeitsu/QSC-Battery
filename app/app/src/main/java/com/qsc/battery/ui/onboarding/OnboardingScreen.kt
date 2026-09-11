@@ -175,15 +175,16 @@ fun OnboardingScreen(
                     title = "框架注入",
                     ok = xp == PermStatus.Ok,
                     detail = if (xp == PermStatus.Ok) {
-                        "已检测到本模块被激活"
+                        "已检测到 LSPosed 管理器或框架目录；请在管理器中勾选「充电控制」，作用域为系统框架(android)，然后重启"
                     } else {
-                        "未检测到。可在 LSPosed 中勾选「充电控制」，作用域勾选「系统框架(android)」后重启"
+                        "未检测到 LSPosed。可安装后在管理器中启用本模块（API 102），作用域勾选系统框架"
                     },
                 )
                 PrefCard {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("增强内容：系统 BatteryService 变化时写入事件提示文件，帮助模块更快感知插拔。")
                         Text("不增强也不影响停充：模块本身已能工作。")
+                        Text("使用现代 Xposed API 102，不写充电控制节点。")
                         Text(
                             if (snap?.modulePresent == true) "已检测到 Magisk 模块。"
                             else "尚未安装 Magisk 模块，可稍后在「更多 → 更新」下载。",

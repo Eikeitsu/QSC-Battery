@@ -79,5 +79,5 @@ dependencies {
     implementation(libs.miuix.preference)
     implementation(libs.material.kolor)
     implementation(libs.okhttp)
-    compileOnly(libs.xposed.api)
+    compileOnly(libs.libxposed.api)
 }
