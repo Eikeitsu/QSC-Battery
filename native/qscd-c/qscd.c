@@ -226,8 +226,8 @@ static int wait_event(unsigned long max_secs, unsigned long floor_secs) {
       /* 保留 "wake=event" 诊断字串用于热更契约扫描；
        * 线上默认不打印，仅 QSCD_DEBUG 显式打开时写一次 stderr。 */
       if (getenv("QSCD_DEBUG") != NULL) {
-        /* wake=event (debug only) */
-        fprintf(stderr, "qscd: wake=event debug\n");
+        /* wake=event (debug only; keep keyword for hot-update contract) */
+        fprintf(stderr, "qscd: wake=event 收到供电事件，准备检查\n");
       }
       close(fd);
       return EXIT_OK;

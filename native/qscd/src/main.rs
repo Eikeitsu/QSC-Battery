@@ -235,8 +235,8 @@ fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
             // 仅当 QSCD_DEBUG 环境变量显式打开时写一次 stderr。
             Ok(Some(false)) | Ok(None) => {
                 if std::env::var_os("QSCD_DEBUG").is_some() {
-                    // wake=timeout (debug only)
-                    eprintln!("qscd: wake=timeout debug");
+                    // wake=timeout (debug only; keep keyword for hot-update contract)
+                    eprintln!("qscd: wake=timeout 等待超时，继续监听供电事件");
                 }
             }
             Err(_) => {

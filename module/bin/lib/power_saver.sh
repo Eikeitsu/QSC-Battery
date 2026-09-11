@@ -49,9 +49,27 @@ qsc_ps_native_parse_stderr() {
 
 qsc_ps_log_native_wake() {
 	local wake="${QSC_PS_NATIVE_WAKE:-ok}"
-	local msg="${QSC_PS_NATIVE_MODE:-wait}: ${wake}"
-	qsc_ps_record_wake "$msg"
-	# 唤醒细节走 DEBUG，避免主循环每轮刷屏；日志页切到 Debug 可见。
+	local mode="${QSC_PS_NATIVE_MODE:-wait}"
+	local human="" msg _now _prev_at _prev_why
+	case "$wake" in
+		event|ok) human="收到供电变化，开始检查" ;;
+		timeout) human="等待超时，按计划检查" ;;
+		*) human="被叫醒（原因：$wake）" ;;
+	esac
+	msg="${mode}: ${human}"
+	qsc_ps_record_wake "${mode}: ${wake}"
+	# 唤醒细节走 DEBUG，且做简单节流：同一原因连续刷时最多 30 秒写一条
+	qsc_debug_enabled || return 0
+	_now="$(date +%s 2>/dev/null)"
+	case "$_now" in ""|*[!0-9]*) _now=0 ;; esac
+	_prev_at="$(cat "$DATADIR/qscd_wake_log_at" 2>/dev/null | tr -d ' \r\n')"
+	_prev_why="$(cat "$DATADIR/qscd_wake_log_why" 2>/dev/null | tr -d '\r\n')"
+	case "$_prev_at" in ""|*[!0-9]*) _prev_at=0 ;; esac
+	if [ "$wake" = "$_prev_why" ] && [ "$((_now - _prev_at))" -lt 30 ] 2>/dev/null; then
+		return 0
+	fi
+	printf '%s\n' "$_now" >"$DATADIR/qscd_wake_log_at" 2>/dev/null
+	printf '%s\n' "$wake" >"$DATADIR/qscd_wake_log_why" 2>/dev/null
 	qsc_log debug "qscd ${msg}"
 }
 
@@ -164,7 +182,7 @@ qsc_ps_plugged() {
 		"$PSDIR/dc/online" \
 		"$PSDIR/wireless/online"; do
 		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
-			qsc_ps_dbg ps_online debug "插电信号: $p=1"
+			qsc_ps_dbg ps_online debug "判定已插电：${p##*/}=1"
 			return 0
 		fi
 	done
@@ -172,7 +190,7 @@ qsc_ps_plugged() {
 	for p in "$PSDIR/usb/present" "$PSDIR/qc_usb/present" \
 		"$PSDIR/wireless/present" "$PSDIR/ac/present"; do
 		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
-			qsc_ps_dbg ps_present debug "插电信号: $p=1（online 可能为 0）"
+			qsc_ps_dbg ps_present debug "判定已插电：${p##*/}=1（online 可能为 0）"
 			return 0
 		fi
 	done
@@ -182,7 +200,7 @@ qsc_ps_plugged() {
 			case "$v" in
 				""|Unknown|UNKNOWN|None|NONE) ;;
 				*)
-					qsc_ps_dbg ps_type debug "插电信号: $p=$v（online 可能为 0）"
+					qsc_ps_dbg ps_type debug "判定已插电：接口类型 $v"
 					return 0
 					;;
 			esac
@@ -196,7 +214,7 @@ qsc_ps_plugged() {
 				# 单位可能是 µV 或 mV，取 3V 作门槛。
 				if [ "$v" -gt 3000000 ] 2>/dev/null || \
 					{ [ "$v" -gt 3000 ] 2>/dev/null && [ "$v" -lt 100000 ] 2>/dev/null; }; then
-					qsc_ps_dbg ps_voltage debug "插电信号: usb/voltage_now=$v（online 可能为 0）"
+					qsc_ps_dbg ps_voltage debug "判定已插电：USB 电压有效（$v）"
 					return 0
 				fi
 				;;
@@ -207,7 +225,7 @@ qsc_ps_plugged() {
 	if qsc_ps_read "$PSDIR/battery/status"; then
 		case "$QSC_PS_VAL" in
 			Charging|Full)
-				qsc_ps_dbg ps_status debug "插电信号: battery/status=$QSC_PS_VAL（MCA 兼容）"
+				qsc_ps_dbg ps_status debug "判定已插电：电池状态 $QSC_PS_VAL"
 				return 0
 				;;
 			"Not charging")
@@ -225,13 +243,13 @@ qsc_ps_plugged() {
 							""|*[!0-9]*) continue ;;
 						esac
 						if [ "${cur%"$cur_int"}" = "-" ] && [ "$cur_int" -gt 10000 ] 2>/dev/null; then
-							qsc_ps_dbg ps_status debug "非插电信号: status=Not charging 但 $p=$cur（电池放电）"
+							qsc_ps_dbg ps_status debug "判定未插电：Not charging 且放电电流 $cur"
 							return 1
 						fi
 						break
 					fi
 				done
-				qsc_ps_dbg ps_status debug "插电信号: battery/status=Not charging（MCA 兼容，无反向电流证据）"
+				qsc_ps_dbg ps_status debug "判定已插电：Not charging（无反向放电证据）"
 				return 0
 				;;
 		esac
