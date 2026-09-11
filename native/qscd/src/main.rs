@@ -642,7 +642,11 @@ fn selftest(root: &str) -> u8 {
 fn plugged(root: &str) -> u8 {
     // 复用 PowerState：读 online / status / 电源 online 节点三向投票
     let state = PowerState::read(root);
-    if state.plugged { EXIT_OK } else { EXIT_NO_HIT }
+    if state.plugged {
+        EXIT_OK
+    } else {
+        EXIT_NO_HIT
+    }
 }
 
 /// `qscd diagnose [--sysfs-root DIR]`：枚举关键电源节点是否可读/是否有缺值，
@@ -671,10 +675,7 @@ fn diagnose(root: &str) -> u8 {
             .temp
             .map_or_else(|| "missing".to_string(), |v| v.to_string()),
     );
-    println!(
-        "status={}",
-        snapshot.status.as_deref().unwrap_or("missing")
-    );
+    println!("status={}", snapshot.status.as_deref().unwrap_or("missing"));
     // 逐节点输出关键信号原值值（缺失=missing），便于 shell 端定位某台机型
     for name in [
         "online",
