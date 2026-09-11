@@ -1,37 +1,31 @@
-# QSC Battery Companion App
+# 充电控制 · 伴侣 APP
 
-Kotlin + Jetpack Compose 伴侣应用。只负责配置/状态/更新；**不挂后台**，停充逻辑仍由 Magisk 模块执行。
+Kotlin + Jetpack Compose。只负责配置/状态/更新；**不挂后台保活**，停充逻辑由 Magisk 模块执行。
 
-**APP 可不安装 Magisk 模块单独使用**（主题、检查更新、下载模块 zip）。装上模块后才能读写停充配置。
+**可不安装模块单独使用**（主题、检查更新、下载模块）。装上模块并授予 Root 后才能读写停充配置。
+
+可选 **LSPosed 增强**：系统侧供电事件补强（不写充电节点）。
 
 ## 功能
 
-- 主题：MIUIX / Material（设置项对齐 SukiSU：UiMode / ColorMode / Monet / AMOLED / 调色板）
+- 主题：MIUIX / Material、动态取色、调色板
 - Root 读写 `/data/adb/modules/QSC_Battery`（有模块时）
-- 主页状态、模块软开关（`off_qsc`）
-- 策略 / 日志 / 配置档 / 守护下载 / APP·模块更新
+- 主页 / 策略 / 日志 / 配置档 / 守护 / 更新
+- 首启权限引导、快捷设置磁贴、可选 XP 模块
 
-## 构建（仅 GitHub Actions 云编译）
+## 构建（仅 GitHub Actions）
 
-**请勿依赖本地 Android SDK。** 推送 `app/` 或手动触发 [App](../.github/workflows/app.yml) 工作流即可：
-
-1. Actions → **App** → 产出 `qsc-companion-apk`（含 `QSC-Battery.apk`）
-2. **Package Module** 会尝试拉取该 artifact，嵌入 zip 的 `app/QSC-Battery.apk`
-3. 刷入模块时 **音量键可选安装** APP（默认可跳过）
-
-本地若只有 Node，可刷新更新清单（不编译）：
+推送 `app/` 或手动触发 **App** 工作流；Package Module 可嵌入产物 APK。刷模块时音量键**可选**安装本 APP。
 
 ```bash
-npm run package:app -- --skip-build
+npm run package:app -- --skip-build   # 只刷新 app-update.json
 ```
 
-## 更新通道
+## 更新
 
 | 目标 | URL |
 |------|-----|
 | 模块 | https://eikeitsu.github.io/QSC-Battery/update.json |
 | APP | https://eikeitsu.github.io/QSC-Battery/app-update.json |
 
-## 包名
-
-`com.qsc.battery`（debug：`com.qsc.battery.debug`）· `minSdk 33`
+桌面显示名：**充电控制** · 包名 `com.qsc.battery` · `minSdk 33`

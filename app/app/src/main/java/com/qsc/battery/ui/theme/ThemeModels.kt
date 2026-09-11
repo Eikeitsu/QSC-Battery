@@ -1,6 +1,6 @@
 package com.qsc.battery.ui.theme
 
-/** Aligns with SukiSU UiMode. */
+/** 界面风格：MIUIX 或 Material。 */
 enum class UiMode(val value: String) {
     Miuix("miuix"),
     Material("material");
@@ -10,7 +10,7 @@ enum class UiMode(val value: String) {
     }
 }
 
-/** Aligns with SukiSU ColorMode. */
+/** 颜色模式（含动态取色 / 纯黑）。 */
 enum class ColorMode(val value: Int) {
     SYSTEM(0),
     LIGHT(1),

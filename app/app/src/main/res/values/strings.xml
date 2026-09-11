@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">QSC Battery</string>
+    <string name="app_name">充电控制</string>
     <string name="nav_home">主页</string>
     <string name="nav_config">策略</string>
     <string name="nav_log">日志</string>
     <string name="nav_more">更多</string>
-    <string name="need_root">需要 Root 权限才能控制充电模块</string>
-    <string name="module_missing">未检测到 QSC_Battery 模块</string>
+    <string name="need_root">需要 Root 才能读写 Magisk 模块配置</string>
+    <string name="module_missing">未检测到充电控制模块</string>
     <string name="settings_ui_mode">界面风格</string>
     <string name="settings_ui_mode_summary">在 MIUIX 与 Material Design 3 之间切换</string>
     <string name="settings_theme">颜色模式</string>
@@ -14,4 +14,7 @@
     <string name="settings_miuix_monet">MIUIX 跟随动态取色</string>
     <string name="icon_switch_title">备用桌面图标</string>
     <string name="icon_switch_summary">切换应用在桌面上显示的图标</string>
+    <string name="tile_label">充电控制</string>
+    <string name="tile_description">查看或切换模块软开关</string>
+    <string name="xposed_description">可选增强：系统侧供电事件补强，不参与节点停充写入</string>
 </resources>

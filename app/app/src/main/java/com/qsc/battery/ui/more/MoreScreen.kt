@@ -20,11 +20,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier.modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qsc.battery.BuildConfig
+import com.qsc.battery.core.ModulePaths
+import com.qsc.battery.core.PermStatus
+import com.qsc.battery.core.PermissionChecker
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.ui.components.PrefAction
 import com.qsc.battery.ui.components.PrefCard
+import com.qsc.battery.ui.components.PrefSwitch
 import com.qsc.battery.ui.components.SectionLabel
+import com.qsc.battery.xposed.XpRuntime
 import kotlinx.coroutines.launch
 
 @Composable
@@ -32,15 +38,27 @@ fun MoreScreen(
     container: AppContainer,
     onOpenAppearance: () -> Unit,
     onOpenUpdates: () -> Unit,
+    onOpenOnboarding: () -> Unit = {},
 ) {
     var profiles by remember { mutableStateOf<List<String>>(emptyList()) }
     var profileName by remember { mutableStateOf("") }
     var bundleText by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
+    var permHint by remember { mutableStateOf("") }
+    val xpEnabled by container.settingsRepository.xpPowerEventsEnabled.collectAsStateWithLifecycle(true)
     val scope = rememberCoroutineScope()
+    val checker = remember { PermissionChecker(container.appContext) }
 
     LaunchedEffect(Unit) {
         profiles = container.profilesRepository.listNames()
+        val st = container.statusRepository.load()
+        val snap = checker.snapshot(st.modulePresent)
+        permHint = buildString {
+            append(if (snap.root == PermStatus.Ok) "Root ✓  " else "Root ✗  ")
+            append(if (snap.notifications == PermStatus.Ok) "通知 ✓  " else "通知 ✗  ")
+            append(if (snap.installPackages == PermStatus.Ok) "安装 ✓  " else "安装 ✗  ")
+            append(if (XpRuntime.isHooked) "XP ✓" else "XP ○")
+        }
     }
 
     Column(
@@ -55,7 +73,31 @@ fun MoreScreen(
 
         SectionLabel("外观")
         PrefCard {
-            PrefAction("主题与界面风格", "对齐 SukiSU：MIUIX / Material 3") { onOpenAppearance() }
+            PrefAction("主题与界面风格", "MIUIX / Material 3、颜色与调色板") { onOpenAppearance() }
+        }
+
+        SectionLabel("权限与增强")
+        PrefCard {
+            PrefAction("重新检测权限", permHint.ifBlank { "Root / 通知 / 安装包 / XP" }) {
+                scope.launch {
+                    container.settingsRepository.setOnboardingDone(false)
+                    onOpenOnboarding()
+                }
+            }
+            PrefSwitch(
+                title = "XP 供电事件补强",
+                summary = if (XpRuntime.isHooked) {
+                    "框架已注入；写入提示文件供模块参考"
+                } else {
+                    "需在 LSPosed 启用本应用，作用域勾选系统框架"
+                },
+                checked = xpEnabled,
+                onCheckedChange = { scope.launch { container.settingsRepository.setXpPowerEvents(it) } },
+            )
+            PrefAction(
+                title = "快捷设置磁贴",
+                summary = "在系统「编辑磁贴」中添加「充电控制」；点击切换模块软开关（需 Root）",
+            ) {}
         }
 
         SectionLabel("更新与安装")
@@ -84,7 +126,7 @@ fun MoreScreen(
                 onClick = {
                     scope.launch {
                         val conf = container.configRepository.loadConf()
-                        val current = container.root.readFile(com.qsc.battery.core.ModulePaths.CURRENT)
+                        val current = container.root.readFile(ModulePaths.CURRENT)
                         val ok = container.profilesRepository.saveProfile(profileName.trim(), conf, current)
                         profiles = container.profilesRepository.listNames()
                         message = if (ok) "已保存档位" else "保存失败"
@@ -144,10 +186,11 @@ fun MoreScreen(
         SectionLabel("关于")
         PrefCard {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("QSC Battery ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                Text("充电控制 ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                 Text("包名 ${BuildConfig.APPLICATION_ID}")
                 Text("模块 ID ${BuildConfig.MODULE_ID}")
-                Text("底层由 Magisk 模块执行；本 APP 仅配置与展示，不挂后台。")
+                Text("底层由 Magisk 模块执行；本应用仅配置与展示，不挂后台保活。")
+                Text("可选 LSPosed 增强不参与节点写入。")
             }
         }
     }

@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -23,13 +24,21 @@ import com.qsc.battery.data.AppContainer
 import com.qsc.battery.ui.config.ConfigScreen
 import com.qsc.battery.ui.home.HomeScreen
 import com.qsc.battery.ui.log.LogScreen
-import com.qsc.battery.ui.more.MoreScreen
 import com.qsc.battery.ui.more.AppearanceScreen
 import com.qsc.battery.ui.more.ColorPaletteScreen
+import com.qsc.battery.ui.more.MoreScreen
+import com.qsc.battery.ui.more.UpdatesScreen
 import com.qsc.battery.ui.nav.QscTab
+import com.qsc.battery.ui.onboarding.OnboardingScreen
 
 @Composable
 fun QscAppRoot(container: AppContainer) {
+    val onboardingDone by container.settingsRepository.onboardingDone.collectAsStateWithLifecycle(initialValue = false)
+    if (!onboardingDone) {
+        OnboardingScreen(container = container, onFinished = {})
+        return
+    }
+
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route ?: QscTab.Home.route
@@ -76,6 +85,9 @@ fun QscAppRoot(container: AppContainer) {
                     container = container,
                     onOpenAppearance = { nav.navigate("appearance") },
                     onOpenUpdates = { nav.navigate("updates") },
+                    onOpenOnboarding = {
+                        // allow re-run from More via resetting flag handled in MoreScreen
+                    },
                 )
             }
             composable("appearance") {
@@ -92,7 +104,7 @@ fun QscAppRoot(container: AppContainer) {
                 )
             }
             composable("updates") {
-                com.qsc.battery.ui.more.UpdatesScreen(
+                UpdatesScreen(
                     container = container,
                     onBack = { nav.popBackStack() },
                 )

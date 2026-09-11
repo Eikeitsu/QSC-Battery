@@ -13,6 +13,7 @@ materialKolor = "2.1.1"
 okhttp = "5.1.0"
 serialization = "1.9.0"
 core-ktx = "1.17.0"
+xposed = "82"
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -46,3 +47,4 @@ miuix-ui = { module = "top.yukonga.miuix.kmp:miuix-ui-android", version.ref = "m
 miuix-preference = { module = "top.yukonga.miuix.kmp:miuix-preference-android", version.ref = "miuix" }
 material-kolor = { group = "com.materialkolor", name = "material-kolor", version.ref = "materialKolor" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+xposed-api = { group = "de.robv.android.xposed", name = "api", version.ref = "xposed" }

@@ -580,6 +580,16 @@ qsc_ps_mark_native_failure() {
 qsc_ps_wait() {
 	local secs="${1:-30}" floor fallback_secs
 	local rc backoff now
+	# XP 可选增强：若近期有供电事件提示文件，缩短本轮等待
+	if [ -f /data/adb/qsc/xp_power_event ] || [ -f /data/local/tmp/qsc_xp_power_event ]; then
+		_xp_f=/data/adb/qsc/xp_power_event
+		[ -f "$_xp_f" ] || _xp_f=/data/local/tmp/qsc_xp_power_event
+		_xp_mt=$(stat -c %Y "$_xp_f" 2>/dev/null || echo 0)
+		_xp_now=$(date +%s 2>/dev/null || echo 0)
+		if [ "$_xp_mt" -gt 0 ] 2>/dev/null && [ "$((_xp_now - _xp_mt))" -le 20 ] 2>/dev/null; then
+			[ "$secs" -gt 3 ] 2>/dev/null && secs=3
+		fi
+	fi
 	floor="${QSC_PS_WAIT_FLOOR:-3}"
 	[ "$secs" -lt "$floor" ] 2>/dev/null && floor="$secs"
 	fallback_secs="${QSC_PS_WAIT_FALLBACK:-${QSC_PS_LOOP:-3}}"

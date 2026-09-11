@@ -128,7 +128,7 @@ private fun AppearanceMiuix(
         }
         SuperSwitch(
             title = "MIUIX 跟随动态取色",
-            summary = "对应 SukiSU miuixMonet",
+            summary = "开启后 MIUIX 风格也使用动态取色",
             checked = settings.miuixMonet,
             onCheckedChange = onMiuixMonet,
         )
@@ -182,7 +182,7 @@ private fun AppearanceMaterial(
         PrefCard {
             PrefSwitch(
                 title = "MIUIX 跟随动态取色",
-                summary = "对应 SukiSU miuixMonet",
+                summary = "开启后 MIUIX 风格也使用动态取色",
                 checked = settings.miuixMonet,
                 onCheckedChange = onMiuixMonet,
             )

@@ -29,6 +29,9 @@ class SettingsRepository(private val context: Context) {
         val colorSpec = stringPreferencesKey("color_spec")
         val miuixMonet = booleanPreferencesKey("miuix_monet")
         val alternativeIcon = booleanPreferencesKey("alternative_icon")
+        val onboardingDone = booleanPreferencesKey("onboarding_done")
+        val xpPowerEvents = booleanPreferencesKey("xp_power_events")
+        val skipRootWarning = booleanPreferencesKey("skip_root_warning")
     }
 
     val settings: Flow<ThemeSettings> = context.settingsStore.data.map { prefs ->
@@ -41,6 +44,26 @@ class SettingsRepository(private val context: Context) {
             miuixMonet = prefs[Keys.miuixMonet] ?: false,
             alternativeIcon = prefs[Keys.alternativeIcon] ?: false,
         )
+    }
+
+    val onboardingDone: Flow<Boolean> = context.settingsStore.data.map {
+        it[Keys.onboardingDone] ?: false
+    }
+
+    val xpPowerEventsEnabled: Flow<Boolean> = context.settingsStore.data.map {
+        it[Keys.xpPowerEvents] ?: true
+    }
+
+    suspend fun setOnboardingDone(done: Boolean) {
+        context.settingsStore.edit { it[Keys.onboardingDone] = done }
+    }
+
+    suspend fun setXpPowerEvents(enabled: Boolean) {
+        context.settingsStore.edit { it[Keys.xpPowerEvents] = enabled }
+        // LSPosed 可通过 XSharedPreferences 读取同名私有偏好
+        context.getSharedPreferences("qsc_xp", Context.MODE_PRIVATE).edit()
+            .putBoolean("xp_power_events", enabled)
+            .apply()
     }
 
     suspend fun setUiMode(mode: UiMode) {
