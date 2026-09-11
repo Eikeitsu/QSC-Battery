@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qsc.battery.ui.QscAppRoot
 import com.qsc.battery.ui.theme.QscTheme
+import com.qsc.battery.ui.theme.ThemeSettings
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -15,7 +16,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val container = (application as QscApp).container
         setContent {
-            val settings by container.settingsRepository.settings.collectAsStateWithLifecycle()
+            val settings by container.settingsRepository.settings.collectAsStateWithLifecycle(
+                initialValue = ThemeSettings(),
+            )
             QscTheme(settings = settings) {
                 QscAppRoot(container = container)
             }

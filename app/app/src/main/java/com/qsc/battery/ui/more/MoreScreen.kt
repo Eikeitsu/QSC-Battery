@@ -45,7 +45,9 @@ fun MoreScreen(
     var bundleText by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     var permHint by remember { mutableStateOf("") }
-    val xpEnabled by container.settingsRepository.xpPowerEventsEnabled.collectAsStateWithLifecycle(true)
+    val xpEnabled by container.settingsRepository.xpPowerEventsEnabled.collectAsStateWithLifecycle(
+        initialValue = true,
+    )
     val scope = rememberCoroutineScope()
     val checker = remember { PermissionChecker(container.appContext) }
 

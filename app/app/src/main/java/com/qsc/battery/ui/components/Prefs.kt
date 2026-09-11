@@ -49,8 +49,8 @@ fun PrefCard(
 fun PrefSwitch(
     title: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
     summary: String? = null,
+    onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
         modifier = Modifier

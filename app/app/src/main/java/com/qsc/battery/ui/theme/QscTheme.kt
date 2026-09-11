@@ -44,17 +44,12 @@ fun QscTheme(
             if (useDynamic) {
                 DynamicMaterialTheme(
                     seedColor = Color(settings.keyColor),
-                    isDark = dark,
+                    useDarkTheme = dark,
+                    withAmoled = effective.isAmoled && dark,
                     style = style,
                     animate = true,
                 ) {
-                    val scheme = MaterialTheme.colorScheme
-                    val amoled = if (effective.isAmoled && dark) {
-                        scheme.copy(background = Color.Black, surface = Color.Black)
-                    } else {
-                        scheme
-                    }
-                    MaterialTheme(colorScheme = amoled, content = content)
+                    MaterialTheme(content = content)
                 }
             } else {
                 MaterialTheme(
