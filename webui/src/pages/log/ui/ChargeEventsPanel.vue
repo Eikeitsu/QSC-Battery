@@ -7,19 +7,12 @@ defineProps<{
   loading: boolean;
   emptyHint?: string;
 }>();
-
-defineEmits<{
-  refresh: [];
-}>();
 </script>
 
 <template>
   <div class="events-panel">
     <div class="events-panel__toolbar">
       <span class="muted">{{ loading ? "读取中…" : `共 ${events.length} 条` }}</span>
-      <button type="button" class="reload" :disabled="loading" @click="$emit('refresh')">
-        刷新
-      </button>
     </div>
     <ul v-if="events.length" class="event-list" aria-label="充电事件列表">
       <li v-for="(e, idx) in events" :key="`${e.ts}-${idx}`" class="event-item">
@@ -56,16 +49,8 @@ defineEmits<{
   font-size: 12px;
 }
 
-.reload {
-  border: none;
-  background: transparent;
-  color: var(--qsc-primary);
-  font-size: 12px;
-  padding: 0;
-}
-
 .empty {
-  padding: 28px 8px;
+  padding: 28px 4px;
   line-height: 1.55;
   text-align: center;
 }
@@ -85,10 +70,10 @@ defineEmits<{
 
 .event-item {
   display: grid;
-  grid-template-columns: 96px 1fr;
+  grid-template-columns: 88px 1fr;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: 11px 12px;
+  border-radius: 12px;
   background: var(--qsc-surface, #fff);
   border: 1px solid color-mix(in srgb, var(--qsc-text) 6%, transparent);
 }
@@ -161,5 +146,21 @@ defineEmits<{
 .detail {
   color: var(--qsc-text-3);
   flex: 1 1 100%;
+}
+
+html.pack-md3 .event-item {
+  border: none;
+  border-radius: 16px;
+  background: var(--qsc-surface-2);
+}
+
+html.pack-md3 .chip {
+  border-radius: 8px;
+}
+
+html.pack-miuix .event-item {
+  border: none;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--qsc-text) 4%, var(--qsc-surface));
 }
 </style>

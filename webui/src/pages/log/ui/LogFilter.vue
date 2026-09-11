@@ -48,7 +48,7 @@ const TONE: Record<string, string> = {
 .log-filter {
   display: flex;
   gap: 6px;
-  margin: 8px 0 12px;
+  margin: 10px 0 12px;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;

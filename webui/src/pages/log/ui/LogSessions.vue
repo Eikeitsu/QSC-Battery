@@ -100,7 +100,7 @@ function toneClass(s: LogSession): string {
   background: transparent;
   color: inherit;
   text-align: left;
-  padding: 10px 12px 10px 0;
+  padding: 11px 12px 11px 0;
   cursor: pointer;
   min-width: 0;
 }
@@ -108,7 +108,7 @@ function toneClass(s: LogSession): string {
 .rail {
   width: 3px;
   align-self: stretch;
-  margin: 2px 0;
+  margin: 4px 0;
   border-radius: 0 3px 3px 0;
   background: var(--qsc-text-3);
   flex-shrink: 0;
@@ -201,7 +201,7 @@ function toneClass(s: LogSession): string {
 }
 
 .sess-body {
-  margin: 0 10px 10px;
+  margin: 0 12px 12px;
   padding: 8px 10px;
   border-radius: 10px;
   background: var(--qsc-surface-2, color-mix(in srgb, var(--qsc-text) 4%, transparent));
@@ -222,18 +222,25 @@ function toneClass(s: LogSession): string {
 
 html.pack-md3 .sess {
   border: none;
-  border-radius: 16px;
-  background: var(--qsc-surface-2);
+  border-radius: 20px;
+  background: var(--qsc-surface);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--qsc-text) 6%, transparent);
 }
 
 html.pack-md3 .sess-body {
-  background: var(--qsc-surface);
+  background: var(--qsc-surface-2);
   border: none;
+  border-radius: 14px;
 }
 
 html.pack-miuix .sess {
   border-radius: 12px;
   border: none;
   background: color-mix(in srgb, var(--qsc-text) 4%, var(--qsc-surface));
+}
+
+html.pack-miuix .sess-body {
+  border: none;
+  background: color-mix(in srgb, var(--qsc-text) 5%, var(--qsc-surface));
 }
 </style>

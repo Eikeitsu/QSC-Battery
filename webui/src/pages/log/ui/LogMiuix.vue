@@ -88,6 +88,7 @@ const store = useAppStore();
         </button>
       </div>
     </section>
+
     <div class="miuix-label">{{ viewMode === "session" ? "会话" : "内容" }}</div>
     <section
       class="miuix-card log-miuix-body"
@@ -113,12 +114,13 @@ const store = useAppStore();
           清空
         </button>
       </div>
-      <ChargeEventsPanel
-        :events="events"
-        :loading="loadingEvents"
-        empty-hint="暂无充电事件记录"
-        @refresh="$emit('refresh-events')"
-      />
+      <div class="events-miuix__body">
+        <ChargeEventsPanel
+          :events="events"
+          :loading="loadingEvents"
+          empty-hint="暂无充电事件记录"
+        />
+      </div>
     </section>
   </template>
 </template>
@@ -128,7 +130,7 @@ const store = useAppStore();
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0;
-  margin: 8px 10px 4px;
+  margin: 4px 0 2px;
   border-radius: 10px;
   overflow: hidden;
   background: color-mix(in srgb, var(--qsc-text) 7%, transparent);
@@ -150,7 +152,7 @@ const store = useAppStore();
 }
 
 .miuix-label {
-  margin: 12px 10px 8px;
+  margin: 14px 4px 8px;
   font-size: 13px;
   font-weight: 600;
   color: var(--qsc-text-2);
@@ -164,7 +166,7 @@ const store = useAppStore();
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 13px 14px;
+  padding: 13px var(--qsc-cell-pad-x, 16px);
   font-size: 15px;
   border-bottom: 1px solid var(--qsc-hairline);
 
@@ -175,7 +177,7 @@ const store = useAppStore();
 }
 
 .miuix-filter {
-  padding: 10px 14px 8px;
+  padding: 10px var(--qsc-cell-pad-x, 16px) 8px;
   border-bottom: 1px solid var(--qsc-hairline);
 }
 
@@ -184,7 +186,7 @@ const store = useAppStore();
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 10px var(--qsc-cell-pad-x, 16px);
   border-bottom: 1px solid var(--qsc-hairline);
 }
 
@@ -197,7 +199,7 @@ const store = useAppStore();
 .miuix-actions {
   display: flex;
   gap: 10px;
-  padding: 12px 14px;
+  padding: 12px var(--qsc-cell-pad-x, 16px);
 
   &.top {
     border-bottom: 1px solid var(--qsc-hairline);
@@ -221,7 +223,7 @@ const store = useAppStore();
 }
 
 .log-miuix-body {
-  padding: 10px 8px 14px;
+  padding: 12px var(--qsc-cell-pad-x, 16px) 14px;
   min-height: 160px;
 
   &.session {
@@ -230,7 +232,7 @@ const store = useAppStore();
   }
 }
 
-.events-miuix {
-  padding: 0 8px 12px;
+.events-miuix__body {
+  padding: 12px var(--qsc-cell-pad-x, 16px) 14px;
 }
 </style>

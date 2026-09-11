@@ -118,7 +118,6 @@ const store = useAppStore();
       <ChargeEventsPanel
         :events="events"
         :loading="loadingEvents"
-        @refresh="$emit('refresh-events')"
       />
     </section>
   </template>
@@ -130,7 +129,7 @@ const store = useAppStore();
   grid-template-columns: 1fr 1fr;
   gap: 6px;
   padding: 5px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--qsc-primary) 10%, transparent);
 }
@@ -152,7 +151,7 @@ const store = useAppStore();
 }
 
 .log-md3-meta {
-  padding: 16px 18px 12px;
+  padding: 18px var(--qsc-cell-pad-x, 20px) 14px;
   margin-bottom: 12px;
 }
 
@@ -194,18 +193,14 @@ const store = useAppStore();
   white-space: nowrap;
 }
 
-.log-md3-body {
-  padding: 12px 14px 16px;
+.log-md3-body,
+.events-md3 {
+  padding: 14px var(--qsc-cell-pad-x, 20px) 16px;
   min-height: 180px;
-
-  &.session {
-    padding: 8px 10px 12px;
-    background: transparent;
-    box-shadow: none;
-  }
 }
 
-.events-md3 {
-  padding: 12px 16px 16px;
+.log-md3-body.session {
+  background: transparent;
+  box-shadow: none;
 }
 </style>

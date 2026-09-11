@@ -60,7 +60,10 @@ const store = useAppStore();
   <template v-if="logTab === 'runtime'">
     <section class="card meta">
       <div class="row">
-        <span>最近 {{ store.logLines }} 行 · {{ store.logSize }}</span>
+        <div class="row-text">
+          <span class="row-title">运行日志</span>
+          <span class="row-sub">最近 {{ store.logLines }} 行 · {{ store.logSize }}</span>
+        </div>
         <div class="actions">
           <van-button size="small" type="primary" plain @click="$emit('refresh')">
             刷新
@@ -95,7 +98,10 @@ const store = useAppStore();
   <template v-else>
     <section class="card meta">
       <div class="row">
-        <span>{{ eventSummary }}</span>
+        <div class="row-text">
+          <span class="row-title">充电事件</span>
+          <span class="row-sub">{{ eventSummary }}</span>
+        </div>
         <div class="actions">
           <van-button size="small" type="primary" plain @click="$emit('refresh-events')">
             刷新
@@ -111,7 +117,6 @@ const store = useAppStore();
       <ChargeEventsPanel
         :events="events"
         :loading="loadingEvents"
-        @refresh="$emit('refresh-events')"
       />
     </section>
   </template>
@@ -150,7 +155,7 @@ const store = useAppStore();
 }
 
 .meta {
-  padding: 14px var(--qsc-cell-pad-x, 16px);
+  padding: 14px var(--qsc-cell-pad-x, 16px) 12px;
   margin-bottom: 12px;
 }
 
@@ -158,10 +163,25 @@ const store = useAppStore();
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--qsc-text-2);
-  margin-bottom: 4px;
+  gap: 10px;
+}
+
+.row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.row-title {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--qsc-text);
+}
+
+.row-sub {
+  font-size: 12px;
+  color: var(--qsc-text-3);
 }
 
 .actions {
@@ -175,7 +195,7 @@ const store = useAppStore();
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 10px;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .toolbar-label {
@@ -185,26 +205,21 @@ const store = useAppStore();
 }
 
 .hint {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   font-size: 12px;
   line-height: 1.45;
   color: var(--qsc-text-3);
 }
 
-.log-card {
-  padding: 14px;
+.log-card,
+.events {
+  padding: 12px var(--qsc-cell-pad-x, 16px) 14px;
   background: var(--qsc-surface-2);
 }
 
 .log-card.session {
-  padding: 10px;
   background: transparent;
   border: none;
   box-shadow: none;
-}
-
-.events {
-  padding: 12px var(--qsc-cell-pad-x, 16px) 14px;
-  background: var(--qsc-surface-2);
 }
 </style>
