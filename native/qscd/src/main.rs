@@ -498,7 +498,7 @@ fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
         match sock.poll_once(&mut buf, left) {
             // 命中电池事件：只有确实需要 shell 干活时才返回
             Ok(Some(true)) => {
-                if let Some(reason) = th.wake_reason(plugged_at_start) {
+                if th.wake_reason(plugged_at_start).is_some() {
                     if sock.drain_event_burst(&mut buf).is_err() {
                         eprintln!("qscd: reason=event_drain");
                         return EXIT_UNUSABLE;
