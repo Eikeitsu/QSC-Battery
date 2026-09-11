@@ -3,7 +3,7 @@ package com.qsc.battery.ui.theme
 import android.content.Context
 
 /**
- * 若主题组合在上一进程渲染中崩溃，下次冷启动强制安全主题，避免「一开就闪退」。
+ * 若主题组合在上一进程渲染中崩溃，下次冷启动强制安全主题。
  */
 object ThemeBootGuard {
     private const val PREFS = "qsc_theme_boot"
@@ -34,7 +34,6 @@ object ThemeBootGuard {
     }
 
     fun safeSettings(base: ThemeSettings): ThemeSettings = base.copy(
-        uiMode = UiMode.Pulse,
         colorMode = ColorMode.SYSTEM,
     )
 }

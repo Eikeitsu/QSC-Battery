@@ -13,8 +13,8 @@ android {
         applicationId = "com.qsc.battery"
         minSdk = 33
         targetSdk = 37
-        versionCode = 2026091103
-        versionName = "0.1.2"
+        versionCode = 2026091104
+        versionName = "0.2.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }

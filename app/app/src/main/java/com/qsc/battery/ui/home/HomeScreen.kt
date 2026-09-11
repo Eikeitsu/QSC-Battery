@@ -1,10 +1,12 @@
 package com.qsc.battery.ui.home
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -19,14 +21,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.StatusBundle
-import com.qsc.battery.ui.components.PrefSwitch
-import com.qsc.battery.ui.components.QscBody
-import com.qsc.battery.ui.components.QscGroup
-import com.qsc.battery.ui.components.QscHeroBattery
-import com.qsc.battery.ui.components.QscMetricGrid
-import com.qsc.battery.ui.components.QscPage
-import com.qsc.battery.ui.components.QscSectionLabel
-import com.qsc.battery.ui.components.StatusBanner
+import com.qsc.battery.ui.design.PrefSwitch
+import com.qsc.battery.ui.design.VoltBanner
+import com.qsc.battery.ui.design.VoltHeroBattery
+import com.qsc.battery.ui.design.VoltMetricStrip
+import com.qsc.battery.ui.design.VoltPage
+import com.qsc.battery.ui.design.VoltPrimaryButton
+import com.qsc.battery.ui.design.VoltSection
+import com.qsc.battery.ui.design.VoltSectionLabel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -41,9 +43,7 @@ fun HomeScreen(container: AppContainer) {
     suspend fun refresh() {
         loading = true
         status = container.statusRepository.load()
-        if (status.modulePresent) {
-            conf = container.configRepository.loadConf()
-        }
+        if (status.modulePresent) conf = container.configRepository.loadConf()
         loading = false
     }
 
@@ -65,7 +65,10 @@ fun HomeScreen(container: AppContainer) {
         if (status.chargingStopped) append(" · 停充中")
     }
 
-    QscPage(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+    VoltPage(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        applyStatusBars = true,
+    ) {
         Text("充电控制", style = MaterialTheme.typography.headlineSmall)
         Text(
             status.description.ifBlank { "模块负责停充，本应用负责配置与状态" },
@@ -74,32 +77,31 @@ fun HomeScreen(container: AppContainer) {
         )
 
         when {
-            !status.rootOk -> StatusBanner(
-                text = "需要 Root：可先改主题；安装/控制模块需要授权 Root",
-            )
+            !status.rootOk -> VoltBanner("需要 Root：可先改主题；安装/控制模块需要授权 Root")
             !status.modulePresent -> {
-                StatusBanner(
-                    text = "未检测到模块。可在「更多 → 更新」下载安装；装上后才能停充。",
-                )
-                QscGroup {
-                    QscBody(spacedBy = 8.dp) {
+                VoltBanner("未检测到模块。可在「我的 → 更新」下载安装。")
+                VoltSection {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         Text("本应用可单独使用主题与更新检查。", style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "刷入 Magisk「充电控制」模块后，主页即可开关与查看电池。",
+                            "刷入 Magisk「充电控制」后，概览页即可开关与查看电池。",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
             }
             else -> {
-                QscHeroBattery(
+                VoltHeroBattery(
                     levelText = levelText,
                     percent = levelPct,
-                    subtitle = status.version.ifBlank { "模块已就绪" },
                     statusLine = statusLine,
+                    subtitle = status.version.ifBlank { "模块已就绪" },
                 )
 
-                QscGroup {
+                VoltSection {
                     PrefSwitch(
                         title = "启用充电控制",
                         summary = if (status.moduleOff) "当前已关闭（off_qsc）" else "模块运行中",
@@ -113,32 +115,25 @@ fun HomeScreen(container: AppContainer) {
                     )
                 }
 
-                QscSectionLabel("电池详情")
-                QscGroup {
-                    if (loading) {
-                        QscBody { CircularProgressIndicator() }
-                    } else {
-                        QscMetricGrid(
-                            listOf(
-                                "温度" to formatTemp(status.snapshot.temp),
-                                "电压" to formatUv(status.voltage),
-                                "电流" to formatUa(status.current),
-                                "停充" to if (status.chargingStopped) "是" else "否",
-                                "供电" to if (status.snapshot.powered) "已插电" else "未插电",
-                                "版本" to status.version.ifBlank { "--" },
-                            ),
-                        )
-                        QscBody {
-                            Button(onClick = { scope.launch { refresh() } }, modifier = Modifier.fillMaxWidth()) {
-                                Text("刷新")
-                            }
-                        }
-                    }
+                VoltSectionLabel("实时数据")
+                if (loading) {
+                    CircularProgressIndicator()
+                } else {
+                    VoltMetricStrip(
+                        listOf(
+                            "温度" to formatTemp(status.snapshot.temp),
+                            "电流" to formatUa(status.current),
+                            "电压" to formatUv(status.voltage),
+                        ),
+                    )
                 }
 
-                QscSectionLabel("策略摘要")
-                QscGroup {
-                    QscBody(spacedBy = 6.dp) {
+                VoltSectionLabel("策略摘要")
+                VoltSection {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         Text("停充 ${conf["power_stop"] ?: "--"}% · 恢复 ${conf["power_start"] ?: "--"}%")
                         Text(
                             "温控 ${if (conf["temperature_switch"] == "1") "开" else "关"} · " +
@@ -150,6 +145,8 @@ fun HomeScreen(container: AppContainer) {
                         }
                     }
                 }
+
+                VoltPrimaryButton("刷新", onClick = { scope.launch { refresh() } }, modifier = Modifier.fillMaxWidth())
             }
         }
     }

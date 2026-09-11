@@ -14,7 +14,6 @@ import com.qsc.battery.MainActivity
 import com.qsc.battery.ui.theme.ColorMode
 import com.qsc.battery.ui.theme.PaletteStyleName
 import com.qsc.battery.ui.theme.ThemeSettings
-import com.qsc.battery.ui.theme.UiMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -22,7 +21,6 @@ private val Context.settingsStore: DataStore<Preferences> by preferencesDataStor
 
 class SettingsRepository(private val context: Context) {
     private object Keys {
-        val uiMode = stringPreferencesKey("ui_mode")
         val themeMode = intPreferencesKey("theme_mode")
         val keyColor = intPreferencesKey("key_color")
         val colorStyle = stringPreferencesKey("color_style")
@@ -30,12 +28,10 @@ class SettingsRepository(private val context: Context) {
         val alternativeIcon = booleanPreferencesKey("alternative_icon")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
         val xpPowerEvents = booleanPreferencesKey("xp_power_events")
-        val skipRootWarning = booleanPreferencesKey("skip_root_warning")
     }
 
     val settings: Flow<ThemeSettings> = context.settingsStore.data.map { prefs ->
         ThemeSettings(
-            uiMode = UiMode.fromValue(prefs[Keys.uiMode]),
             colorMode = ColorMode.fromValue(prefs[Keys.themeMode] ?: 0),
             keyColor = prefs[Keys.keyColor] ?: 0xFF0B6E4F.toInt(),
             paletteStyle = PaletteStyleName.fromWire(prefs[Keys.colorStyle]),
@@ -61,10 +57,6 @@ class SettingsRepository(private val context: Context) {
         context.getSharedPreferences("qsc_xp", Context.MODE_PRIVATE).edit()
             .putBoolean("xp_power_events", enabled)
             .apply()
-    }
-
-    suspend fun setUiMode(mode: UiMode) {
-        context.settingsStore.edit { it[Keys.uiMode] = mode.value }
     }
 
     suspend fun setColorMode(mode: ColorMode) {

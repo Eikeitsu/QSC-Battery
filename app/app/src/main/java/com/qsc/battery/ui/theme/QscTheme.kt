@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.sp
 import com.materialkolor.PaletteStyle
 import com.materialkolor.rememberDynamicColorScheme
 
-val LocalUiMode = staticCompositionLocalOf { UiMode.Pulse }
 val LocalColorMode = staticCompositionLocalOf { ColorMode.SYSTEM }
 
 @Composable
@@ -30,43 +29,31 @@ fun QscTheme(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val effective = settings.effectiveColorMode()
+    val mode = settings.colorMode
     val dark = when {
-        effective.isSystem -> isSystemInDarkTheme()
-        effective.isDark -> true
+        mode.isSystem -> isSystemInDarkTheme()
+        mode.isDark -> true
         else -> false
     }
 
-    LaunchedEffect(settings.uiMode, settings.colorMode, settings.keyColor) {
+    LaunchedEffect(settings.colorMode, settings.keyColor) {
         ThemeBootGuard.markThemeReady(context)
     }
 
-    CompositionLocalProvider(
-        LocalUiMode provides settings.uiMode,
-        LocalColorMode provides effective,
-    ) {
+    CompositionLocalProvider(LocalColorMode provides mode) {
         val style = runCatching {
             PaletteStyle.valueOf(settings.paletteStyle.wire)
         }.getOrDefault(PaletteStyle.TonalSpot)
 
-        val typography = when (settings.uiMode) {
-            UiMode.Pulse -> pulseTypography()
-            UiMode.Ledger -> ledgerTypography()
-        }
-        val shapes = when (settings.uiMode) {
-            UiMode.Pulse -> pulseShapes()
-            UiMode.Ledger -> ledgerShapes()
-        }
-
         val dynamicScheme = rememberDynamicColorScheme(
             seedColor = Color(settings.keyColor),
             isDark = dark,
-            isAmoled = effective.isAmoled && dark,
+            isAmoled = mode.isAmoled && dark,
             style = style,
         )
         val seed = Color(settings.keyColor)
         val staticScheme = if (dark) {
-            if (effective.isAmoled) {
+            if (mode.isAmoled) {
                 darkColorScheme(primary = seed, surface = Color.Black, background = Color.Black)
             } else {
                 darkColorScheme(primary = seed)
@@ -74,58 +61,41 @@ fun QscTheme(
         } else {
             lightColorScheme(primary = seed)
         }
-        val colorScheme = if (effective.isMonet) dynamicScheme else staticScheme
+        val colorScheme = if (mode.isMonet) dynamicScheme else staticScheme
 
         MaterialTheme(
             colorScheme = colorScheme,
-            typography = typography,
-            shapes = shapes,
+            typography = voltTypography(),
+            shapes = voltShapes(),
             content = content,
         )
     }
 }
 
-private fun pulseTypography(): Typography {
+private fun voltTypography(): Typography {
     val base = Typography()
     return base.copy(
         displayLarge = TextStyle(
             fontFamily = FontFamily.SansSerif,
             fontWeight = FontWeight.Bold,
-            fontSize = 48.sp,
-            lineHeight = 52.sp,
+            fontSize = 52.sp,
+            lineHeight = 56.sp,
+            letterSpacing = (-0.5).sp,
         ),
-        headlineLarge = base.headlineLarge.copy(fontWeight = FontWeight.SemiBold, fontSize = 30.sp),
         headlineMedium = base.headlineMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 26.sp),
         headlineSmall = base.headlineSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 22.sp),
-        titleLarge = base.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+        titleLarge = base.titleLarge.copy(fontWeight = FontWeight.SemiBold, fontSize = 20.sp),
+        titleMedium = base.titleMedium.copy(fontWeight = FontWeight.Medium, fontSize = 16.sp),
         bodyLarge = base.bodyLarge.copy(fontSize = 16.sp, lineHeight = 24.sp),
+        bodyMedium = base.bodyMedium.copy(fontSize = 14.sp, lineHeight = 20.sp),
+        labelLarge = base.labelLarge.copy(fontWeight = FontWeight.Medium),
     )
 }
 
-private fun ledgerTypography(): Typography {
-    val base = Typography()
-    return base.copy(
-        headlineSmall = base.headlineSmall.copy(fontWeight = FontWeight.Medium, fontSize = 20.sp),
-        titleLarge = base.titleLarge.copy(fontWeight = FontWeight.Medium, fontSize = 18.sp),
-        titleMedium = base.titleMedium.copy(fontWeight = FontWeight.Medium, fontSize = 15.sp),
-        bodyLarge = base.bodyLarge.copy(fontSize = 15.sp, lineHeight = 20.sp),
-        bodyMedium = base.bodyMedium.copy(fontSize = 13.sp, lineHeight = 18.sp),
-        labelLarge = base.labelLarge.copy(fontSize = 12.sp),
-    )
-}
-
-private fun pulseShapes() = Shapes(
-    extraSmall = RoundedCornerShape(12.dp),
-    small = RoundedCornerShape(16.dp),
-    medium = RoundedCornerShape(22.dp),
-    large = RoundedCornerShape(28.dp),
-    extraLarge = RoundedCornerShape(36.dp),
-)
-
-private fun ledgerShapes() = Shapes(
-    extraSmall = RoundedCornerShape(4.dp),
-    small = RoundedCornerShape(8.dp),
-    medium = RoundedCornerShape(10.dp),
-    large = RoundedCornerShape(12.dp),
-    extraLarge = RoundedCornerShape(14.dp),
+private fun voltShapes() = Shapes(
+    extraSmall = RoundedCornerShape(10.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(18.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(32.dp),
 )

@@ -1,20 +1,13 @@
 package com.qsc.battery.ui.more
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,13 +18,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.UpdateCheckResult
-import com.qsc.battery.ui.components.QscBody
-import com.qsc.battery.ui.components.QscGroup
-import com.qsc.battery.ui.components.QscPage
-import com.qsc.battery.ui.components.QscSectionLabel
+import com.qsc.battery.ui.design.VoltPage
+import com.qsc.battery.ui.design.VoltPrimaryButton
+import com.qsc.battery.ui.design.VoltScaffold
+import com.qsc.battery.ui.design.VoltSection
+import com.qsc.battery.ui.design.VoltSectionLabel
+import com.qsc.battery.ui.design.VoltTopBar
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UpdatesScreen(
     container: AppContainer,
@@ -42,25 +36,19 @@ fun UpdatesScreen(
     var message by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("更新") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
-                    }
-                },
-            )
-        },
+    VoltScaffold(
+        topBar = { VoltTopBar(title = "更新", onBack = onBack) },
     ) { padding ->
-        QscPage(
+        VoltPage(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
+            applyStatusBars = false,
         ) {
-            Button(
+            VoltPrimaryButton(
+                text = if (busy) "检查中…" else "检查更新",
+                enabled = !busy,
                 onClick = {
                     scope.launch {
                         busy = true
@@ -69,18 +57,19 @@ fun UpdatesScreen(
                         busy = false
                     }
                 },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (busy) "检查中…" else "检查更新") }
+            )
 
             message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             result?.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
             val r = result
             if (r != null) {
-                QscSectionLabel("模块")
-                QscGroup {
-                    QscBody(spacedBy = 6.dp) {
+                VoltSectionLabel("模块")
+                VoltSection {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         Text("本地 ${r.moduleLocal?.version ?: "未安装"} (${r.moduleLocal?.versionCode ?: 0})")
                         Text("远端 ${r.moduleRemote?.version ?: "--"} (${r.moduleRemote?.versionCode ?: 0})")
                         Text(
@@ -91,7 +80,9 @@ fun UpdatesScreen(
                             },
                         )
                         if ((r.moduleHasUpdate || r.moduleLocal == null) && !r.moduleRemote?.zipUrl.isNullOrBlank()) {
-                            Button(
+                            VoltPrimaryButton(
+                                text = if (r.moduleLocal == null) "下载并安装模块" else "下载并更新模块",
+                                enabled = !busy,
                                 onClick = {
                                     scope.launch {
                                         busy = true
@@ -107,21 +98,24 @@ fun UpdatesScreen(
                                         busy = false
                                     }
                                 },
-                                modifier = Modifier.fillMaxWidth(),
-                                enabled = !busy,
-                            ) { Text(if (r.moduleLocal == null) "下载并安装模块" else "下载并更新模块") }
+                            )
                         }
                     }
                 }
 
-                QscSectionLabel("APP")
-                QscGroup {
-                    QscBody(spacedBy = 6.dp) {
+                VoltSectionLabel("APP")
+                VoltSection {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         Text("本地 ${r.appLocalVersion} (${r.appLocalCode})")
                         Text("远端 ${r.appRemote?.version ?: "--"} (${r.appRemote?.versionCode ?: 0})")
                         Text(if (r.appHasUpdate) "有新版本" else "已是最新或无法比较")
                         if (!r.appRemote?.apkUrl.isNullOrBlank()) {
-                            Button(
+                            VoltPrimaryButton(
+                                text = if (r.appHasUpdate) "下载并安装 APP" else "重新下载安装 APP",
+                                enabled = !busy,
                                 onClick = {
                                     scope.launch {
                                         busy = true
@@ -136,9 +130,7 @@ fun UpdatesScreen(
                                         busy = false
                                     }
                                 },
-                                modifier = Modifier.fillMaxWidth(),
-                                enabled = !busy,
-                            ) { Text(if (r.appHasUpdate) "下载并安装 APP" else "重新下载安装 APP") }
+                            )
                         }
                     }
                 }

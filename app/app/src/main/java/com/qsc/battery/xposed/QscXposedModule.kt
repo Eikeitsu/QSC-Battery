@@ -16,11 +16,12 @@ class QscXposedModule : XposedModule() {
     private val lastWrite = AtomicLong(0L)
 
     override fun onSystemServerStarting(param: SystemServerStartingParam) {
+        writeHeartbeat("system_server_starting")
         hookBatteryService(param.classLoader)
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
-        // 系统服务已在 onSystemServerStarting 处理；此处忽略普通应用
+        // 系统服务已在 onSystemServerStarting 处理
     }
 
     private fun hookBatteryService(loader: ClassLoader) {
@@ -41,6 +42,7 @@ class QscXposedModule : XposedModule() {
                         result
                     }
             }
+            writeHeartbeat("hooked")
             log(Log.INFO, TAG, "hooked BatteryService.processValuesLocked x${methods.size}")
         }.onFailure {
             log(Log.ERROR, TAG, "hook BatteryService failed", it)
@@ -53,11 +55,18 @@ class QscXposedModule : XposedModule() {
         if (now - lastWrite.get() < 15_000L) return
         lastWrite.set(now)
         writeWakeHint("battery_process")
+        writeHeartbeat("battery_process")
     }
 
-    private fun powerEventsEnabled(): Boolean {
-        // 应用通过 Root 写入关闭标记；无标记则默认开启
-        return !File(XP_OFF_FLAG).exists()
+    private fun powerEventsEnabled(): Boolean = !File(XP_OFF_FLAG).exists()
+
+    private fun writeHeartbeat(reason: String) {
+        val line = "${System.currentTimeMillis()}\t$reason\n"
+        runCatching {
+            val f = File(HEARTBEAT)
+            f.parentFile?.mkdirs()
+            f.writeText(line)
+        }
     }
 
     private fun writeWakeHint(action: String) {
@@ -76,6 +85,7 @@ class QscXposedModule : XposedModule() {
     companion object {
         private const val TAG = "QscXp"
         private const val XP_OFF_FLAG = "/data/adb/qsc/xp_power_events_off"
+        private const val HEARTBEAT = "/data/adb/qsc/xp_heartbeat"
         private val TARGETS = listOf(
             "/data/adb/qsc/xp_power_event",
             "/data/local/tmp/qsc_xp_power_event",

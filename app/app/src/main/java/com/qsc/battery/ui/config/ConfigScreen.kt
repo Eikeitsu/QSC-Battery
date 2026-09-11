@@ -1,12 +1,13 @@
 package com.qsc.battery.ui.config
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -22,11 +23,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.CurrentConfig
-import com.qsc.battery.ui.components.PrefSwitch
-import com.qsc.battery.ui.components.QscGroup
-import com.qsc.battery.ui.components.QscPage
-import com.qsc.battery.ui.components.QscSectionLabel
-import com.qsc.battery.ui.components.StatusBanner
+import com.qsc.battery.ui.design.PrefSwitch
+import com.qsc.battery.ui.design.VoltBanner
+import com.qsc.battery.ui.design.VoltPage
+import com.qsc.battery.ui.design.VoltPrimaryButton
+import com.qsc.battery.ui.design.VoltSection
+import com.qsc.battery.ui.design.VoltSectionLabel
 import kotlinx.coroutines.launch
 
 @Composable
@@ -59,25 +61,25 @@ fun ConfigScreen(container: AppContainer) {
 
     LaunchedEffect(Unit) { reload() }
 
-    QscPage(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+    VoltPage(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Text("策略", style = MaterialTheme.typography.headlineSmall)
         message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
 
         if (!ready) {
             Text("加载中…")
-            return@QscPage
+            return@VoltPage
         }
         if (!rootOk) {
-            StatusBanner("需要 Root 才能修改配置")
-            return@QscPage
+            VoltBanner("需要 Root 才能修改配置")
+            return@VoltPage
         }
         if (!moduleOk) {
-            StatusBanner("模块未安装")
-            return@QscPage
+            VoltBanner("模块未安装")
+            return@VoltPage
         }
 
-        QscSectionLabel("电量停充")
-        QscGroup {
+        VoltSectionLabel("电量停充")
+        VoltSection {
             NumberField("停止充电电量 (%)", v("power_stop")) { setLocal("power_stop", it) }
             NumberField("恢复充电电量 (%)", v("power_start")) { setLocal("power_start", it) }
             NumberField("延时停充 (秒)", v("power_stop_time")) { setLocal("power_stop_time", it) }
@@ -88,8 +90,8 @@ fun ConfigScreen(container: AppContainer) {
             }
         }
 
-        QscSectionLabel("温度")
-        QscGroup {
+        VoltSectionLabel("温度")
+        VoltSection {
             PrefSwitch("温度停充", v("temperature_switch") == "1") {
                 setLocal("temperature_switch", if (it) "1" else "0")
             }
@@ -101,8 +103,8 @@ fun ConfigScreen(container: AppContainer) {
             }
         }
 
-        QscSectionLabel("通知与行为")
-        QscGroup {
+        VoltSectionLabel("通知与行为")
+        VoltSection {
             PrefSwitch("充电事件通知", v("notify_charge_event") == "1") {
                 setLocal("notify_charge_event", if (it) "1" else "0")
             }
@@ -115,8 +117,8 @@ fun ConfigScreen(container: AppContainer) {
             TextField("App 停充列表", v("app_stop_list")) { setLocal("app_stop_list", it) }
         }
 
-        QscSectionLabel("循环与省电")
-        QscGroup {
+        VoltSectionLabel("循环与省电")
+        VoltSection {
             PrefSwitch("省电模式", v("power_saver") == "1") { setLocal("power_saver", if (it) "1" else "0") }
             NumberField("近阈值间隔 (秒)", v("loop_interval_sec")) { setLocal("loop_interval_sec", it) }
             NumberField("维持间隔 (秒)", v("loop_interval_maintain_sec")) {
@@ -142,8 +144,8 @@ fun ConfigScreen(container: AppContainer) {
             PrefSwitch("主页曲线", v("chart_show") == "1") { setLocal("chart_show", if (it) "1" else "0") }
         }
 
-        QscSectionLabel("电流控制")
-        QscGroup {
+        VoltSectionLabel("电流控制")
+        VoltSection {
             PrefSwitch("启用电流控制", current.current_control == 1) {
                 current = current.copy(current_control = if (it) 1 else 0)
             }
@@ -166,8 +168,8 @@ fun ConfigScreen(container: AppContainer) {
             }
         }
 
-        QscSectionLabel("事件唤醒守护")
-        QscGroup {
+        VoltSectionLabel("事件唤醒守护")
+        VoltSection {
             PrefSwitch("启用守护", v("native_daemon") == "1") {
                 setLocal("native_daemon", if (it) "1" else "0")
             }
@@ -177,42 +179,33 @@ fun ConfigScreen(container: AppContainer) {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 style = MaterialTheme.typography.bodySmall,
             )
-            Button(
-                onClick = {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                VoltPrimaryButton("检查更新", onClick = {
                     scope.launch {
                         message = container.daemonRepository.check()
                         daemonStatus = container.daemonRepository.status()
                     }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-            ) { Text("检查更新") }
-            Button(
-                onClick = {
+                })
+                VoltPrimaryButton("下载并安装守护", onClick = {
                     scope.launch {
                         message = container.daemonRepository.install(v("native_impl").ifBlank { "rust" })
                         daemonStatus = container.daemonRepository.status()
                     }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-            ) { Text("下载并安装守护") }
-            Button(
-                onClick = {
+                })
+                VoltPrimaryButton("移除守护", onClick = {
                     scope.launch {
                         message = container.daemonRepository.remove()
                         daemonStatus = container.daemonRepository.status()
                     }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-            ) { Text("移除守护") }
+                })
+            }
         }
 
-        Button(
+        VoltPrimaryButton(
+            text = "保存全部",
             onClick = {
                 scope.launch {
                     val okConf = container.configRepository.setConfValues(conf)
@@ -220,8 +213,7 @@ fun ConfigScreen(container: AppContainer) {
                     message = if (okConf && okCur) "已保存（下一轮循环生效）" else "保存失败"
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("保存全部") }
+        )
     }
 }
 
@@ -231,9 +223,7 @@ private fun NumberField(label: String, value: String, onChange: (String) -> Unit
         value = value,
         onValueChange = onChange,
         label = { Text(label) },
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
     )
@@ -245,9 +235,7 @@ private fun TextField(label: String, value: String, onChange: (String) -> Unit) 
         value = value,
         onValueChange = onChange,
         label = { Text(label) },
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
         singleLine = true,
     )
 }

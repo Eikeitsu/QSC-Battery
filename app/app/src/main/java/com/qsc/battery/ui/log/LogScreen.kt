@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -28,9 +27,10 @@ import androidx.compose.ui.unit.sp
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.ChargeEvent
 import com.qsc.battery.data.model.LogLine
-import com.qsc.battery.ui.components.QscGroup
-import com.qsc.battery.ui.components.QscPage
-import com.qsc.battery.ui.components.QscSectionLabel
+import com.qsc.battery.ui.design.VoltChipRow
+import com.qsc.battery.ui.design.VoltPage
+import com.qsc.battery.ui.design.VoltSection
+import com.qsc.battery.ui.design.VoltSectionLabel
 import kotlinx.coroutines.launch
 
 private enum class LogTab { Runtime, Events }
@@ -54,33 +54,48 @@ fun LogScreen(container: AppContainer) {
 
     LaunchedEffect(Unit) { refresh() }
 
-    QscPage(modifier = Modifier.fillMaxSize()) {
+    VoltPage(modifier = Modifier.fillMaxSize()) {
         Text("日志", style = MaterialTheme.typography.headlineSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = tab == LogTab.Runtime, onClick = { tab = LogTab.Runtime }, label = { Text("运行日志") })
-            FilterChip(selected = tab == LogTab.Events, onClick = { tab = LogTab.Events }, label = { Text("充电事件") })
-        }
+        VoltChipRow(
+            options = listOf(
+                "运行日志" to (tab == LogTab.Runtime),
+                "充电事件" to (tab == LogTab.Events),
+            ),
+            onSelect = { tab = if (it == 0) LogTab.Runtime else LogTab.Events },
+        )
 
         if (tab == LogTab.Runtime) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                listOf("" to "全部", "info" to "信息", "warn" to "警告", "error" to "错误", "debug" to "调试").forEach { (id, label) ->
-                    FilterChip(selected = level == id, onClick = { level = id }, label = { Text(label) })
-                }
+                VoltChipRow(
+                    options = listOf(
+                        "全部" to (level == ""),
+                        "信息" to (level == "info"),
+                        "警告" to (level == "warn"),
+                        "错误" to (level == "error"),
+                        "调试" to (level == "debug"),
+                    ),
+                    onSelect = { idx ->
+                        level = listOf("", "info", "warn", "error", "debug")[idx]
+                    },
+                )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = viewMode == ViewMode.Flat, onClick = { viewMode = ViewMode.Flat }, label = { Text("平铺") })
-                FilterChip(selected = viewMode == ViewMode.Session, onClick = { viewMode = ViewMode.Session }, label = { Text("会话") })
+                VoltChipRow(
+                    options = listOf(
+                        "平铺" to (viewMode == ViewMode.Flat),
+                        "会话" to (viewMode == ViewMode.Session),
+                    ),
+                    onSelect = { viewMode = if (it == 0) ViewMode.Flat else ViewMode.Session },
+                )
                 TextButton(onClick = { scope.launch { refresh() } }) { Text("刷新") }
                 TextButton(onClick = { scope.launch { container.logRepository.clearLog(); refresh() } }) { Text("清空") }
             }
 
             val filtered = lines.filter { level.isEmpty() || it.level == level }
-            QscGroup(modifier = Modifier.weight(1f, fill = true)) {
+            VoltSection(modifier = Modifier.weight(1f, fill = true)) {
                 if (viewMode == ViewMode.Session) {
                     val sessions = groupSessions(filtered)
                     LazyColumn(modifier = Modifier.padding(12.dp)) {
@@ -88,9 +103,7 @@ fun LogScreen(container: AppContainer) {
                             item {
                                 Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(vertical = 6.dp))
                             }
-                            items(body) { line ->
-                                LogText(line)
-                            }
+                            items(body) { LogText(it) }
                         }
                     }
                 } else {
@@ -101,8 +114,8 @@ fun LogScreen(container: AppContainer) {
             }
 
             if (historyPreview.isNotBlank()) {
-                QscSectionLabel("充电历史片段")
-                QscGroup {
+                VoltSectionLabel("充电历史片段")
+                VoltSection {
                     Text(
                         historyPreview.take(1200),
                         modifier = Modifier.padding(12.dp),
@@ -117,7 +130,7 @@ fun LogScreen(container: AppContainer) {
                 TextButton(onClick = { scope.launch { refresh() } }) { Text("刷新") }
                 TextButton(onClick = { scope.launch { container.logRepository.clearEvents(); refresh() } }) { Text("清空") }
             }
-            QscGroup(modifier = Modifier.weight(1f, fill = true)) {
+            VoltSection(modifier = Modifier.weight(1f, fill = true)) {
                 LazyColumn(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(events) { e ->
                         Column {
