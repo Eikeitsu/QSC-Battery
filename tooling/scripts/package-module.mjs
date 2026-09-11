@@ -41,6 +41,7 @@ const BIN_RELEASE = [
   "diagnose.sh",
   "test_switch.sh",
   "qscd_fetch.sh",
+  "qsc_status.sh",
 ];
 const BIN_DEBUG_EXTRA = ["testing.sh", "diag2.sh"];
 
@@ -277,6 +278,24 @@ if (includeDebug) {
   log("release package: diagnose only (no testing/diag2)");
 }
 copyBuiltWebroot();
+
+// Optional companion APP APK — produced by GitHub Actions「App」workflow artifact.
+// Local packaging may skip this; CI Package Module downloads qsc-companion-apk first.
+{
+  const apkCandidates = [
+    join(releaseDir, "QSC-Battery.apk"),
+    join(repoRoot, "app", "app", "build", "outputs", "apk", "release", "app-release.apk"),
+    join(repoRoot, "app", "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
+  ];
+  const apk = apkCandidates.find((p) => existsSync(p));
+  if (apk) {
+    mkdirSync(join(staging, "app"), { recursive: true });
+    cpSync(apk, join(staging, "app", "QSC-Battery.apk"));
+    log(`embedded companion apk: ${apk}`);
+  } else {
+    log("companion apk not found — module zip without app/");
+  }
+}
 
 if (existsSync(zipPath)) rmSync(zipPath);
 log(`packaging ${zipName}...`);

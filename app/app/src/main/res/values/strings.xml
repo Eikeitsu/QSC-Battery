@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">QSC Battery</string>
+    <string name="nav_home">主页</string>
+    <string name="nav_config">策略</string>
+    <string name="nav_log">日志</string>
+    <string name="nav_more">更多</string>
+    <string name="need_root">需要 Root 权限才能控制充电模块</string>
+    <string name="module_missing">未检测到 QSC_Battery 模块</string>
+    <string name="settings_ui_mode">界面风格</string>
+    <string name="settings_ui_mode_summary">在 MIUIX 与 Material Design 3 之间切换</string>
+    <string name="settings_theme">颜色模式</string>
+    <string name="settings_color_palette">调色板</string>
+    <string name="settings_miuix_monet">MIUIX 跟随动态取色</string>
+    <string name="icon_switch_title">备用桌面图标</string>
+    <string name="icon_switch_summary">切换应用在桌面上显示的图标</string>
+</resources>

@@ -28,6 +28,7 @@
     "test:hot-update": "node tooling/scripts/test-hot-update.mjs",
     "test:unit:watch": "vitest --config webui/vitest.config.ts",
     "package:module": "node tooling/scripts/package-module.mjs",
+    "package:app": "node tooling/scripts/package-app.mjs",
     "package:module:debug": "node tooling/scripts/package-module.mjs --debug",
     "package:module:all": "node tooling/scripts/package-module.mjs --native=full && node tooling/scripts/package-module.mjs --native=rust && node tooling/scripts/package-module.mjs --native=c && node tooling/scripts/package-module.mjs --native=sh",
     "build:module": "npm run build:web && npm run package:module",

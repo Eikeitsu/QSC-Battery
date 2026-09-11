@@ -1,0 +1,78 @@
+name: App
+
+# 伴侣 APP 仅在 GitHub Actions 云编译，不依赖本地 Android SDK。
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "app/**"
+      - "tooling/scripts/package-app.mjs"
+      - "docs/public/app-update.json"
+      - ".github/workflows/app.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - "tooling/scripts/package-app.mjs"
+      - ".github/workflows/app.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          build-root-directory: app
+
+      - name: Ensure Gradle Wrapper
+        run: |
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            curl -sL https://services.gradle.org/distributions/gradle-8.13-bin.zip -o /tmp/gradle.zip
+            sudo unzip -q /tmp/gradle.zip -d /opt
+            /opt/gradle-8.13/bin/gradle wrapper --gradle-version 8.13
+          fi
+
+      - name: Assemble release + debug
+        run: ./gradlew :app:assembleRelease :app:assembleDebug --stacktrace
+
+      - name: Stage APKs
+        working-directory: .
+        run: |
+          mkdir -p release
+          cp app/app/build/outputs/apk/release/app-release.apk release/QSC-Battery.apk
+          cp app/app/build/outputs/apk/debug/app-debug.apk release/QSC-Battery-debug.apk
+          node tooling/scripts/package-app.mjs --skip-build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qsc-companion-apk
+          path: |
+            release/QSC-Battery.apk
+            release/QSC-Battery-debug.apk
+            docs/public/app-update.json
+            app-update.json
+          if-no-files-found: error
+          retention-days: 30

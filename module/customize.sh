@@ -565,12 +565,41 @@ qscd_offer_download() {
 }
 install_qscd
 
+# 可选安装伴侣 APP（模块内 app/QSC-Battery.apk）
+install_companion_app() {
+	_apk="$MODPATH/app/QSC-Battery.apk"
+	[ -f "$_apk" ] || return 0
+	ui_print "--------------------------------"
+	ui_print " 检测到伴侣 APP（可选安装）"
+	ui_print " APP 可不装模块单独使用；装上后才能控制停充"
+	ui_print " 音量上：现在安装/更新 APP"
+	ui_print " 音量下：跳过（推荐先跳过，需要时再装）"
+	ui_print " 20 秒未选择时跳过"
+	qsc_volume_choice
+	case "$?" in
+		0)
+			ui_print "- 正在安装伴侣 APP..."
+			if pm install -r "$_apk" >/dev/null 2>&1; then
+				ui_print "- 伴侣 APP 已安装"
+			else
+				ui_print "- APP 安装失败（签名冲突或 pm 不可用）"
+				ui_print "- 可稍后手动安装: $_apk"
+			fi
+			;;
+		*)
+			ui_print "- 已跳过 APP 安装"
+			;;
+	esac
+}
+install_companion_app
+
 ui_print "--------------------------------"
 ui_print " 目录结构: "
 ui_print "  bin/     核心脚本 "
 ui_print "  config/  用户配置 "
 ui_print "  data/    运行数据 "
 [ "$INSTALL_WEBUI" = "1" ] && ui_print "  webroot/ WebUI 界面 "
+[ -f "$MODPATH/app/QSC-Battery.apk" ] && ui_print "  app/     伴侣 APP "
 ui_print "--------------------------------"
 if [ "$INSTALL_WEBUI" = "1" ]; then
 	ui_print " 安装后可在 Magisk/KernelSU 打开 WebUI "
@@ -588,6 +617,7 @@ set_perm_recursive "$MODPATH/config" root root 0755 0644
 set_perm_recursive "$MODPATH/data" root root 0755 0777
 [ -d "$MODPATH/assets" ] && set_perm_recursive "$MODPATH/assets" root root 0755 0644
 [ -d "$MODPATH/webroot" ] && set_perm_recursive "$MODPATH/webroot" root root 0755 0644
+[ -d "$MODPATH/app" ] && set_perm_recursive "$MODPATH/app" root root 0755 0644
 set_perm "$MODPATH/service.sh" root root 0755
 set_perm "$MODPATH/uninstall.sh" root root 0755
 set_perm "$MODPATH/action.sh" root root 0755
@@ -595,6 +625,7 @@ set_perm "$MODPATH/customize.sh" root root 0755
 set_perm "$MODPATH/hotinstall.sh" root root 0755
 [ -f "$MODPATH/bin/qscd" ] && set_perm "$MODPATH/bin/qscd" root root 0755
 [ -f "$MODPATH/bin/qscd_fetch.sh" ] && set_perm "$MODPATH/bin/qscd_fetch.sh" root root 0755
+[ -f "$MODPATH/bin/qsc_status.sh" ] && set_perm "$MODPATH/bin/qsc_status.sh" root root 0755
 
 # 非首次：本模块无 system/sepolicy 等开机挂载，更新默认可免重启
 ui_print "--------------------------------"
