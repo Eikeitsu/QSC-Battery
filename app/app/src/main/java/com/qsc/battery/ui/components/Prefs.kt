@@ -3,7 +3,6 @@ package com.qsc.battery.ui.components
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,22 +25,24 @@ import com.qsc.battery.ui.theme.UiMode
 @Composable
 fun PrefCard(
     modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit,
+    content: @Composable () -> Unit,
 ) {
     val miuix = LocalUiMode.current == UiMode.Miuix
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(if (miuix) 16.dp else 28.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (miuix) MaterialTheme.colorScheme.surface
-            else MaterialTheme.colorScheme.surfaceContainerLow,
+            containerColor = if (miuix) {
+                MaterialTheme.colorScheme.surface
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            },
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = if (miuix) 0.dp else 1.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(vertical = if (miuix) 4.dp else 8.dp),
-            content = content,
-        )
+        Column(modifier = Modifier.padding(vertical = if (miuix) 4.dp else 8.dp)) {
+            content()
+        }
     }
 }
 
