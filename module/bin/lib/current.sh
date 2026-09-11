@@ -49,10 +49,10 @@ QSC_BYPASS_NODE_CANDIDATES="\
 /sys/class/power_supply/main/bypass_enable \
 /sys/class/power_supply/battery/enable_bypass_mode \
 /sys/class/power_supply/battery/bypass_charging"
-# 反极性：写 0 进入旁路（关闭充电使能即进入旁路）
-QSC_BYPASS_INV_CANDIDATES="\
-/sys/devices/virtual/oplus_chg/battery/mmi_charging_enable \
-/sys/class/oplus_chg/battery/mmi_charging_enable"
+# 反极性候选已移除：OPlus mmi_charging_enable 实为充电使能节点，
+# 自动探测当旁路会误把「关充电」当成旁路，存在硬停充风险。
+# 若确需使用，请在 power_switch / 自定义旁路路径中显式配置。
+QSC_BYPASS_INV_CANDIDATES=""
 
 # µA → 可读 mA（日志用）
 qsc_fmt_ma() {

@@ -37,7 +37,7 @@ async function archiveExec(cmd: string): Promise<{
   stdout: string;
 }> {
   return exec(
-    `set -- 2>/dev/null; [ -f '${PATHS.MODDIR}/bin/lib/archive.sh' ] && . '${PATHS.MODDIR}/bin/lib/archive.sh'; DATADIR='${PATHS.DATADIR}' DEVICE_PROFILE='${PATHS.DEVICE_PROFILE}' QSC_ARCHIVE_DIR='${PATHS.PROFILES_DIR}' ${cmd}`,
+    `set -- 2>/dev/null; MODDIR='${PATHS.MODDIR}'; . '${PATHS.MODDIR}/bin/common.sh' 2>/dev/null; [ -f '${PATHS.MODDIR}/bin/lib/archive.sh' ] && . '${PATHS.MODDIR}/bin/lib/archive.sh'; QSC_ARCHIVE_DIR='${PATHS.PROFILES_DIR}' ${cmd}`,
   );
 }
 
