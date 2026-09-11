@@ -27,6 +27,7 @@ import com.qsc.battery.core.PermStatus
 import com.qsc.battery.core.PermissionChecker
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.ui.components.PrefAction
+import com.qsc.battery.ui.components.PrefBody
 import com.qsc.battery.ui.components.PrefCard
 import com.qsc.battery.ui.components.PrefSwitch
 import com.qsc.battery.ui.components.SectionLabel
@@ -205,7 +206,7 @@ fun MoreScreen(
 
         SectionLabel("关于")
         PrefCard {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            PrefBody(spacedBy = 4.dp) {
                 Text("充电控制 ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                 Text("包名 ${BuildConfig.APPLICATION_ID}")
                 Text("模块 ID ${BuildConfig.MODULE_ID}")

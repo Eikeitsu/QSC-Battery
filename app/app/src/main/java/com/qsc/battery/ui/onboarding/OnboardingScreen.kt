@@ -32,6 +32,7 @@ import com.qsc.battery.core.PermStatus
 import com.qsc.battery.core.PermissionChecker
 import com.qsc.battery.core.PermissionSnapshot
 import com.qsc.battery.data.AppContainer
+import com.qsc.battery.ui.components.PrefBody
 import com.qsc.battery.ui.components.PrefCard
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -78,7 +79,7 @@ fun OnboardingScreen(
             0 -> {
                 Text("欢迎", style = MaterialTheme.typography.titleLarge)
                 PrefCard {
-                    Column(Modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("本应用用于配置与查看 Magisk「充电控制」模块，不在后台执行停充逻辑。")
                         Text("接下来会检测几项权限。Root 用于读写模块配置；没有 Root 仍可改主题、检查更新。")
                         Text("LSPosed 增强为可选项，用于系统侧供电事件补强，不写充电节点。")
@@ -99,7 +100,7 @@ fun OnboardingScreen(
                     },
                 )
                 PrefCard {
-                    Column(Modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             "为何需要：读写 /data/adb/modules 下的配置、安装模块、快捷磁贴切换。",
                             style = MaterialTheme.typography.bodyMedium,
@@ -181,7 +182,7 @@ fun OnboardingScreen(
                     },
                 )
                 PrefCard {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    PrefBody(spacedBy = 6.dp) {
                         Text("增强内容：系统 BatteryService 变化时写入事件提示文件，帮助模块更快感知插拔。")
                         Text("不增强也不影响停充：模块本身已能工作。")
                         Text("使用现代 Xposed API 102，不写充电控制节点。")
@@ -210,7 +211,7 @@ fun OnboardingScreen(
 @Composable
 private fun StatusLine(title: String, ok: Boolean, detail: String) {
     PrefCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        PrefBody(spacedBy = 4.dp) {
             Text(
                 if (ok) "✓ $title" else "○ $title",
                 style = MaterialTheme.typography.titleMedium,

@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.StatusBundle
+import com.qsc.battery.ui.components.PrefBody
 import com.qsc.battery.ui.components.PrefCard
 import com.qsc.battery.ui.components.PrefSwitch
 import com.qsc.battery.ui.components.SectionLabel
@@ -81,7 +82,7 @@ fun HomeScreen(container: AppContainer) {
                     text = "未检测到 QSC_Battery 模块。APP 可单独使用（主题/检查更新）；停充需安装模块。请到「更多 → 更新」下载安装。",
                 )
                 PrefCard {
-                    Column(Modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("模块可选：本 APP 不依赖模块也能打开。", style = MaterialTheme.typography.bodyMedium)
                         Text("装上模块后即可在本页开关停充与查看电池状态。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -104,9 +105,9 @@ fun HomeScreen(container: AppContainer) {
 
                 SectionLabel("电池")
                 PrefCard {
-                    Column(Modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (loading) {
-                            Row(Modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                                 CircularProgressIndicator()
                             }
                         } else {
@@ -128,7 +129,7 @@ fun HomeScreen(container: AppContainer) {
 
                 SectionLabel("策略摘要")
                 PrefCard {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    PrefBody(spacedBy = 6.dp) {
                         Text("停充 ${conf["power_stop"] ?: "--"}% · 恢复 ${conf["power_start"] ?: "--"}%")
                         Text("温控 ${if (conf["temperature_switch"] == "1") "开" else "关"} · ${conf["temperature_switch_stop"] ?: "--"}°C / ${conf["temperature_switch_start"] ?: "--"}°C")
                         Text("守护 ${if (conf["native_daemon"] == "1") "开" else "关"} · ${conf["native_impl"] ?: "rust"}")

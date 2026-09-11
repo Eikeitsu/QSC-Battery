@@ -3,6 +3,7 @@ package com.qsc.battery.ui.components
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +19,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.qsc.battery.ui.theme.LocalUiMode
 import com.qsc.battery.ui.theme.UiMode
@@ -44,6 +46,21 @@ fun PrefCard(
             content()
         }
     }
+}
+
+/** 卡片内边距正文；独立 composable，避免 when 分支内嵌套 Column(modifier=) 的编译问题。 */
+@Composable
+fun PrefBody(
+    spacedBy: Dp = 8.dp,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(spacedBy),
+        content = content,
+    )
 }
 
 @Composable

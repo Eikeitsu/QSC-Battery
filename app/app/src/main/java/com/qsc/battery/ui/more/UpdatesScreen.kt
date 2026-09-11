@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.UpdateCheckResult
+import com.qsc.battery.ui.components.PrefBody
 import com.qsc.battery.ui.components.PrefCard
 import com.qsc.battery.ui.components.SectionLabel
 import kotlinx.coroutines.launch
@@ -82,7 +83,7 @@ fun UpdatesScreen(
             if (r != null) {
                 SectionLabel("模块")
                 PrefCard {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    PrefBody(spacedBy = 6.dp) {
                         Text("本地 ${r.moduleLocal?.version ?: "未安装"} (${r.moduleLocal?.versionCode ?: 0})")
                         Text("远端 ${r.moduleRemote?.version ?: "--"} (${r.moduleRemote?.versionCode ?: 0})")
                         Text(
@@ -118,7 +119,7 @@ fun UpdatesScreen(
 
                 SectionLabel("APP")
                 PrefCard {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    PrefBody(spacedBy = 6.dp) {
                         Text("本地 ${r.appLocalVersion} (${r.appLocalCode})")
                         Text("远端 ${r.appRemote?.version ?: "--"} (${r.appRemote?.versionCode ?: 0})")
                         Text(if (r.appHasUpdate) "有新版本" else "已是最新或无法比较")

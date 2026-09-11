@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.ui.components.PrefAction
+import com.qsc.battery.ui.components.PrefBody
 import com.qsc.battery.ui.components.PrefCard
 import com.qsc.battery.ui.components.PrefSwitch
 import com.qsc.battery.ui.components.SectionLabel
@@ -104,7 +105,7 @@ private fun AppearanceMiuix(
 ) {
     SectionLabel("界面风格")
     PrefCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        PrefBody(spacedBy = 8.dp) {
             Text("MIUIX / Material Design 3", style = MaterialTheme.typography.bodySmall)
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 SegmentedButton(
@@ -153,7 +154,7 @@ private fun AppearanceMaterial(
 ) {
     SectionLabel("界面风格")
     PrefCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        PrefBody(spacedBy = 8.dp) {
             Text("在 MIUIX 与 Material Design 3 之间切换", style = MaterialTheme.typography.bodySmall)
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 SegmentedButton(
