@@ -22,6 +22,55 @@ qsc_debug_enabled() {
 qsc_debug_step() {
 	qsc_debug_enabled || return 0
 	echo "$(date +%F_%T) step$1" >> "$DATADIR/debug.log"
+	qsc_trim_file_bytes "$DATADIR/debug.log" 262144 131072
+}
+
+# 按字节裁剪日志：超过 max 时只保留末尾 keep 字节。失败静默。
+# 用于 debug.log / 运行日志等会持续追加的文件，避免占满 /data。
+qsc_trim_file_bytes() {
+	local file="$1" max="$2" keep="$3" size
+	[ -f "$file" ] || return 0
+	case "$max" in ""|*[!0-9]*) return 0 ;; esac
+	case "$keep" in ""|*[!0-9]*) return 0 ;; esac
+	size="$(wc -c <"$file" 2>/dev/null | tr -d ' ')"
+	case "$size" in ""|*[!0-9]*) return 0 ;; esac
+	[ "$size" -gt "$max" ] 2>/dev/null || return 0
+	tail -c "$keep" "$file" >"$file.trim.$$" 2>/dev/null &&
+		mv -f "$file.trim.$$" "$file" 2>/dev/null
+	rm -f "$file.trim.$$" 2>/dev/null
+	return 0
+}
+
+# 按行数裁剪日志：超过 max 行时只保留末尾 keep 行。
+qsc_trim_file_lines() {
+	local file="$1" max="$2" keep="$3" n
+	[ -f "$file" ] || return 0
+	case "$max" in ""|*[!0-9]*) return 0 ;; esac
+	case "$keep" in ""|*[!0-9]*) return 0 ;; esac
+	n="$(wc -l <"$file" 2>/dev/null | tr -d ' ')"
+	case "$n" in ""|*[!0-9]*) return 0 ;; esac
+	[ "$n" -gt "$max" ] 2>/dev/null || return 0
+	tail -n "$keep" "$file" >"$file.trim.$$" 2>/dev/null &&
+		mv -f "$file.trim.$$" "$file" 2>/dev/null
+	rm -f "$file.trim.$$" 2>/dev/null
+	return 0
+}
+
+# 服务启动时清理临时文件，并对可能胀大的调试日志做容量控制。
+# 不删 charge_events / charge_history / health_history / log.log：那是用户可见历史。
+qsc_boot_cleanup_logs() {
+	rm -f "$DATADIR/startup.log" \
+		"$DATADIR/service_diag" \
+		"$DATADIR"/qscd_wait_error.* \
+		"$DATADIR/qscd_unusable.tmp" 2>/dev/null
+	# 开关测试日志偶发残留，开机清掉即可（不是充放电历史）
+	rm -f "$DATADIR/switch_test.log" \
+		"$DATADIR/switch_test_bg.log" \
+		"$DATADIR/switch_test_status" 2>/dev/null
+	# debug.log：跨重启保留链路，但按 256KiB 封顶，避免 debug_on 忘关撑爆分区
+	qsc_trim_file_bytes "$DATADIR/debug.log" 262144 131072
+	# 运行日志软上限：超过 400 行留最近 300 行（主循环里还会再裁）
+	qsc_trim_file_lines "${LOG_FILE:-$DATADIR/log.log}" 400 300
 }
 
 # 单行节点快速读取：纯内建，无 fork、不写临时文件。结果放 QSC_NODE_VAL。

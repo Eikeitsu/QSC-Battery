@@ -168,10 +168,14 @@ else
 fi
 rm -f "$DATADIR/now_c"
 rm -f "$DATADIR/history_last_lv"
-# 启动日志只保留本次服务入口；debug.log 要跨服务重启保留，才能追踪 PID
-# 变化与服务中断前后的完整链路。
-rm -f "$DATADIR/startup.log"
-rm -f "$DATADIR/service_diag"
+# 启动清理：临时/调试类文件可清；充放电历史与事件线保留。
+# debug.log 跨服务重启保留链路，仅做字节封顶（见 qsc_boot_cleanup_logs）。
+if type qsc_boot_cleanup_logs >/dev/null 2>&1; then
+	qsc_boot_cleanup_logs
+else
+	rm -f "$DATADIR/startup.log" "$DATADIR/service_diag"
+	rm -f "$DATADIR"/qscd_wait_error.* "$DATADIR/qscd_unusable.tmp"
+fi
 rm -f "$DATADIR/off_d"
 rm -f "$DATADIR/power_on"
 # 残留停充节点每个开机周期查一次，由 qsc_switch.sh 首轮执行
@@ -181,7 +185,6 @@ rm -f "$DATADIR/unplug_streak"
 # 守护可用性每次启动重新判定（可能换了二进制或换了机型）
 rm -f "$DATADIR/qscd_unusable" "$DATADIR/qscd_features" \
 	"$DATADIR/qscd_last_wake_reason"
-rm -f "$DATADIR"/qscd_wait_error.* "$DATADIR/qscd_unusable.tmp"
 rm -f "$DATADIR/power_off"
 echo "$(date +%F_%T) service.sh 启动，开始循环" > "$DATADIR/service_start.log"
 QSC_SERVICE_HEARTBEAT_LAST=0
@@ -305,6 +308,8 @@ qsc_runtime_trace() {
 	printf '{"level":"%s","category":"%s","hypothesisId":"%s","location":"service.sh","message":"%s","note":"%s","data":{"value":"%s","pid":"%s"},"timestamp":%s,"wall":"%s"}\n' \
 		"$level" "$category" "$hypothesis" "$message" "$note" "$value" "$$" "$now" \
 		"$(date +%F_%T 2>/dev/null)" >>"$DATADIR/debug.log" 2>/dev/null
+	type qsc_trim_file_bytes >/dev/null 2>&1 &&
+		qsc_trim_file_bytes "$DATADIR/debug.log" 262144 131072
 }
 # endregion
 qsc_runtime_trace "H0" "service_start" "$$"

@@ -46,8 +46,7 @@ jobs:
       - name: Verify module zips
         run: npm run verify:zips
 
-      - name: Verify hot update and release contracts
-        run: npm run test:hot-update
+      # 热更新契约由 Lint 工作流的 shell job 覆盖，此处不再重复跑
 
       - uses: actions/upload-artifact@v4
         with:

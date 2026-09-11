@@ -10,8 +10,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  lint:
+  web:
+    name: Web (lint / typecheck / unit)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,11 +26,35 @@ jobs:
 
       - uses: ./.github/actions/setup-node-npm
 
+      - name: ESLint / Stylelint / Markdown
+        run: npm run lint:js && npm run lint:style && npm run lint:md
+
+      - name: Typecheck WebUI
+        run: npm run typecheck:web
+
+      - name: Unit tests (Vitest)
+        run: npm run test:unit
+
+      - name: Prettier check
+        run: npm run format:check
+
+      - name: Commitlint (PR range)
+        if: github.event_name == 'pull_request'
+        run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
+  shell:
+    name: Shell (lint / ash tests / contracts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-node-npm
+
       - name: Install shellcheck / busybox
         run: sudo apt-get update && sudo apt-get install -y shellcheck busybox
 
-      - name: ESLint / Stylelint / Markdown / Shell
-        run: npm run lint
+      - name: ShellCheck
+        run: npm run lint:shell
         env:
           REQUIRE_SHELLCHECK: "1"
 
@@ -43,13 +72,12 @@ jobs:
       - name: Hot update and release contracts
         run: npm run test:hot-update
 
-      - name: Typecheck WebUI
-        run: npm run typecheck:web
+  rust:
+    name: Rust (fmt / clippy / test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Prettier check
-        run: npm run format:check
-
-      # 原生等待器：宿主端跑 fmt / clippy / 单测（不需要 NDK）
       - name: Setup Rust
         run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
 
@@ -60,13 +88,23 @@ jobs:
           cargo clippy --all-targets -- -D warnings
           cargo test
 
-      # C 版等待器：宿主 clang 编译 + 跑内建 selftest（不需要 NDK）
+  c:
+    name: C (host selftest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
       - name: C build / selftest (qscd-c)
         working-directory: native/qscd-c
         run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
           clang -std=gnu11 -Os -Wall -Wextra -Werror -o /tmp/qscd-host qscd.c
           /tmp/qscd-host selftest
 
-      - name: Commitlint (PR range)
-        if: github.event_name == 'pull_request'
-        run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+  lint:
+    name: Lint gate
+    runs-on: ubuntu-latest
+    needs: [web, shell, rust, c]
+    steps:
+      - run: echo "All lint jobs passed"

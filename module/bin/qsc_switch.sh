@@ -317,9 +317,12 @@ elif [ "$app_stop" != "1" ]; then
 fi
 
 if [ "$charge_eval" = "1" ]; then
-	if [ -f "$LOG_FILE" ]; then
-		log_n="$(cat "$LOG_FILE" | wc -l)"
-		if [ "$log_n" -gt "80" ]; then
+	if type qsc_trim_file_lines >/dev/null 2>&1; then
+		qsc_trim_file_lines "$LOG_FILE" 400 300
+	elif [ -f "$LOG_FILE" ]; then
+		log_n="$(wc -l <"$LOG_FILE" 2>/dev/null | tr -d ' ')"
+		case "$log_n" in ""|*[!0-9]*) log_n=0 ;; esac
+		if [ "$log_n" -gt 80 ] 2>/dev/null; then
 			sed -i '1,10d' "$LOG_FILE"
 		fi
 	fi
