@@ -7,15 +7,16 @@ plugins {
 
 android {
     namespace = "com.qsc.battery"
-    compileSdk = 36
+    // miuix 0.9.x / Compose 1.12 要求 compileSdk 37 + AGP ≥ 9.1.1
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.qsc.battery"
-        // miuix 0.9.x 要求较高 API；伴侣 APP 面向常见 Magisk/KSU 机型
+        // 伴侣 APP 面向常见 Magisk/KSU 机型
         minSdk = 33
-        targetSdk = 36
-        versionCode = 2026091101
-        versionName = "0.1.0"
+        targetSdk = 37
+        versionCode = 2026091102
+        versionName = "0.1.1"
         buildConfigField("String", "MODULE_UPDATE_URL", "\"https://eikeitsu.github.io/QSC-Battery/update.json\"")
         buildConfigField("String", "APP_UPDATE_URL", "\"https://eikeitsu.github.io/QSC-Battery/app-update.json\"")
         buildConfigField("String", "MODULE_ID", "\"QSC_Battery\"")

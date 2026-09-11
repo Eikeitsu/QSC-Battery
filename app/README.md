@@ -28,4 +28,4 @@ npm run package:app -- --skip-build   # 只刷新 app-update.json
 | 模块 | [update.json](https://eikeitsu.github.io/QSC-Battery/update.json) |
 | APP | [app-update.json](https://eikeitsu.github.io/QSC-Battery/app-update.json) |
 
-桌面显示名：**充电控制** · 包名 `com.qsc.battery` · `minSdk 33`
+桌面显示名：**充电控制** · 包名 `com.qsc.battery` · `minSdk 33` · `compileSdk/targetSdk 37`

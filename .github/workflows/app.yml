@@ -49,9 +49,9 @@ jobs:
         run: |
           chmod +x gradlew
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            curl -sL https://services.gradle.org/distributions/gradle-8.13-bin.zip -o /tmp/gradle.zip
+            curl -sL https://services.gradle.org/distributions/gradle-9.3.1-bin.zip -o /tmp/gradle.zip
             sudo unzip -q /tmp/gradle.zip -d /opt
-            /opt/gradle-8.13/bin/gradle wrapper --gradle-version 8.13
+            /opt/gradle-9.3.1/bin/gradle wrapper --gradle-version 9.3.1
             chmod +x gradlew
           fi
 
