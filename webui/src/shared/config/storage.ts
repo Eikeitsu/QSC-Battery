@@ -17,6 +17,7 @@ export const STORAGE_KEYS = {
   currentCollapse: "qsc_current_collapse",
   logLevelFilter: "qsc_log_level_filter",
   logViewMode: "qsc_log_view_mode",
+  logPageTab: "qsc_log_page_tab",
   codeEditorWrap: "qsc_code_editor_wrap",
   legacyDockPage: "qsc_dock_page",
   chargeRange: "qsc_charge_range",

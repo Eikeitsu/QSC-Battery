@@ -10,6 +10,7 @@ export type ConfigKey =
   | "stop_hold_wakelock"
   | "notify_charge_event"
   | "notify_charge_kinds"
+  | "notify_power_status"
   | "temperature_switch"
   | "temperature_switch_stop"
   | "temperature_switch_start"

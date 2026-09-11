@@ -12,6 +12,10 @@ import {
   writeStorage,
 } from "@/shared";
 import { useAppStore } from "@/stores";
+import { clearChargeEvents } from "@/shared/api/events";
+import { useChargeEvents } from "./useChargeEvents";
+
+export type LogPageTab = "runtime" | "events";
 
 /** 空字符串 = 全部；未缓存时默认 Info */
 function readLevelFilter(): string {
@@ -25,11 +29,18 @@ function readViewMode(): "flat" | "session" {
   return readStorage(STORAGE_KEYS.logViewMode) === "session" ? "session" : "flat";
 }
 
+function readLogTab(): LogPageTab {
+  return readStorage(STORAGE_KEYS.logPageTab) === "events" ? "events" : "runtime";
+}
+
 export function useLogPage() {
   const store = useAppStore();
   const { theme, packClass } = useThemePackClass();
   const levelFilter = ref(readLevelFilter());
   const viewMode = ref<"flat" | "session">(readViewMode());
+  const logTab = ref<LogPageTab>(readLogTab());
+  const { eventsNewestFirst, loadingEvents, eventSummary, refreshEvents } =
+    useChargeEvents(80);
 
   const logEntries = computed(() => parseLogText(store.logText));
   const visibleLogLines = computed(() =>
@@ -42,8 +53,13 @@ export function useLogPage() {
 
   watch(levelFilter, (v) => writeStorage(STORAGE_KEYS.logLevelFilter, v));
   watch(viewMode, (v) => writeStorage(STORAGE_KEYS.logViewMode, v));
+  watch(logTab, (v) => writeStorage(STORAGE_KEYS.logPageTab, v));
 
   async function doRefresh(showTip: boolean) {
+    if (logTab.value === "events") {
+      await refreshEvents();
+      return;
+    }
     await store.refreshLog(showTip);
   }
 
@@ -52,16 +68,29 @@ export function useLogPage() {
   }
 
   async function onClear() {
+    if (logTab.value === "events") {
+      try {
+        await showConfirmDialog({
+          title: "清空事件",
+          message: "确认清空充电事件记录？此操作不可恢复。",
+        });
+      } catch {
+        return;
+      }
+      await clearChargeEvents();
+      await refreshEvents();
+      return;
+    }
     try {
       await showConfirmDialog({
         title: "清空日志",
         message: "确认清空运行日志？",
       });
-      await store.clearLog();
-      theme.restoreChromeInsets?.();
     } catch {
-      /* cancelled */
+      return;
     }
+    await store.clearLog();
+    theme.restoreChromeInsets?.();
   }
 
   return {
@@ -70,10 +99,15 @@ export function useLogPage() {
     packClass,
     levelFilter,
     viewMode,
+    logTab,
+    eventsNewestFirst,
+    loadingEvents,
+    eventSummary,
     visibleLogLines,
     logSessions,
     filterActive,
     onButtonRefresh,
     onClear,
+    refreshEvents,
   };
 }

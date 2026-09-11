@@ -56,3 +56,9 @@ export async function loadChargeEvents(maxLines = 80): Promise<ChargeEvent[]> {
   );
   return parseChargeEventsText(result.stdout);
 }
+
+export async function clearChargeEvents(): Promise<void> {
+  await exec(
+    `: > '${PATHS.CHARGE_EVENTS}' 2>/dev/null || rm -f '${PATHS.CHARGE_EVENTS}' 2>/dev/null`,
+  );
+}

@@ -184,6 +184,8 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   if (next.stop_hold_wakelock !== String(input.stop_hold_wakelock || "auto")) mark(true);
   next.notify_charge_event =
     next.notify_charge_event === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
+  next.notify_power_status =
+    next.notify_power_status === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
   {
     const raw = String(next.notify_charge_kinds || "stop,resume,fail")
       .split(",")

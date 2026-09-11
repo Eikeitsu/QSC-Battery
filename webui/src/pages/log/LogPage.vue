@@ -12,11 +12,16 @@ const {
   packClass,
   levelFilter,
   viewMode,
+  logTab,
   visibleLogLines,
   logSessions,
   filterActive,
+  eventsNewestFirst,
+  loadingEvents,
+  eventSummary,
   onButtonRefresh,
   onClear,
+  refreshEvents,
 } = useLogPage();
 </script>
 
@@ -29,10 +34,16 @@ const {
       :view-mode="viewMode"
       :level-filter="levelFilter"
       :filter-active="filterActive"
+      :log-tab="logTab"
+      :events="eventsNewestFirst"
+      :loading-events="loadingEvents"
+      :event-summary="eventSummary"
       @update:level-filter="levelFilter = $event"
       @update:view-mode="viewMode = $event"
+      @update:log-tab="logTab = $event"
       @refresh="onButtonRefresh"
       @clear="onClear"
+      @refresh-events="refreshEvents"
     />
     <LogMiuix
       v-else-if="theme.themePack === ThemePack.Miuix"
@@ -41,10 +52,16 @@ const {
       :view-mode="viewMode"
       :level-filter="levelFilter"
       :filter-active="filterActive"
+      :log-tab="logTab"
+      :events="eventsNewestFirst"
+      :loading-events="loadingEvents"
+      :event-summary="eventSummary"
       @update:level-filter="levelFilter = $event"
       @update:view-mode="viewMode = $event"
+      @update:log-tab="logTab = $event"
       @refresh="onButtonRefresh"
       @clear="onClear"
+      @refresh-events="refreshEvents"
     />
     <LogDefault
       v-else
@@ -53,10 +70,16 @@ const {
       :view-mode="viewMode"
       :level-filter="levelFilter"
       :filter-active="filterActive"
+      :log-tab="logTab"
+      :events="eventsNewestFirst"
+      :loading-events="loadingEvents"
+      :event-summary="eventSummary"
       @update:level-filter="levelFilter = $event"
       @update:view-mode="viewMode = $event"
+      @update:log-tab="logTab = $event"
       @refresh="onButtonRefresh"
       @clear="onClear"
+      @refresh-events="refreshEvents"
     />
   </div>
 </template>

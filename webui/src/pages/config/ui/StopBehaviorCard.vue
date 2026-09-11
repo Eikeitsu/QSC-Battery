@@ -86,6 +86,12 @@ async function toggleKind(kind: "stop" | "resume" | "fail", on: boolean) {
       :model-value="notifyOn"
       @update:model-value="(v) => onSwitch('notify_charge_event', v)"
     />
+    <SwitchCell
+      title="常显功耗通知"
+      label="状态栏常驻显示电量、温度与实时电流（默关）"
+      :model-value="store.settings.notify_power_status === '1'"
+      @update:model-value="(v) => onSwitch('notify_power_status', v)"
+    />
     <van-collapse v-if="notifyOn" v-model="notifyDetailOpen" accordion>
       <van-collapse-item name="notify" title="通知种类与勿扰（可选）">
         <SwitchCell
