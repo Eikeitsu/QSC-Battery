@@ -1,7 +1,5 @@
 package com.qsc.battery.ui.more
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -27,10 +25,11 @@ import com.qsc.battery.core.PermStatus
 import com.qsc.battery.core.PermissionChecker
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.ui.components.PrefAction
-import com.qsc.battery.ui.components.PrefBody
-import com.qsc.battery.ui.components.PrefCard
 import com.qsc.battery.ui.components.PrefSwitch
-import com.qsc.battery.ui.components.SectionLabel
+import com.qsc.battery.ui.components.QscBody
+import com.qsc.battery.ui.components.QscGroup
+import com.qsc.battery.ui.components.QscPage
+import com.qsc.battery.ui.components.QscSectionLabel
 import com.qsc.battery.xposed.XpRuntime
 import kotlinx.coroutines.launch
 
@@ -62,30 +61,23 @@ fun MoreScreen(
             append(if (snap.installPackages == PermStatus.Ok) "安装 ✓  " else "安装 ✗  ")
             append(if (XpRuntime.isAvailable(container.appContext)) "XP ✓" else "XP ○")
         }
-        // 用设备上的关闭标记对齐 DataStore（XP 侧只认文件）
         if (container.root.isRootAvailable()) {
             val off = container.root.exists("/data/adb/qsc/xp_power_events_off")
             container.settingsRepository.setXpPowerEvents(!off)
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    QscPage(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Text("更多", style = MaterialTheme.typography.headlineSmall)
         message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
 
-        SectionLabel("外观")
-        PrefCard {
-            PrefAction("主题与界面风格", "MIUIX / Material 3、颜色与调色板") { onOpenAppearance() }
+        QscSectionLabel("外观")
+        QscGroup {
+            PrefAction("主题与界面风格", "Pulse / Ledger、颜色与调色板") { onOpenAppearance() }
         }
 
-        SectionLabel("权限与增强")
-        PrefCard {
+        QscSectionLabel("权限与增强")
+        QscGroup {
             PrefAction("重新检测权限", permHint.ifBlank { "Root / 通知 / 安装包 / XP" }) {
                 scope.launch {
                     container.settingsRepository.setOnboardingDone(false)
@@ -121,19 +113,19 @@ fun MoreScreen(
             ) {}
         }
 
-        SectionLabel("更新与安装")
-        PrefCard {
+        QscSectionLabel("更新与安装")
+        QscGroup {
             PrefAction("检查 / 安装 APP 与模块更新", "无模块时也可检查并下载模块 zip") { onOpenUpdates() }
-            PrefAction("从已刷模块目录安装内置 APP（可选）") {
+            PrefAction("在线下载并安装 APP") {
                 scope.launch {
-                    message = container.moduleInstallRepository.installBundledApkFromModule()
-                        .fold({ "APP 已安装" }, { it.message ?: "失败（可能未刷入带 APK 的模块包）" })
+                    message = container.moduleInstallRepository.installCompanionApkOnline()
+                        .fold({ "APP 已安装" }, { it.message ?: "下载或安装失败" })
                 }
             }
         }
 
-        SectionLabel("配置档")
-        PrefCard {
+        QscSectionLabel("配置档")
+        QscGroup {
             OutlinedTextField(
                 value = profileName,
                 onValueChange = { profileName = it },
@@ -169,8 +161,8 @@ fun MoreScreen(
             }
         }
 
-        SectionLabel("导入 / 导出")
-        PrefCard {
+        QscSectionLabel("导入 / 导出")
+        QscGroup {
             Button(
                 onClick = {
                     scope.launch {
@@ -204,9 +196,9 @@ fun MoreScreen(
             ) { Text("导入配置包") }
         }
 
-        SectionLabel("关于")
-        PrefCard {
-            PrefBody(spacedBy = 4.dp) {
+        QscSectionLabel("关于")
+        QscGroup {
+            QscBody(spacedBy = 4.dp) {
                 Text("充电控制 ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                 Text("包名 ${BuildConfig.APPLICATION_ID}")
                 Text("模块 ID ${BuildConfig.MODULE_ID}")

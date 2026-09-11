@@ -8,14 +8,14 @@ Kotlin + Jetpack Compose。只负责配置/状态/更新；**不挂后台保活*
 
 ## 功能
 
-- 主题：MIUIX / Material、动态取色、调色板
+- 主题皮肤：**Pulse**（表现型）/ **Ledger**（工具型）、颜色模式、调色板
 - Root 读写 `/data/adb/modules/QSC_Battery`（有模块时）
 - 主页 / 策略 / 日志 / 配置档 / 守护 / 更新
 - 首启权限引导、快捷设置磁贴、可选 XP 模块
 
 ## 构建（仅 GitHub Actions）
 
-推送 `app/` 或手动触发 **App** 工作流；Package Module 可嵌入产物 APK。刷模块时音量键**可选**安装本 APP。
+推送 `app/` 或手动触发 **App** 工作流产出 APK。模块 zip **不再内嵌** APK；刷模块时可选**在线下载**安装，或在 APP「更新」页安装。
 
 ```bash
 npm run package:app -- --skip-build   # 只刷新 app-update.json

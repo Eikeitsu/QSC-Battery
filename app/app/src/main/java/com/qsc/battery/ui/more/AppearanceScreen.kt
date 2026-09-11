@@ -27,17 +27,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.ui.components.PrefAction
-import com.qsc.battery.ui.components.PrefBody
-import com.qsc.battery.ui.components.PrefCard
 import com.qsc.battery.ui.components.PrefSwitch
-import com.qsc.battery.ui.components.SectionLabel
+import com.qsc.battery.ui.components.QscBody
+import com.qsc.battery.ui.components.QscGroup
+import com.qsc.battery.ui.components.QscSectionLabel
 import com.qsc.battery.ui.theme.ColorMode
-import com.qsc.battery.ui.theme.LocalUiMode
 import com.qsc.battery.ui.theme.ThemeSettings
 import com.qsc.battery.ui.theme.UiMode
 import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,132 +68,50 @@ fun AppearanceScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (LocalUiMode.current == UiMode.Miuix) {
-                AppearanceMiuix(
-                    settings = settings,
-                    onUiMode = { scope.launch { container.settingsRepository.setUiMode(it) } },
-                    onColorMode = { scope.launch { container.settingsRepository.setColorMode(it) } },
-                    onMiuixMonet = { scope.launch { container.settingsRepository.setMiuixMonet(it) } },
-                    onAltIcon = { scope.launch { container.settingsRepository.setAlternativeIcon(it) } },
-                    onOpenPalette = onOpenPalette,
-                )
-            } else {
-                AppearanceMaterial(
-                    settings = settings,
-                    onUiMode = { scope.launch { container.settingsRepository.setUiMode(it) } },
-                    onColorMode = { scope.launch { container.settingsRepository.setColorMode(it) } },
-                    onMiuixMonet = { scope.launch { container.settingsRepository.setMiuixMonet(it) } },
-                    onAltIcon = { scope.launch { container.settingsRepository.setAlternativeIcon(it) } },
-                    onOpenPalette = onOpenPalette,
-                )
+            QscSectionLabel("界面风格")
+            QscGroup {
+                QscBody(spacedBy = 10.dp) {
+                    Text(
+                        "Pulse 偏表现与大字号；Ledger 偏系统设置密度。均为原生 Compose，非网页皮肤。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        SegmentedButton(
+                            selected = settings.uiMode == UiMode.Pulse,
+                            onClick = { scope.launch { container.settingsRepository.setUiMode(UiMode.Pulse) } },
+                            shape = SegmentedButtonDefaults.itemShape(0, 2),
+                        ) { Text("Pulse") }
+                        SegmentedButton(
+                            selected = settings.uiMode == UiMode.Ledger,
+                            onClick = { scope.launch { container.settingsRepository.setUiMode(UiMode.Ledger) } },
+                            shape = SegmentedButtonDefaults.itemShape(1, 2),
+                        ) { Text("Ledger") }
+                    }
+                }
             }
-        }
-    }
-}
 
-@Composable
-private fun AppearanceMiuix(
-    settings: ThemeSettings,
-    onUiMode: (UiMode) -> Unit,
-    onColorMode: (ColorMode) -> Unit,
-    onMiuixMonet: (Boolean) -> Unit,
-    onAltIcon: (Boolean) -> Unit,
-    onOpenPalette: () -> Unit,
-) {
-    SectionLabel("界面风格")
-    PrefCard {
-        PrefBody(spacedBy = 8.dp) {
-            Text("MIUIX / Material Design 3", style = MaterialTheme.typography.bodySmall)
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                SegmentedButton(
-                    selected = settings.uiMode == UiMode.Miuix,
-                    onClick = { onUiMode(UiMode.Miuix) },
-                    shape = SegmentedButtonDefaults.itemShape(0, 2),
-                ) { Text("MIUIX") }
-                SegmentedButton(
-                    selected = settings.uiMode == UiMode.Material,
-                    onClick = { onUiMode(UiMode.Material) },
-                    shape = SegmentedButtonDefaults.itemShape(1, 2),
-                ) { Text("Material") }
+            QscSectionLabel("颜色模式")
+            QscGroup {
+                ColorMode.entries.forEach { mode ->
+                    PrefAction(
+                        title = modeLabel(mode),
+                        summary = if (settings.colorMode == mode) "当前" else null,
+                    ) { scope.launch { container.settingsRepository.setColorMode(mode) } }
+                }
             }
-        }
-        ColorMode.entries.forEach { mode ->
-            ArrowPreference(
-                title = modeLabel(mode),
-                summary = if (settings.colorMode == mode) "当前" else null,
-                onClick = { onColorMode(mode) },
-            )
-        }
-        SwitchPreference(
-            title = "MIUIX 跟随动态取色",
-            summary = "开启后 MIUIX 风格也使用动态取色",
-            checked = settings.miuixMonet,
-            onCheckedChange = onMiuixMonet,
-        )
-        ArrowPreference(title = "调色板", summary = "keyColor / PaletteStyle / ColorSpec", onClick = onOpenPalette)
-        SwitchPreference(
-            title = "备用桌面图标",
-            summary = "切换启动器图标",
-            checked = settings.alternativeIcon,
-            onCheckedChange = onAltIcon,
-        )
-    }
-}
 
-@Composable
-private fun AppearanceMaterial(
-    settings: ThemeSettings,
-    onUiMode: (UiMode) -> Unit,
-    onColorMode: (ColorMode) -> Unit,
-    onMiuixMonet: (Boolean) -> Unit,
-    onAltIcon: (Boolean) -> Unit,
-    onOpenPalette: () -> Unit,
-) {
-    SectionLabel("界面风格")
-    PrefCard {
-        PrefBody(spacedBy = 8.dp) {
-            Text("在 MIUIX 与 Material Design 3 之间切换", style = MaterialTheme.typography.bodySmall)
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                SegmentedButton(
-                    selected = settings.uiMode == UiMode.Miuix,
-                    onClick = { onUiMode(UiMode.Miuix) },
-                    shape = SegmentedButtonDefaults.itemShape(0, 2),
-                ) { Text("MIUIX") }
-                SegmentedButton(
-                    selected = settings.uiMode == UiMode.Material,
-                    onClick = { onUiMode(UiMode.Material) },
-                    shape = SegmentedButtonDefaults.itemShape(1, 2),
-                ) { Text("Material") }
+            QscSectionLabel("更多")
+            QscGroup {
+                PrefAction("调色板", "种子色与 PaletteStyle", onClick = onOpenPalette)
+                PrefSwitch(
+                    title = "备用桌面图标",
+                    summary = "切换启动器图标",
+                    checked = settings.alternativeIcon,
+                    onCheckedChange = { scope.launch { container.settingsRepository.setAlternativeIcon(it) } },
+                )
             }
         }
-    }
-    SectionLabel("颜色模式")
-    PrefCard {
-        ColorMode.entries.forEach { mode ->
-            PrefAction(
-                title = modeLabel(mode),
-                summary = if (settings.colorMode == mode) "当前" else null,
-            ) { onColorMode(mode) }
-        }
-    }
-    if (settings.uiMode == UiMode.Miuix) {
-        PrefCard {
-            PrefSwitch(
-                title = "MIUIX 跟随动态取色",
-                summary = "开启后 MIUIX 风格也使用动态取色",
-                checked = settings.miuixMonet,
-                onCheckedChange = onMiuixMonet,
-            )
-        }
-    }
-    PrefCard {
-        PrefAction("调色板", "keyColor / PaletteStyle / ColorSpec", onClick = onOpenPalette)
-        PrefSwitch(
-            title = "备用桌面图标",
-            summary = "切换启动器图标",
-            checked = settings.alternativeIcon,
-            onCheckedChange = onAltIcon,
-        )
     }
 }
 

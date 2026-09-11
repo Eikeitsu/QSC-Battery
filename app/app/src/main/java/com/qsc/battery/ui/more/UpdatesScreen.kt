@@ -1,7 +1,5 @@
 package com.qsc.battery.ui.more
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -27,9 +25,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.UpdateCheckResult
-import com.qsc.battery.ui.components.PrefBody
-import com.qsc.battery.ui.components.PrefCard
-import com.qsc.battery.ui.components.SectionLabel
+import com.qsc.battery.ui.components.QscBody
+import com.qsc.battery.ui.components.QscGroup
+import com.qsc.battery.ui.components.QscPage
+import com.qsc.battery.ui.components.QscSectionLabel
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,13 +54,11 @@ fun UpdatesScreen(
             )
         },
     ) { padding ->
-        Column(
+        QscPage(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .verticalScroll(rememberScrollState()),
         ) {
             Button(
                 onClick = {
@@ -81,9 +78,9 @@ fun UpdatesScreen(
 
             val r = result
             if (r != null) {
-                SectionLabel("模块")
-                PrefCard {
-                    PrefBody(spacedBy = 6.dp) {
+                QscSectionLabel("模块")
+                QscGroup {
+                    QscBody(spacedBy = 6.dp) {
                         Text("本地 ${r.moduleLocal?.version ?: "未安装"} (${r.moduleLocal?.versionCode ?: 0})")
                         Text("远端 ${r.moduleRemote?.version ?: "--"} (${r.moduleRemote?.versionCode ?: 0})")
                         Text(
@@ -117,13 +114,13 @@ fun UpdatesScreen(
                     }
                 }
 
-                SectionLabel("APP")
-                PrefCard {
-                    PrefBody(spacedBy = 6.dp) {
+                QscSectionLabel("APP")
+                QscGroup {
+                    QscBody(spacedBy = 6.dp) {
                         Text("本地 ${r.appLocalVersion} (${r.appLocalCode})")
                         Text("远端 ${r.appRemote?.version ?: "--"} (${r.appRemote?.versionCode ?: 0})")
                         Text(if (r.appHasUpdate) "有新版本" else "已是最新或无法比较")
-                        if (r.appHasUpdate && !r.appRemote?.apkUrl.isNullOrBlank()) {
+                        if (!r.appRemote?.apkUrl.isNullOrBlank()) {
                             Button(
                                 onClick = {
                                     scope.launch {
@@ -141,7 +138,7 @@ fun UpdatesScreen(
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 enabled = !busy,
-                            ) { Text("下载并安装 APP") }
+                            ) { Text(if (r.appHasUpdate) "下载并安装 APP" else "重新下载安装 APP") }
                         }
                     }
                 }

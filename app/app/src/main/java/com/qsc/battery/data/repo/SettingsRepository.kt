@@ -27,7 +27,6 @@ class SettingsRepository(private val context: Context) {
         val keyColor = intPreferencesKey("key_color")
         val colorStyle = stringPreferencesKey("color_style")
         val colorSpec = stringPreferencesKey("color_spec")
-        val miuixMonet = booleanPreferencesKey("miuix_monet")
         val alternativeIcon = booleanPreferencesKey("alternative_icon")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
         val xpPowerEvents = booleanPreferencesKey("xp_power_events")
@@ -41,7 +40,6 @@ class SettingsRepository(private val context: Context) {
             keyColor = prefs[Keys.keyColor] ?: 0xFF0B6E4F.toInt(),
             paletteStyle = PaletteStyleName.fromWire(prefs[Keys.colorStyle]),
             colorSpec = prefs[Keys.colorSpec] ?: "SPEC_2021",
-            miuixMonet = prefs[Keys.miuixMonet] ?: false,
             alternativeIcon = prefs[Keys.alternativeIcon] ?: false,
         )
     }
@@ -60,7 +58,6 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setXpPowerEvents(enabled: Boolean) {
         context.settingsStore.edit { it[Keys.xpPowerEvents] = enabled }
-        // LSPosed 可通过 XSharedPreferences 读取同名私有偏好
         context.getSharedPreferences("qsc_xp", Context.MODE_PRIVATE).edit()
             .putBoolean("xp_power_events", enabled)
             .apply()
@@ -84,10 +81,6 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setColorSpec(spec: String) {
         context.settingsStore.edit { it[Keys.colorSpec] = spec }
-    }
-
-    suspend fun setMiuixMonet(enabled: Boolean) {
-        context.settingsStore.edit { it[Keys.miuixMonet] = enabled }
     }
 
     suspend fun setAlternativeIcon(enabled: Boolean) {

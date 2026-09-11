@@ -2,13 +2,11 @@ package com.qsc.battery.ui.onboarding
 
 import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -32,8 +30,9 @@ import com.qsc.battery.core.PermStatus
 import com.qsc.battery.core.PermissionChecker
 import com.qsc.battery.core.PermissionSnapshot
 import com.qsc.battery.data.AppContainer
-import com.qsc.battery.ui.components.PrefBody
-import com.qsc.battery.ui.components.PrefCard
+import com.qsc.battery.ui.components.QscBody
+import com.qsc.battery.ui.components.QscGroup
+import com.qsc.battery.ui.components.QscPage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -62,13 +61,7 @@ fun OnboardingScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
+    QscPage(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Text("充电控制", style = MaterialTheme.typography.headlineMedium)
         LinearProgressIndicator(
             progress = { (step + 1) / 5f },
@@ -78,8 +71,8 @@ fun OnboardingScreen(
         when (step) {
             0 -> {
                 Text("欢迎", style = MaterialTheme.typography.titleLarge)
-                PrefCard {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                QscGroup {
+                    QscBody(spacedBy = 8.dp) {
                         Text("本应用用于配置与查看 Magisk「充电控制」模块，不在后台执行停充逻辑。")
                         Text("接下来会检测几项权限。Root 用于读写模块配置；没有 Root 仍可改主题、检查更新。")
                         Text("LSPosed 增强为可选项，用于系统侧供电事件补强，不写充电节点。")
@@ -99,8 +92,8 @@ fun OnboardingScreen(
                         else -> "未授权。请在 Magisk/KernelSU 中允许本应用，然后点「重新检测」"
                     },
                 )
-                PrefCard {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                QscGroup {
+                    QscBody {
                         Text(
                             "为何需要：读写 /data/adb/modules 下的配置、安装模块、快捷磁贴切换。",
                             style = MaterialTheme.typography.bodyMedium,
@@ -181,8 +174,8 @@ fun OnboardingScreen(
                         "未检测到 LSPosed。可安装后在管理器中启用本模块（API 102），作用域勾选系统框架"
                     },
                 )
-                PrefCard {
-                    PrefBody(spacedBy = 6.dp) {
+                QscGroup {
+                    QscBody(spacedBy = 6.dp) {
                         Text("增强内容：系统 BatteryService 变化时写入事件提示文件，帮助模块更快感知插拔。")
                         Text("不增强也不影响停充：模块本身已能工作。")
                         Text("使用现代 Xposed API 102，不写充电控制节点。")
@@ -210,8 +203,8 @@ fun OnboardingScreen(
 
 @Composable
 private fun StatusLine(title: String, ok: Boolean, detail: String) {
-    PrefCard {
-        PrefBody(spacedBy = 4.dp) {
+    QscGroup {
+        QscBody(spacedBy = 4.dp) {
             Text(
                 if (ok) "✓ $title" else "○ $title",
                 style = MaterialTheme.typography.titleMedium,

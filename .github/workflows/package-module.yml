@@ -39,17 +39,6 @@ jobs:
 
       - uses: ./.github/actions/build-native
 
-      - name: Download companion APK (from App workflow artifact, optional)
-        continue-on-error: true
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          workflow: app.yml
-          name: qsc-companion-apk
-          path: release
-          search_artifacts: true
-          workflow_conclusion: success
-          branch: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
-
       - name: Build all module zips (full / rust / c / sh)
         run: npm run build:module:all
 

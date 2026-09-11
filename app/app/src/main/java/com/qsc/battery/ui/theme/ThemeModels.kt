@@ -1,12 +1,16 @@
 package com.qsc.battery.ui.theme
 
-/** 界面风格：MIUIX 或 Material。 */
+/** 界面皮肤：Pulse（表现型）/ Ledger（工具型）。 */
 enum class UiMode(val value: String) {
-    Miuix("miuix"),
-    Material("material");
+    Pulse("pulse"),
+    Ledger("ledger");
 
     companion object {
-        fun fromValue(v: String?) = entries.find { it.value == v } ?: Miuix
+        fun fromValue(v: String?): UiMode = when (v) {
+            "pulse", "miuix", null -> Pulse
+            "ledger", "material" -> Ledger
+            else -> entries.find { it.value == v } ?: Pulse
+        }
     }
 }
 
@@ -61,20 +65,12 @@ enum class PaletteStyleName(val wire: String) {
 }
 
 data class ThemeSettings(
-    val uiMode: UiMode = UiMode.Miuix,
+    val uiMode: UiMode = UiMode.Pulse,
     val colorMode: ColorMode = ColorMode.SYSTEM,
     val keyColor: Int = 0xFF0B6E4F.toInt(),
     val paletteStyle: PaletteStyleName = PaletteStyleName.TonalSpot,
     val colorSpec: String = "SPEC_2021",
-    val miuixMonet: Boolean = false,
     val alternativeIcon: Boolean = false,
 ) {
-    fun effectiveColorMode(): ColorMode {
-        if (uiMode != UiMode.Miuix) return colorMode
-        return when {
-            !miuixMonet && colorMode.isMonet -> colorMode.toNonMonetMode()
-            miuixMonet && !colorMode.isMonet -> colorMode.toMonetMode()
-            else -> colorMode
-        }
-    }
+    fun effectiveColorMode(): ColorMode = colorMode
 }

@@ -1,13 +1,7 @@
 package com.qsc.battery.ui.home
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -21,15 +15,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.StatusBundle
-import com.qsc.battery.ui.components.PrefBody
-import com.qsc.battery.ui.components.PrefCard
 import com.qsc.battery.ui.components.PrefSwitch
-import com.qsc.battery.ui.components.SectionLabel
+import com.qsc.battery.ui.components.QscBody
+import com.qsc.battery.ui.components.QscGroup
+import com.qsc.battery.ui.components.QscHeroBattery
+import com.qsc.battery.ui.components.QscMetricGrid
+import com.qsc.battery.ui.components.QscPage
+import com.qsc.battery.ui.components.QscSectionLabel
 import com.qsc.battery.ui.components.StatusBanner
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -59,16 +55,20 @@ fun HomeScreen(container: AppContainer) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("QSC Battery", style = MaterialTheme.typography.headlineSmall)
+    val levelRaw = status.snapshot.level
+    val levelPct = levelRaw.toFloatOrNull()?.div(100f)
+    val levelText = if (levelRaw.isBlank()) "--%" else "${levelRaw}%"
+    val statusLine = buildString {
+        append(if (status.snapshot.powered) "已插电" else "未插电")
+        append(" · ")
+        append(status.snapshot.status.ifBlank { "未知" })
+        if (status.chargingStopped) append(" · 停充中")
+    }
+
+    QscPage(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        Text("充电控制", style = MaterialTheme.typography.headlineSmall)
         Text(
-            status.description.ifBlank { "充电控制伴侣" },
+            status.description.ifBlank { "模块负责停充，本应用负责配置与状态" },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -79,17 +79,27 @@ fun HomeScreen(container: AppContainer) {
             )
             !status.modulePresent -> {
                 StatusBanner(
-                    text = "未检测到 QSC_Battery 模块。APP 可单独使用（主题/检查更新）；停充需安装模块。请到「更多 → 更新」下载安装。",
+                    text = "未检测到模块。可在「更多 → 更新」下载安装；装上后才能停充。",
                 )
-                PrefCard {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("模块可选：本 APP 不依赖模块也能打开。", style = MaterialTheme.typography.bodyMedium)
-                        Text("装上模块后即可在本页开关停充与查看电池状态。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                QscGroup {
+                    QscBody(spacedBy = 8.dp) {
+                        Text("本应用可单独使用主题与更新检查。", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "刷入 Magisk「充电控制」模块后，主页即可开关与查看电池。",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
             else -> {
-                PrefCard {
+                QscHeroBattery(
+                    levelText = levelText,
+                    percent = levelPct,
+                    subtitle = status.version.ifBlank { "模块已就绪" },
+                    statusLine = statusLine,
+                )
+
+                QscGroup {
                     PrefSwitch(
                         title = "启用充电控制",
                         summary = if (status.moduleOff) "当前已关闭（off_qsc）" else "模块运行中",
@@ -103,35 +113,37 @@ fun HomeScreen(container: AppContainer) {
                     )
                 }
 
-                SectionLabel("电池")
-                PrefCard {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (loading) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                                CircularProgressIndicator()
+                QscSectionLabel("电池详情")
+                QscGroup {
+                    if (loading) {
+                        QscBody { CircularProgressIndicator() }
+                    } else {
+                        QscMetricGrid(
+                            listOf(
+                                "温度" to formatTemp(status.snapshot.temp),
+                                "电压" to formatUv(status.voltage),
+                                "电流" to formatUa(status.current),
+                                "停充" to if (status.chargingStopped) "是" else "否",
+                                "供电" to if (status.snapshot.powered) "已插电" else "未插电",
+                                "版本" to status.version.ifBlank { "--" },
+                            ),
+                        )
+                        QscBody {
+                            Button(onClick = { scope.launch { refresh() } }, modifier = Modifier.fillMaxWidth()) {
+                                Text("刷新")
                             }
-                        } else {
-                            Metric("电量", "${status.snapshot.level.ifBlank { "--" }}%")
-                            Metric("温度", formatTemp(status.snapshot.temp))
-                            Metric("状态", status.snapshot.status.ifBlank { "--" })
-                            Metric("供电", if (status.snapshot.powered) "已插电" else "未插电")
-                            Metric("停充中", if (status.chargingStopped) "是" else "否")
-                            Metric("电压", formatUv(status.voltage))
-                            Metric("电流", formatUa(status.current))
-                            Metric("模块版本", status.version.ifBlank { "--" })
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        Button(onClick = { scope.launch { refresh() } }, modifier = Modifier.fillMaxWidth()) {
-                            Text("刷新")
                         }
                     }
                 }
 
-                SectionLabel("策略摘要")
-                PrefCard {
-                    PrefBody(spacedBy = 6.dp) {
+                QscSectionLabel("策略摘要")
+                QscGroup {
+                    QscBody(spacedBy = 6.dp) {
                         Text("停充 ${conf["power_stop"] ?: "--"}% · 恢复 ${conf["power_start"] ?: "--"}%")
-                        Text("温控 ${if (conf["temperature_switch"] == "1") "开" else "关"} · ${conf["temperature_switch_stop"] ?: "--"}°C / ${conf["temperature_switch_start"] ?: "--"}°C")
+                        Text(
+                            "温控 ${if (conf["temperature_switch"] == "1") "开" else "关"} · " +
+                                "${conf["temperature_switch_stop"] ?: "--"}°C / ${conf["temperature_switch_start"] ?: "--"}°C",
+                        )
                         Text("守护 ${if (conf["native_daemon"] == "1") "开" else "关"} · ${conf["native_impl"] ?: "rust"}")
                         if (status.failed) {
                             Text("存在停充失败提示，请检查节点", color = MaterialTheme.colorScheme.error)
@@ -140,18 +152,6 @@ fun HomeScreen(container: AppContainer) {
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun Metric(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.titleMedium)
     }
 }
 

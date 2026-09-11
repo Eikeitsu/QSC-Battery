@@ -19,7 +19,7 @@ class AppContainer(context: Context) {
     val configRepository = ConfigRepository(root)
     val logRepository = LogRepository(root)
     val updateRepository = UpdateRepository(appContext)
-    val moduleInstallRepository = ModuleInstallRepository(appContext, root)
+    val moduleInstallRepository = ModuleInstallRepository(appContext, root, updateRepository)
     val daemonRepository = DaemonRepository(root)
     val profilesRepository = ProfilesRepository(root)
 }

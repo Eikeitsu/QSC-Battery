@@ -1,7 +1,5 @@
 package com.qsc.battery.ui.config
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -24,9 +22,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.CurrentConfig
-import com.qsc.battery.ui.components.PrefCard
 import com.qsc.battery.ui.components.PrefSwitch
-import com.qsc.battery.ui.components.SectionLabel
+import com.qsc.battery.ui.components.QscGroup
+import com.qsc.battery.ui.components.QscPage
+import com.qsc.battery.ui.components.QscSectionLabel
 import com.qsc.battery.ui.components.StatusBanner
 import kotlinx.coroutines.launch
 
@@ -60,31 +59,25 @@ fun ConfigScreen(container: AppContainer) {
 
     LaunchedEffect(Unit) { reload() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    QscPage(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Text("策略", style = MaterialTheme.typography.headlineSmall)
         message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
 
         if (!ready) {
             Text("加载中…")
-            return@Column
+            return@QscPage
         }
         if (!rootOk) {
             StatusBanner("需要 Root 才能修改配置")
-            return@Column
+            return@QscPage
         }
         if (!moduleOk) {
             StatusBanner("模块未安装")
-            return@Column
+            return@QscPage
         }
 
-        SectionLabel("电量停充")
-        PrefCard {
+        QscSectionLabel("电量停充")
+        QscGroup {
             NumberField("停止充电电量 (%)", v("power_stop")) { setLocal("power_stop", it) }
             NumberField("恢复充电电量 (%)", v("power_start")) { setLocal("power_start", it) }
             NumberField("延时停充 (秒)", v("power_stop_time")) { setLocal("power_stop_time", it) }
@@ -95,8 +88,8 @@ fun ConfigScreen(container: AppContainer) {
             }
         }
 
-        SectionLabel("温度")
-        PrefCard {
+        QscSectionLabel("温度")
+        QscGroup {
             PrefSwitch("温度停充", v("temperature_switch") == "1") {
                 setLocal("temperature_switch", if (it) "1" else "0")
             }
@@ -108,8 +101,8 @@ fun ConfigScreen(container: AppContainer) {
             }
         }
 
-        SectionLabel("通知与行为")
-        PrefCard {
+        QscSectionLabel("通知与行为")
+        QscGroup {
             PrefSwitch("充电事件通知", v("notify_charge_event") == "1") {
                 setLocal("notify_charge_event", if (it) "1" else "0")
             }
@@ -122,8 +115,8 @@ fun ConfigScreen(container: AppContainer) {
             TextField("App 停充列表", v("app_stop_list")) { setLocal("app_stop_list", it) }
         }
 
-        SectionLabel("循环与省电")
-        PrefCard {
+        QscSectionLabel("循环与省电")
+        QscGroup {
             PrefSwitch("省电模式", v("power_saver") == "1") { setLocal("power_saver", if (it) "1" else "0") }
             NumberField("近阈值间隔 (秒)", v("loop_interval_sec")) { setLocal("loop_interval_sec", it) }
             NumberField("维持间隔 (秒)", v("loop_interval_maintain_sec")) {
@@ -149,8 +142,8 @@ fun ConfigScreen(container: AppContainer) {
             PrefSwitch("主页曲线", v("chart_show") == "1") { setLocal("chart_show", if (it) "1" else "0") }
         }
 
-        SectionLabel("电流控制")
-        PrefCard {
+        QscSectionLabel("电流控制")
+        QscGroup {
             PrefSwitch("启用电流控制", current.current_control == 1) {
                 current = current.copy(current_control = if (it) 1 else 0)
             }
@@ -173,8 +166,8 @@ fun ConfigScreen(container: AppContainer) {
             }
         }
 
-        SectionLabel("事件唤醒守护")
-        PrefCard {
+        QscSectionLabel("事件唤醒守护")
+        QscGroup {
             PrefSwitch("启用守护", v("native_daemon") == "1") {
                 setLocal("native_daemon", if (it) "1" else "0")
             }

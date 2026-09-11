@@ -28,8 +28,9 @@ import androidx.compose.ui.unit.sp
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.ChargeEvent
 import com.qsc.battery.data.model.LogLine
-import com.qsc.battery.ui.components.PrefCard
-import com.qsc.battery.ui.components.SectionLabel
+import com.qsc.battery.ui.components.QscGroup
+import com.qsc.battery.ui.components.QscPage
+import com.qsc.battery.ui.components.QscSectionLabel
 import kotlinx.coroutines.launch
 
 private enum class LogTab { Runtime, Events }
@@ -53,12 +54,7 @@ fun LogScreen(container: AppContainer) {
 
     LaunchedEffect(Unit) { refresh() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
+    QscPage(modifier = Modifier.fillMaxSize()) {
         Text("日志", style = MaterialTheme.typography.headlineSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = tab == LogTab.Runtime, onClick = { tab = LogTab.Runtime }, label = { Text("运行日志") })
@@ -84,7 +80,7 @@ fun LogScreen(container: AppContainer) {
             }
 
             val filtered = lines.filter { level.isEmpty() || it.level == level }
-            PrefCard(modifier = Modifier.weight(1f, fill = true)) {
+            QscGroup(modifier = Modifier.weight(1f, fill = true)) {
                 if (viewMode == ViewMode.Session) {
                     val sessions = groupSessions(filtered)
                     LazyColumn(modifier = Modifier.padding(12.dp)) {
@@ -105,8 +101,8 @@ fun LogScreen(container: AppContainer) {
             }
 
             if (historyPreview.isNotBlank()) {
-                SectionLabel("充电历史片段")
-                PrefCard {
+                QscSectionLabel("充电历史片段")
+                QscGroup {
                     Text(
                         historyPreview.take(1200),
                         modifier = Modifier.padding(12.dp),
@@ -121,7 +117,7 @@ fun LogScreen(container: AppContainer) {
                 TextButton(onClick = { scope.launch { refresh() } }) { Text("刷新") }
                 TextButton(onClick = { scope.launch { container.logRepository.clearEvents(); refresh() } }) { Text("清空") }
             }
-            PrefCard(modifier = Modifier.weight(1f, fill = true)) {
+            QscGroup(modifier = Modifier.weight(1f, fill = true)) {
                 LazyColumn(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(events) { e ->
                         Column {

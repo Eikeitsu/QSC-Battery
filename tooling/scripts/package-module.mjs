@@ -279,23 +279,8 @@ if (includeDebug) {
 }
 copyBuiltWebroot();
 
-// Optional companion APP APK — produced by GitHub Actions「App」workflow artifact.
-// Local packaging may skip this; CI Package Module downloads qsc-companion-apk first.
-{
-  const apkCandidates = [
-    join(releaseDir, "QSC-Battery.apk"),
-    join(repoRoot, "app", "app", "build", "outputs", "apk", "release", "app-release.apk"),
-    join(repoRoot, "app", "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
-  ];
-  const apk = apkCandidates.find((p) => existsSync(p));
-  if (apk) {
-    mkdirSync(join(staging, "app"), { recursive: true });
-    cpSync(apk, join(staging, "app", "QSC-Battery.apk"));
-    log(`embedded companion apk: ${apk}`);
-  } else {
-    log("companion apk not found — module zip without app/");
-  }
-}
+// Companion APP is distributed via app-update.json (online download), not embedded in the module zip.
+log("companion apk: skipped embed — install via online download in customize.sh / APP updates");
 
 if (existsSync(zipPath)) rmSync(zipPath);
 log(`packaging ${zipName}...`);
