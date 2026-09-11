@@ -6,13 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -20,22 +17,31 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.moriafly.salt.ui.Item
+import com.moriafly.salt.ui.ItemArrowType
+import com.moriafly.salt.ui.ItemCheck
+import com.moriafly.salt.ui.ItemOuterTitle
+import com.moriafly.salt.ui.RoundedColumn
+import com.moriafly.salt.ui.SaltTheme
+import com.moriafly.salt.ui.Text
+import com.moriafly.salt.ui.UnstableSaltUiApi
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.ChargeEvent
 import com.qsc.battery.data.model.LogLine
-import com.qsc.battery.ui.design.VoltChipRow
-import com.qsc.battery.ui.design.VoltPage
-import com.qsc.battery.ui.design.VoltSection
-import com.qsc.battery.ui.design.VoltSectionLabel
+import com.qsc.battery.ui.design.AppPage
+import com.qsc.battery.ui.design.AppPrimaryButton
+import com.qsc.battery.ui.design.AppSecondaryButton
 import kotlinx.coroutines.launch
 
 private enum class LogTab { Runtime, Events }
 private enum class ViewMode { Flat, Session }
 
+@OptIn(UnstableSaltUiApi::class)
 @Composable
 fun LogScreen(container: AppContainer) {
     var tab by remember { mutableStateOf(LogTab.Runtime) }
@@ -54,113 +60,173 @@ fun LogScreen(container: AppContainer) {
 
     LaunchedEffect(Unit) { refresh() }
 
-    VoltPage(modifier = Modifier.fillMaxSize()) {
-        Text("日志", style = MaterialTheme.typography.headlineSmall)
-        VoltChipRow(
-            options = listOf(
-                "运行日志" to (tab == LogTab.Runtime),
-                "充电事件" to (tab == LogTab.Events),
-            ),
-            onSelect = { tab = if (it == 0) LogTab.Runtime else LogTab.Events },
+    AppPage(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+    ) {
+        Text(
+            text = "日志",
+            style = SaltTheme.textStyles.main,
+            fontWeight = FontWeight.SemiBold,
         )
 
+        RoundedColumn {
+            ItemCheck(
+                state = tab == LogTab.Runtime,
+                onChange = { if (it) tab = LogTab.Runtime },
+                text = "运行日志",
+            )
+            ItemCheck(
+                state = tab == LogTab.Events,
+                onChange = { if (it) tab = LogTab.Events },
+                text = "充电事件",
+            )
+        }
+
         if (tab == LogTab.Runtime) {
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                VoltChipRow(
-                    options = listOf(
-                        "全部" to (level == ""),
-                        "信息" to (level == "info"),
-                        "警告" to (level == "warn"),
-                        "错误" to (level == "error"),
-                        "调试" to (level == "debug"),
-                    ),
-                    onSelect = { idx ->
-                        level = listOf("", "info", "warn", "error", "debug")[idx]
-                    },
+            ItemOuterTitle(text = "级别")
+            RoundedColumn {
+                listOf("" to "全部", "info" to "信息", "warn" to "警告", "error" to "错误", "debug" to "调试")
+                    .forEach { (key, label) ->
+                        ItemCheck(
+                            state = level == key,
+                            onChange = { if (it) level = key },
+                            text = label,
+                        )
+                    }
+            }
+
+            ItemOuterTitle(text = "视图")
+            RoundedColumn {
+                ItemCheck(
+                    state = viewMode == ViewMode.Flat,
+                    onChange = { if (it) viewMode = ViewMode.Flat },
+                    text = "平铺",
+                )
+                ItemCheck(
+                    state = viewMode == ViewMode.Session,
+                    onChange = { if (it) viewMode = ViewMode.Session },
+                    text = "会话",
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                VoltChipRow(
-                    options = listOf(
-                        "平铺" to (viewMode == ViewMode.Flat),
-                        "会话" to (viewMode == ViewMode.Session),
-                    ),
-                    onSelect = { viewMode = if (it == 0) ViewMode.Flat else ViewMode.Session },
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                AppSecondaryButton(
+                    text = "刷新",
+                    onClick = { scope.launch { refresh() } },
+                    modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { scope.launch { refresh() } }) { Text("刷新") }
-                TextButton(onClick = { scope.launch { container.logRepository.clearLog(); refresh() } }) { Text("清空") }
+                AppSecondaryButton(
+                    text = "清空",
+                    onClick = { scope.launch { container.logRepository.clearLog(); refresh() } },
+                    modifier = Modifier.weight(1f),
+                )
             }
 
             val filtered = lines.filter { level.isEmpty() || it.level == level }
-            VoltSection(modifier = Modifier.weight(1f, fill = true)) {
-                if (viewMode == ViewMode.Session) {
-                    val sessions = groupSessions(filtered)
-                    LazyColumn(modifier = Modifier.padding(12.dp)) {
-                        for ((title, body) in sessions) {
-                            item {
-                                Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(vertical = 6.dp))
-                            }
-                            items(body) { LogText(it) }
+            ItemOuterTitle(text = "内容 (${filtered.size})")
+            RoundedColumn {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .padding(12.dp)
+                        .horizontalScroll(rememberScrollState()),
+                ) {
+                    if (viewMode == ViewMode.Session) {
+                        groupSessions(filtered).forEach { (title, body) ->
+                            Text(
+                                text = title,
+                                style = SaltTheme.textStyles.main,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(vertical = 6.dp),
+                            )
+                            body.forEach { LogText(it) }
                         }
-                    }
-                } else {
-                    LazyColumn(modifier = Modifier.padding(12.dp)) {
-                        items(filtered) { LogText(it) }
+                    } else {
+                        filtered.forEach { LogText(it) }
                     }
                 }
             }
 
             if (historyPreview.isNotBlank()) {
-                VoltSectionLabel("充电历史片段")
-                VoltSection {
+                ItemOuterTitle(text = "充电历史片段")
+                RoundedColumn {
                     Text(
-                        historyPreview.take(1200),
+                        text = historyPreview.take(1200),
                         modifier = Modifier.padding(12.dp),
+                        color = SaltTheme.colors.subText,
+                        style = SaltTheme.textStyles.sub,
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
         } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { scope.launch { refresh() } }) { Text("刷新") }
-                TextButton(onClick = { scope.launch { container.logRepository.clearEvents(); refresh() } }) { Text("清空") }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                AppSecondaryButton(
+                    text = "刷新",
+                    onClick = { scope.launch { refresh() } },
+                    modifier = Modifier.weight(1f),
+                )
+                AppSecondaryButton(
+                    text = "清空",
+                    onClick = { scope.launch { container.logRepository.clearEvents(); refresh() } },
+                    modifier = Modifier.weight(1f),
+                )
             }
-            VoltSection(modifier = Modifier.weight(1f, fill = true)) {
-                LazyColumn(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(events) { e ->
-                        Column {
-                            Text("${e.dateText} ${e.timeText} · ${e.type}", style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                buildString {
-                                    e.level?.let { append("电量 $it%  ") }
-                                    e.temp?.let { append("温度 $it°C  ") }
-                                    append(e.detail)
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+            ItemOuterTitle(text = "事件")
+            RoundedColumn {
+                if (events.isEmpty()) {
+                    Item(
+                        onClick = {},
+                        text = "暂无事件",
+                        arrowType = ItemArrowType.None,
+                        enabled = false,
+                    )
+                } else {
+                    events.take(80).forEach { e ->
+                        Item(
+                            onClick = {},
+                            text = "${e.dateText} ${e.timeText} · ${e.type}",
+                            sub = buildString {
+                                e.level?.let { append("电量 $it%  ") }
+                                e.temp?.let { append("温度 $it°C  ") }
+                                append(e.detail)
+                            },
+                            arrowType = ItemArrowType.None,
+                            enabled = false,
+                        )
                     }
                 }
             }
         }
+
+        AppPrimaryButton(text = "重新加载", onClick = { scope.launch { refresh() } })
     }
 }
 
 @Composable
 private fun LogText(line: LogLine) {
     val color = when (line.level) {
-        "error" -> MaterialTheme.colorScheme.error
-        "warn" -> MaterialTheme.colorScheme.tertiary
-        "debug" -> MaterialTheme.colorScheme.onSurfaceVariant
-        else -> MaterialTheme.colorScheme.onSurface
+        "error" -> Color(0xFFB3261E)
+        "warn" -> Color(0xFFE6A700)
+        "debug" -> SaltTheme.colors.subText
+        else -> SaltTheme.colors.text
     }
-    Text(line.raw, color = color, fontFamily = FontFamily.Monospace, fontSize = 11.sp, modifier = Modifier.padding(vertical = 2.dp))
+    Text(
+        text = line.raw,
+        color = color,
+        fontFamily = FontFamily.Monospace,
+        style = SaltTheme.textStyles.sub,
+        modifier = Modifier.padding(vertical = 2.dp),
+    )
 }
 
 private fun groupSessions(lines: List<LogLine>): List<Pair<String, List<LogLine>>> {

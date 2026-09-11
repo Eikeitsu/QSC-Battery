@@ -1,6 +1,5 @@
 package com.qsc.battery.ui
 
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BatteryChargingFull
 import androidx.compose.material.icons.outlined.Home
@@ -8,7 +7,6 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -17,9 +15,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.ui.config.ConfigScreen
-import com.qsc.battery.ui.design.VoltBottomNavHost
-import com.qsc.battery.ui.design.VoltNavItem
-import com.qsc.battery.ui.design.VoltScaffold
+import com.qsc.battery.ui.design.AppChrome
+import com.qsc.battery.ui.design.AppNavItem
+import com.qsc.battery.ui.design.ImmersiveBottomBar
 import com.qsc.battery.ui.home.HomeScreen
 import com.qsc.battery.ui.log.LogScreen
 import com.qsc.battery.ui.more.AppearanceScreen
@@ -42,10 +40,10 @@ fun QscAppRoot(container: AppContainer) {
     val route = backStack?.destination?.route ?: QscTab.Home.route
     val showBar = QscTab.entries.any { it.route == route }
 
-    VoltScaffold(
+    AppChrome(
         bottomBar = {
-            if (!showBar) return@VoltScaffold
-            VoltBottomNavHost {
+            if (!showBar) return@AppChrome
+            ImmersiveBottomBar {
                 QscTab.entries.forEach { tab ->
                     val icon = when (tab) {
                         QscTab.Home -> Icons.Outlined.Home
@@ -53,7 +51,7 @@ fun QscAppRoot(container: AppContainer) {
                         QscTab.Log -> Icons.Outlined.BatteryChargingFull
                         QscTab.More -> Icons.Outlined.Person
                     }
-                    VoltNavItem(
+                    AppNavItem(
                         selected = route == tab.route,
                         icon = icon,
                         label = tab.label,
@@ -68,11 +66,10 @@ fun QscAppRoot(container: AppContainer) {
                 }
             }
         },
-    ) { padding ->
+    ) {
         NavHost(
             navController = nav,
             startDestination = QscTab.Home.route,
-            modifier = Modifier.padding(padding),
         ) {
             composable(QscTab.Home.route) { HomeScreen(container) }
             composable(QscTab.Config.route) { ConfigScreen(container) }

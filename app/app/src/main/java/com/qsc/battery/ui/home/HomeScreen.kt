@@ -1,6 +1,7 @@
 package com.qsc.battery.ui.home
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,8 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,21 +17,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.moriafly.salt.ui.ItemOuterTitle
+import com.moriafly.salt.ui.ItemSwitcher
+import com.moriafly.salt.ui.ItemValue
+import com.moriafly.salt.ui.RoundedColumn
+import com.moriafly.salt.ui.SaltTheme
+import com.moriafly.salt.ui.Text
+import com.moriafly.salt.ui.UnstableSaltUiApi
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.StatusBundle
-import com.qsc.battery.ui.design.PrefSwitch
+import com.qsc.battery.ui.design.AppHeroBattery
+import com.qsc.battery.ui.design.AppMetricStrip
+import com.qsc.battery.ui.design.AppPage
+import com.qsc.battery.ui.design.AppPrimaryButton
 import com.qsc.battery.ui.design.VoltBanner
-import com.qsc.battery.ui.design.VoltHeroBattery
-import com.qsc.battery.ui.design.VoltMetricStrip
-import com.qsc.battery.ui.design.VoltPage
-import com.qsc.battery.ui.design.VoltPrimaryButton
-import com.qsc.battery.ui.design.VoltSection
-import com.qsc.battery.ui.design.VoltSectionLabel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+@OptIn(UnstableSaltUiApi::class)
 @Composable
 fun HomeScreen(container: AppContainer) {
     var status by remember { mutableStateOf(StatusBundle()) }
@@ -65,61 +70,66 @@ fun HomeScreen(container: AppContainer) {
         if (status.chargingStopped) append(" · 停充中")
     }
 
-    VoltPage(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-        applyStatusBars = true,
+    AppPage(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
     ) {
-        Text("充电控制", style = MaterialTheme.typography.headlineSmall)
         Text(
-            status.description.ifBlank { "模块负责停充，本应用负责配置与状态" },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            text = "充电控制",
+            style = SaltTheme.textStyles.main,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = status.description.ifBlank { "模块负责停充，本应用负责配置与状态" },
+            style = SaltTheme.textStyles.sub,
+            color = SaltTheme.colors.subText,
         )
 
         when {
             !status.rootOk -> VoltBanner("需要 Root：可先改主题；安装/控制模块需要授权 Root")
             !status.modulePresent -> {
                 VoltBanner("未检测到模块。可在「我的 → 更新」下载安装。")
-                VoltSection {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text("本应用可单独使用主题与更新检查。", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            "刷入 Magisk「充电控制」后，概览页即可开关与查看电池。",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                RoundedColumn {
+                    Box(modifier = Modifier.padding(16.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(text = "本应用可单独使用主题与更新检查。")
+                            Text(
+                                text = "刷入 Magisk「充电控制」后，概览页即可开关与查看电池。",
+                                color = SaltTheme.colors.subText,
+                                style = SaltTheme.textStyles.sub,
+                            )
+                        }
                     }
                 }
             }
             else -> {
-                VoltHeroBattery(
+                AppHeroBattery(
                     levelText = levelText,
                     percent = levelPct,
                     statusLine = statusLine,
                     subtitle = status.version.ifBlank { "模块已就绪" },
                 )
 
-                VoltSection {
-                    PrefSwitch(
-                        title = "启用充电控制",
-                        summary = if (status.moduleOff) "当前已关闭（off_qsc）" else "模块运行中",
-                        checked = !status.moduleOff,
-                        onCheckedChange = { enabled ->
+                RoundedColumn {
+                    ItemSwitcher(
+                        state = !status.moduleOff,
+                        onChange = { enabled ->
                             scope.launch {
                                 container.statusRepository.setModuleEnabled(enabled)
                                 refresh()
                             }
                         },
+                        text = "启用充电控制",
+                        sub = if (status.moduleOff) "当前已关闭（off_qsc）" else "模块运行中",
                     )
                 }
 
-                VoltSectionLabel("实时数据")
+                ItemOuterTitle(text = "实时数据")
                 if (loading) {
-                    CircularProgressIndicator()
+                    CircularProgressIndicator(color = SaltTheme.colors.highlight)
                 } else {
-                    VoltMetricStrip(
+                    AppMetricStrip(
                         listOf(
                             "温度" to formatTemp(status.snapshot.temp),
                             "电流" to formatUa(status.current),
@@ -128,25 +138,28 @@ fun HomeScreen(container: AppContainer) {
                     )
                 }
 
-                VoltSectionLabel("策略摘要")
-                VoltSection {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text("停充 ${conf["power_stop"] ?: "--"}% · 恢复 ${conf["power_start"] ?: "--"}%")
-                        Text(
-                            "温控 ${if (conf["temperature_switch"] == "1") "开" else "关"} · " +
-                                "${conf["temperature_switch_stop"] ?: "--"}°C / ${conf["temperature_switch_start"] ?: "--"}°C",
-                        )
-                        Text("守护 ${if (conf["native_daemon"] == "1") "开" else "关"} · ${conf["native_impl"] ?: "rust"}")
-                        if (status.failed) {
-                            Text("存在停充失败提示，请检查节点", color = MaterialTheme.colorScheme.error)
-                        }
+                ItemOuterTitle(text = "策略摘要")
+                RoundedColumn {
+                    ItemValue(text = "停充 / 恢复", sub = "${conf["power_stop"] ?: "--"}% / ${conf["power_start"] ?: "--"}%")
+                    ItemValue(
+                        text = "温控",
+                        sub = "${if (conf["temperature_switch"] == "1") "开" else "关"} · " +
+                            "${conf["temperature_switch_stop"] ?: "--"}°C / ${conf["temperature_switch_start"] ?: "--"}°C",
+                    )
+                    ItemValue(
+                        text = "守护",
+                        sub = "${if (conf["native_daemon"] == "1") "开" else "关"} · ${conf["native_impl"] ?: "rust"}",
+                    )
+                    if (status.failed) {
+                        ItemValue(text = "提示", sub = "存在停充失败，请检查节点")
                     }
                 }
 
-                VoltPrimaryButton("刷新", onClick = { scope.launch { refresh() } }, modifier = Modifier.fillMaxWidth())
+                AppPrimaryButton(
+                    text = "刷新",
+                    onClick = { scope.launch { refresh() } },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }

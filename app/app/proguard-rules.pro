@@ -21,5 +21,7 @@
     *** INSTANCE;
 }
 
-# Compose / Material Kolor reflective bits
+# Compose / Material Kolor / Salt UI
 -keep class com.materialkolor.** { *; }
+-dontwarn com.moriafly.salt.**
+-keep class com.moriafly.salt.** { *; }

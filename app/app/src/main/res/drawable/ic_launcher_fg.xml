@@ -4,7 +4,16 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Battery body -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,28c-10,0 -18,8 -18,18v8h-6c-2.2,0 -4,1.8 -4,4v22c0,2.2 1.8,4 4,4h48c2.2,0 4,-1.8 4,-4V58c0,-2.2 -1.8,-4 -4,-4h-6v-8c0,-10 -8,-18 -18,-18zM54,36c5.5,0 10,4.5 10,10v8H44v-8c0,-5.5 4.5,-10 10,-10z" />
+        android:pathData="M38,40h28c2.2,0 4,1.8 4,4v34c0,2.2 -1.8,4 -4,4H38c-2.2,0 -4,-1.8 -4,-4V44c0,-2.2 1.8,-4 4,-4z" />
+    <!-- Battery cap -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,32h12c1.1,0 2,0.9 2,2v4H46v-4c0,-1.1 0.9,-2 2,-2z" />
+    <!-- Lightning bolt -->
+    <path
+        android:fillColor="#0B6E4F"
+        android:pathData="M56,48 L48,64h6l-2,14 12,-18h-6z" />
 </vector>

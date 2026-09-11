@@ -2,13 +2,11 @@ package com.qsc.battery.ui.design
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -21,24 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,174 +32,128 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
+import com.moriafly.salt.ui.Button
+import com.moriafly.salt.ui.ButtonType
+import com.moriafly.salt.ui.SaltTheme
+import com.moriafly.salt.ui.Text
+import com.moriafly.salt.ui.UnstableSaltUiApi
 
-private val GroupShape = RoundedCornerShape(18.dp)
+object AppDimens {
+    val pageHorizontal = 16.dp
+    val pageTop = 8.dp
+    val sectionGap = 16.dp
+    val heroSize = 200.dp
+    val heroStroke = 12.dp
+    val primaryButtonHeight = 48.dp
+}
 
+/** 顶层状态栏渐变遮罩：滚动内容从下方穿过，系统时间始终可读。 */
 @Composable
-fun VoltScaffold(
-    modifier: Modifier = Modifier,
-    topBar: @Composable () -> Unit = {},
-    bottomBar: @Composable () -> Unit = {},
-    content: @Composable (PaddingValues) -> Unit,
-) {
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = topBar,
-        bottomBar = bottomBar,
-        content = content,
+fun StatusScrim(modifier: Modifier = Modifier) {
+    val bg = SaltTheme.colors.background
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .windowInsetsTopHeight(WindowInsets.statusBars)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        bg.copy(alpha = 0.96f),
+                        bg.copy(alpha = 0.72f),
+                        bg.copy(alpha = 0f),
+                    ),
+                ),
+            )
+            .zIndex(8f),
     )
 }
 
+/**
+ * 沉浸底栏：背景延伸进 navigationBars / 小白条；
+ * 仅图标行做 insets 垫高。
+ */
 @Composable
-fun VoltTopBar(
-    title: String,
-    onBack: (() -> Unit)? = null,
-    actions: @Composable RowScope.() -> Unit = {},
+fun ImmersiveBottomBar(
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
 ) {
-    Surface(color = MaterialTheme.colorScheme.background.copy(alpha = 0.92f)) {
+    val bg = SaltTheme.colors.subBackground.copy(alpha = 0.92f)
+        .compositeOverSafe(SaltTheme.colors.background)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(bg),
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(horizontal = 8.dp, vertical = 10.dp),
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(horizontal = 4.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (onBack != null) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
-                }
-            } else {
-                Spacer(Modifier.size(48.dp))
+            content = content,
+        )
+    }
+}
+
+private fun Color.compositeOverSafe(background: Color): Color {
+    val a = alpha
+    if (a >= 1f) return this
+    val r = red * a + background.red * (1f - a)
+    val g = green * a + background.green * (1f - a)
+    val b = blue * a + background.blue * (1f - a)
+    return Color(r, g, b, 1f)
+}
+
+@Composable
+fun AppChrome(
+    modifier: Modifier = Modifier,
+    bottomBar: @Composable () -> Unit = {},
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(SaltTheme.colors.background),
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                content()
             }
-            Text(
-                title,
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.weight(1f),
-            )
-            actions()
+            bottomBar()
         }
+        StatusScrim(modifier = Modifier.align(Alignment.TopCenter))
     }
 }
 
 @Composable
-fun VoltPage(
+fun AppPage(
     modifier: Modifier = Modifier,
-    applyStatusBars: Boolean = true,
+    /** 首行 Spacer 吃掉 statusBars，内容可滚入遮罩下 */
+    includeStatusSpacer: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (applyStatusBars) Modifier.windowInsetsPadding(WindowInsets.statusBars) else Modifier)
-            .padding(horizontal = VoltDimens.pageHorizontal, vertical = VoltDimens.pageTop),
-        verticalArrangement = Arrangement.spacedBy(VoltDimens.sectionGap),
-        content = content,
-    )
-}
-
-@Composable
-fun VoltSectionLabel(text: String) {
-    Text(
-        text = text.uppercase(),
-        modifier = Modifier.padding(start = 8.dp, bottom = 2.dp),
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.SemiBold,
-    )
-}
-
-@Composable
-fun VoltSection(
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    val border = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.55f), GroupShape)
-            .border(1.dp, border, GroupShape)
-            .padding(vertical = 4.dp),
-        content = content,
-    )
-}
-
-@Composable
-fun VoltListRow(
-    title: String,
-    summary: String? = null,
-    onClick: (() -> Unit)? = null,
-    showChevron: Boolean = onClick != null,
-    trailing: @Composable (RowScope.() -> Unit)? = null,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 16.dp, vertical = VoltDimens.itemVertical),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = AppDimens.pageHorizontal)
+            .padding(top = AppDimens.pageTop, bottom = AppDimens.sectionGap),
+        verticalArrangement = Arrangement.spacedBy(AppDimens.sectionGap),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            if (!summary.isNullOrBlank()) {
-                Spacer(Modifier.height(3.dp))
-                Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+        if (includeStatusSpacer) {
+            Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
         }
-        trailing?.invoke(this)
-        if (showChevron && trailing == null) {
-            Icon(
-                Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        content()
     }
 }
 
+@OptIn(UnstableSaltUiApi::class)
 @Composable
-fun VoltSwitchRow(
-    title: String,
-    checked: Boolean,
-    summary: String? = null,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    VoltListRow(
-        title = title,
-        summary = summary,
-        onClick = { onCheckedChange(!checked) },
-        showChevron = false,
-        trailing = {
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                colors = SwitchDefaults.colors(
-                    checkedTrackColor = MaterialTheme.colorScheme.primary,
-                ),
-            )
-        },
-    )
-}
-
-@Composable
-fun VoltBanner(text: String, accent: Color = MaterialTheme.colorScheme.tertiary) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(accent.copy(alpha = 0.14f), GroupShape)
-            .border(1.dp, accent.copy(alpha = 0.35f), GroupShape)
-            .padding(16.dp),
-    ) {
-        Text(text, style = MaterialTheme.typography.bodyMedium)
-    }
-}
-
-@Composable
-fun VoltPrimaryButton(
+fun AppPrimaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -224,38 +161,95 @@ fun VoltPrimaryButton(
 ) {
     Button(
         onClick = onClick,
+        text = text,
         enabled = enabled,
+        type = ButtonType.Highlight,
         modifier = modifier
             .fillMaxWidth()
-            .height(52.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+            .height(AppDimens.primaryButtonHeight),
+    )
+}
+
+@OptIn(UnstableSaltUiApi::class)
+@Composable
+fun AppSecondaryButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    Button(
+        onClick = onClick,
+        text = text,
+        enabled = enabled,
+        type = ButtonType.Sub,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(AppDimens.primaryButtonHeight),
+    )
+}
+
+@Composable
+fun RowScope.AppNavItem(
+    selected: Boolean,
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    val color = if (selected) SaltTheme.colors.highlight else SaltTheme.colors.subText
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(text, style = MaterialTheme.typography.titleMedium)
+        Box(
+            modifier = Modifier
+                .background(
+                    if (selected) SaltTheme.colors.highlight.copy(alpha = 0.14f) else Color.Transparent,
+                    CircleShape,
+                )
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+        ) {
+            androidx.compose.foundation.Image(
+                painter = rememberVectorPainter(icon),
+                contentDescription = label,
+                modifier = Modifier.size(22.dp),
+                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(color),
+            )
+        }
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = label,
+            color = color,
+            style = SaltTheme.textStyles.sub,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        )
     }
 }
 
 @Composable
-fun VoltHeroBattery(
+fun AppHeroBattery(
     levelText: String,
     percent: Float?,
     statusLine: String,
     subtitle: String,
 ) {
-    val track = MaterialTheme.colorScheme.surfaceVariant
-    val progress = MaterialTheme.colorScheme.primary
-    val glow = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+    val track = SaltTheme.colors.stroke
+    val progress = SaltTheme.colors.highlight
+    val glow = SaltTheme.colors.highlight.copy(alpha = 0.22f)
     val p = (percent ?: 0f).coerceIn(0f, 1f)
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp, bottom = 4.dp),
+            .padding(top = 8.dp, bottom = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(VoltDimens.heroSize)) {
-            Canvas(modifier = Modifier.size(VoltDimens.heroSize)) {
-                val stroke = VoltDimens.heroStroke.toPx()
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(AppDimens.heroSize)) {
+            Canvas(modifier = Modifier.size(AppDimens.heroSize)) {
+                val stroke = AppDimens.heroStroke.toPx()
                 drawCircle(brush = Brush.radialGradient(listOf(glow, Color.Transparent)))
                 val arcSize = Size(size.minDimension - stroke, size.minDimension - stroke)
                 val topLeft = Offset(stroke / 2, stroke / 2)
@@ -279,17 +273,30 @@ fun VoltHeroBattery(
                 )
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(levelText, style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold)
-                Text(statusLine, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = levelText,
+                    style = SaltTheme.textStyles.main,
+                    fontWeight = FontWeight.Bold,
+                    color = SaltTheme.colors.text,
+                )
+                Text(
+                    text = statusLine,
+                    style = SaltTheme.textStyles.sub,
+                    color = SaltTheme.colors.subText,
+                )
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = subtitle,
+            style = SaltTheme.textStyles.sub,
+            color = SaltTheme.colors.subText,
+        )
     }
 }
 
 @Composable
-fun VoltMetricStrip(items: List<Pair<String, String>>) {
+fun AppMetricStrip(items: List<Pair<String, String>>) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -298,105 +305,54 @@ fun VoltMetricStrip(items: List<Pair<String, String>>) {
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+                    .background(SaltTheme.colors.subBackground, RoundedCornerShape(14.dp))
                     .padding(12.dp),
             ) {
-                Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(4.dp))
-                Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(text = label, style = SaltTheme.textStyles.sub, color = SaltTheme.colors.subText)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(text = value, style = SaltTheme.textStyles.main, fontWeight = FontWeight.SemiBold)
             }
         }
     }
 }
 
 @Composable
-fun VoltChipRow(
-    options: List<Pair<String, Boolean>>,
-    onSelect: (Int) -> Unit,
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.forEachIndexed { index, (label, selected) ->
-            FilterChip(
-                selected = selected,
-                onClick = { onSelect(index) },
-                label = { Text(label) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                ),
-            )
-        }
-    }
-}
-
-@Composable
-fun VoltBottomNavHost(
-    content: @Composable RowScope.() -> Unit,
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-        tonalElevation = 0.dp,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-            content = content,
-        )
-    }
-}
-
-@Composable
-fun RowScope.VoltNavItem(
-    selected: Boolean,
-    icon: ImageVector,
-    label: String,
+fun VoltPrimaryButton(
+    text: String,
     onClick: () -> Unit,
-) {
-    val color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-    Column(
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) = AppPrimaryButton(text, onClick, modifier, enabled)
+
+@Composable
+fun VoltPage(
+    modifier: Modifier = Modifier,
+    applyStatusBars: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit,
+) = AppPage(modifier = modifier, includeStatusSpacer = applyStatusBars, content = content)
+
+@Composable
+fun VoltHeroBattery(
+    levelText: String,
+    percent: Float?,
+    statusLine: String,
+    subtitle: String,
+) = AppHeroBattery(levelText, percent, statusLine, subtitle)
+
+@Composable
+fun VoltMetricStrip(items: List<Pair<String, String>>) = AppMetricStrip(items)
+
+@Composable
+fun VoltBanner(text: String, accent: Color = SaltTheme.colors.highlight) {
+    Box(
         modifier = Modifier
-            .weight(1f)
-            .clickable(onClick = onClick)
-            .padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .fillMaxWidth()
+            .background(accent.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+            .padding(16.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .background(
-                    if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent,
-                    CircleShape,
-                )
-                .padding(horizontal = 14.dp, vertical = 6.dp),
-        ) {
-            Icon(icon, contentDescription = label, tint = color)
-        }
-        Spacer(Modifier.height(2.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, color = color, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Text(text = text, style = SaltTheme.textStyles.main)
     }
 }
-
-@Composable
-fun VoltDivider() {
-    HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
-    )
-}
-
-/* Aliases for gradual migration */
-@Composable
-fun PrefSwitch(title: String, checked: Boolean, summary: String? = null, onCheckedChange: (Boolean) -> Unit) =
-    VoltSwitchRow(title, checked, summary, onCheckedChange)
-
-@Composable
-fun PrefAction(title: String, summary: String? = null, onClick: () -> Unit) =
-    VoltListRow(title = title, summary = summary, onClick = onClick)
-
-@Composable
-fun SectionLabel(text: String) = VoltSectionLabel(text)
 
 @Composable
 fun StatusBanner(text: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {

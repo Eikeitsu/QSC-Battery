@@ -4,7 +4,12 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Soft disc -->
     <path
-        android:fillColor="#0B6E4F"
-        android:pathData="M30,54h48v8H30zM38,42h32v8H38zM46,66h16v8H46z" />
+        android:fillColor="#1AFFFFFF"
+        android:pathData="M54,30c13.3,0 24,10.7 24,24s-10.7,24 -24,24s-24,-10.7 -24,-24s10.7,-24 24,-24z" />
+    <!-- Bold bolt -->
+    <path
+        android:fillColor="#E8FFF6"
+        android:pathData="M58,36 L44,58h8l-4,18 18,-26h-8z" />
 </vector>
