@@ -114,10 +114,7 @@ const store = useAppStore();
       <p class="hint">记录插拔、停充、恢复与异常节点，便于回顾充电过程。</p>
     </section>
     <section class="card events">
-      <ChargeEventsPanel
-        :events="events"
-        :loading="loadingEvents"
-      />
+      <ChargeEventsPanel :events="events" :loading="loadingEvents" />
     </section>
   </template>
 </template>

@@ -115,10 +115,7 @@ const store = useAppStore();
       </div>
     </section>
     <section class="md3-tonal events-md3">
-      <ChargeEventsPanel
-        :events="events"
-        :loading="loadingEvents"
-      />
+      <ChargeEventsPanel :events="events" :loading="loadingEvents" />
     </section>
   </template>
 </template>
