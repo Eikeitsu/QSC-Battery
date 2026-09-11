@@ -390,12 +390,18 @@ if [ "$charge_eval" = "1" ]; then
 				if [ "$cpu_log" = "1" ]; then
 					qsc_log info "电量$battery_level 触发开关温控：停止充电 温度$temperature [$stop_nodes]"
 					qsc_notify qsc_stop "充电控制" "温度停充 ${temperature}°C · 电量 ${battery_level}%"
+					type qsc_event_thermal >/dev/null 2>&1 &&
+						qsc_event_thermal "温度停充 ${temperature}°C [$stop_nodes]"
 				elif [ -f "$DATADIR/app_stop_flag" ] && [ "$battery_stop_reason" != "1" ]; then
 					qsc_log info "电量$battery_level 按 App 停充 [$stop_nodes]"
 					qsc_notify qsc_stop "充电控制" "前台应用触发停充 · 电量 ${battery_level}%"
+					type qsc_event_stop >/dev/null 2>&1 &&
+						qsc_event_stop "应用停充 [$stop_nodes]"
 				else
 					qsc_log info "电量$battery_level 停止充电 [$stop_nodes]"
 					qsc_notify qsc_stop "充电控制" "已停充 · 电量 ${battery_level}%"
+					type qsc_event_stop >/dev/null 2>&1 &&
+						qsc_event_stop "电量停充 [$stop_nodes]"
 				fi
 			fi
 		elif [ "$first_stop" = "1" ]; then
@@ -404,6 +410,8 @@ if [ "$charge_eval" = "1" ]; then
 				touch "$DATADIR/no_node_logged"
 				touch "$DATADIR/stop_fail_hint"
 				qsc_notify qsc_fail "充电控制" "停充失败：未找到有效节点，请插电测开关"
+				type qsc_event_warn >/dev/null 2>&1 &&
+					qsc_event_warn "停充失败：无有效节点"
 			fi
 		fi
 		if [ -f "$DATADIR/power_switch" -a "$battery_stop_reason" = "1" ]; then
@@ -415,6 +423,8 @@ if [ "$charge_eval" = "1" ]; then
 	if [ ! -f "$DATADIR/power_on" -a "$off_qsc" != "1" ]; then
 		rm -f "$DATADIR/power_off"
 		touch "$DATADIR/power_on"
+		type qsc_event_plug >/dev/null 2>&1 &&
+			qsc_event_plug "检测到充电器接入"
 		if [ "$power_reset" = "1" -a "$reset_log" = "1" ]; then
 			qsc_power_reset
 			qsc_log info "电量$battery_level 触发自动拔插功能"
@@ -470,12 +480,16 @@ else
 			qsc_clear_active_switch
 			qsc_stop_wakelock_release
 			qsc_log info "已拔出充电器，还原充电节点并清除停充状态 [$start_node <- $start_val]"
+			type qsc_event_unplug >/dev/null 2>&1 &&
+				qsc_event_unplug "充电器拔出，已还原节点"
 			qsc_log_once_clear unplug_restore
 			qsc_log_once_clear resume_fail
 		else
 			# 还原失败时保留标记，交给恢复流程继续重试，避免节点停在停充态却没人管
 			touch "$DATADIR/resume_fail_hint"
 			qsc_log_once unplug_restore warn "拔出充电器后还原充电节点失败，将持续重试"
+			type qsc_event_warn >/dev/null 2>&1 &&
+				qsc_event_warn "拔线后还原节点失败"
 		fi
 	fi
 fi
@@ -519,6 +533,8 @@ if [ -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
 			qsc_log_once emerg_resume warn \
 				"电量$battery_level 已低于安全线 ${QSC_EMERGENCY_LEVEL}%，忽略温控/应用停充，强制恢复充电"
 			qsc_notify qsc_resume "充电控制" "电量过低（${battery_level}%），已强制恢复充电"
+			type qsc_event_warn >/dev/null 2>&1 &&
+				qsc_event_warn "低电量紧急恢复（≤${QSC_EMERGENCY_LEVEL}%）"
 		fi
 		temp_ready=1
 		app_ready=1
@@ -541,9 +557,13 @@ if [ -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
 			if [ "$cpu_log2" = "1" ]; then
 				qsc_log info "电量$battery_level 触发开关温控：恢复充电 温度$temperature [$start_node <- $start_val]"
 				qsc_notify qsc_resume "充电控制" "温度恢复充电 ${temperature}°C · 电量 ${battery_level}%"
+				type qsc_event_start >/dev/null 2>&1 &&
+					qsc_event_start "温度恢复 ${temperature}°C"
 			else
 				qsc_log info "电量$battery_level 恢复充电 [$start_node <- $start_val]"
 				qsc_notify qsc_resume "充电控制" "已恢复充电 · 电量 ${battery_level}%"
+				type qsc_event_start >/dev/null 2>&1 &&
+					qsc_event_start "恢复充电"
 			fi
 		fi
 	fi
@@ -592,6 +612,9 @@ fi
 if type qsc_history_sample >/dev/null 2>&1; then
 	qsc_history_sample "$history_enable" "$history_interval_sec" "$battery_level" "$temperature"
 fi
+if type qsc_health_sample_daily >/dev/null 2>&1; then
+	qsc_health_sample_daily
+fi
 if type qsc_ps_load_conf >/dev/null 2>&1; then
 	qsc_ps_load_conf
 	_plugged=0
@@ -606,6 +629,7 @@ elif type qsc_write_loop_sleep >/dev/null 2>&1; then
 fi
 
 qsc_refresh_module_description
+type qsc_notify_power_status >/dev/null 2>&1 && qsc_notify_power_status
 
 qsc_debug_step 9
 #version=20260805

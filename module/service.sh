@@ -496,6 +496,9 @@ while true ; do
 		qsc_runtime_trace "H1" "skip_result" "$_skip_rc"
 		# endregion
 		if [ "$_skip_rc" -eq 0 ]; then
+			if type qsc_notify_power_status >/dev/null 2>&1; then
+				qsc_notify_power_status
+			fi
 			if type qsc_ps_idle_secs >/dev/null 2>&1; then
 				qsc_ps_idle_secs
 			else

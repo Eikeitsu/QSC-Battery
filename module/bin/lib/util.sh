@@ -252,6 +252,95 @@ qsc_notify() {
 	cmd notification post -t "$title" "$tag" "$body" >/dev/null 2>&1 || true
 }
 
+# 取消指定 tag 的通知（失败静默）
+qsc_notify_cancel() {
+	local tag="$1"
+	[ -n "$tag" ] || return 0
+	tag="$(printf '%s' "$tag" | tr -d "'\"\r\n")"
+	if command -v su >/dev/null 2>&1; then
+		su -lp 2000 -c "cmd notification cancel '$tag'" >/dev/null 2>&1 && return 0
+	fi
+	cmd notification cancel "$tag" >/dev/null 2>&1 || true
+}
+
+# 常显功耗通知：把当前电量/温度/电流挂在状态栏，供快速查看待机耗电
+# 配置 notify_power_status=1 开启；同文案会节流，避免每轮狂刷。
+qsc_notify_power_status() {
+	local en level temp ua ma abs_ua body title prev now force="$1"
+	local batt_status flow _last
+	[ -f "$CONF" ] || return 0
+	en="$(sed -n 's/^notify_power_status=//p' "$CONF" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+	if [ "$en" != "1" ]; then
+		if [ -f "$DATADIR/power_status_notify_on" ]; then
+			qsc_notify_cancel qsc_power
+			rm -f "$DATADIR/power_status_notify_on" \
+				"$DATADIR/power_status_notify_body" \
+				"$DATADIR/power_status_notify_at" 2>/dev/null
+		fi
+		return 0
+	fi
+	touch "$DATADIR/power_status_notify_on" 2>/dev/null
+	level="$(qsc_cat_node "$PSDIR/battery/capacity" 2>/dev/null)"
+	[ -z "$level" ] && level="--"
+	temp="$(qsc_cat_node "$PSDIR/battery/temp" 2>/dev/null)"
+	if [ -n "$temp" ] && type qsc_normalize_temperature >/dev/null 2>&1; then
+		temp="$(qsc_normalize_temperature "$temp" 2>/dev/null)" || temp=""
+	fi
+	[ -z "$temp" ] && temp="--"
+	ua="$(qsc_cat_node "$PSDIR/battery/current_now" 2>/dev/null)"
+	batt_status="$(qsc_cat_node "$PSDIR/battery/status" 2>/dev/null)"
+	case "$ua" in
+		""|*[!0-9-]*) ma="--" ;;
+		*)
+			abs_ua="${ua#-}"
+			case "$abs_ua" in ""|*[!0-9]*) ma="--" ;;
+				*) ma=$((abs_ua / 1000)) ;;
+			esac
+			;;
+	esac
+	if [ -f "$DATADIR/power_switch" ]; then
+		flow="已停充"
+	else
+		case "$batt_status" in
+			Charging|Full) flow="充电中" ;;
+			Discharging) flow="放电中" ;;
+			"Not charging") flow="未在充电" ;;
+			*)
+				if [ "$ma" != "--" ] && [ "$ua" != "${ua#-}" ]; then
+					flow="放电中"
+				elif [ "$ma" != "--" ]; then
+					flow="充电中"
+				else
+					flow="监测中"
+				fi
+				;;
+		esac
+	fi
+	if [ "$ma" = "--" ]; then
+		body="电量 ${level}% · ${temp}°C · ${flow}"
+	else
+		body="电量 ${level}% · ${temp}°C · ${flow} ${ma}mA"
+	fi
+	title="电池功耗"
+	prev="$(cat "$DATADIR/power_status_notify_body" 2>/dev/null | tr -d '\r\n')"
+	now="$(date +%s 2>/dev/null)"
+	case "$now" in ""|*[!0-9]*) now=0 ;; esac
+	if [ "$force" != "1" ] && [ "$body" = "$prev" ]; then
+		_last="$(cat "$DATADIR/power_status_notify_at" 2>/dev/null | tr -d ' \r\n')"
+		case "$_last" in ""|*[!0-9]*) _last=0 ;; esac
+		# 文案未变时最多 60 秒刷新一次，防止系统吞掉常驻通知
+		[ "$((now - _last))" -lt 60 ] 2>/dev/null && return 0
+	fi
+	printf '%s\n' "$body" >"$DATADIR/power_status_notify_body" 2>/dev/null
+	printf '%s\n' "$now" >"$DATADIR/power_status_notify_at" 2>/dev/null
+	title="$(printf '%s' "$title" | tr -d "'\"\r\n")"
+	body="$(printf '%s' "$body" | tr -d "'\"\r\n")"
+	if command -v su >/dev/null 2>&1; then
+		su -lp 2000 -c "cmd notification post -t '$title' 'qsc_power' '$body'" >/dev/null 2>&1 && return 0
+	fi
+	cmd notification post -t "$title" "qsc_power" "$body" >/dev/null 2>&1 || true
+}
+
 # HH:MM → 当日分钟数（0–1439）；非法返回空
 qsc_hm_to_min() {
 	local hm="$1" h m

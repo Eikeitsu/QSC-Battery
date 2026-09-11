@@ -56,6 +56,8 @@ fi
 . "$LIBDIR/status.sh"
 . "$LIBDIR/jsonc.sh"
 . "$LIBDIR/history.sh"
+[ -f "$LIBDIR/event_log.sh" ] && . "$LIBDIR/event_log.sh"
+[ -f "$LIBDIR/health.sh" ] && . "$LIBDIR/health.sh"
 [ -f "$LIBDIR/power_saver.sh" ] && . "$LIBDIR/power_saver.sh"
 [ -f "$LIBDIR/battery_snapshot.sh" ] && . "$LIBDIR/battery_snapshot.sh"
 # 电流控制为可选组件，安装时未选择则无此文件

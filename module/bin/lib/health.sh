@@ -39,5 +39,8 @@ qsc_health_sample_daily() {
 
 	echo "${stamp},${soh},${cycles}" >>"$QSC_HEALTH_FILE" 2>/dev/null || return 1
 	echo "$today" >"$DATADIR/health_last_day" 2>/dev/null
+	if type qsc_event_health >/dev/null 2>&1; then
+		qsc_event_health "日采样 soh=${soh} cycles=${cycles}"
+	fi
 	return 0
 }

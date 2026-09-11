@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# 充电事件日志：插拔/停充/恢复/过温/健康等，charge_events.log，500 行轮转
+# 充电事件日志：插拔/停充/恢复/过温/健康等，写入 charge_events.log，超过上限自动轮转
 # 格式：YYYY-MM-DD HH:MM:SS [EVENT] type level% temp°C detail
 
 QSC_EVENT_LOG="${QSC_EVENT_LOG:-$DATADIR/charge_events.log}"
@@ -26,13 +26,14 @@ qsc_event_log_raw() {
 qsc_event_log() {
 	local type="$1" detail="$2"
 	[ -n "$type" ] || return 0
-	local ts level temp
+	local ts level temp raw_temp
 	ts="$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null)" || ts=""
 	level="$(qsc_cat_node "$PSDIR/battery/capacity" 2>/dev/null)"
 	[ -z "$level" ] && level="--"
-	temp="$(qsc_cat_node "$PSDIR/battery/temp" 2>/dev/null)"
-	if [ -n "$temp" ] && [ "$temp" -gt 1000 ] 2>/dev/null; then
-		temp=$((temp / 10))
+	raw_temp="$(qsc_cat_node "$PSDIR/battery/temp" 2>/dev/null)"
+	temp=""
+	if [ -n "$raw_temp" ] && type qsc_normalize_temperature >/dev/null 2>&1; then
+		temp="$(qsc_normalize_temperature "$raw_temp" 2>/dev/null)" || temp=""
 	fi
 	[ -z "$temp" ] && temp="--"
 	# 归一化：过滤换行、%、度符号
