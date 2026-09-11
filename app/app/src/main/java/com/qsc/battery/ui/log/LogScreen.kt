@@ -21,7 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier.modifier
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -88,7 +88,7 @@ fun LogScreen(container: AppContainer) {
                 if (viewMode == ViewMode.Session) {
                     val sessions = groupSessions(filtered)
                     LazyColumn(modifier = Modifier.padding(12.dp)) {
-                        sessions.forEach { (title, body) ->
+                        for ((title, body) in sessions) {
                             item {
                                 Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(vertical = 6.dp))
                             }

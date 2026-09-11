@@ -44,7 +44,7 @@ fun QscTheme(
             if (useDynamic) {
                 DynamicMaterialTheme(
                     seedColor = Color(settings.keyColor),
-                    useDarkTheme = dark,
+                    isDark = dark,
                     style = style,
                     animate = true,
                 ) {

@@ -22,7 +22,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Modifier.modifier
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qsc.battery.data.AppContainer
@@ -35,8 +35,8 @@ import com.qsc.battery.ui.theme.LocalUiMode
 import com.qsc.battery.ui.theme.ThemeSettings
 import com.qsc.battery.ui.theme.UiMode
 import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.extra.SuperArrow
-import top.yukonga.miuix.kmp.extra.SuperSwitch
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,20 +120,20 @@ private fun AppearanceMiuix(
             }
         }
         ColorMode.entries.forEach { mode ->
-            SuperArrow(
+            ArrowPreference(
                 title = modeLabel(mode),
                 summary = if (settings.colorMode == mode) "当前" else null,
                 onClick = { onColorMode(mode) },
             )
         }
-        SuperSwitch(
+        SwitchPreference(
             title = "MIUIX 跟随动态取色",
             summary = "开启后 MIUIX 风格也使用动态取色",
             checked = settings.miuixMonet,
             onCheckedChange = onMiuixMonet,
         )
-        SuperArrow(title = "调色板", summary = "keyColor / PaletteStyle / ColorSpec", onClick = onOpenPalette)
-        SuperSwitch(
+        ArrowPreference(title = "调色板", summary = "keyColor / PaletteStyle / ColorSpec", onClick = onOpenPalette)
+        SwitchPreference(
             title = "备用桌面图标",
             summary = "切换启动器图标",
             checked = settings.alternativeIcon,
