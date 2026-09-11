@@ -291,7 +291,7 @@ fun QscMetricGrid(items: List<Pair<String, String>>) {
                             shape = MaterialTheme.shapes.medium,
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         ) {
-                            Column(Modifier = Modifier.padding(14.dp)) {
+                            Column(modifier = Modifier.padding(14.dp)) {
                                 Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.height(4.dp))
                                 Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)

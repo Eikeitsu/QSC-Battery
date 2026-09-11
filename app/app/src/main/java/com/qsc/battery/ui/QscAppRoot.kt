@@ -1,6 +1,7 @@
 package com.qsc.battery.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -126,7 +127,7 @@ fun QscAppRoot(container: AppContainer) {
 }
 
 @Composable
-private fun TabItems(route: String, nav: androidx.navigation.NavHostController) {
+private fun RowScope.TabItems(route: String, nav: androidx.navigation.NavHostController) {
     QscTab.entries.forEach { tab ->
         val icon = when (tab) {
             QscTab.Home -> Icons.Outlined.Home
