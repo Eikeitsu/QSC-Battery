@@ -4,7 +4,7 @@ import {
   matchModel,
   parseDevicePresetCatalog,
   resolveRepoPresetsForDisplay,
-} from "./devicePresets";
+} from "@/shared/data/devicePresets";
 
 describe("matchModel", () => {
   it("supports wildcard / prefix / contains", () => {

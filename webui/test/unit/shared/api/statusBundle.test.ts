@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseStatusBundle } from "./statusBundle";
+import { parseStatusBundle } from "@/shared/api/statusBundle";
 
 describe("status bundle contract", () => {
   it("parses all status fields from one shell response", () => {

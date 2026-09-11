@@ -14,8 +14,8 @@ export default defineConfig({
   test: {
     name: "webui",
     environment: "node",
-    dir: root,
-    include: ["src/**/*.{test,spec}.ts"],
+    dir: resolve(root, "test"),
+    include: ["unit/**/*.{test,spec}.ts"],
     reporters: ["default"],
   },
 });

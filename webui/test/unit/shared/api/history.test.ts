@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mergeHistory, parseBatteryStatsHistory } from "./history";
-import type { HistoryPoint } from "./history";
+import { mergeHistory, parseBatteryStatsHistory } from "@/shared/api/history";
+import type { HistoryPoint } from "@/shared/api/history";
 
 const SAMPLE = `
                     0 (9) RESET:TIME: 2026-08-27-10-00-00

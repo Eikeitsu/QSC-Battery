@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LogLevel } from "@/shared/config/enums";
-import { groupLogSessions, parseLogText } from "./log";
+import { groupLogSessions, parseLogText } from "@/shared/lib/log";
 
 describe("parseLogText", () => {
   it("parses leveled lines", () => {

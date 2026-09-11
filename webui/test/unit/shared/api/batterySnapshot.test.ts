@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBatterySnapshot } from "./batterySnapshot";
+import { parseBatterySnapshot } from "@/shared/api/batterySnapshot";
 
 describe("battery snapshot contract", () => {
   it("parses the shared shell snapshot without changing source metadata", () => {

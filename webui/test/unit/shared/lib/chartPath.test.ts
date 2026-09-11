@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSmoothPath, downsamplePoints } from "./chartPath";
+import { buildSmoothPath, downsamplePoints } from "@/shared/lib/chartPath";
 
 describe("downsamplePoints", () => {
   it("returns original list when within max", () => {

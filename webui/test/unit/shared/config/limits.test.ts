@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeSettings } from "./limits";
-import { DEFAULTS } from "./defaults";
-import { BinaryFlag } from "./enums";
+import { sanitizeSettings } from "@/shared/config/limits";
+import { DEFAULTS } from "@/shared/config/defaults";
+import { BinaryFlag } from "@/shared/config/enums";
 import type { Settings } from "@/shared/types";
 
 function make(overrides: Partial<Settings>): Settings {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { exec, resetExecQueueForTests } from "./ksu";
+import { exec, resetExecQueueForTests } from "@/shared/api/ksu";
 
 type KsuExec = (cmd: string, opts: string, cb: string) => void;
 

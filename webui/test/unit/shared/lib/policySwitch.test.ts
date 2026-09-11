@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { looksLikePolicySwitch } from "./policySwitch";
+import { looksLikePolicySwitch } from "@/shared/lib/policySwitch";
 
 describe("looksLikePolicySwitch", () => {
   it("flags known policy nodes", () => {
