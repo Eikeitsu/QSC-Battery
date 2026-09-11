@@ -22,11 +22,14 @@ Kotlin + Jetpack Compose（**Charge** 设计系统 · 沉浸式状态产品）�
 npm run package:app -- --skip-build   # 只刷新 app-update.json
 ```
 
-## 更新
+## 更新（三套独立通道）
 
-| 目标 | URL |
-|------|-----|
-| 模块 | [update.json](https://eikeitsu.github.io/QSC-Battery/update.json) |
-| APP | [app-update.json](https://eikeitsu.github.io/QSC-Battery/app-update.json) |
+| 目标 | URL | 谁在查 | 单独发版时 |
+|------|-----|--------|------------|
+| 模块 zip | [update.json](https://eikeitsu.github.io/QSC-Battery/update.json) | Magisk / APP「模块」 | 只勾 zip 才改 |
+| 守护二进制 | [qscd/manifest.json](https://eikeitsu.github.io/QSC-Battery/qscd/manifest.json) | WebUI 守护卡片 | 只勾 Rust/C 才改 |
+| APP | [app-update.json](https://eikeitsu.github.io/QSC-Battery/app-update.json) | APP「自身」 | 只勾 APK 才改 |
+
+单独发布 APK 或守护**不会**改 `update.json`，因此不会触发 Magisk 模块更新提示。
 
 桌面显示名：**充电控制** · 包名 `com.qsc.battery` · `minSdk 33` · `compileSdk/targetSdk 37`

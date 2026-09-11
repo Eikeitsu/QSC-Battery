@@ -244,10 +244,9 @@ for (const mod of modules) {
 
 const update = JSON.parse(read(join(root, "docs/public/update.json")));
 const manifest = JSON.parse(read(join(root, "docs/public/qscd/manifest.json")));
-if (update.version !== manifest.version) {
-  throw new Error(
-    `update.json version ${update.version} != manifest ${manifest.version}`,
-  );
+// 模块 zip / 守护可分开发版：version 不必相同，各自驱动 update.json 与 qscd/manifest
+if (!update.version || !manifest.version) {
+  throw new Error("update.json / qscd manifest missing version");
 }
 for (const key of ["qscd-c-arm", "qscd-c-arm64", "qscd-rust-arm", "qscd-rust-arm64"]) {
   if (!/^[0-9a-f]{64}$/.test(manifest[key] || "")) {

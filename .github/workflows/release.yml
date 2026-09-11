@@ -12,6 +12,26 @@ on:
         required: false
         type: string
         default: ""
+      publish_zips:
+        description: "发布模块 zip（4 个变体：sh / full / rust / c）→ 驱动 update.json"
+        required: false
+        type: boolean
+        default: true
+      publish_binaries_rust:
+        description: "发布 Rust 守护（qscd-rust-arm64 / qscd-rust-arm）→ 驱动 qscd/manifest"
+        required: false
+        type: boolean
+        default: true
+      publish_binaries_c:
+        description: "发布 C 守护（qscd-c-arm64 / qscd-c-arm）→ 驱动 qscd/manifest"
+        required: false
+        type: boolean
+        default: true
+      publish_apk:
+        description: "发布伴侣 APK → 驱动 app-update.json"
+        required: false
+        type: boolean
+        default: true
       prerelease:
         description: "标记为预发布"
         required: false
@@ -40,6 +60,10 @@ jobs:
       prerelease: ${{ steps.meta.outputs.prerelease }}
       draft: ${{ steps.meta.outputs.draft }}
       zip: ${{ steps.meta.outputs.zip }}
+      publish_zips: ${{ steps.meta.outputs.publish_zips }}
+      publish_binaries_rust: ${{ steps.meta.outputs.publish_binaries_rust }}
+      publish_binaries_c: ${{ steps.meta.outputs.publish_binaries_c }}
+      publish_apk: ${{ steps.meta.outputs.publish_apk }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,12 +79,32 @@ jobs:
             CUSTOM_NAME="${{ inputs.release_name }}"
             echo "prerelease=${{ inputs.prerelease }}" >> "$GITHUB_OUTPUT"
             echo "draft=${{ inputs.draft }}" >> "$GITHUB_OUTPUT"
+            echo "publish_zips=${{ inputs.publish_zips }}" >> "$GITHUB_OUTPUT"
+            echo "publish_binaries_rust=${{ inputs.publish_binaries_rust }}" >> "$GITHUB_OUTPUT"
+            echo "publish_binaries_c=${{ inputs.publish_binaries_c }}" >> "$GITHUB_OUTPUT"
+            echo "publish_apk=${{ inputs.publish_apk }}" >> "$GITHUB_OUTPUT"
           else
             TAG_NAME="${GITHUB_REF_NAME}"
             RAW="${TAG_NAME#v}"
             CUSTOM_NAME=""
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
             echo "draft=false" >> "$GITHUB_OUTPUT"
+            echo "publish_zips=true" >> "$GITHUB_OUTPUT"
+            echo "publish_binaries_rust=true" >> "$GITHUB_OUTPUT"
+            echo "publish_binaries_c=true" >> "$GITHUB_OUTPUT"
+            echo "publish_apk=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ZIPS="${{ inputs.publish_zips }}"
+            RUST="${{ inputs.publish_binaries_rust }}"
+            CBIN="${{ inputs.publish_binaries_c }}"
+            APK="${{ inputs.publish_apk }}"
+            if [ "$ZIPS" != "true" ] && [ "$RUST" != "true" ] && \
+               [ "$CBIN" != "true" ] && [ "$APK" != "true" ]; then
+              echo "至少勾选一项发布内容（zip / Rust / C / APK）" >&2
+              exit 1
+            fi
           fi
 
           eval "$(RAW="$RAW" python3 tooling/scripts/resolve-release-version.py)"
@@ -101,7 +145,32 @@ jobs:
       # 守护二进制：两套实现都要有，四个变体包与 Pages 托管都依赖它们
       - uses: ./.github/actions/build-native
 
+      - name: Setup Java for companion APK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build companion release APK
+        working-directory: app
+        run: |
+          chmod +x gradlew
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            curl -sL https://services.gradle.org/distributions/gradle-9.3.1-bin.zip -o /tmp/gradle.zip
+            sudo unzip -q /tmp/gradle.zip -d /opt
+            /opt/gradle-9.3.1/bin/gradle wrapper --gradle-version 9.3.1
+            chmod +x gradlew
+          fi
+          ./gradlew :app:assembleRelease --stacktrace
+          mkdir -p ../release
+          cp app/build/outputs/apk/release/app-release.apk ../release/QSC-Battery.apk
+
       - name: Build all module zips (full / rust / c / sh)
+        env:
+          REQUIRE_COMPANION_APK: "1"
         run: npm run build:module:all
 
       # 与 Package Module 同一套断言：发版包也必须变体正确、zip 完好
@@ -111,13 +180,14 @@ jobs:
       - name: Verify hot update and release contracts
         run: npm run test:hot-update
 
-      # 二进制随构件带到 post 任务：那里要把它们发到 Pages 供 WebUI 下载
-      - name: Upload zips and native binaries
+      # 二进制 / APK 随构件带到 publish / post
+      - name: Upload zips, native binaries, and APK
         uses: actions/upload-artifact@v4
         with:
           name: magisk-module-${{ steps.meta.outputs.tag }}
           path: |
             release/*.zip
+            release/QSC-Battery.apk
             module/bin/qscd-arm64
             module/bin/qscd-arm
             module/bin/qscdc-arm64
@@ -132,8 +202,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 解到仓库根：构件同时含 release/ 与 module/bin/，
-      # 其内部路径是相对仓库根的（upload-artifact 取所有 path 的最近公共父目录做根）
+      # 解到仓库根：构件同时含 release/ 与 module/bin/
       - uses: actions/download-artifact@v4
         with:
           name: magisk-module-${{ needs.build.outputs.tag }}
@@ -149,6 +218,70 @@ jobs:
           echo "---- release body preview ----"
           cat .release-body.md || true
 
+      - name: Stage selected release assets
+        id: assets
+        shell: bash
+        env:
+          RAW: ${{ needs.build.outputs.raw }}
+          PUBLISH_ZIPS: ${{ needs.build.outputs.publish_zips }}
+          PUBLISH_RUST: ${{ needs.build.outputs.publish_binaries_rust }}
+          PUBLISH_C: ${{ needs.build.outputs.publish_binaries_c }}
+          PUBLISH_APK: ${{ needs.build.outputs.publish_apk }}
+        run: |
+          set -euo pipefail
+          mkdir -p .release-assets
+          count=0
+
+          if [ "$PUBLISH_ZIPS" = "true" ]; then
+            shopt -s nullglob
+            zips=(release/*.zip)
+            if [ ${#zips[@]} -eq 0 ]; then
+              echo "勾选了 zip，但 release/*.zip 为空" >&2
+              exit 1
+            fi
+            cp "${zips[@]}" .release-assets/
+            count=$((count + ${#zips[@]}))
+            echo "staged zips: ${zips[*]}"
+          fi
+
+          stage_bin() {
+            local src="$1" dst="$2"
+            [ -f "$src" ] || { echo "missing $src" >&2; exit 1; }
+            cp "$src" ".release-assets/$dst"
+            chmod 0755 ".release-assets/$dst"
+            count=$((count + 1))
+            echo "staged binary: $dst"
+          }
+
+          if [ "$PUBLISH_RUST" = "true" ]; then
+            stage_bin module/bin/qscd-arm64 qscd-rust-arm64
+            stage_bin module/bin/qscd-arm qscd-rust-arm
+          fi
+
+          if [ "$PUBLISH_C" = "true" ]; then
+            stage_bin module/bin/qscdc-arm64 qscd-c-arm64
+            stage_bin module/bin/qscdc-arm qscd-c-arm
+          fi
+
+          if [ "$PUBLISH_APK" = "true" ]; then
+            [ -f release/QSC-Battery.apk ] || {
+              echo "勾选了 APK，但缺少 release/QSC-Battery.apk" >&2
+              exit 1
+            }
+            apk_name="QSC-Battery_v${RAW}.apk"
+            cp release/QSC-Battery.apk ".release-assets/${apk_name}"
+            count=$((count + 1))
+            echo "staged apk: ${apk_name}"
+          fi
+
+          if [ "$count" -eq 0 ]; then
+            echo "没有可上传的 Release 资产" >&2
+            exit 1
+          fi
+          echo "---- release assets ($count) ----"
+          ls -la .release-assets
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -158,7 +291,7 @@ jobs:
           prerelease: ${{ needs.build.outputs.prerelease }}
           body_path: .release-body.md
           generate_release_notes: true
-          files: release/*.zip
+          files: .release-assets/*
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -192,7 +325,7 @@ jobs:
             chmod 0755 "$f"
           done
 
-      - name: Update default branch (changelog / update.json / Pages zip + qscd)
+      - name: Update default branch (changelog / update.json / Pages zip + qscd + apk)
         env:
           RAW: ${{ needs.build.outputs.raw }}
           CODE: ${{ needs.build.outputs.version_code }}
@@ -201,4 +334,8 @@ jobs:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           PAGES_BASE: https://eikeitsu.github.io/QSC-Battery
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLISH_ZIPS: ${{ needs.build.outputs.publish_zips }}
+          PUBLISH_BINS_RUST: ${{ needs.build.outputs.publish_binaries_rust }}
+          PUBLISH_BINS_C: ${{ needs.build.outputs.publish_binaries_c }}
+          PUBLISH_APK: ${{ needs.build.outputs.publish_apk }}
         run: bash tooling/scripts/post-release-update.sh
