@@ -1,15 +1,12 @@
 package com.qsc.battery.ui.more
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -21,15 +18,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.qsc.battery.core.ModulePaths
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.ui.design.charge.ChargeDivider
 import com.qsc.battery.ui.design.charge.ChargeListRow
-import com.qsc.battery.ui.design.charge.ChargePage
 import com.qsc.battery.ui.design.charge.ChargePrimaryButton
 import com.qsc.battery.ui.design.charge.ChargeSecondaryButton
 import com.qsc.battery.ui.design.charge.ChargeSection
-import com.qsc.battery.ui.design.charge.ChargeTitleBar
+import com.qsc.battery.ui.design.charge.ChargeTextField
+import com.qsc.battery.ui.design.charge.ChargeTheme
+import com.qsc.battery.ui.design.charge.ChargeTopBar
 import kotlinx.coroutines.launch
 
 @Composable
@@ -50,13 +49,14 @@ fun ProfilesScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-        ChargeTitleBar(title = "配置档", onBack = onBack)
-        ChargePage(
+        ChargeTopBar(title = "配置档", onBack = onBack)
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
-            includeStatusSpacer = false,
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
+                .padding(bottom = ChargeTheme.dimens.sectionGap),
+            verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
         ) {
             ChargeSection(title = "档位") {
                 ChargeListRow(
@@ -116,6 +116,7 @@ fun ProfilesScreen(
 
             ChargeSecondaryButton(
                 text = "导入配置包",
+                equalHeight = true,
                 onClick = {
                     scope.launch {
                         val ok = container.profilesRepository.importBundle(bundleText, container.configRepository)
@@ -131,11 +132,10 @@ fun ProfilesScreen(
             onDismissRequest = { editingName = false },
             title = { Text("档位名称") },
             text = {
-                OutlinedTextField(
+                ChargeTextField(
                     value = profileName,
                     onValueChange = { profileName = it },
-                    singleLine = true,
-                    placeholder = { Text("例如：日常 / 出行") },
+                    label = "例如：日常 / 出行",
                 )
             },
             confirmButton = {
@@ -151,11 +151,12 @@ fun ProfilesScreen(
             onDismissRequest = { editingBundle = false },
             title = { Text("配置 JSON") },
             text = {
-                OutlinedTextField(
+                ChargeTextField(
                     value = bundleText,
                     onValueChange = { bundleText = it },
+                    singleLine = false,
                     minLines = 6,
-                    placeholder = { Text("粘贴导出的 JSON") },
+                    label = "粘贴导出的 JSON",
                 )
             },
             confirmButton = {

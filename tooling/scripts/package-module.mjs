@@ -279,10 +279,30 @@ if (includeDebug) {
 }
 copyBuiltWebroot();
 
-// Companion APP is distributed via app-update.json (online download), not embedded in the module zip.
-log(
-  "companion apk: skipped embed — install via online download in customize.sh / APP updates",
-);
+function embedCompanionApk() {
+  const candidates = [
+    join(releaseDir, "QSC-Battery.apk"),
+    join(repoRoot, "app", "app", "build", "outputs", "apk", "release", "app-release.apk"),
+  ];
+  const apk = candidates.find((p) => existsSync(p));
+  if (!apk) {
+    const msg =
+      "companion apk: missing (expected release/QSC-Battery.apk or app release APK)";
+    if (process.env.REQUIRE_COMPANION_APK === "1") {
+      throw new Error(`${msg} — build the companion app first`);
+    }
+    log(`${msg} — packaging module without APK`);
+    return;
+  }
+  const destDir = join(staging, "apk");
+  mkdirSync(destDir, { recursive: true });
+  const dest = join(destDir, "QSC-Battery.apk");
+  cpSync(apk, dest);
+  log(
+    `companion apk: embedded ${(statSync(apk).size / 1024).toFixed(0)} KB → apk/QSC-Battery.apk`,
+  );
+}
+embedCompanionApk();
 
 if (existsSync(zipPath)) rmSync(zipPath);
 log(`packaging ${zipName}...`);

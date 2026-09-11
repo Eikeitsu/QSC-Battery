@@ -16,7 +16,7 @@ Kotlin + Jetpack Compose（**Charge** 设计系统 · 沉浸式状态产品）�
 
 ## 构建（仅 GitHub Actions）
 
-推送 `app/` 或手动触发 **App** 工作流产出 APK。模块 zip **不内嵌** APK；刷模块时可选在线下载安装。
+推送 `app/` 或手动触发 **App** 工作流产出 APK。模块 zip **内嵌** `apk/QSC-Battery.apk`（约 3MB）；刷模块时可选安装。打包前需先有 `release/QSC-Battery.apk` 或本地 `assembleRelease`。
 
 ```bash
 npm run package:app -- --skip-build   # 只刷新 app-update.json

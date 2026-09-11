@@ -39,7 +39,32 @@ jobs:
 
       - uses: ./.github/actions/build-native
 
+      - name: Setup Java for companion APK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build companion release APK
+        working-directory: app
+        run: |
+          chmod +x gradlew
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            curl -sL https://services.gradle.org/distributions/gradle-9.3.1-bin.zip -o /tmp/gradle.zip
+            sudo unzip -q /tmp/gradle.zip -d /opt
+            /opt/gradle-9.3.1/bin/gradle wrapper --gradle-version 9.3.1
+            chmod +x gradlew
+          fi
+          ./gradlew :app:assembleRelease --stacktrace
+          mkdir -p ../release
+          cp app/build/outputs/apk/release/app-release.apk ../release/QSC-Battery.apk
+
       - name: Build all module zips (full / rust / c / sh)
+        env:
+          REQUIRE_COMPANION_APK: "1"
         run: npm run build:module:all
 
       # 变体断言 + zip 完整性校验，并写一份 Step Summary

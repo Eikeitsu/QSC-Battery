@@ -4,14 +4,14 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Safe zone ~66%: battery inset toward center -->
     <path
-        android:fillColor="#FFFFFF"
+        android:fillColor="#000000"
         android:pathData="M42,38h24c2,0 3.5,1.5 3.5,3.5v30c0,2 -1.5,3.5 -3.5,3.5H42c-2,0 -3.5,-1.5 -3.5,-3.5v-30c0,-2 1.5,-3.5 3.5,-3.5z" />
     <path
-        android:fillColor="#FFFFFF"
+        android:fillColor="#000000"
         android:pathData="M50,32h8c1,0 1.8,0.8 1.8,1.8V36H48.2v-2.2c0,-1 0.8,-1.8 1.8,-1.8z" />
     <path
-        android:fillColor="#0B6E4F"
-        android:pathData="M57,44 L50,58h5l-1.5,12 10,-15h-5z" />
+        android:fillColor="#000000"
+        android:pathData="M57,44 L50,58h5l-1.5,12 10,-15h-5z"
+        android:fillAlpha="0.55" />
 </vector>

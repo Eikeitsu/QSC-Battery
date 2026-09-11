@@ -29,11 +29,36 @@ describe("groupLogSessions", () => {
       ].join("\n"),
     );
     const sessions = groupLogSessions(entries);
-    expect(sessions).toHaveLength(2);
+    expect(sessions).toHaveLength(3);
     expect(sessions[0].open).toBe(true);
     expect(sessions[0].entries.some((e) => /停止充电/.test(e.raw))).toBe(true);
     expect(sessions[1].open).toBe(false);
-    expect(sessions[1].entries).toHaveLength(4);
+    expect(sessions[1].entries).toHaveLength(3);
     expect(sessions[1].hasWarn).toBe(true);
+    expect(sessions[1].title).toMatch(/停止充电.*已恢复/);
+    expect(sessions[2].id).toBe("orphan");
+    expect(sessions[2].entries).toHaveLength(1);
+  });
+
+  it("treats App stop and unplug clear as session boundaries", () => {
+    const entries = parseLogText(
+      [
+        "2026-08-26_12:00:00 [INFO] 电量88 按 App 停充 [/sys/x]",
+        "2026-08-26_12:10:00 [INFO] 已拔出充电器，还原充电节点并清除停充状态 [/sys/x]",
+      ].join("\n"),
+    );
+    const sessions = groupLogSessions(entries);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].open).toBe(false);
+    expect(sessions[0].title).toMatch(/按 App 停充.*已恢复/);
+  });
+
+  it("does not treat threshold hint as stop/resume", () => {
+    const entries = parseLogText(
+      "2026-08-26_09:00:00 [WARN] 电量阈值已纠正 100/95 → 停充100% 恢复95%\n",
+    );
+    const sessions = groupLogSessions(entries);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].id).toBe("orphan");
   });
 });

@@ -67,7 +67,28 @@ class ModuleInstallRepository(
         context.startActivity(intent)
     }
 
-    /** Download companion APK from app-update.json and install (root pm, else system installer). */
+    /** Install companion APK bundled in Magisk module (`apk/QSC-Battery.apk`). */
+    suspend fun installBundledApkFromModule(): Result<String> = withContext(Dispatchers.IO) {
+        val candidates = listOf(
+            "${ModulePaths.MODDIR}/apk/QSC-Battery.apk",
+            "${ModulePaths.MODDIR}/QSC-Battery.apk",
+            "${ModulePaths.MODDIR}/apk/app-release.apk",
+        )
+        val path = candidates.firstOrNull { root.exists(it) }
+            ?: return@withContext Result.failure(IllegalStateException("模块内未找到伴侣 APK"))
+        if (root.isRootAvailable()) {
+            val escaped = path.replace("'", "'\\''")
+            val r = root.exec("pm install -r '$escaped'")
+            if (r.ok) return@withContext Result.success("installed")
+            return@withContext Result.failure(IllegalStateException(r.err.ifBlank { r.out }.ifBlank { "pm install failed" }))
+        }
+        Result.failure(IllegalStateException("需要 Root 才能从模块安装"))
+    }
+
+    /**
+     * Download companion APK from app-update.json and install.
+     * Kept for APP「更新」页；刷模块安装请用内嵌 APK。
+     */
     suspend fun installCompanionApkOnline(): Result<String> = withContext(Dispatchers.IO) {
         val apkUrl = resolveApkUrl()
             ?: return@withContext Result.failure(IllegalStateException("无法解析 apkUrl"))
@@ -84,9 +105,6 @@ class ModuleInstallRepository(
         withContext(Dispatchers.Main) { promptInstallApk(apk) }
         Result.success("installer-opened")
     }
-
-    @Deprecated("Bundled APK removed; use installCompanionApkOnline")
-    suspend fun installBundledApkFromModule(): Result<String> = installCompanionApkOnline()
 
     private fun resolveApkUrl(): String? {
         val req = Request.Builder().url(BuildConfig.APP_UPDATE_URL).get().build()

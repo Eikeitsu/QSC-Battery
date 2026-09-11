@@ -1,13 +1,17 @@
 package com.qsc.battery.ui.design.charge
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +32,10 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -37,7 +44,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +57,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 
@@ -257,13 +264,16 @@ fun ChargeSecondaryButton(
     text: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    equalHeight: Boolean = false,
+    height: Dp? = null,
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(ChargeTheme.dimens.radiusMd)
+    val h = height ?: if (equalHeight) ChargeTheme.dimens.primaryButton else ChargeTheme.dimens.secondaryButton
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(ChargeTheme.dimens.secondaryButton)
+            .height(h)
             .clip(shape)
             .border(1.dp, ChargeTheme.colors.stroke, shape)
             .background(ChargeTheme.colors.surface)
@@ -285,12 +295,12 @@ fun ChargeHero(
     percent: Float?,
     statusLine: String,
     subtitle: String,
+    charging: Boolean = false,
 ) {
     val p = (percent ?: 0f).coerceIn(0f, 1f)
     val animated by animateFloatAsState(targetValue = p, animationSpec = tween(700), label = "hero")
     val track = ChargeTheme.colors.stroke
     val progress = ChargeTheme.colors.accent
-    val glow = ChargeTheme.colors.accent.copy(alpha = 0.18f)
     val heroSize = ChargeTheme.dimens.heroSize
     val heroStroke = ChargeTheme.dimens.heroStroke
     val display = ChargeTheme.typography.display
@@ -298,6 +308,22 @@ fun ChargeHero(
     val caption = ChargeTheme.typography.caption
     val ink = ChargeTheme.colors.ink
     val muted = ChargeTheme.colors.muted
+
+    val pulse = if (charging) {
+        val t = rememberInfiniteTransition(label = "chargePulse")
+        t.animateFloat(
+            initialValue = 0.12f,
+            targetValue = 0.32f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1600, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "glow",
+        ).value
+    } else {
+        0.18f
+    }
+    val glow = ChargeTheme.colors.accent.copy(alpha = pulse)
 
     Column(
         modifier = Modifier
@@ -407,15 +433,7 @@ fun ChargeListRow(
         modifier = Modifier
             .fillMaxWidth()
             .then(
-                if (onClick != null) {
-                    Modifier.clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() },
-                        onClick = onClick,
-                    )
-                } else {
-                    Modifier
-                },
+                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
             )
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -531,17 +549,18 @@ fun ChargeTitleBar(title: String, onBack: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = "←",
-            style = ChargeTheme.typography.headline,
-            color = ChargeTheme.colors.ink,
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+            contentDescription = "返回",
+            tint = ChargeTheme.colors.ink,
             modifier = Modifier
+                .size(40.dp)
                 .clip(CircleShape)
                 .clickable(onClick = onBack)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(8.dp),
         )
         Text(text = title, style = ChargeTheme.typography.title, color = ChargeTheme.colors.ink)
     }

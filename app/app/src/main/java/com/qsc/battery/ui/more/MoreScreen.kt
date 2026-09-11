@@ -21,7 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -33,10 +32,11 @@ import com.qsc.battery.core.PermissionChecker
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.ui.design.charge.ChargeDivider
 import com.qsc.battery.ui.design.charge.ChargeListRow
-import com.qsc.battery.ui.design.charge.ChargePage
+import com.qsc.battery.ui.design.charge.ChargeScreen
 import com.qsc.battery.ui.design.charge.ChargeSection
 import com.qsc.battery.ui.design.charge.ChargeTheme
 import com.qsc.battery.ui.design.charge.ChargeToggleRow
+import com.qsc.battery.ui.design.charge.ChargeTopBar
 import com.qsc.battery.xposed.XpRuntime
 import kotlinx.coroutines.launch
 
@@ -87,34 +87,41 @@ fun MoreScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
 
-    ChargePage(
+    ChargeScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
+        topBar = {
+            ChargeTopBar(
+                title = "我的",
+                subtitle = "v${BuildConfig.VERSION_NAME}",
+            )
+        },
     ) {
-        Text(
-            text = "我的",
-            style = ChargeTheme.typography.title,
-            color = ChargeTheme.colors.ink,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Text(
-            text = "v${BuildConfig.VERSION_NAME}",
-            style = ChargeTheme.typography.caption,
-            color = ChargeTheme.colors.muted,
-        )
-
+        val chips = buildList {
+            add(if (permHint.contains("Root ✓")) "Root ✓" else "Root ✗")
+            add(if (permHint.contains("通知 ✓")) "通知 ✓" else "通知 ✗")
+            add(if (permHint.contains("安装 ✓")) "安装 ✓" else "安装 ✗")
+            add(
+                when (xpStatus?.level) {
+                    XpRuntime.Level.Injected -> "XP 已注入"
+                    XpRuntime.Level.Framework -> "XP 框架未注入"
+                    XpRuntime.Level.ManagerOnly -> "XP 仅管理器"
+                    else -> "XP 未检测"
+                },
+            )
+        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.horizontalScroll(rememberScrollState()),
         ) {
-            permHint.split(Regex("\\s{2,}")).filter { it.isNotBlank() }.forEach { chip ->
+            chips.forEach { chip ->
                 Surface(
                     shape = RoundedCornerShape(999.dp),
                     color = ChargeTheme.colors.surfaceStrong,
                 ) {
                     Text(
-                        text = chip.trim(),
+                        text = chip,
                         style = ChargeTheme.typography.caption,
                         color = ChargeTheme.colors.ink,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),

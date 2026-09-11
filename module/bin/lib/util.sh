@@ -337,6 +337,7 @@ qsc_notify_power_status() {
 	fi
 	[ -z "$temp" ] && temp="--"
 	ua="$(qsc_cat_node "$PSDIR/battery/current_now" 2>/dev/null)"
+	uv="$(qsc_cat_node "$PSDIR/battery/voltage_now" 2>/dev/null)"
 	batt_status="$(qsc_cat_node "$PSDIR/battery/status" 2>/dev/null)"
 	case "$ua" in
 		""|*[!0-9-]*) ma="--" ;;
@@ -345,6 +346,25 @@ qsc_notify_power_status() {
 			case "$abs_ua" in ""|*[!0-9]*) ma="--" ;;
 				*) ma=$((abs_ua / 1000)) ;;
 			esac
+			;;
+	esac
+	# 瞬时功耗估算：P(W) ≈ |I(µA)| × V(µV) / 1e12；无电压节点时仅显示 mA
+	watts="--"
+	case "$uv" in
+		""|*[!0-9]*) ;;
+		*)
+			if [ "$ma" != "--" ]; then
+				abs_uv="$uv"
+				# mW = mA × mV / 1000
+				_mv=$((abs_uv / 1000))
+				_mw=$((ma * _mv / 1000))
+				_w=$((_mw / 1000))
+				_frac=$(((_mw % 1000) / 10))
+				case "$_frac" in
+					[0-9]) _frac="0${_frac}" ;;
+				esac
+				watts="${_w}.${_frac}W"
+			fi
 			;;
 	esac
 	if [ -f "$DATADIR/power_switch" ]; then
@@ -367,8 +387,10 @@ qsc_notify_power_status() {
 	fi
 	if [ "$ma" = "--" ]; then
 		body="电量 ${level}% · ${temp}°C · ${flow}"
-	else
+	elif [ "$watts" = "--" ]; then
 		body="电量 ${level}% · ${temp}°C · ${flow} ${ma}mA"
+	else
+		body="电量 ${level}% · ${temp}°C · ${flow} ${ma}mA · ${watts}"
 	fi
 	title="电池功耗"
 	prev="$(cat "$DATADIR/power_status_notify_body" 2>/dev/null | tr -d '\r\n')"

@@ -4,12 +4,16 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Soft disc -->
     <path
-        android:fillColor="#1AFFFFFF"
-        android:pathData="M54,30c13.3,0 24,10.7 24,24s-10.7,24 -24,24s-24,-10.7 -24,-24s10.7,-24 24,-24z" />
-    <!-- Bold bolt -->
+        android:fillColor="#FFFFFF"
+        android:pathData="M42,38h24c2,0 3.5,1.5 3.5,3.5v30c0,2 -1.5,3.5 -3.5,3.5H42c-2,0 -3.5,-1.5 -3.5,-3.5v-30c0,-2 1.5,-3.5 3.5,-3.5z" />
     <path
-        android:fillColor="#E8FFF6"
-        android:pathData="M58,36 L44,58h8l-4,18 18,-26h-8z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M50,32h8c1,0 1.8,0.8 1.8,1.8V36H48.2v-2.2c0,-1 0.8,-1.8 1.8,-1.8z" />
+    <path
+        android:fillColor="#12B886"
+        android:pathData="M54,46 m-8,0 a8,8 0 1,1 16,0 a8,8 0 1,1 -16,0" />
+    <path
+        android:fillColor="#0B6E4F"
+        android:pathData="M57,44 L50,58h5l-1.5,12 10,-15h-5z" />
 </vector>

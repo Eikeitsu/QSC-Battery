@@ -1,11 +1,9 @@
 package com.qsc.battery.ui.more
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.SnackbarHostState
@@ -17,17 +15,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.UpdateCheckResult
 import com.qsc.battery.ui.design.charge.BannerTone
 import com.qsc.battery.ui.design.charge.ChargeBanner
 import com.qsc.battery.ui.design.charge.ChargeDivider
 import com.qsc.battery.ui.design.charge.ChargeListRow
-import com.qsc.battery.ui.design.charge.ChargePage
 import com.qsc.battery.ui.design.charge.ChargePrimaryButton
 import com.qsc.battery.ui.design.charge.ChargeSection
 import com.qsc.battery.ui.design.charge.ChargeTheme
-import com.qsc.battery.ui.design.charge.ChargeTitleBar
+import com.qsc.battery.ui.design.charge.ChargeTopBar
 import kotlinx.coroutines.launch
 
 @Composable
@@ -41,13 +39,14 @@ fun UpdatesScreen(
     val scope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-        ChargeTitleBar(title = "更新", onBack = onBack)
-        ChargePage(
+        ChargeTopBar(title = "更新", onBack = onBack)
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
-            includeStatusSpacer = false,
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
+                .padding(bottom = ChargeTheme.dimens.sectionGap),
+            verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
         ) {
             Text(
                 text = "检查模块与伴侣 APP 的远端版本，并一键下载安装。",

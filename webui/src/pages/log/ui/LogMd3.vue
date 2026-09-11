@@ -199,5 +199,8 @@ const store = useAppStore();
 .log-md3-body.session {
   background: transparent;
   box-shadow: none;
+  /* 与上方 meta 卡左右对齐 */
+  padding-left: 0;
+  padding-right: 0;
 }
 </style>

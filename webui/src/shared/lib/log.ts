@@ -2,8 +2,10 @@ import { LogLevel, isLogLevel } from "@/shared/config/enums";
 
 const LEVEL_TAG = /\[(INFO|WARN|ERROR|DEBUG)\]/i;
 const EMPTY_HINTS = new Set(["", "暂无日志", "暂无日志（触发功能后才会写入）"]);
-const STOP_RE = /停止充电/;
-const RESUME_RE = /恢复充电/;
+/** 一轮停充的起点（含温控停充 / App 停充） */
+const STOP_RE = /停止充电|按\s*App\s*停充/;
+/** 一轮停充的结束（恢复充电，或拔线/关模块时清除停充状态） */
+const RESUME_RE = /恢复充电|清除停充状态/;
 
 export interface LogEntry {
   raw: string;
@@ -55,7 +57,12 @@ function bumpFlags(session: LogSession, e: LogEntry) {
   if (e.level === LogLevel.Warn) session.hasWarn = true;
 }
 
-/** 按「停止充电 → 恢复充电」折叠为一轮会话；最新在前 */
+function stopTitle(session: LogSession): string {
+  const stop = session.entries.find((x) => STOP_RE.test(x.raw));
+  return shortTitle(stop?.raw || session.title) || "停充";
+}
+
+/** 按「停充 → 恢复/清除」折叠为一轮会话；最新在前。停充前的杂项单独成组，不并入首轮停充。 */
 export function groupLogSessions(entries: LogEntry[]): LogSession[] {
   const sessions: LogSession[] = [];
   let current: LogSession | null = null;
@@ -77,7 +84,7 @@ export function groupLogSessions(entries: LogEntry[]): LogSession[] {
         open: true,
         hasError: false,
         hasWarn: false,
-        entries: orphan.length ? [...orphan.splice(0, orphan.length), e] : [e],
+        entries: [e],
       };
       bumpFlags(current, e);
       continue;
@@ -86,7 +93,7 @@ export function groupLogSessions(entries: LogEntry[]): LogSession[] {
       current.entries.push(e);
       bumpFlags(current, e);
       current.open = false;
-      current.title = `${shortTitle(current.entries[0]?.raw || "")} → 已恢复`;
+      current.title = `${stopTitle(current)} → 已恢复`;
       pushCurrent();
       continue;
     }
@@ -98,8 +105,10 @@ export function groupLogSessions(entries: LogEntry[]): LogSession[] {
     }
   }
   pushCurrent();
+
+  const latestFirst = sessions.reverse();
   if (orphan.length) {
-    sessions.push({
+    latestFirst.push({
       id: "orphan",
       title: "其它日志",
       open: false,
@@ -108,5 +117,5 @@ export function groupLogSessions(entries: LogEntry[]): LogSession[] {
       entries: orphan,
     });
   }
-  return sessions.reverse();
+  return latestFirst;
 }

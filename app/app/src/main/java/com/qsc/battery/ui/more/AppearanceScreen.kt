@@ -8,13 +8,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -31,11 +28,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.ui.design.charge.ChargeDivider
 import com.qsc.battery.ui.design.charge.ChargeListRow
-import com.qsc.battery.ui.design.charge.ChargePage
 import com.qsc.battery.ui.design.charge.ChargeSection
 import com.qsc.battery.ui.design.charge.ChargeTheme
-import com.qsc.battery.ui.design.charge.ChargeTitleBar
 import com.qsc.battery.ui.design.charge.ChargeToggleRow
+import com.qsc.battery.ui.design.charge.ChargeTopBar
 import com.qsc.battery.ui.theme.ColorMode
 import com.qsc.battery.ui.theme.ThemeSettings
 import kotlinx.coroutines.launch
@@ -52,13 +48,14 @@ fun AppearanceScreen(
     val scope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-        ChargeTitleBar(title = "主题设置", onBack = onBack)
-        ChargePage(
+        ChargeTopBar(title = "主题设置", onBack = onBack)
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
-            includeStatusSpacer = false,
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
+                .padding(bottom = ChargeTheme.dimens.sectionGap),
+            verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
         ) {
             Text(
                 text = "选择颜色模式预览块，一键切换明暗与取色。",
@@ -124,7 +121,7 @@ fun AppearanceScreen(
             ChargeSection(title = "更多") {
                 ChargeListRow(
                     title = "调色板",
-                    summary = "种子色与 PaletteStyle",
+                    summary = "种子色与配色风格",
                     onClick = onOpenPalette,
                 )
                 ChargeDivider()

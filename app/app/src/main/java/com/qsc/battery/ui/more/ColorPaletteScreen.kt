@@ -7,12 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -30,12 +27,24 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.ui.design.charge.ChargeDivider
 import com.qsc.battery.ui.design.charge.ChargeListRow
-import com.qsc.battery.ui.design.charge.ChargePage
 import com.qsc.battery.ui.design.charge.ChargeSection
-import com.qsc.battery.ui.design.charge.ChargeTitleBar
+import com.qsc.battery.ui.design.charge.ChargeTheme
+import com.qsc.battery.ui.design.charge.ChargeTopBar
 import com.qsc.battery.ui.theme.PaletteStyleName
 import com.qsc.battery.ui.theme.ThemeSettings
 import kotlinx.coroutines.launch
+
+private fun paletteStyleLabel(style: PaletteStyleName): String = when (style) {
+    PaletteStyleName.TonalSpot -> "色调点缀"
+    PaletteStyleName.Neutral -> "中性"
+    PaletteStyleName.Vibrant -> "鲜艳"
+    PaletteStyleName.Expressive -> "表现力"
+    PaletteStyleName.Rainbow -> "彩虹"
+    PaletteStyleName.FruitSalad -> "果色"
+    PaletteStyleName.Monochrome -> "单色"
+    PaletteStyleName.Fidelity -> "保真"
+    PaletteStyleName.Content -> "内容"
+}
 
 @Composable
 fun ColorPaletteScreen(
@@ -52,13 +61,14 @@ fun ColorPaletteScreen(
     )
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-        ChargeTitleBar(title = "调色板", onBack = onBack)
-        ChargePage(
+        ChargeTopBar(title = "调色板", onBack = onBack)
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
-            includeStatusSpacer = false,
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
+                .padding(bottom = ChargeTheme.dimens.sectionGap),
+            verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
         ) {
             ChargeSection(title = "种子色") {
                 LazyVerticalGrid(
@@ -87,11 +97,12 @@ fun ColorPaletteScreen(
                 }
             }
 
-            ChargeSection(title = "PaletteStyle") {
+            ChargeSection(title = "配色风格") {
                 PaletteStyleName.entries.forEachIndexed { index, style ->
                     if (index > 0) ChargeDivider()
                     ChargeListRow(
-                        title = style.wire,
+                        title = paletteStyleLabel(style),
+                        summary = style.wire,
                         value = if (settings.paletteStyle == style) "已选" else null,
                         onClick = {
                             scope.launch { container.settingsRepository.setPaletteStyle(style) }
@@ -100,11 +111,11 @@ fun ColorPaletteScreen(
                 }
             }
 
-            ChargeSection(title = "ColorSpec") {
-                listOf("SPEC_2021", "SPEC_2025").forEachIndexed { index, spec ->
+            ChargeSection(title = "色规") {
+                listOf("SPEC_2021" to "2021", "SPEC_2025" to "2025").forEachIndexed { index, (spec, label) ->
                     if (index > 0) ChargeDivider()
                     ChargeListRow(
-                        title = spec.removePrefix("SPEC_"),
+                        title = label,
                         value = if (settings.colorSpec == spec) "已选" else null,
                         onClick = {
                             scope.launch { container.settingsRepository.setColorSpec(spec) }

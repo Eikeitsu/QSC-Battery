@@ -88,24 +88,24 @@ fun OnboardingScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
         ) {
-                    Text(
-                        text = "充电控制",
-                        style = ChargeTheme.typography.title,
-                        color = ChargeTheme.colors.ink,
-                        fontWeight = FontWeight.Bold,
-                    )
+            Text(
+                text = "充电控制",
+                style = ChargeTheme.typography.title,
+                color = ChargeTheme.colors.ink,
+                fontWeight = FontWeight.Bold,
+            )
             StepDots(total = 5, current = step)
 
             when (step) {
                 0 -> {
                     Text(
                         text = "欢迎",
-                        style = ChargeTheme.typography.title,
+                        style = ChargeTheme.typography.headline,
                         color = ChargeTheme.colors.ink,
                     )
                     ChargeBanner(
                         text = "本应用用于配置与查看 Magisk「充电控制」模块，不在后台执行停充逻辑。\n\n" +
-                            "接下来会检测权限。Root 用于读写模块配置；没有 Root 仍可改主题、检查更新。\n\n" +
+                            "接下来会检测权限。没有全部授权也能用主题与检查更新；停充配置需要 Root。\n\n" +
                             "LSPosed 增强为可选项，不写充电节点。",
                     )
                     ChargePrimaryButton("开始检测", onClick = { step = 1 })
@@ -114,8 +114,12 @@ fun OnboardingScreen(
                 1 -> {
                     Text(
                         text = "Root 权限",
-                        style = ChargeTheme.typography.title,
+                        style = ChargeTheme.typography.headline,
                         color = ChargeTheme.colors.ink,
+                    )
+                    ChargeBanner(
+                        text = "为什么需要：读写模块配置、启停充电控制、查看实时电量与日志。\n" +
+                            "拒绝会怎样：仍可改主题、检查更新；无法改停充策略或启停模块。",
                     )
                     val root = snap?.root
                     StatusBlock(
@@ -132,13 +136,14 @@ fun OnboardingScreen(
                     ) {
                         ChargeSecondaryButton(
                             text = "重新检测",
-                            onClick = { scope.launch { refresh() } },
+                            equalHeight = true,
                             modifier = Modifier.weight(1f),
+                            onClick = { scope.launch { refresh() } },
                         )
                         ChargePrimaryButton(
                             text = if (root == PermStatus.Ok) "下一步" else "暂时跳过",
-                            onClick = { step = 2 },
                             modifier = Modifier.weight(1f),
+                            onClick = { step = 2 },
                         )
                     }
                 }
@@ -146,8 +151,12 @@ fun OnboardingScreen(
                 2 -> {
                     Text(
                         text = "通知权限",
-                        style = ChargeTheme.typography.title,
+                        style = ChargeTheme.typography.headline,
                         color = ChargeTheme.colors.ink,
+                    )
+                    ChargeBanner(
+                        text = "为什么需要：更新完成、模块安装结果等提示。\n" +
+                            "拒绝会怎样：核心停充不受影响，只是少了系统通知提醒。",
                     )
                     val n = snap?.notifications
                     StatusBlock(
@@ -161,6 +170,8 @@ fun OnboardingScreen(
                     ) {
                         ChargeSecondaryButton(
                             text = if (n == PermStatus.Ok) "已完成" else "去授权",
+                            equalHeight = true,
+                            modifier = Modifier.weight(1f),
                             onClick = {
                                 if (Build.VERSION.SDK_INT >= 33) {
                                     notifyLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -168,12 +179,11 @@ fun OnboardingScreen(
                                     (context as? Activity)?.let { checker.requestNotifications(it) }
                                 }
                             },
-                            modifier = Modifier.weight(1f),
                         )
                         ChargePrimaryButton(
                             text = "下一步",
-                            onClick = { step = 3 },
                             modifier = Modifier.weight(1f),
+                            onClick = { step = 3 },
                         )
                     }
                 }
@@ -181,8 +191,12 @@ fun OnboardingScreen(
                 3 -> {
                     Text(
                         text = "安装应用权限",
-                        style = ChargeTheme.typography.title,
+                        style = ChargeTheme.typography.headline,
                         color = ChargeTheme.colors.ink,
+                    )
+                    ChargeBanner(
+                        text = "为什么需要：在线下载并安装 / 更新本伴侣 APP。\n" +
+                            "拒绝会怎样：无法一键更新 APP，仍可手动安装 APK。",
                     )
                     val i = snap?.installPackages
                     StatusBlock(
@@ -196,13 +210,14 @@ fun OnboardingScreen(
                     ) {
                         ChargeSecondaryButton(
                             text = if (i == PermStatus.Ok) "已完成" else "打开设置",
-                            onClick = { checker.openInstallPermissionSettings() },
+                            equalHeight = true,
                             modifier = Modifier.weight(1f),
+                            onClick = { checker.openInstallPermissionSettings() },
                         )
                         ChargePrimaryButton(
                             text = "下一步",
-                            onClick = { step = 4 },
                             modifier = Modifier.weight(1f),
+                            onClick = { step = 4 },
                         )
                     }
                 }
@@ -210,8 +225,12 @@ fun OnboardingScreen(
                 else -> {
                     Text(
                         text = "可选 · LSPosed 增强",
-                        style = ChargeTheme.typography.title,
+                        style = ChargeTheme.typography.headline,
                         color = ChargeTheme.colors.ink,
+                    )
+                    ChargeBanner(
+                        text = "为什么可选：系统 BatteryService 变化时写事件提示，帮助模块更快感知插拔。\n" +
+                            "不增强也不影响停充。请在 LSPosed 中启用本模块，作用域勾选系统框架(android)，然后重启。",
                     )
                     val status = xp
                     StatusBlock(
@@ -226,13 +245,11 @@ fun OnboardingScreen(
                             ?: "可安装 LSPosed 后启用本模块（API 102），作用域勾选系统框架",
                     )
                     ChargeBanner(
-                        text = "增强：系统 BatteryService 变化时写事件提示，帮助模块更快感知插拔。\n" +
-                            "不增强也不影响停充。\n" +
-                            if (snap?.modulePresent == true) {
-                                "已检测到 Magisk 模块。"
-                            } else {
-                                "尚未安装 Magisk 模块，可稍后在「我的 → 更新」下载。"
-                            },
+                        text = if (snap?.modulePresent == true) {
+                            "已检测到 Magisk 模块。"
+                        } else {
+                            "尚未安装 Magisk 模块，可稍后在「我的 → 更新」下载。"
+                        },
                     )
                     ChargePrimaryButton(
                         text = "进入应用",
@@ -244,7 +261,11 @@ fun OnboardingScreen(
                             }
                         },
                     )
-                    ChargeSecondaryButton(text = "返回权限项", onClick = { step = 1 })
+                    ChargeSecondaryButton(
+                        text = "返回权限项",
+                        equalHeight = true,
+                        onClick = { step = 1 },
+                    )
                 }
             }
         }
