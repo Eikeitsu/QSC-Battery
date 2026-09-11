@@ -1,12 +1,18 @@
 package com.qsc.battery.ui
 
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.BatteryChargingFull
+import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -15,17 +21,21 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.ui.config.ConfigScreen
-import com.qsc.battery.ui.design.AppChrome
-import com.qsc.battery.ui.design.AppNavItem
-import com.qsc.battery.ui.design.ImmersiveBottomBar
+import com.qsc.battery.ui.design.charge.ChargeNavItem
+import com.qsc.battery.ui.design.charge.ChargeScaffold
+import com.qsc.battery.ui.design.charge.ImmersiveBottomBar
 import com.qsc.battery.ui.home.HomeScreen
 import com.qsc.battery.ui.log.LogScreen
 import com.qsc.battery.ui.more.AppearanceScreen
 import com.qsc.battery.ui.more.ColorPaletteScreen
 import com.qsc.battery.ui.more.MoreScreen
+import com.qsc.battery.ui.more.ProfilesScreen
 import com.qsc.battery.ui.more.UpdatesScreen
 import com.qsc.battery.ui.nav.QscTab
 import com.qsc.battery.ui.onboarding.OnboardingScreen
+
+private val enter = fadeIn() + slideInVertically { it / 28 }
+private val exit = fadeOut() + slideOutVertically { -it / 28 }
 
 @Composable
 fun QscAppRoot(container: AppContainer) {
@@ -39,19 +49,21 @@ fun QscAppRoot(container: AppContainer) {
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route ?: QscTab.Home.route
     val showBar = QscTab.entries.any { it.route == route }
+    val snackbar = remember { SnackbarHostState() }
 
-    AppChrome(
+    ChargeScaffold(
+        snackbarHostState = snackbar,
         bottomBar = {
-            if (!showBar) return@AppChrome
+            if (!showBar) return@ChargeScaffold
             ImmersiveBottomBar {
                 QscTab.entries.forEach { tab ->
                     val icon = when (tab) {
                         QscTab.Home -> Icons.Outlined.Home
                         QscTab.Config -> Icons.Outlined.Tune
-                        QscTab.Log -> Icons.Outlined.BatteryChargingFull
+                        QscTab.Log -> Icons.Outlined.Bolt
                         QscTab.More -> Icons.Outlined.Person
                     }
-                    AppNavItem(
+                    ChargeNavItem(
                         selected = route == tab.route,
                         icon = icon,
                         label = tab.label,
@@ -70,15 +82,38 @@ fun QscAppRoot(container: AppContainer) {
         NavHost(
             navController = nav,
             startDestination = QscTab.Home.route,
+            enterTransition = { enter },
+            exitTransition = { exit },
+            popEnterTransition = { enter },
+            popExitTransition = { exit },
         ) {
-            composable(QscTab.Home.route) { HomeScreen(container) }
-            composable(QscTab.Config.route) { ConfigScreen(container) }
+            composable(QscTab.Home.route) {
+                HomeScreen(
+                    container = container,
+                    onOpenStrategy = {
+                        nav.navigate(QscTab.Config.route) {
+                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
+            }
+            composable(QscTab.Config.route) {
+                ConfigScreen(
+                    container = container,
+                    snackbar = snackbar,
+                    onOpenAdvanced = { nav.navigate("config/advanced") },
+                )
+            }
             composable(QscTab.Log.route) { LogScreen(container) }
             composable(QscTab.More.route) {
                 MoreScreen(
                     container = container,
                     onOpenAppearance = { nav.navigate("appearance") },
                     onOpenUpdates = { nav.navigate("updates") },
+                    onOpenProfiles = { nav.navigate("profiles") },
+                    snackbar = snackbar,
                 )
             }
             composable("appearance") {
@@ -89,14 +124,27 @@ fun QscAppRoot(container: AppContainer) {
                 )
             }
             composable("palette") {
-                ColorPaletteScreen(
-                    container = container,
-                    onBack = { nav.popBackStack() },
-                )
+                ColorPaletteScreen(container = container, onBack = { nav.popBackStack() })
             }
             composable("updates") {
                 UpdatesScreen(
                     container = container,
+                    onBack = { nav.popBackStack() },
+                    snackbar = snackbar,
+                )
+            }
+            composable("profiles") {
+                ProfilesScreen(
+                    container = container,
+                    onBack = { nav.popBackStack() },
+                    snackbar = snackbar,
+                )
+            }
+            composable("config/advanced") {
+                ConfigScreen(
+                    container = container,
+                    snackbar = snackbar,
+                    advancedOnly = true,
                     onBack = { nav.popBackStack() },
                 )
             }

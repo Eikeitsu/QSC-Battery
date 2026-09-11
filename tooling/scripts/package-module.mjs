@@ -280,7 +280,9 @@ if (includeDebug) {
 copyBuiltWebroot();
 
 // Companion APP is distributed via app-update.json (online download), not embedded in the module zip.
-log("companion apk: skipped embed — install via online download in customize.sh / APP updates");
+log(
+  "companion apk: skipped embed — install via online download in customize.sh / APP updates",
+);
 
 if (existsSync(zipPath)) rmSync(zipPath);
 log(`packaging ${zipName}...`);

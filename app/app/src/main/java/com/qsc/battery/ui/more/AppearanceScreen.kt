@@ -1,34 +1,45 @@
 package com.qsc.battery.ui.more
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.moriafly.salt.ui.Item
-import com.moriafly.salt.ui.ItemCheck
-import com.moriafly.salt.ui.ItemOuterTitle
-import com.moriafly.salt.ui.ItemSwitcher
-import com.moriafly.salt.ui.RoundedColumn
-import com.moriafly.salt.ui.SaltTheme
-import com.moriafly.salt.ui.Text
-import com.moriafly.salt.ui.UnstableSaltUiApi
 import com.qsc.battery.data.AppContainer
-import com.qsc.battery.ui.design.AppPage
-import com.qsc.battery.ui.design.AppTitleBar
+import com.qsc.battery.ui.design.charge.ChargeDivider
+import com.qsc.battery.ui.design.charge.ChargeListRow
+import com.qsc.battery.ui.design.charge.ChargePage
+import com.qsc.battery.ui.design.charge.ChargeSection
+import com.qsc.battery.ui.design.charge.ChargeTheme
+import com.qsc.battery.ui.design.charge.ChargeTitleBar
+import com.qsc.battery.ui.design.charge.ChargeToggleRow
 import com.qsc.battery.ui.theme.ColorMode
 import com.qsc.battery.ui.theme.ThemeSettings
 import kotlinx.coroutines.launch
 
-@OptIn(UnstableSaltUiApi::class)
 @Composable
 fun AppearanceScreen(
     container: AppContainer,
@@ -42,56 +53,88 @@ fun AppearanceScreen(
 
     Column(modifier = Modifier.fillMaxSize()) {
         Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-        AppTitleBar(title = "主题设置", onBack = onBack)
-        AppPage(
+        ChargeTitleBar(title = "主题设置", onBack = onBack)
+        ChargePage(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
             includeStatusSpacer = false,
         ) {
             Text(
-                text = "Salt 列表语言 + 沉浸系统栏。仅切换明暗与取色。",
-                style = SaltTheme.textStyles.sub,
-                color = SaltTheme.colors.subText,
+                text = "选择颜色模式预览块，一键切换明暗与取色。",
+                style = ChargeTheme.typography.caption,
+                color = ChargeTheme.colors.muted,
             )
 
-            ItemOuterTitle(text = "颜色模式")
-            RoundedColumn {
-                ColorMode.entries.forEach { mode ->
-                    ItemCheck(
-                        state = settings.colorMode == mode,
-                        onChange = {
-                            if (it) scope.launch { container.settingsRepository.setColorMode(mode) }
-                        },
-                        text = modeLabel(mode),
-                    )
+            Text(
+                text = "颜色模式",
+                style = ChargeTheme.typography.label,
+                color = ChargeTheme.colors.accent,
+                fontWeight = FontWeight.SemiBold,
+            )
+
+            val modes = listOf(
+                ColorMode.SYSTEM to "跟随系统",
+                ColorMode.LIGHT to "浅色",
+                ColorMode.DARK to "深色",
+                ColorMode.DARK_AMOLED to "纯黑 AMOLED",
+                ColorMode.MONET_SYSTEM to "动态 · 系统",
+                ColorMode.MONET_LIGHT to "动态 · 浅色",
+                ColorMode.MONET_DARK to "动态 · 深色",
+            )
+            modes.chunked(2).forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    row.forEach { (mode, label) ->
+                        val selected = settings.colorMode == mode
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(72.dp)
+                                .clip(RoundedCornerShape(ChargeTheme.dimens.radiusMd))
+                                .background(
+                                    if (selected) ChargeTheme.colors.accent.copy(alpha = 0.12f)
+                                    else ChargeTheme.colors.surface,
+                                )
+                                .border(
+                                    width = if (selected) 2.dp else 1.dp,
+                                    color = if (selected) ChargeTheme.colors.accent else ChargeTheme.colors.stroke,
+                                    shape = RoundedCornerShape(ChargeTheme.dimens.radiusMd),
+                                )
+                                .clickable {
+                                    scope.launch { container.settingsRepository.setColorMode(mode) }
+                                }
+                                .padding(12.dp),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            Text(
+                                text = label,
+                                style = ChargeTheme.typography.label,
+                                color = ChargeTheme.colors.ink,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            )
+                        }
+                    }
+                    if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
                 }
             }
 
-            ItemOuterTitle(text = "更多")
-            RoundedColumn {
-                Item(
+            ChargeSection(title = "更多") {
+                ChargeListRow(
+                    title = "调色板",
+                    summary = "种子色与 PaletteStyle",
                     onClick = onOpenPalette,
-                    text = "调色板",
-                    sub = "种子色与 PaletteStyle",
                 )
-                ItemSwitcher(
-                    state = settings.alternativeIcon,
-                    onChange = { scope.launch { container.settingsRepository.setAlternativeIcon(it) } },
-                    text = "备用桌面图标",
-                    sub = "切换启动器图标",
+                ChargeDivider()
+                ChargeToggleRow(
+                    title = "备用桌面图标",
+                    checked = settings.alternativeIcon,
+                    summary = "切换启动器图标",
+                    onCheckedChange = { scope.launch { container.settingsRepository.setAlternativeIcon(it) } },
                 )
             }
         }
     }
-}
-
-private fun modeLabel(mode: ColorMode): String = when (mode) {
-    ColorMode.SYSTEM -> "跟随系统"
-    ColorMode.LIGHT -> "浅色"
-    ColorMode.DARK -> "深色"
-    ColorMode.MONET_SYSTEM -> "动态取色 · 跟随系统"
-    ColorMode.MONET_LIGHT -> "动态取色 · 浅色"
-    ColorMode.MONET_DARK -> "动态取色 · 深色"
-    ColorMode.DARK_AMOLED -> "纯黑 AMOLED"
 }

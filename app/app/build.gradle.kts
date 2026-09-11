@@ -13,8 +13,8 @@ android {
         applicationId = "com.qsc.battery"
         minSdk = 33
         targetSdk = 37
-        versionCode = 2026091105
-        versionName = "0.2.1"
+        versionCode = 2026091106
+        versionName = "0.3.0"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
@@ -83,7 +83,6 @@ dependencies {
     implementation(libs.libsu.core)
     implementation(libs.libsu.io)
     implementation(libs.material.kolor)
-    implementation(libs.salt.ui)
     implementation(libs.okhttp)
     compileOnly(libs.libxposed.api)
 }

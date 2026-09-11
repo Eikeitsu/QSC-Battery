@@ -5,15 +5,19 @@ import android.app.Activity
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -22,30 +26,29 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.moriafly.salt.ui.RoundedColumn
-import com.moriafly.salt.ui.SaltTheme
-import com.moriafly.salt.ui.Text
-import com.moriafly.salt.ui.UnstableSaltUiApi
 import com.qsc.battery.core.PermStatus
 import com.qsc.battery.core.PermissionChecker
 import com.qsc.battery.core.PermissionSnapshot
 import com.qsc.battery.data.AppContainer
-import com.qsc.battery.ui.design.AppChrome
-import com.qsc.battery.ui.design.AppPage
-import com.qsc.battery.ui.design.AppPrimaryButton
-import com.qsc.battery.ui.design.AppSecondaryButton
-import com.qsc.battery.ui.design.VoltBanner
+import com.qsc.battery.ui.design.charge.BannerTone
+import com.qsc.battery.ui.design.charge.ChargeBanner
+import com.qsc.battery.ui.design.charge.ChargePage
+import com.qsc.battery.ui.design.charge.ChargePrimaryButton
+import com.qsc.battery.ui.design.charge.ChargeScaffold
+import com.qsc.battery.ui.design.charge.ChargeSecondaryButton
+import com.qsc.battery.ui.design.charge.ChargeTheme
 import com.qsc.battery.xposed.XpRuntime
 import kotlinx.coroutines.launch
 
-@OptIn(UnstableSaltUiApi::class)
 @Composable
 fun OnboardingScreen(
     container: AppContainer,
@@ -79,50 +82,41 @@ fun OnboardingScreen(
         ActivityResultContracts.RequestPermission(),
     ) { scope.launch { refresh() } }
 
-    AppChrome {
-        AppPage(
+    ChargeScaffold {
+        ChargePage(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
         ) {
-            Text(
-                text = "充电控制",
-                style = SaltTheme.textStyles.main,
-                fontWeight = FontWeight.Bold,
-            )
-            LinearProgressIndicator(
-                progress = { (step + 1) / 5f },
-                modifier = Modifier.fillMaxWidth(),
-                color = SaltTheme.colors.highlight,
-                trackColor = SaltTheme.colors.stroke,
-            )
+                    Text(
+                        text = "充电控制",
+                        style = ChargeTheme.typography.title,
+                        color = ChargeTheme.colors.ink,
+                        fontWeight = FontWeight.Bold,
+                    )
+            StepDots(total = 5, current = step)
 
             when (step) {
                 0 -> {
-                    Text(text = "欢迎", style = SaltTheme.textStyles.main, fontWeight = FontWeight.SemiBold)
-                    RoundedColumn {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(text = "本应用用于配置与查看 Magisk「充电控制」模块，不在后台执行停充逻辑。")
-                            Text(
-                                text = "接下来会检测权限。Root 用于读写模块配置；没有 Root 仍可改主题、检查更新。",
-                                color = SaltTheme.colors.subText,
-                                style = SaltTheme.textStyles.sub,
-                            )
-                            Text(
-                                text = "LSPosed 增强为可选项，不写充电节点。",
-                                color = SaltTheme.colors.subText,
-                                style = SaltTheme.textStyles.sub,
-                            )
-                        }
-                    }
-                    AppPrimaryButton("开始检测", onClick = { step = 1 })
+                    Text(
+                        text = "欢迎",
+                        style = ChargeTheme.typography.title,
+                        color = ChargeTheme.colors.ink,
+                    )
+                    ChargeBanner(
+                        text = "本应用用于配置与查看 Magisk「充电控制」模块，不在后台执行停充逻辑。\n\n" +
+                            "接下来会检测权限。Root 用于读写模块配置；没有 Root 仍可改主题、检查更新。\n\n" +
+                            "LSPosed 增强为可选项，不写充电节点。",
+                    )
+                    ChargePrimaryButton("开始检测", onClick = { step = 1 })
                 }
 
                 1 -> {
-                    Text(text = "Root 权限", style = SaltTheme.textStyles.main, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "Root 权限",
+                        style = ChargeTheme.typography.title,
+                        color = ChargeTheme.colors.ink,
+                    )
                     val root = snap?.root
                     StatusBlock(
                         title = "Root",
@@ -136,12 +130,12 @@ fun OnboardingScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        AppSecondaryButton(
+                        ChargeSecondaryButton(
                             text = "重新检测",
                             onClick = { scope.launch { refresh() } },
                             modifier = Modifier.weight(1f),
                         )
-                        AppPrimaryButton(
+                        ChargePrimaryButton(
                             text = if (root == PermStatus.Ok) "下一步" else "暂时跳过",
                             onClick = { step = 2 },
                             modifier = Modifier.weight(1f),
@@ -150,7 +144,11 @@ fun OnboardingScreen(
                 }
 
                 2 -> {
-                    Text(text = "通知权限", style = SaltTheme.textStyles.main, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "通知权限",
+                        style = ChargeTheme.typography.title,
+                        color = ChargeTheme.colors.ink,
+                    )
                     val n = snap?.notifications
                     StatusBlock(
                         title = "发送通知",
@@ -161,7 +159,7 @@ fun OnboardingScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        AppSecondaryButton(
+                        ChargeSecondaryButton(
                             text = if (n == PermStatus.Ok) "已完成" else "去授权",
                             onClick = {
                                 if (Build.VERSION.SDK_INT >= 33) {
@@ -172,7 +170,7 @@ fun OnboardingScreen(
                             },
                             modifier = Modifier.weight(1f),
                         )
-                        AppPrimaryButton(
+                        ChargePrimaryButton(
                             text = "下一步",
                             onClick = { step = 3 },
                             modifier = Modifier.weight(1f),
@@ -181,7 +179,11 @@ fun OnboardingScreen(
                 }
 
                 3 -> {
-                    Text(text = "安装应用权限", style = SaltTheme.textStyles.main, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "安装应用权限",
+                        style = ChargeTheme.typography.title,
+                        color = ChargeTheme.colors.ink,
+                    )
                     val i = snap?.installPackages
                     StatusBlock(
                         title = "安装未知应用",
@@ -192,12 +194,12 @@ fun OnboardingScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        AppSecondaryButton(
+                        ChargeSecondaryButton(
                             text = if (i == PermStatus.Ok) "已完成" else "打开设置",
                             onClick = { checker.openInstallPermissionSettings() },
                             modifier = Modifier.weight(1f),
                         )
-                        AppPrimaryButton(
+                        ChargePrimaryButton(
                             text = "下一步",
                             onClick = { step = 4 },
                             modifier = Modifier.weight(1f),
@@ -208,8 +210,8 @@ fun OnboardingScreen(
                 else -> {
                     Text(
                         text = "可选 · LSPosed 增强",
-                        style = SaltTheme.textStyles.main,
-                        fontWeight = FontWeight.SemiBold,
+                        style = ChargeTheme.typography.title,
+                        color = ChargeTheme.colors.ink,
                     )
                     val status = xp
                     StatusBlock(
@@ -223,29 +225,16 @@ fun OnboardingScreen(
                         detail = status?.detail
                             ?: "可安装 LSPosed 后启用本模块（API 102），作用域勾选系统框架",
                     )
-                    RoundedColumn {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(text = "增强：系统 BatteryService 变化时写事件提示，帮助模块更快感知插拔。")
-                            Text(
-                                text = "不增强也不影响停充。",
-                                color = SaltTheme.colors.subText,
-                                style = SaltTheme.textStyles.sub,
-                            )
-                            Text(
-                                text = if (snap?.modulePresent == true) {
-                                    "已检测到 Magisk 模块。"
-                                } else {
-                                    "尚未安装 Magisk 模块，可稍后在「我的 → 更新」下载。"
-                                },
-                                color = SaltTheme.colors.subText,
-                                style = SaltTheme.textStyles.sub,
-                            )
-                        }
-                    }
-                    AppPrimaryButton(
+                    ChargeBanner(
+                        text = "增强：系统 BatteryService 变化时写事件提示，帮助模块更快感知插拔。\n" +
+                            "不增强也不影响停充。\n" +
+                            if (snap?.modulePresent == true) {
+                                "已检测到 Magisk 模块。"
+                            } else {
+                                "尚未安装 Magisk 模块，可稍后在「我的 → 更新」下载。"
+                            },
+                    )
+                    ChargePrimaryButton(
                         text = "进入应用",
                         onClick = {
                             scope.launch {
@@ -255,7 +244,7 @@ fun OnboardingScreen(
                             }
                         },
                     )
-                    AppSecondaryButton(text = "返回权限项", onClick = { step = 1 })
+                    ChargeSecondaryButton(text = "返回权限项", onClick = { step = 1 })
                 }
             }
         }
@@ -263,10 +252,30 @@ fun OnboardingScreen(
 }
 
 @Composable
-private fun StatusBlock(title: String, ok: Boolean, detail: String) {
-    if (ok) {
-        VoltBanner("✓ $title\n$detail", accent = SaltTheme.colors.highlight)
-    } else {
-        VoltBanner("○ $title\n$detail")
+private fun StepDots(total: Int, current: Int) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(vertical = 4.dp),
+    ) {
+        repeat(total) { i ->
+            Box(
+                modifier = Modifier
+                    .size(if (i == current) 10.dp else 8.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (i == current) ChargeTheme.colors.accent
+                        else ChargeTheme.colors.stroke,
+                    ),
+            )
+        }
     }
+}
+
+@Composable
+private fun StatusBlock(title: String, ok: Boolean, detail: String) {
+    ChargeBanner(
+        text = "${if (ok) "✓" else "○"} $title\n$detail",
+        tone = if (ok) BannerTone.Ok else BannerTone.Info,
+    )
 }

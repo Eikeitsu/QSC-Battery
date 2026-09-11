@@ -27,18 +27,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.moriafly.salt.ui.ItemCheck
-import com.moriafly.salt.ui.ItemOuterTitle
-import com.moriafly.salt.ui.RoundedColumn
-import com.moriafly.salt.ui.UnstableSaltUiApi
 import com.qsc.battery.data.AppContainer
-import com.qsc.battery.ui.design.AppPage
-import com.qsc.battery.ui.design.AppTitleBar
+import com.qsc.battery.ui.design.charge.ChargeDivider
+import com.qsc.battery.ui.design.charge.ChargeListRow
+import com.qsc.battery.ui.design.charge.ChargePage
+import com.qsc.battery.ui.design.charge.ChargeSection
+import com.qsc.battery.ui.design.charge.ChargeTitleBar
 import com.qsc.battery.ui.theme.PaletteStyleName
 import com.qsc.battery.ui.theme.ThemeSettings
 import kotlinx.coroutines.launch
 
-@OptIn(UnstableSaltUiApi::class)
 @Composable
 fun ColorPaletteScreen(
     container: AppContainer,
@@ -55,61 +53,62 @@ fun ColorPaletteScreen(
 
     Column(modifier = Modifier.fillMaxSize()) {
         Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-        AppTitleBar(title = "调色板", onBack = onBack)
-        AppPage(
+        ChargeTitleBar(title = "调色板", onBack = onBack)
+        ChargePage(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
             includeStatusSpacer = false,
         ) {
-            ItemOuterTitle(text = "种子色")
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(56.dp),
-                contentPadding = PaddingValues(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.size(width = 360.dp, height = 140.dp),
-            ) {
-                items(colors) { c ->
-                    val selected = settings.keyColor == c.toInt()
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(Color(c))
-                            .then(
-                                if (selected) Modifier.border(3.dp, Color.White, CircleShape)
-                                else Modifier,
-                            )
-                            .clickable {
-                                scope.launch { container.settingsRepository.setKeyColor(c.toInt()) }
-                            },
+            ChargeSection(title = "种子色") {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(56.dp),
+                    contentPadding = PaddingValues(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.size(width = 360.dp, height = 140.dp),
+                ) {
+                    items(colors) { c ->
+                        val selected = settings.keyColor == c.toInt()
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(Color(c))
+                                .then(
+                                    if (selected) Modifier.border(3.dp, Color.White, CircleShape)
+                                    else Modifier,
+                                )
+                                .clickable {
+                                    scope.launch { container.settingsRepository.setKeyColor(c.toInt()) }
+                                },
+                        )
+                    }
+                }
+            }
+
+            ChargeSection(title = "PaletteStyle") {
+                PaletteStyleName.entries.forEachIndexed { index, style ->
+                    if (index > 0) ChargeDivider()
+                    ChargeListRow(
+                        title = style.wire,
+                        value = if (settings.paletteStyle == style) "已选" else null,
+                        onClick = {
+                            scope.launch { container.settingsRepository.setPaletteStyle(style) }
+                        },
                     )
                 }
             }
 
-            ItemOuterTitle(text = "PaletteStyle")
-            RoundedColumn {
-                PaletteStyleName.entries.forEach { style ->
-                    ItemCheck(
-                        state = settings.paletteStyle == style,
-                        onChange = {
-                            if (it) scope.launch { container.settingsRepository.setPaletteStyle(style) }
+            ChargeSection(title = "ColorSpec") {
+                listOf("SPEC_2021", "SPEC_2025").forEachIndexed { index, spec ->
+                    if (index > 0) ChargeDivider()
+                    ChargeListRow(
+                        title = spec.removePrefix("SPEC_"),
+                        value = if (settings.colorSpec == spec) "已选" else null,
+                        onClick = {
+                            scope.launch { container.settingsRepository.setColorSpec(spec) }
                         },
-                        text = style.wire,
-                    )
-                }
-            }
-
-            ItemOuterTitle(text = "ColorSpec")
-            RoundedColumn {
-                listOf("SPEC_2021", "SPEC_2025").forEach { spec ->
-                    ItemCheck(
-                        state = settings.colorSpec == spec,
-                        onChange = {
-                            if (it) scope.launch { container.settingsRepository.setColorSpec(spec) }
-                        },
-                        text = spec.removePrefix("SPEC_"),
                     )
                 }
             }

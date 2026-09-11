@@ -1,12 +1,15 @@
 package com.qsc.battery.ui.config
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -14,44 +17,48 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.moriafly.salt.ui.Item
-import com.moriafly.salt.ui.ItemArrowType
-import com.moriafly.salt.ui.ItemOuterTitle
-import com.moriafly.salt.ui.ItemSwitcher
-import com.moriafly.salt.ui.RoundedColumn
-import com.moriafly.salt.ui.SaltTheme
-import com.moriafly.salt.ui.Text
-import com.moriafly.salt.ui.UnstableSaltUiApi
-import com.moriafly.salt.ui.dialog.InputDialog
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.CurrentConfig
-import com.qsc.battery.ui.design.AppPage
-import com.qsc.battery.ui.design.AppPrimaryButton
-import com.qsc.battery.ui.design.AppSecondaryButton
-import com.qsc.battery.ui.design.VoltBanner
+import com.qsc.battery.ui.design.charge.BannerTone
+import com.qsc.battery.ui.design.charge.ChargeBanner
+import com.qsc.battery.ui.design.charge.ChargeEditSheet
+import com.qsc.battery.ui.design.charge.ChargeListRow
+import com.qsc.battery.ui.design.charge.ChargePage
+import com.qsc.battery.ui.design.charge.ChargePrimaryButton
+import com.qsc.battery.ui.design.charge.ChargeSecondaryButton
+import com.qsc.battery.ui.design.charge.ChargeSection
+import com.qsc.battery.ui.design.charge.ChargeTheme
+import com.qsc.battery.ui.design.charge.ChargeTitleBar
+import com.qsc.battery.ui.design.charge.ChargeToggleRow
 import kotlinx.coroutines.launch
 
-private sealed class EditTarget {
-    data class Conf(val key: String, val title: String, val numeric: Boolean) : EditTarget()
-    data class CurrentInt(val title: String, val getter: (CurrentConfig) -> String, val setter: (CurrentConfig, String) -> CurrentConfig) : EditTarget()
-    data class CurrentLong(val title: String, val getter: (CurrentConfig) -> String, val setter: (CurrentConfig, String) -> CurrentConfig) : EditTarget()
-}
+private data class EditField(
+    val title: String,
+    val unit: String,
+    val numeric: Boolean,
+    val step: Int?,
+    val get: () -> String,
+    val set: (String) -> Unit,
+)
 
-@OptIn(UnstableSaltUiApi::class)
 @Composable
-fun ConfigScreen(container: AppContainer) {
+fun ConfigScreen(
+    container: AppContainer,
+    snackbar: SnackbarHostState,
+    advancedOnly: Boolean = false,
+    onOpenAdvanced: (() -> Unit)? = null,
+    onBack: (() -> Unit)? = null,
+) {
     var conf by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var current by remember { mutableStateOf(CurrentConfig()) }
-    var message by remember { mutableStateOf<String?>(null) }
     var ready by remember { mutableStateOf(false) }
     var rootOk by remember { mutableStateOf(false) }
     var moduleOk by remember { mutableStateOf(false) }
     var daemonStatus by remember { mutableStateOf("") }
-    var edit by remember { mutableStateOf<EditTarget?>(null) }
-    var draft by remember { mutableStateOf("") }
+    var edit by remember { mutableStateOf<EditField?>(null) }
     val scope = rememberCoroutineScope()
 
     fun v(key: String) = conf[key].orEmpty()
@@ -73,288 +80,310 @@ fun ConfigScreen(container: AppContainer) {
 
     LaunchedEffect(Unit) { reload() }
 
-    fun openConf(key: String, title: String, numeric: Boolean = true) {
-        draft = v(key)
-        edit = EditTarget.Conf(key, title, numeric)
-    }
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = if (!advancedOnly) 88.dp else 24.dp),
+        ) {
+            ChargePage(includeStatusSpacer = onBack == null) {
+                if (onBack != null) {
+                    ChargeTitleBar(title = if (advancedOnly) "进阶策略" else "策略", onBack = onBack)
+                } else {
+                    Text(
+                        text = "策略",
+                        style = ChargeTheme.typography.title,
+                        color = ChargeTheme.colors.ink,
+                    )
+                    Text(
+                        text = "常用项一屏搞定，细节放进阶",
+                        style = ChargeTheme.typography.caption,
+                        color = ChargeTheme.colors.muted,
+                    )
+                }
 
-    AppPage(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-    ) {
-        Text(
-            text = "策略",
-            style = SaltTheme.textStyles.main,
-            fontWeight = FontWeight.SemiBold,
-        )
-        message?.let {
-            Text(text = it, color = SaltTheme.colors.highlight, style = SaltTheme.textStyles.sub)
+                if (!ready) {
+                    Text("加载中…", color = ChargeTheme.colors.muted, style = ChargeTheme.typography.body)
+                    return@ChargePage
+                }
+                if (!rootOk) {
+                    ChargeBanner("需要 Root 才能修改配置", BannerTone.Warn)
+                    return@ChargePage
+                }
+                if (!moduleOk) {
+                    ChargeBanner("模块未安装", BannerTone.Warn)
+                    return@ChargePage
+                }
+
+                if (!advancedOnly) {
+                    ChargeSection(title = "电量停充") {
+                        ChargeListRow(
+                            title = "停止充电",
+                            value = "${v("power_stop").ifBlank { "--" }} %",
+                            onClick = {
+                                edit = EditField("停止充电电量", "%", true, 1, { v("power_stop") }) {
+                                    setLocal("power_stop", it)
+                                }
+                            },
+                        )
+                        ChargeListRow(
+                            title = "恢复充电",
+                            value = "${v("power_start").ifBlank { "--" }} %",
+                            onClick = {
+                                edit = EditField("恢复充电电量", "%", true, 1, { v("power_start") }) {
+                                    setLocal("power_start", it)
+                                }
+                            },
+                        )
+                        ChargeListRow(
+                            title = "延时停充",
+                            value = "${v("power_stop_time").ifBlank { "--" }} 秒",
+                            onClick = {
+                                edit = EditField("延时停充", "秒", true, 1, { v("power_stop_time") }) {
+                                    setLocal("power_stop_time", it)
+                                }
+                            },
+                        )
+                        ChargeToggleRow("充满再停", v("charge_full") == "1") {
+                            setLocal("charge_full", if (it) "1" else "0")
+                        }
+                        ChargeToggleRow("自动拔插", v("power_reset") == "1") {
+                            setLocal("power_reset", if (it) "1" else "0")
+                        }
+                        ChargeToggleRow("兼容模式", v("Compatibility_mode") == "1") {
+                            setLocal("Compatibility_mode", if (it) "1" else "0")
+                        }
+                    }
+
+                    ChargeSection(title = "温度") {
+                        ChargeToggleRow("温度停充", v("temperature_switch") == "1") {
+                            setLocal("temperature_switch", if (it) "1" else "0")
+                        }
+                        ChargeListRow(
+                            title = "停充温度",
+                            value = "${v("temperature_switch_stop").ifBlank { "--" }} °C",
+                            onClick = {
+                                edit = EditField("停充温度", "°C", true, 1, { v("temperature_switch_stop") }) {
+                                    setLocal("temperature_switch_stop", it)
+                                }
+                            },
+                        )
+                        ChargeListRow(
+                            title = "恢复温度",
+                            value = "${v("temperature_switch_start").ifBlank { "--" }} °C",
+                            onClick = {
+                                edit = EditField("恢复温度", "°C", true, 1, { v("temperature_switch_start") }) {
+                                    setLocal("temperature_switch_start", it)
+                                }
+                            },
+                        )
+                    }
+
+                    ChargeSection(title = "更多") {
+                        ChargeListRow(
+                            title = "进阶策略",
+                            summary = "循环间隔、电流控制、守护与通知",
+                            onClick = { onOpenAdvanced?.invoke() },
+                        )
+                    }
+                } else {
+                    ChargeSection(title = "通知与行为") {
+                        ChargeToggleRow("充电事件通知", v("notify_charge_event") == "1") {
+                            setLocal("notify_charge_event", if (it) "1" else "0")
+                        }
+                        ChargeToggleRow("常显功耗通知", v("notify_power_status") == "1") {
+                            setLocal("notify_power_status", if (it) "1" else "0")
+                        }
+                        ChargeListRow(
+                            title = "通知种类",
+                            value = v("notify_charge_kinds").ifBlank { "默认" },
+                            onClick = {
+                                edit = EditField("通知种类", "", false, null, { v("notify_charge_kinds") }) {
+                                    setLocal("notify_charge_kinds", it)
+                                }
+                            },
+                        )
+                        ChargeToggleRow("按 App 停充", v("app_stop") == "1") {
+                            setLocal("app_stop", if (it) "1" else "0")
+                        }
+                        ChargeListRow(
+                            title = "App 停充列表",
+                            summary = v("app_stop_list").ifBlank { "空" },
+                            onClick = {
+                                edit = EditField("App 停充列表", "", false, null, { v("app_stop_list") }) {
+                                    setLocal("app_stop_list", it)
+                                }
+                            },
+                        )
+                    }
+
+                    ChargeSection(title = "循环与省电") {
+                        ChargeToggleRow("省电模式", v("power_saver") == "1") {
+                            setLocal("power_saver", if (it) "1" else "0")
+                        }
+                        listOf(
+                            Triple("近阈值间隔", "loop_interval_sec", "秒"),
+                            Triple("维持间隔", "loop_interval_maintain_sec", "秒"),
+                            Triple("未插电间隔", "loop_interval_idle_sec", "秒"),
+                            Triple("未插电(守护)", "loop_interval_idle_native_sec", "秒"),
+                            Triple("插电远阈值", "loop_interval_plugged_sec", "秒"),
+                            Triple("插电远阈值(守护)", "loop_interval_plugged_native_sec", "秒"),
+                            Triple("近窗口", "loop_interval_near_window", "%"),
+                        ).forEach { (title, key, unit) ->
+                            ChargeListRow(
+                                title = title,
+                                value = "${v(key).ifBlank { "--" }} $unit",
+                                onClick = {
+                                    edit = EditField(title, unit, true, 1, { v(key) }) { setLocal(key, it) }
+                                },
+                            )
+                        }
+                        ChargeToggleRow("充放电历史", v("history_enable") == "1") {
+                            setLocal("history_enable", if (it) "1" else "0")
+                        }
+                    }
+
+                    ChargeSection(title = "电流控制") {
+                        ChargeToggleRow("启用电流控制", current.current_control == 1) {
+                            current = current.copy(current_control = if (it) 1 else 0)
+                        }
+                        ChargeToggleRow("旁路充电", current.bypass_enable == 1) {
+                            current = current.copy(bypass_enable = if (it) 1 else 0)
+                        }
+                        ChargeToggleRow("温度限流", current.temperature_current == 1) {
+                            current = current.copy(temperature_current = if (it) 1 else 0)
+                        }
+                        ChargeListRow(
+                            title = "安全温度上限",
+                            value = "${current.safety_temp_max} °C",
+                            onClick = {
+                                edit = EditField("安全温度上限", "°C", true, 1, {
+                                    current.safety_temp_max.toString()
+                                }) {
+                                    current = current.copy(
+                                        safety_temp_max = it.toIntOrNull() ?: current.safety_temp_max,
+                                    )
+                                }
+                            },
+                        )
+                        ChargeListRow(
+                            title = "默认限流",
+                            value = String.format("%.1f A", current.default_current_max_limit / 1_000_000.0),
+                            summary = "进阶原始值 ${current.default_current_max_limit} µA",
+                            onClick = {
+                                edit = EditField("默认限流 (µA)", "µA", true, 100_000, {
+                                    current.default_current_max_limit.toString()
+                                }) {
+                                    current = current.copy(
+                                        default_current_max_limit = it.toLongOrNull()
+                                            ?: current.default_current_max_limit,
+                                    )
+                                }
+                            },
+                        )
+                    }
+
+                    ChargeSection(title = "事件唤醒守护") {
+                        ChargeToggleRow("启用守护", v("native_daemon") == "1") {
+                            setLocal("native_daemon", if (it) "1" else "0")
+                        }
+                        ChargeListRow(
+                            title = "实现偏好",
+                            value = v("native_impl").ifBlank { "rust" },
+                            onClick = {
+                                edit = EditField("实现偏好 (rust/c/off)", "", false, null, { v("native_impl") }) {
+                                    setLocal("native_impl", it)
+                                }
+                            },
+                        )
+                        ChargeListRow(title = "守护状态", summary = daemonStatus.ifBlank { "未知" })
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                        ) {
+                            ChargeSecondaryButton("检查守护更新") {
+                                scope.launch {
+                                    val msg = container.daemonRepository.check()
+                                    daemonStatus = container.daemonRepository.status()
+                                    snackbar.showSnackbar(msg)
+                                }
+                            }
+                            ChargeSecondaryButton("下载并安装守护") {
+                                scope.launch {
+                                    val msg = container.daemonRepository.install(v("native_impl").ifBlank { "rust" })
+                                    daemonStatus = container.daemonRepository.status()
+                                    snackbar.showSnackbar(msg)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
-        if (!ready) {
-            Text(text = "加载中…", color = SaltTheme.colors.subText)
-            return@AppPage
-        }
-        if (!rootOk) {
-            VoltBanner("需要 Root 才能修改配置")
-            return@AppPage
-        }
-        if (!moduleOk) {
-            VoltBanner("模块未安装")
-            return@AppPage
-        }
-
-        ItemOuterTitle(text = "电量停充")
-        RoundedColumn {
-            ValueItem("停止充电电量", "${v("power_stop").ifBlank { "--" }}%") {
-                openConf("power_stop", "停止充电电量 (%)")
-            }
-            ValueItem("恢复充电电量", "${v("power_start").ifBlank { "--" }}%") {
-                openConf("power_start", "恢复充电电量 (%)")
-            }
-            ValueItem("延时停充", "${v("power_stop_time").ifBlank { "--" }} 秒") {
-                openConf("power_stop_time", "延时停充 (秒)")
-            }
-            ItemSwitcher(
-                state = v("charge_full") == "1",
-                onChange = { setLocal("charge_full", if (it) "1" else "0") },
-                text = "充满再停",
-            )
-            ItemSwitcher(
-                state = v("power_reset") == "1",
-                onChange = { setLocal("power_reset", if (it) "1" else "0") },
-                text = "自动拔插",
-            )
-            ItemSwitcher(
-                state = v("Compatibility_mode") == "1",
-                onChange = { setLocal("Compatibility_mode", if (it) "1" else "0") },
-                text = "兼容模式",
-            )
-        }
-
-        ItemOuterTitle(text = "温度")
-        RoundedColumn {
-            ItemSwitcher(
-                state = v("temperature_switch") == "1",
-                onChange = { setLocal("temperature_switch", if (it) "1" else "0") },
-                text = "温度停充",
-            )
-            ValueItem("停充温度", "${v("temperature_switch_stop").ifBlank { "--" }}°C") {
-                openConf("temperature_switch_stop", "停充温度 (°C)")
-            }
-            ValueItem("恢复温度", "${v("temperature_switch_start").ifBlank { "--" }}°C") {
-                openConf("temperature_switch_start", "恢复温度 (°C)")
-            }
-        }
-
-        ItemOuterTitle(text = "通知与行为")
-        RoundedColumn {
-            ItemSwitcher(
-                state = v("notify_charge_event") == "1",
-                onChange = { setLocal("notify_charge_event", if (it) "1" else "0") },
-                text = "充电事件通知",
-            )
-            ItemSwitcher(
-                state = v("notify_power_status") == "1",
-                onChange = { setLocal("notify_power_status", if (it) "1" else "0") },
-                text = "常显功耗通知",
-            )
-            ValueItem("通知种类", v("notify_charge_kinds").ifBlank { "未设置" }) {
-                openConf("notify_charge_kinds", "通知种类", numeric = false)
-            }
-            ValueItem("停充持锁", v("stop_hold_wakelock").ifBlank { "未设置" }) {
-                openConf("stop_hold_wakelock", "停充持锁", numeric = false)
-            }
-            ItemSwitcher(
-                state = v("app_stop") == "1",
-                onChange = { setLocal("app_stop", if (it) "1" else "0") },
-                text = "按 App 停充",
-            )
-            ValueItem("App 停充列表", v("app_stop_list").ifBlank { "空" }) {
-                openConf("app_stop_list", "App 停充列表", numeric = false)
-            }
-        }
-
-        ItemOuterTitle(text = "循环与省电")
-        RoundedColumn {
-            ItemSwitcher(
-                state = v("power_saver") == "1",
-                onChange = { setLocal("power_saver", if (it) "1" else "0") },
-                text = "省电模式",
-            )
-            ValueItem("近阈值间隔", "${v("loop_interval_sec").ifBlank { "--" }} 秒") {
-                openConf("loop_interval_sec", "近阈值间隔 (秒)")
-            }
-            ValueItem("维持间隔", "${v("loop_interval_maintain_sec").ifBlank { "--" }} 秒") {
-                openConf("loop_interval_maintain_sec", "维持间隔 (秒)")
-            }
-            ValueItem("未插电间隔", v("loop_interval_idle_sec").ifBlank { "--" }) {
-                openConf("loop_interval_idle_sec", "未插电间隔")
-            }
-            ValueItem("未插电(守护)", v("loop_interval_idle_native_sec").ifBlank { "--" }) {
-                openConf("loop_interval_idle_native_sec", "未插电间隔(守护)")
-            }
-            ValueItem("插电远阈值", v("loop_interval_plugged_sec").ifBlank { "--" }) {
-                openConf("loop_interval_plugged_sec", "插电远阈值")
-            }
-            ValueItem("插电远阈值(守护)", v("loop_interval_plugged_native_sec").ifBlank { "--" }) {
-                openConf("loop_interval_plugged_native_sec", "插电远阈值(守护)")
-            }
-            ValueItem("近窗口", "${v("loop_interval_near_window").ifBlank { "--" }}%") {
-                openConf("loop_interval_near_window", "近窗口 (%)")
-            }
-            ValueItem("无线策略", v("wireless_policy").ifBlank { "未设置" }) {
-                openConf("wireless_policy", "无线策略", numeric = false)
-            }
-            ItemSwitcher(
-                state = v("history_enable") == "1",
-                onChange = { setLocal("history_enable", if (it) "1" else "0") },
-                text = "充放电历史",
-            )
-            ItemSwitcher(
-                state = v("chart_show") == "1",
-                onChange = { setLocal("chart_show", if (it) "1" else "0") },
-                text = "主页曲线",
-            )
-        }
-
-        ItemOuterTitle(text = "电流控制")
-        RoundedColumn {
-            ItemSwitcher(
-                state = current.current_control == 1,
-                onChange = { current = current.copy(current_control = if (it) 1 else 0) },
-                text = "启用电流控制",
-            )
-            ItemSwitcher(
-                state = current.bypass_enable == 1,
-                onChange = { current = current.copy(bypass_enable = if (it) 1 else 0) },
-                text = "旁路充电",
-            )
-            ItemSwitcher(
-                state = current.temperature_current == 1,
-                onChange = { current = current.copy(temperature_current = if (it) 1 else 0) },
-                text = "温度限流",
-            )
-            ItemSwitcher(
-                state = current.app_limit == 1,
-                onChange = { current = current.copy(app_limit = if (it) 1 else 0) },
-                text = "按 App 限流",
-            )
-            ValueItem("安全温度上限", current.safety_temp_max.toString()) {
-                draft = current.safety_temp_max.toString()
-                edit = EditTarget.CurrentInt(
-                    title = "安全温度上限",
-                    getter = { it.safety_temp_max.toString() },
-                    setter = { c, s -> c.copy(safety_temp_max = s.toIntOrNull() ?: c.safety_temp_max) },
+        if (!advancedOnly && ready && rootOk && moduleOk) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .navigationBarsPadding()
+                    .padding(bottom = 12.dp),
+            ) {
+                ChargePrimaryButton(
+                    text = "保存",
+                    onClick = {
+                        scope.launch {
+                            val okConf = container.configRepository.setConfValues(conf)
+                            val okCur = container.configRepository.saveCurrent(current)
+                            snackbar.showSnackbar(
+                                if (okConf && okCur) "已保存，下一轮循环生效" else "保存失败",
+                            )
+                        }
+                    },
                 )
             }
-            ValueItem("默认限流 (uA)", current.default_current_max_limit.toString()) {
-                draft = current.default_current_max_limit.toString()
-                edit = EditTarget.CurrentLong(
-                    title = "默认限流 (uA)",
-                    getter = { it.default_current_max_limit.toString() },
-                    setter = { c, s ->
-                        c.copy(default_current_max_limit = s.toLongOrNull() ?: c.default_current_max_limit)
+        } else if (advancedOnly && ready && rootOk && moduleOk) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .navigationBarsPadding()
+                    .padding(bottom = 12.dp),
+            ) {
+                ChargePrimaryButton(
+                    text = "保存进阶项",
+                    onClick = {
+                        scope.launch {
+                            val okConf = container.configRepository.setConfValues(conf)
+                            val okCur = container.configRepository.saveCurrent(current)
+                            snackbar.showSnackbar(
+                                if (okConf && okCur) "已保存" else "保存失败",
+                            )
+                        }
                     },
                 )
             }
         }
-
-        ItemOuterTitle(text = "事件唤醒守护")
-        RoundedColumn {
-            ItemSwitcher(
-                state = v("native_daemon") == "1",
-                onChange = { setLocal("native_daemon", if (it) "1" else "0") },
-                text = "启用守护",
-            )
-            ValueItem("实现偏好", v("native_impl").ifBlank { "rust" }) {
-                openConf("native_impl", "实现偏好 (rust/c/off)", numeric = false)
-            }
-            ValueItem("守护状态", daemonStatus.ifBlank { "状态未知" }, clickable = false)
-        }
-
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            AppSecondaryButton(
-                text = "检查守护更新",
-                onClick = {
-                    scope.launch {
-                        message = container.daemonRepository.check()
-                        daemonStatus = container.daemonRepository.status()
-                    }
-                },
-            )
-            AppSecondaryButton(
-                text = "下载并安装守护",
-                onClick = {
-                    scope.launch {
-                        message = container.daemonRepository.install(v("native_impl").ifBlank { "rust" })
-                        daemonStatus = container.daemonRepository.status()
-                    }
-                },
-            )
-            AppSecondaryButton(
-                text = "移除守护",
-                onClick = {
-                    scope.launch {
-                        message = container.daemonRepository.remove()
-                        daemonStatus = container.daemonRepository.status()
-                    }
-                },
-            )
-            AppPrimaryButton(
-                text = "保存全部",
-                onClick = {
-                    scope.launch {
-                        val okConf = container.configRepository.setConfValues(conf)
-                        val okCur = container.configRepository.saveCurrent(current)
-                        message = if (okConf && okCur) "已保存（下一轮循环生效）" else "保存失败"
-                    }
-                },
-            )
-        }
     }
 
-    val target = edit
-    if (target != null) {
-        InputDialog(
-            onDismissRequest = { edit = null },
+    val field = edit
+    if (field != null) {
+        ChargeEditSheet(
+            title = field.title,
+            value = field.get(),
+            unit = field.unit,
+            numeric = field.numeric,
+            step = field.step,
+            onDismiss = { edit = null },
             onConfirm = {
-                when (val t = target) {
-                    is EditTarget.Conf -> setLocal(t.key, draft.trim())
-                    is EditTarget.CurrentInt -> current = t.setter(current, draft.trim())
-                    is EditTarget.CurrentLong -> current = t.setter(current, draft.trim())
-                }
+                field.set(it)
                 edit = null
             },
-            title = when (target) {
-                is EditTarget.Conf -> target.title
-                is EditTarget.CurrentInt -> target.title
-                is EditTarget.CurrentLong -> target.title
-            },
-            text = draft,
-            onChange = { draft = it },
-            hint = "输入新值",
         )
     }
-}
-
-@OptIn(UnstableSaltUiApi::class)
-@Composable
-private fun ValueItem(
-    title: String,
-    value: String,
-    clickable: Boolean = true,
-    onClick: () -> Unit = {},
-) {
-    Item(
-        onClick = onClick,
-        text = title,
-        tag = value,
-        arrowType = if (clickable) ItemArrowType.Arrow else ItemArrowType.None,
-        enabled = clickable,
-    )
 }
