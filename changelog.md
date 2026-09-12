@@ -1,4 +1,4 @@
-# 更新日志
+﻿# 更新日志
 
 ## Unreleased
 
@@ -16,7 +16,7 @@
 - **新增** `bin/qsc.sh` CLI（status / on|off|toggle / config / log / events / diagnose / test-switch / detect / daemon 等）；C 包装安装到 `/data/adb/qsc/bin/qsc`（不挂载 `system/bin`）
 - **新增** 充电事件日志 `data/charge_events.log` 与 `learn_stats.sh`；可选常显功耗通知 `notify_power_status`（默认关）
 - **新增** 设备档案库：`device.profile` 压缩归档 / 一键还原；WebUI 可复用；扩展旁路节点列表，并移除危险旁路自动探测
-- **插电判定**：简介与供电标记不再单信 `status=Charging` 或 dumpsys `powered`（一加等假充电）；也不再把无端口证据的孤立 `Not charging` 当成已插电（小米 17 / K90U 等未插电却显示充电中）；弱 `present` 需结合 VBUS / 放电电流
+- **插电判定**：简介与供电标记不再单信 `status=Charging` 或 dumpsys `powered`（一加等假充电）；也不再把无端口证据的孤立 `Not charging` 当成已插电（小米 17 / K90U 等未插电却显示充电中）；MCA 无 `online` 时仍认 `present` / VBUS，明显放电时忽略粘住的 `present`
 - **待机省电**：修复事件等待时父 shell 每秒轮询抵消 qscd；服务心跳写盘改为约 **180s**；未插电 idle / native 默认拉长；简介 worker 未就绪短重试、未插电拉长周期；同 tick 缓存插电判定；`qscd` 失败时可武装 XP，回退 sleep 可被 `qsc_xp_wake` 打断
 - **保留更新**：音量上只迁移停充阈值/温控/通知/开关/时段等核心项；`power_saver` 与 `loop_interval_*` 一律用新版默认，避免旧间隔盖掉省电优化
 - **热更新**：接管校验改为确认 service PID、主循环与心跳即可，不再强依赖简介 worker 的 `last_refresh` 窗口（修复近期「热更新未完成 / 接管检验失败」）
@@ -27,7 +27,7 @@
 - 充放电曲线：等距降采样、单调 Hermite、范围切换、增量刷新与健康趋势；打开时刷新间隔改为 **60s**；修复强制刷新仍走旧缓存的问题
 - 日志页拆成运行日志 / 充电事件 Tab；常显功耗开关入口；我的页接入档案库与配置档增强，守护卡片与安装流程对齐
 
-### 工程
+### 构建与发版
 
 - APP 独立更新清单 `app-update.json`；发版工作流可分项勾选模块 zip / 守护 / APK
 - CI：停充用例适配 MCA「供电中」简介文案；统一 `checkout@v5` / `setup-node@v5`；抽取 `setup-android`；Vitest 迁至 `webui/test/unit`

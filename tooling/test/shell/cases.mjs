@@ -80,14 +80,16 @@ export const cases = [
   },
 
   {
-    // K90U 的 online 节点可能在 MCA 接管后为 0；仅修 charge_eval 不够，
-    // 省电快路径也必须先把 Not charging 识别为仍插线，不能跳过整轮。
+    // K90U：MCA 接管后 online 常为 0，靠 present / VBUS 识别仍插线；
+    // 不能再单信孤立的 Not charging（未插电待机也会报，会造成假插电）。
     name: "MCA status=Not charging 且无 online → 仍应执行停充",
     sysfs: {
       "battery/capacity": "85",
       "battery/status": "Not charging",
       "battery/temp": COOL,
       "battery/current_now": "0",
+      "usb/present": "1",
+      "usb/voltage_now": "5000000",
     },
     config: { ...FAST, power_stop: "80", power_start: "75", temperature_switch: "0" },
     node: { initial: "0", stop: "1", start: "0" },

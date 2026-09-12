@@ -242,8 +242,8 @@ qsc_ps_plugged_scan() {
 			return 0
 		fi
 	done
-	# K90U / MCA 停充时 online 可能被驱动压成 0，不能因此跳过整轮。
-	# 但部分机型未插电时 present 也会粘在 1：无 VBUS 且 status 非充电中时不单独采信。
+	# K90U / MCA 停充时 online 常被压成 0，但仍靠 present 识别插线。
+	# 未插电却粘住 present=1 时，若伴随明显放电则忽略。
 	for p in "$PSDIR/usb/present" "$PSDIR/qc_usb/present" \
 		"$PSDIR/wireless/present" "$PSDIR/ac/present"; do
 		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
@@ -251,34 +251,8 @@ qsc_ps_plugged_scan() {
 				qsc_ps_dbg ps_present debug "忽略 ${p##*/}=1：伴随明显放电"
 				continue
 			fi
-			_st=""
-			qsc_ps_read "$PSDIR/battery/status" && _st="$QSC_PS_VAL"
-			case "$_st" in
-				Charging|Full|charging|full)
-					qsc_ps_dbg ps_present debug "判定已插电：${p##*/}=1 + status=$_st"
-					return 0
-					;;
-				Discharging|discharging|"Not charging"|Notcharging|not_charging)
-					_vbus=""
-					qsc_ps_read "$PSDIR/usb/voltage_now" && _vbus="$QSC_PS_VAL"
-					case "$_vbus" in
-						""|*[!0-9]*) ;;
-						*)
-							if [ "$_vbus" -gt 3000000 ] 2>/dev/null || \
-								{ [ "$_vbus" -gt 3000 ] 2>/dev/null && [ "$_vbus" -lt 100000 ] 2>/dev/null; }; then
-								qsc_ps_dbg ps_present debug "判定已插电：${p##*/}=1 + VBUS=$_vbus"
-								return 0
-							fi
-							;;
-					esac
-					qsc_ps_dbg ps_present debug "忽略孤立 ${p##*/}=1（status=$_st 且无有效 VBUS）"
-					continue
-					;;
-				*)
-					qsc_ps_dbg ps_present debug "判定已插电：${p##*/}=1（online 可能为 0）"
-					return 0
-					;;
-			esac
+			qsc_ps_dbg ps_present debug "判定已插电：${p##*/}=1（online 可能为 0）"
+			return 0
 		fi
 	done
 	for p in "$PSDIR/usb/real_type" "$PSDIR/usb/type"; do
