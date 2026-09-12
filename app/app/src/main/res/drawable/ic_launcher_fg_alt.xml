@@ -4,32 +4,25 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Outer ring (donut) — alt identity from original circle motif -->
+    <!--
+      Alt: charging ring + bolt — same brand family, darker stage (#063D2C).
+      Distinct from primary's horizontal cell at a glance.
+    -->
+    <!-- Track ring (full) -->
     <path
-        android:fillColor="#2AD4A0"
+        android:fillColor="#3A8F72"
         android:fillType="evenOdd"
-        android:pathData="M54,54m-31,0a31,31 0 1,1 62,0a31,31 0 1,1 -62,0 M54,54m-26.5,0a26.5,26.5 0 1,1 53,0a26.5,26.5 0 1,1 -53,0" />
-    <!-- Progress accent wedge hint -->
+        android:pathData="M54,54m-30,0a30,30 0 1,1 60,0a30,30 0 1,1 -60,0 M54,54m-24.5,0a24.5,24.5 0 1,1 49,0a24.5,24.5 0 1,1 -49,0" />
+    <!-- Active arc (mint) — top-right quarter as thick wedge -->
     <path
-        android:fillColor="#9AF5D0"
-        android:pathData="M54,23 A31,31 0 0,1 82.5,40 L76.8,43.8 A26.5,26.5 0 0,0 54,27.5z" />
-    <!-- Inner disc -->
+        android:fillColor="#5EF0B8"
+        android:pathData="M54,24 A30,30 0 0,1 84,54 L78.5,54 A24.5,24.5 0 0,0 54,29.5z" />
+    <!-- Soft inner stage -->
     <path
-        android:fillColor="#145C45"
-        android:pathData="M54,54 m-22,0 a22,22 0 1,1 44,0 a22,22 0 1,1 -44,0" />
-    <!-- Battery body -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M44,41h20c1.8,0 3,1.2 3,3v22c0,1.8 -1.2,3 -3,3H44c-1.8,0 -3,-1.2 -3,-3V44c0,-1.8 1.2,-3 3,-3z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M50.5,35.5h7c0.9,0 1.5,0.6 1.5,1.5V39H49v-2c0,-0.9 0.6,-1.5 1.5,-1.5z" />
-    <!-- Nucleus circle (original alt) -->
-    <path
-        android:fillColor="#12B886"
-        android:pathData="M54,53 m-7.2,0 a7.2,7.2 0 1,1 14.4,0 a7.2,7.2 0 1,1 -14.4,0" />
+        android:fillColor="#0A2E22"
+        android:pathData="M54,54 m-20,0 a20,20 0 1,1 40,0 a20,20 0 1,1 -40,0" />
     <!-- Bolt -->
     <path
-        android:fillColor="#063D2C"
-        android:pathData="M56.6,47.2 L51.4,56.8h3.6l-1,8.6 7.8,-10.6h-3.6z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M58.5,40 L47.5,55.5h7L52.2,70 66.5,51.5h-7.2z" />
 </vector>

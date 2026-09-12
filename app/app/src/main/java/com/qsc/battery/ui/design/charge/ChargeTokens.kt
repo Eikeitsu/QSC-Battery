@@ -41,7 +41,7 @@ data class ChargeTypography(
 data class ChargeDimens(
     val pageHorizontal: Dp = 20.dp,
     val sectionGap: Dp = 20.dp,
-    val topBarContentGap: Dp = 8.dp,
+    val topBarContentGap: Dp = 4.dp,
     val radiusLg: Dp = 22.dp,
     val radiusMd: Dp = 16.dp,
     val primaryButton: Dp = 52.dp,

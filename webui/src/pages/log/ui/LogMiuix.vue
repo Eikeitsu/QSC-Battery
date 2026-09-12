@@ -229,6 +229,8 @@ const store = useAppStore();
   &.session {
     background: transparent;
     box-shadow: none;
+    padding-left: 0;
+    padding-right: 0;
   }
 }
 

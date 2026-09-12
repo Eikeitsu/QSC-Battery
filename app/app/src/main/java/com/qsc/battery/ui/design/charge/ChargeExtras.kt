@@ -39,7 +39,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -59,71 +58,47 @@ fun ChargeTopBar(
     subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    val bg = ChargeTheme.colors.background
-    Column(
+    // 用内边距呼吸，不用分割线/渐变白条——避免「线下一截白」
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(bg.copy(alpha = 0.98f))
-            .windowInsetsPadding(WindowInsets.statusBars),
+            .background(ChargeTheme.colors.background)
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
+            .padding(top = 12.dp, bottom = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                .padding(top = 10.dp, bottom = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (onBack != null) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = "返回",
-                    tint = ChargeTheme.colors.ink,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .clickable(onClick = onBack)
-                        .padding(8.dp),
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = ChargeTheme.typography.title,
-                    color = ChargeTheme.colors.ink,
-                )
-                if (!subtitle.isNullOrBlank()) {
-                    Text(
-                        text = subtitle,
-                        style = ChargeTheme.typography.caption,
-                        color = ChargeTheme.colors.muted,
-                    )
-                }
-            }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                content = actions,
+        if (onBack != null) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                contentDescription = "返回",
+                tint = ChargeTheme.colors.ink,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onBack)
+                    .padding(8.dp),
             )
         }
-        // Hairline + soft fade so sticky bar doesn't collide with content
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(ChargeTheme.colors.stroke),
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(ChargeTheme.dimens.topBarContentGap)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            bg.copy(alpha = 0.55f),
-                            bg.copy(alpha = 0f),
-                        ),
-                    ),
-                ),
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = ChargeTheme.typography.title,
+                color = ChargeTheme.colors.ink,
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = ChargeTheme.typography.caption,
+                    color = ChargeTheme.colors.muted,
+                )
+            }
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = actions,
         )
     }
 }
