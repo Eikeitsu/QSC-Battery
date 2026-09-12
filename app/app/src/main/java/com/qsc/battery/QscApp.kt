@@ -2,6 +2,7 @@ package com.qsc.battery
 
 import android.app.Application
 import com.qsc.battery.data.AppContainer
+import com.qsc.battery.icon.LauncherIconController
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +25,11 @@ class QscApp : Application() {
         )
         container = AppContainer(this)
         appScope.launch {
-            container.settingsRepository.syncLauncherIcon(force = true)
+            runCatching {
+                container.settingsRepository.syncLauncherIcon(force = true)
+            }.onFailure {
+                LauncherIconController.restoreDefaultLauncher(this@QscApp)
+            }
         }
     }
 }

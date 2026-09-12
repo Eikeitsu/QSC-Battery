@@ -25,8 +25,8 @@ npm run package:app -- --skip-build   # 只刷新 app-update.json
 
 | 目标 | URL |
 | ---- | --- |
-| 模块 | https://eikeitsu.github.io/QSC-Battery/update.json |
-| 守护 | https://eikeitsu.github.io/QSC-Battery/qscd/manifest.json |
-| APP | https://eikeitsu.github.io/QSC-Battery/app-update.json |
+| 模块 | <https://eikeitsu.github.io/QSC-Battery/update.json> |
+| 守护 | <https://eikeitsu.github.io/QSC-Battery/qscd/manifest.json> |
+| APP | <https://eikeitsu.github.io/QSC-Battery/app-update.json> |
 
 单独发 APK/守护不会改模块 `update.json`。

@@ -58,7 +58,7 @@ export const DEFAULTS: Settings = {
   history_interval_sec: "60",
   power_saver: BinaryFlag.On,
   loop_interval_idle_sec: "90",
-  loop_interval_idle_native_sec: "300",
+  loop_interval_idle_native_sec: "600",
   loop_interval_plugged_sec: "15",
   loop_interval_plugged_native_sec: "90",
   loop_interval_near_window: "3",

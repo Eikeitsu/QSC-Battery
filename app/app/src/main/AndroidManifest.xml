@@ -16,14 +16,15 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.QscBattery">
 
-        <!-- 本体始终启用；桌面图标只在 alias 间切换，避免禁用 target 导致切换失效 -->
+        <!-- 本体始终启用（无 LAUNCHER）；桌面入口只走 alias，避免禁用 Activity 后无法打开 -->
         <activity
             android:name=".MainActivity"
+            android:enabled="true"
             android:exported="true"
             android:theme="@style/Theme.QscBattery"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- 静态默认（动态电量关闭时） -->
+        <!-- 静态默认（动态电量关闭时）；清单默认启用，保证首次安装就有图标 -->
         <activity-alias
             android:name=".MainActivityDefault"
             android:enabled="true"

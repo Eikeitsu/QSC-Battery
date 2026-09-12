@@ -67,7 +67,7 @@ object ConfigKeys {
         "history_interval_sec" to "60",
         "power_saver" to "1",
         "loop_interval_idle_sec" to "90",
-        "loop_interval_idle_native_sec" to "300",
+        "loop_interval_idle_native_sec" to "600",
         "loop_interval_plugged_sec" to "15",
         "loop_interval_plugged_native_sec" to "90",
         "loop_interval_near_window" to "3",

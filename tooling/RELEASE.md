@@ -5,11 +5,11 @@
 
 ## 日志写哪里
 
-| 文件 | 用途 |
-| ---- | ---- |
-| 仓库根目录 `changelog.md` | **唯一手写源**。开发中把条目写在 `## Unreleased` 下 |
-| `docs/guide/changelog.md` | 文档站「更新日志」页（发版工作流同步；开发预览可手动复制） |
-| `docs/public/changelog.md` | Pages / `updateJson` 指向的 changelog（同上） |
+| 文件                       | 用途                                                       |
+| -------------------------- | ---------------------------------------------------------- |
+| 仓库根目录 `changelog.md`  | **唯一手写源**。开发中把条目写在 `## Unreleased` 下        |
+| `docs/guide/changelog.md`  | 文档站「更新日志」页（发版工作流同步；开发预览可手动复制） |
+| `docs/public/changelog.md` | Pages / `updateJson` 指向的 changelog（同上）              |
 
 ### Unreleased 写法
 
@@ -29,12 +29,12 @@ Actions → **Release Module**（或推送 `v*` tag）：
 
 发版对话框可勾选 4 项（默认全选）：
 
-| 勾选 | GitHub Release 资产 | 会改哪条更新通道 |
-| ---- | ------------------- | ---------------- |
-| 模块 zip | 4 个变体 zip | `update.json` + `module.prop`（Magisk / APP「模块更新」） |
-| Rust 守护 | `qscd-rust-arm64` / `qscd-rust-arm` | `qscd/manifest.json`（WebUI 守护卡片） |
-| C 守护 | `qscd-c-arm64` / `qscd-c-arm` | 同上 |
-| 伴侣 APK | `QSC-Battery_v*.apk` | `app-update.json`（APP 自身更新） |
+| 勾选      | GitHub Release 资产                 | 会改哪条更新通道                                          |
+| --------- | ----------------------------------- | --------------------------------------------------------- |
+| 模块 zip  | 4 个变体 zip                        | `update.json` + `module.prop`（Magisk / APP「模块更新」） |
+| Rust 守护 | `qscd-rust-arm64` / `qscd-rust-arm` | `qscd/manifest.json`（WebUI 守护卡片）                    |
+| C 守护    | `qscd-c-arm64` / `qscd-c-arm`       | 同上                                                      |
+| 伴侣 APK  | `QSC-Battery_v*.apk`                | `app-update.json`（APP 自身更新）                         |
 
 ### 单独发版时「模块检测更新」怎么处理
 

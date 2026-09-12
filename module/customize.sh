@@ -144,21 +144,50 @@ qsc_merge_config() {
 		rm -f "$merged"
 		return 1
 	}
-	# 迁移新增标量键（有则覆盖模板默认）
-	for _nk in loop_interval_sec loop_interval_maintain_sec switch_verify_sec \
-		wireless_policy history_enable history_interval_sec app_stop app_stop_list \
-		power_saver loop_interval_idle_sec loop_interval_idle_native_sec \
-		loop_interval_plugged_sec loop_interval_plugged_native_sec \
-		loop_interval_near_window native_daemon native_impl chart_show \
+
+	# —— 保留更新策略 ——
+	# 核心策略：从旧配置迁入（停充阈值、通知、无线、App、历史开关等）
+	# 运行/省电旋钮：一律留新版模板默认，避免旧间隔把本版省电优化盖掉
+	# （power_saver、loop_interval_*、switch_verify_sec 不在此列表）
+	_core_migrated=0
+	for _nk in wireless_policy history_enable history_interval_sec \
+		app_stop app_stop_list native_daemon native_impl chart_show \
 		notify_power_status; do
 		_nv="$(sed -n "s/^${_nk}=//p" "$source" 2>/dev/null | head -n1 | tr -d '\r')"
 		[ -n "$_nv" ] || continue
+		case "$_nk" in
+			wireless_policy)
+				case "$_nv" in same|ignore) ;; *) continue ;; esac
+				;;
+			history_enable|app_stop|native_daemon|chart_show|notify_power_status)
+				case "$_nv" in 0|1) ;; *) continue ;; esac
+				;;
+			history_interval_sec)
+				case "$_nv" in ""|*[!0-9]*) continue ;; esac
+				[ "$_nv" -ge 15 ] 2>/dev/null && [ "$_nv" -le 600 ] 2>/dev/null || continue
+				;;
+			native_impl)
+				case "$_nv" in rust|c|off) ;; *) continue ;; esac
+				;;
+			app_stop_list)
+				# 包名列表：过长或含非法字符则跳过，避免写坏 conf
+				case "$_nv" in *[!A-Za-z0-9._,]* ) continue ;; esac
+				;;
+		esac
 		if grep -q "^${_nk}=" "$merged" 2>/dev/null; then
 			sed -i "s|^${_nk}=.*|${_nk}=${_nv}|" "$merged"
 		else
 			echo "${_nk}=${_nv}" >>"$merged"
 		fi
+		_core_migrated=$((_core_migrated + 1))
 	done
+
+	# 明示：省电相关键保持新版（读模板值仅用于提示）
+	_idle_n="$(sed -n 's/^loop_interval_idle_native_sec=//p' "$merged" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+	_idle="$(sed -n 's/^loop_interval_idle_sec=//p' "$merged" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+	ui_print "- 核心停充/通知等配置已保留；省电间隔已用新版默认（idle=${_idle:-?}s native=${_idle_n:-?}s）"
+	[ "$_core_migrated" -gt 0 ] && ui_print "- 另迁移 ${_core_migrated} 项运行偏好（无线/历史/守护选型等）"
+
 	# 迁移用户自定义供电开关与停充时段（多行）；跳过策略类节点以免闪充
 	sed -i -e '/^power_switch=/d' -e '/^power_stop_schedule=/d' -e '/^notify_quiet_schedule=/d' "$merged" 2>/dev/null
 	if grep -q '^power_switch=' "$source" 2>/dev/null; then
@@ -229,14 +258,15 @@ fi
 if [ -f "$CONFIG_BACKUP" ]; then
 	ui_print "--------------------------------"
 	ui_print " 检测到已安装的 QSC-Battery"
-	ui_print " 音量上：保留原有配置"
-	ui_print " 音量下：使用新版默认配置"
-	ui_print " 20 秒未选择时自动保留原有配置"
+	ui_print " 音量上：保留核心配置（停充阈值/开关/时段等）"
+	ui_print "         省电间隔等运行参数用新版默认"
+	ui_print " 音量下：全部使用新版默认配置"
+	ui_print " 20 秒未选择时按「保留核心配置」处理"
 	qsc_volume_choice
 	case "$?" in
-		0) KEEP_CONFIG=1; ui_print "- 将保留原有配置" ;;
+		0) KEEP_CONFIG=1; ui_print "- 将保留核心配置，并应用新版省电默认" ;;
 		1) ui_print "- 将使用新版默认配置" ;;
-		*) KEEP_CONFIG=1; ui_print "- 选择超时，按安全默认保留原有配置" ;;
+		*) KEEP_CONFIG=1; ui_print "- 选择超时，按安全默认保留核心配置" ;;
 	esac
 fi
 
@@ -343,7 +373,7 @@ cp "$MODPATH/module.prop" "$MODPATH/t_module"
 mkdir -p "$MODPATH/bin" "$MODPATH/config" "$MODPATH/data" "$MODPATH/webroot"
 if [ "$KEEP_CONFIG" = "1" ]; then
 	qsc_merge_config "$CONFIG_BACKUP" "$MODPATH/config/config.conf" || qsc_abort "安全迁移原有配置失败，已取消更新"
-	ui_print "- 原有有效配置已安全迁移到新版模板"
+	ui_print "- 配置迁移完成（核心保留 + 新版省电默认）"
 fi
 rm -f "$CONFIG_BACKUP"
 if [ "$INSTALL_WEBUI" != "1" ]; then

@@ -47,7 +47,7 @@ qsc_start_heartbeat_loop() {
 			now="$(date +%s 2>/dev/null)"
 			case "$now" in ""|*[!0-9]*) now=0 ;; esac
 			printf "%s\n" "$now" >"$file" 2>/dev/null
-			sleep 60
+			sleep 180
 		done
 	'
 	if command -v setsid >/dev/null 2>&1; then

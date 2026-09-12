@@ -139,10 +139,11 @@ qsc_ps_load_conf() {
 	done <"$CONF"
 
 	QSC_PS_ENABLE="$(qsc_clamp_int "$QSC_PS_ENABLE" 0 1 1)"
-	QSC_PS_IDLE="$(qsc_clamp_int "$QSC_PS_IDLE" 3 300 30)"
-	QSC_PS_IDLE_NATIVE="$(qsc_clamp_int "$QSC_PS_IDLE_NATIVE" 0 300 120)"
-	QSC_PS_PLUGGED="$(qsc_clamp_int "$QSC_PS_PLUGGED" 2 120 10)"
-	QSC_PS_PLUGGED_NATIVE="$(qsc_clamp_int "$QSC_PS_PLUGGED_NATIVE" 0 300 60)"
+	QSC_PS_IDLE="$(qsc_clamp_int "$QSC_PS_IDLE" 3 300 90)"
+	# uevent 可靠时允许更长兜底；默认 600，上限 900
+	QSC_PS_IDLE_NATIVE="$(qsc_clamp_int "$QSC_PS_IDLE_NATIVE" 0 900 600)"
+	QSC_PS_PLUGGED="$(qsc_clamp_int "$QSC_PS_PLUGGED" 2 120 15)"
+	QSC_PS_PLUGGED_NATIVE="$(qsc_clamp_int "$QSC_PS_PLUGGED_NATIVE" 0 300 90)"
 	# 停充阈值只做形状校验：>100 是「关闭电量停充」的既有约定，原样传给 watch
 	QSC_PS_STOP="$(qsc_clamp_int "$QSC_PS_STOP" 1 255 101)"
 	QSC_PS_TEMP_ON="$(qsc_clamp_int "$QSC_PS_TEMP_ON" 0 1 1)"
@@ -175,6 +176,23 @@ qsc_ps_now() {
 
 # 插电判定：只读 power_supply 节点，无 fork
 qsc_ps_plugged() {
+	local now="${QSC_PS_NOW:-0}"
+	if [ "$now" -gt 0 ] 2>/dev/null &&
+		[ "$now" = "${QSC_PS_PLUG_CACHE_AT:-}" ]; then
+		[ "${QSC_PS_PLUG_CACHE_VAL:-0}" = "1" ]
+		return $?
+	fi
+	if qsc_ps_plugged_scan; then
+		QSC_PS_PLUG_CACHE_VAL=1
+		QSC_PS_PLUG_CACHE_AT="$now"
+		return 0
+	fi
+	QSC_PS_PLUG_CACHE_VAL=0
+	QSC_PS_PLUG_CACHE_AT="$now"
+	return 1
+}
+
+qsc_ps_plugged_scan() {
 	local p v
 	for p in "$PSDIR/usb/online" \
 		"$PSDIR/qc_usb/online" \
@@ -264,8 +282,8 @@ qsc_ps_plugged() {
 
 # 未插电且无停充维持时可跳过整轮；仍按 QSC_PS_FULL_MAX_GAP 定期跑满轮，
 # 保证曲线采样、简介刷新、配置纠正不会长期停摆。
-# 日用待机优先：默认 15 分钟才强制满轮（有 qscd 插拔仍即时唤醒）。
-QSC_PS_FULL_MAX_GAP=900
+# 日用待机优先：默认 30 分钟才强制满轮（有 qscd 插拔仍即时唤醒）。
+QSC_PS_FULL_MAX_GAP=1800
 
 qsc_ps_can_skip_round() {
 	local now last
@@ -292,8 +310,8 @@ QSC_PS_DESC_SIG=""
 QSC_PS_DESC_TS=0
 # 简介是用户可见的运行状态，最长允许按省电策略等待；真正没有变化时
 # qsc_ps_refresh_desc 仍会被指纹短路，不会产生重复 module.prop 写入。
-# 未插电待机：2 分钟内同一指纹不写盘（原先 30s 过密）。
-QSC_PS_DESC_MIN_GAP=120
+# 未插电待机：5 分钟内同一指纹不写盘（主循环与 worker 都会走这里）。
+QSC_PS_DESC_MIN_GAP=300
 
 # 参数: 当前单调秒（service.sh 已经读过 /proc/uptime，不再重复读）
 qsc_ps_refresh_desc() {

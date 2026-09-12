@@ -42,5 +42,5 @@ data class ThemeSettings(
     val paletteStyle: PaletteStyleName = PaletteStyleName.TonalSpot,
     val colorSpec: String = "SPEC_2021",
     val alternativeIcon: Boolean = false,
-    val dynamicBatteryIcon: Boolean = true,
+    val dynamicBatteryIcon: Boolean = false,
 )

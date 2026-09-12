@@ -284,7 +284,7 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   const idleNativeI = clampInt(
     next.loop_interval_idle_native_sec,
     0,
-    300,
+    900,
     Number(DEFAULTS.loop_interval_idle_native_sec),
   );
   if (String(idleNativeI) !== String(input.loop_interval_idle_native_sec)) mark(true);

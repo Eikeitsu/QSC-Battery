@@ -8,14 +8,14 @@
 
 ## 功能
 
-| 区域 | 内容 |
-| ---- | ---- |
-| 引导 | Root / 通知 / 安装包 / XP 检测 |
-| 首页 | 状态舞台、软开关、策略入口 |
+| 区域 | 内容                                                                   |
+| ---- | ---------------------------------------------------------------------- |
+| 引导 | Root / 通知 / 安装包 / XP 检测                                         |
+| 首页 | 状态舞台、软开关、策略入口                                             |
 | 策略 | 常用停充/温度；进阶：持锁、无线、通知、App、省电、历史、电流部分、守护 |
-| 动态 | 运行日志 + 充电事件 |
-| 我的 | 主题、更新、配置档、XP、磁贴说明、权限 |
-| 磁贴 | 快捷设置切换 `off_qsc`（需 Root+模块） |
+| 动态 | 运行日志 + 充电事件                                                    |
+| 我的 | 主题、更新、配置档、XP、磁贴说明、权限                                 |
+| 磁贴 | 快捷设置切换 `off_qsc`（需 Root+模块）                                 |
 
 ### 主题与图标
 
@@ -34,17 +34,17 @@
 
 ## 安装
 
-1. Release 中的 APK，或刷模块时选择安装内嵌 APK  
-2. 固定 release 签名；从旧 debug 包升级需先卸载一次  
+1. Release 中的 APK，或刷模块时选择安装内嵌 APK
+2. 固定 release 签名；从旧 debug 包升级需先卸载一次
 3. 授予 Root（读写模块）与通知权限（可选）
 
 ## 更新通道（三套独立）
 
-| 目标 | 清单 | 谁在查 |
-| ---- | ---- | ------ |
-| 模块 zip | [update.json](https://eikeitsu.github.io/QSC-Battery/update.json) | Magisk / APP「模块」 |
-| qscd | [qscd/manifest.json](https://eikeitsu.github.io/QSC-Battery/qscd/manifest.json) | WebUI 守护卡片 |
-| APP | [app-update.json](https://eikeitsu.github.io/QSC-Battery/app-update.json) | APP「自身」 |
+| 目标     | 清单                                                                            | 谁在查               |
+| -------- | ------------------------------------------------------------------------------- | -------------------- |
+| 模块 zip | [update.json](https://eikeitsu.github.io/QSC-Battery/update.json)               | Magisk / APP「模块」 |
+| qscd     | [qscd/manifest.json](https://eikeitsu.github.io/QSC-Battery/qscd/manifest.json) | WebUI 守护卡片       |
+| APP      | [app-update.json](https://eikeitsu.github.io/QSC-Battery/app-update.json)       | APP「自身」          |
 
 单独发 APK 或守护**不会**改模块 `update.json`，避免误提示 Magisk 更新。
 

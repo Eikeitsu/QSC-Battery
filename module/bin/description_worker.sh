@@ -3,6 +3,8 @@
 # 独立简介刷新进程。
 # 参数：父 service.sh 的 PID。worker 不依赖父 shell 中已经 source 的函数，
 # 每次启动都重新加载当前模块文件，热更新后由新 service 接管新 worker。
+#
+# 未插电时拉长周期，避免与主循环重复刷简介；插电仍用较短间隔。
 MODDIR=${0%/*}
 MODDIR=${MODDIR%/*}
 PARENT_PID="${1:-0}"
@@ -10,11 +12,9 @@ PARENT_PID="${1:-0}"
 
 WORKER_PID_FILE="$DATADIR/description_worker.pid"
 WORKER_LOCK="$DATADIR/.description_worker.lock"
-REFRESH_SECS="${QSC_PS_DESC_MIN_GAP:-120}"
-case "$REFRESH_SECS" in
-	""|*[!0-9]*) REFRESH_SECS=120 ;;
-esac
-[ "$REFRESH_SECS" -ge 30 ] 2>/dev/null || REFRESH_SECS=30
+# 插电：2 分钟；未插电：默认 5 分钟（与 DESC_MIN_GAP / idle 对齐）
+REFRESH_PLUGGED=120
+REFRESH_IDLE=300
 
 case "$PARENT_PID" in
 	""|*[!0-9]*) PARENT_PID=0 ;;
@@ -58,8 +58,9 @@ worker_service_ready() {
 	now="$(date +%s 2>/dev/null)"
 	[ -n "$heartbeat" ] && [ -n "$now" ] || return 1
 	case "$heartbeat:$now" in *[!0-9:]*) return 1 ;; esac
+	# 心跳写盘约 180s 一次，探活窗口放宽到 400s
 	[ "$now" -ge "$heartbeat" ] 2>/dev/null &&
-		[ "$((now - heartbeat))" -le 120 ] 2>/dev/null
+		[ "$((now - heartbeat))" -le 400 ] 2>/dev/null
 }
 
 worker_state() {
@@ -95,10 +96,23 @@ worker_refresh() {
 	return "$_rc"
 }
 
-# 热更新文案写入后立即刷新一次，之后按配置周期更新。
+worker_sleep_secs() {
+	local s
+	if type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged; then
+		s="$REFRESH_PLUGGED"
+	else
+		s="${QSC_PS_IDLE_NATIVE:-$REFRESH_IDLE}"
+		case "$s" in ""|*[!0-9]*|0) s="$REFRESH_IDLE" ;; esac
+		[ "$s" -lt 180 ] 2>/dev/null && s=180
+		[ "$s" -gt 900 ] 2>/dev/null && s=900
+	fi
+	printf '%s\n' "$s"
+}
+
+# 热更新文案写入后立即刷新一次，之后按插电状态选周期。
 worker_refresh
 while worker_parent_alive; do
-	sleep "$REFRESH_SECS"
+	sleep "$(worker_sleep_secs)"
 	worker_parent_alive || break
 	worker_refresh
 done

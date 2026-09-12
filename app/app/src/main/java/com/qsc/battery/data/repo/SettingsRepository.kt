@@ -37,7 +37,8 @@ class SettingsRepository(private val context: Context) {
             paletteStyle = PaletteStyleName.fromWire(prefs[Keys.colorStyle]),
             colorSpec = prefs[Keys.colorSpec] ?: "SPEC_2021",
             alternativeIcon = prefs[Keys.alternativeIcon] ?: false,
-            dynamicBatteryIcon = prefs[Keys.dynamicBatteryIcon] ?: true,
+            // 默认关：避免安装后立即切换 alias 导致部分桌面「无图标」
+            dynamicBatteryIcon = prefs[Keys.dynamicBatteryIcon] ?: false,
         )
     }
 
@@ -53,7 +54,7 @@ class SettingsRepository(private val context: Context) {
         context.settingsStore.data.first()[Keys.alternativeIcon] ?: false
 
     suspend fun dynamicBatteryIconEnabled(): Boolean =
-        context.settingsStore.data.first()[Keys.dynamicBatteryIcon] ?: true
+        context.settingsStore.data.first()[Keys.dynamicBatteryIcon] ?: false
 
     suspend fun setOnboardingDone(done: Boolean) {
         context.settingsStore.edit { it[Keys.onboardingDone] = done }
