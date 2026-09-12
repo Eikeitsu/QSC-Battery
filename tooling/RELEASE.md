@@ -30,23 +30,23 @@ Actions → **Release Module**（或推送 `v*` tag）：
 
 发版对话框可勾选 4 项（默认全选）：
 
-| 勾选 | GitHub Release 资产 | 会改哪条更新通道 |
-| ---- | ------------------- | ---------------- |
-| 模块 zip | 4 个变体 zip | `update.json` + `module.prop`（Magisk / APP「模块更新」） |
-| Rust 守护 | `qscd-rust-arm64` / `qscd-rust-arm` | `qscd/manifest.json`（WebUI 守护卡片） |
-| C 守护 | `qscd-c-arm64` / `qscd-c-arm` | 同上 |
-| 伴侣 APK | `QSC-Battery_v*.apk` | `app-update.json`（APP 自身更新） |
+| 勾选      | GitHub Release 资产                 | 会改哪条更新通道                                          |
+| --------- | ----------------------------------- | --------------------------------------------------------- |
+| 模块 zip  | 4 个变体 zip                        | `update.json` + `module.prop`（Magisk / APP「模块更新」） |
+| Rust 守护 | `qscd-rust-arm64` / `qscd-rust-arm` | `qscd/manifest.json`（WebUI 守护卡片）                    |
+| C 守护    | `qscd-c-arm64` / `qscd-c-arm`       | 同上                                                      |
+| 伴侣 APK  | `QSC-Battery_v*.apk`                | `app-update.json`（APP 自身更新）                         |
 
 ### 单独发版时「模块检测更新」怎么处理
 
 三套通道彼此独立，**只改勾选项对应的清单**，不会互相误报：
 
-| 场景 | Magisk / APP 模块更新 | WebUI 守护更新 | APP 自身更新 |
-| ---- | --------------------- | -------------- | ------------ |
-| 只勾 zip | 有（`update.json` 新 versionCode） | 否 | 否 |
-| 只勾 Rust 和/或 C | **否**（不碰 `update.json`） | 有（`manifest.version` bump） | 否 |
-| 只勾 APK | **否** | 否 | 有（需先 bump APP `versionCode`） |
-| 全选 | 有 | 有 | 有 |
+| 场景              | Magisk / APP 模块更新              | WebUI 守护更新                | APP 自身更新                      |
+| ----------------- | ---------------------------------- | ----------------------------- | --------------------------------- |
+| 只勾 zip          | 有（`update.json` 新 versionCode） | 否                            | 否                                |
+| 只勾 Rust 和/或 C | **否**（不碰 `update.json`）       | 有（`manifest.version` bump） | 否                                |
+| 只勾 APK          | **否**                             | 否                            | 有（需先 bump APP `versionCode`） |
+| 全选              | 有                                 | 有                            | 有                                |
 
 要点：
 
