@@ -61,25 +61,32 @@ object XpServiceHolder : XposedServiceHelper.OnServiceListener {
         }
     }
 
-    fun frameworkInfo(svc: XposedService = service ?: return null): FrameworkInfo? =
-        runCatching {
+    fun frameworkInfo(svc: XposedService? = service): FrameworkInfo? {
+        val s = svc ?: return null
+        return runCatching {
             FrameworkInfo(
-                apiVersion = svc.apiVersion,
-                name = svc.frameworkName.orEmpty(),
-                version = svc.frameworkVersion.orEmpty(),
-                versionCode = runCatching { svc.frameworkVersionCode.toLong() }.getOrDefault(0L),
+                apiVersion = s.apiVersion,
+                name = s.frameworkName.orEmpty(),
+                version = s.frameworkVersion.orEmpty(),
+                versionCode = runCatching { s.frameworkVersionCode.toLong() }.getOrDefault(0L),
             )
         }.getOrNull()
+    }
 
-    fun scopeList(svc: XposedService = service ?: return emptyList()): List<String> =
-        runCatching { svc.scope?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty() }
+    fun scopeList(svc: XposedService? = service): List<String> {
+        val s = svc ?: return emptyList()
+        return runCatching { s.scope?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty() }
             .getOrDefault(emptyList())
+    }
 
-    fun runningTargetNames(svc: XposedService = service ?: return emptyList()): List<String> {
+    fun runningTargetNames(svc: XposedService? = service): List<String> {
+        val s = svc ?: return emptyList()
         return runCatching {
-            if (svc.apiVersion < 102) return emptyList()
-            svc.runningTargets.mapNotNull { t ->
-                runCatching { t.processName }.getOrNull()?.takeIf { it.isNotBlank() }
+            if (s.apiVersion < 102) emptyList()
+            else {
+                s.runningTargets.mapNotNull { t ->
+                    runCatching { t.processName }.getOrNull()?.takeIf { it.isNotBlank() }
+                }
             }
         }.getOrDefault(emptyList())
     }
