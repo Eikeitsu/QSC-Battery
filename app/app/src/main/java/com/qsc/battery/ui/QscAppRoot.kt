@@ -31,6 +31,7 @@ import com.qsc.battery.ui.more.ColorPaletteScreen
 import com.qsc.battery.ui.more.MoreScreen
 import com.qsc.battery.ui.more.ProfilesScreen
 import com.qsc.battery.ui.more.UpdatesScreen
+import com.qsc.battery.ui.more.XpPanelScreen
 import com.qsc.battery.ui.nav.QscTab
 import com.qsc.battery.ui.onboarding.OnboardingScreen
 
@@ -113,6 +114,7 @@ fun QscAppRoot(container: AppContainer) {
                     onOpenAppearance = { nav.navigate("appearance") },
                     onOpenUpdates = { nav.navigate("updates") },
                     onOpenProfiles = { nav.navigate("profiles") },
+                    onOpenXp = { nav.navigate("xp") },
                     snackbar = snackbar,
                 )
             }
@@ -125,6 +127,20 @@ fun QscAppRoot(container: AppContainer) {
             }
             composable("palette") {
                 ColorPaletteScreen(container = container, onBack = { nav.popBackStack() })
+            }
+            composable("xp") {
+                XpPanelScreen(
+                    container = container,
+                    onBack = { nav.popBackStack() },
+                    onOpenLspLog = {
+                        nav.navigate(QscTab.Log.route) {
+                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    snackbar = snackbar,
+                )
             }
             composable("updates") {
                 UpdatesScreen(

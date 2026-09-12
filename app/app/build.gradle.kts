@@ -123,4 +123,5 @@ dependencies {
     implementation(libs.material.kolor)
     implementation(libs.okhttp)
     compileOnly(libs.libxposed.api)
+    implementation(libs.libxposed.service)
 }

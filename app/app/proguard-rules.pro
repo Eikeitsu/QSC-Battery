@@ -1,10 +1,12 @@
 # QSC Battery companion
 -dontwarn io.github.libxposed.annotation.**
+-dontwarn io.github.libxposed.service.**
 -adaptresourcefilecontents META-INF/xposed/java_init.list
 -keep,allowoptimization public class * extends io.github.libxposed.api.XposedModule {
     public <init>();
 }
 -keep class com.qsc.battery.xposed.** { *; }
+-keep class io.github.libxposed.service.XposedProvider { *; }
 
 # libsu
 -keep class com.topjohnwu.superuser.** { *; }

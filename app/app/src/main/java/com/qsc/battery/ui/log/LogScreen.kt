@@ -19,19 +19,19 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.ChargeEvent
 import com.qsc.battery.data.model.LogLine
+import com.qsc.battery.ui.AppViewModelFactory
 import com.qsc.battery.ui.design.charge.ChargeChipGroup
 import com.qsc.battery.ui.design.charge.ChargePresets
 import com.qsc.battery.ui.design.charge.ChargeSecondaryButton
@@ -40,38 +40,20 @@ import com.qsc.battery.ui.design.charge.ChargeSkeletonBox
 import com.qsc.battery.ui.design.charge.ChargeTheme
 import com.qsc.battery.ui.design.charge.ChargeTopBar
 import com.qsc.battery.ui.design.charge.chargeEventTypeLabel
-import kotlinx.coroutines.launch
-
-private enum class LogTab { Runtime, Events, Lsp }
 
 @Composable
 fun LogScreen(container: AppContainer) {
-    var tab by remember { mutableStateOf(LogTab.Runtime) }
-    var level by remember { mutableStateOf("") }
-    var lines by remember { mutableStateOf<List<LogLine>>(emptyList()) }
-    var xpLines by remember { mutableStateOf<List<LogLine>>(emptyList()) }
-    var events by remember { mutableStateOf<List<ChargeEvent>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    val scope = rememberCoroutineScope()
+    val factory = remember(container) { AppViewModelFactory(container) }
+    val vm: LogViewModel = viewModel(factory = factory)
+    val ui by vm.ui.collectAsStateWithLifecycle()
+    val tab = ui.tab
+    val level = ui.level
+    val lines = ui.lines
+    val xpLines = ui.xpLines
+    val events = ui.events
+    val loading = ui.loading
 
-    suspend fun refresh() {
-        loading = lines.isEmpty() && events.isEmpty() && xpLines.isEmpty()
-        lines = container.logRepository.loadLogTail()
-        events = container.logRepository.loadEvents()
-        if (tab == LogTab.Lsp || xpLines.isNotEmpty()) {
-            xpLines = container.logRepository.loadXpLog()
-        }
-        loading = false
-    }
-
-    suspend fun refreshXp() {
-        xpLines = container.logRepository.loadXpLog()
-    }
-
-    LaunchedEffect(Unit) { refresh() }
-    LaunchedEffect(tab) {
-        if (tab == LogTab.Lsp) refreshXp()
-    }
+    LaunchedEffect(Unit) { vm.refresh() }
 
     Column(modifier = Modifier.fillMaxSize()) {
         ChargeTopBar(
@@ -99,18 +81,20 @@ fun LogScreen(container: AppContainer) {
                     LogTab.Lsp -> 2
                 },
                 onSelect = {
-                    tab = when (it) {
-                        1 -> LogTab.Events
-                        2 -> LogTab.Lsp
-                        else -> LogTab.Runtime
-                    }
+                    vm.setTab(
+                        when (it) {
+                            1 -> LogTab.Events
+                            2 -> LogTab.Lsp
+                            else -> LogTab.Runtime
+                        },
+                    )
                 },
             )
             if (tab == LogTab.Runtime || tab == LogTab.Lsp) {
                 ChargeChipGroup(
                     chips = ChargePresets.logLevels,
                     selectedId = level,
-                    onSelect = { level = it },
+                    onSelect = { vm.setLevel(it) },
                 )
             }
             Row(
@@ -122,11 +106,9 @@ fun LogScreen(container: AppContainer) {
                     equalHeight = true,
                     modifier = Modifier.weight(1f),
                     onClick = {
-                        scope.launch {
-                            when (tab) {
-                                LogTab.Lsp -> refreshXp()
-                                else -> refresh()
-                            }
+                        when (tab) {
+                            LogTab.Lsp -> vm.refreshXp()
+                            else -> vm.refresh()
                         }
                     },
                 )
@@ -134,19 +116,7 @@ fun LogScreen(container: AppContainer) {
                     text = "清空",
                     equalHeight = true,
                     modifier = Modifier.weight(1f),
-                    onClick = {
-                        scope.launch {
-                            when (tab) {
-                                LogTab.Runtime -> container.logRepository.clearLog()
-                                LogTab.Events -> container.logRepository.clearEvents()
-                                LogTab.Lsp -> container.logRepository.clearXpLog()
-                            }
-                            when (tab) {
-                                LogTab.Lsp -> refreshXp()
-                                else -> refresh()
-                            }
-                        }
-                    },
+                    onClick = { vm.clearCurrent() },
                 )
             }
         }

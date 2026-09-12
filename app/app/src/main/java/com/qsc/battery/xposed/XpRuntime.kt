@@ -9,11 +9,10 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * XP / LSPosed 状态：
- * - 管理器 / 框架目录
- * - `modules_config.db`：Root 拷贝后用系统 [SQLiteDatabase] 读（不依赖手机是否有 sqlite3 命令）
- * - 系统框架在库中常记为 `system`（LSPosed 会把 `android` 迁成 `system`）
- * - `/data/system/qsc_xp_alive`：system_server 存活标记
+ * XP / LSPosed 三层状态：
+ * 1. 服务已连接（XposedService binder）— 打开 APP 即可，不必重启
+ * 2. 作用域已含 system — getScope / 一键 requestScope
+ * 3. 框架已注入 — qsc_xp_alive 或 runningTargets 含 system_server
  */
 object XpRuntime {
     private val MANAGER_PACKAGES = listOf(
@@ -32,11 +31,7 @@ object XpRuntime {
         "/data/adb/modules/lsposed",
     )
 
-    /** LSPosed 配置库中「系统框架」可能是 android 或 system */
-    private val SYSTEM_SCOPE_PKGS = setOf("android", "system")
-
     private const val DB = "/data/adb/lspd/config/modules_config.db"
-    private const val ALIVE = "/data/system/qsc_xp_alive"
     private const val ALIVE_MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
 
     enum class Level {
@@ -53,9 +48,16 @@ object XpRuntime {
         val frameworkPresent: Boolean,
         val enabledInManager: Boolean,
         val scopedAndroid: Boolean,
-        /** 作用域是否从 DB 可靠读到（false 时勿武断说「未勾选」） */
         val scopeKnown: Boolean,
         val frameworkAlive: Boolean,
+        val serviceBound: Boolean,
+        val scopeList: List<String>,
+        val runningTargets: List<String>,
+        val frameworkName: String?,
+        val frameworkVersion: String?,
+        val apiVersion: Int?,
+        val armed: Boolean,
+        val xpOffFile: Boolean,
         val detail: String,
     ) {
         val activated: Boolean get() = level == Level.Enabled || level == Level.Active
@@ -78,12 +80,30 @@ object XpRuntime {
         val hasRoot = root.isRootAvailable()
         val framework = if (hasRoot) FRAMEWORK_PATHS.any { root.exists(it) } else false
 
+        val svc = XpServiceHolder.awaitService(2000L)
         var enabled = false
         var scopedAndroid = false
         var scopeKnown = false
+        var viaService = false
+        var scopeList = emptyList<String>()
+        var running = emptyList<String>()
+        var fwName: String? = null
+        var fwVer: String? = null
+        var api: Int? = null
 
-        if (hasRoot && root.exists(DB)) {
-            val cfg = readLsposedConfig(context, root, ourPkgs)
+        if (svc != null) {
+            viaService = true
+            enabled = true
+            val info = XpServiceHolder.frameworkInfo(svc)
+            fwName = info?.name
+            fwVer = info?.version
+            api = info?.apiVersion
+            scopeList = XpServiceHolder.scopeList(svc)
+            scopeKnown = true
+            scopedAndroid = scopeList.any { it.lowercase() in XpPrefs.SYSTEM_SCOPE_PKGS }
+            running = XpServiceHolder.runningTargetNames(svc)
+        } else if (hasRoot && root.exists(DB)) {
+            val cfg = readLsposedConfigDb(context, root, ourPkgs)
             enabled = cfg.enabled
             scopedAndroid = cfg.scopedAndroid
             scopeKnown = cfg.scopeKnown
@@ -91,46 +111,59 @@ object XpRuntime {
                 val rough = root.exec(
                     "strings '$DB' 2>/dev/null | tr '\\0' '\\n' | grep -F 'com.qsc.battery' | head -n 8",
                 )
-                if (rough.ok && rough.out.contains("com.qsc.battery")) {
-                    enabled = true
-                }
+                if (rough.ok && rough.out.contains("com.qsc.battery")) enabled = true
             }
         }
 
         var alive = false
-        if (hasRoot && root.exists(ALIVE)) {
-            val raw = root.readFile(ALIVE)
+        if (hasRoot && root.exists(XpPrefs.ALIVE_PATH)) {
+            val raw = root.readFile(XpPrefs.ALIVE_PATH)
             val ts = raw?.lineSequence()?.firstOrNull()?.substringBefore('\t')?.toLongOrNull()
-            if (ts != null) {
+            alive = if (ts != null) {
                 val age = System.currentTimeMillis() - ts
-                alive = age in 0..ALIVE_MAX_AGE_MS
+                age in 0..ALIVE_MAX_AGE_MS
             } else {
-                alive = true
+                true
             }
         }
-
-        // 存活标记只可能由 system_server 写出 → 作用域实际已含系统框架
-        if (alive) {
+        val targetInjected = running.any {
+            val n = it.lowercase()
+            n == "system_server" || n == "system" || n.endsWith("/system_server")
+        }
+        if (alive || targetInjected) {
             scopedAndroid = true
             scopeKnown = true
         }
 
+        val armed = hasRoot && root.exists(XpPrefs.ARM_PATH)
+        val xpOff = hasRoot && root.exists(XpPrefs.OFF_PATH)
+
         val level = when {
-            alive -> Level.Active
-            enabled -> Level.Enabled
+            alive || targetInjected -> Level.Active
+            enabled || viaService -> Level.Enabled
             framework -> Level.Framework
             manager -> Level.ManagerOnly
             else -> Level.None
         }
 
+        val fwHint = listOfNotNull(fwName, fwVer).joinToString(" ").takeIf { it.isNotBlank() }
+            ?.let { "（$it）" }.orEmpty()
         val detail = when (level) {
-            Level.Active -> "XP 已在系统框架运行"
+            Level.Active -> "③ 框架已注入$fwHint"
             Level.Enabled -> when {
-                scopedAndroid -> "LSPosed 已启用本模块，作用域含系统框架；未见存活标记，请确认已重启或查看 LSP 日志"
-                scopeKnown -> "LSPosed 已启用本模块，但作用域未含系统框架（库中为 system/android），插拔唤醒不会生效"
-                else -> "LSPosed 已启用本模块；配置库暂无法解析作用域。请在管理器确认勾选系统框架后重启"
+                scopedAndroid && viaService ->
+                    "② 服务已连接且作用域含系统框架$fwHint；重启后出现存活标记即③注入完成"
+                scopedAndroid ->
+                    "作用域含系统框架；打开 APP 建立服务连接，重启后完成注入"
+                scopeKnown && viaService ->
+                    "① 服务已连接$fwHint，请勾选/请求系统框架（system）"
+                viaService ->
+                    "① 服务已连接$fwHint"
+                else ->
+                    "模块已启用；打开本 APP 以连接 LSPosed 服务"
             }
-            Level.Framework -> "已检测到 LSPosed，请启用「充电控制」并勾选系统框架后重启"
+            Level.Framework ->
+                "已检测到 LSPosed，请启用本模块并勾选系统框架；读作用域不必重启，注入需重启"
             Level.ManagerOnly -> "已安装 LSPosed 管理器"
             Level.None -> if (hasRoot) "未检测到 LSPosed" else "检测 XP 需 Root；或先安装 LSPosed"
         }
@@ -138,11 +171,19 @@ object XpRuntime {
         Status(
             level = level,
             managerInstalled = manager,
-            frameworkPresent = framework || (manager && !hasRoot),
-            enabledInManager = enabled,
+            frameworkPresent = framework || viaService || (manager && !hasRoot),
+            enabledInManager = enabled || viaService,
             scopedAndroid = scopedAndroid,
             scopeKnown = scopeKnown,
-            frameworkAlive = alive,
+            frameworkAlive = alive || targetInjected,
+            serviceBound = viaService,
+            scopeList = scopeList,
+            runningTargets = running,
+            frameworkName = fwName,
+            frameworkVersion = fwVer,
+            apiVersion = api,
+            armed = armed,
+            xpOffFile = xpOff,
             detail = detail,
         )
     }
@@ -153,11 +194,7 @@ object XpRuntime {
         val scopeKnown: Boolean,
     )
 
-    /**
-     * 不依赖设备上的 sqlite3 CLI（多数 ROM 没有）。
-     * Root 把 DB（及 wal/shm）拷到 APP 缓存，再用系统 SQLite 只读打开。
-     */
-    private suspend fun readLsposedConfig(
+    private suspend fun readLsposedConfigDb(
         context: Context,
         root: RootBridge,
         ourPkgs: List<String>,
@@ -180,7 +217,7 @@ object XpRuntime {
             """.trimIndent(),
         )
         if (!copy.out.contains("OK") || !local.isFile) {
-            return readLsposedConfigViaCliFallback(root, ourPkgs)
+            return LsposedCfg(enabled = false, scopedAndroid = false, scopeKnown = false)
         }
 
         return try {
@@ -188,11 +225,9 @@ object XpRuntime {
                 local.absolutePath,
                 null,
                 SQLiteDatabase.OPEN_READONLY or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
-            ).use { db ->
-                parseLsposedDb(db, ourPkgs)
-            }
+            ).use { db -> parseLsposedDb(db, ourPkgs) }
         } catch (_: Throwable) {
-            readLsposedConfigViaCliFallback(root, ourPkgs)
+            LsposedCfg(enabled = false, scopedAndroid = false, scopeKnown = false)
         } finally {
             runCatching { local.delete() }
             runCatching { localWal.delete() }
@@ -203,7 +238,6 @@ object XpRuntime {
     private fun parseLsposedDb(db: SQLiteDatabase, ourPkgs: List<String>): LsposedCfg {
         var enabled: Boolean? = null
         var mid: Long? = null
-
         val placeholders = ourPkgs.joinToString(",") { "?" }
         runCatching {
             db.rawQuery(
@@ -226,28 +260,9 @@ object XpRuntime {
                 ).use { c ->
                     scoped = false
                     while (c.moveToNext()) {
-                        val pkg = c.getString(0)?.trim().orEmpty()
-                        if (pkg in SYSTEM_SCOPE_PKGS) {
+                        if (c.getString(0)?.trim()?.lowercase() in XpPrefs.SYSTEM_SCOPE_PKGS) {
                             scoped = true
                             break
-                        }
-                    }
-                }
-            }
-            // 旧列名兼容
-            if (scoped == null) {
-                runCatching {
-                    db.rawQuery(
-                        "SELECT package_name FROM scope WHERE mid=? LIMIT 32",
-                        arrayOf(mid.toString()),
-                    ).use { c ->
-                        scoped = false
-                        while (c.moveToNext()) {
-                            val pkg = c.getString(0)?.trim().orEmpty()
-                            if (pkg in SYSTEM_SCOPE_PKGS) {
-                                scoped = true
-                                break
-                            }
                         }
                     }
                 }
@@ -259,42 +274,6 @@ object XpRuntime {
             scopedAndroid = scoped == true,
             scopeKnown = mid != null && scoped != null,
         )
-    }
-
-    /** 仅作兜底：少数环境若拷贝失败，再试 PATH 里的 sqlite3（多数机没有） */
-    private suspend fun readLsposedConfigViaCliFallback(
-        root: RootBridge,
-        ourPkgs: List<String>,
-    ): LsposedCfg {
-        val pkgList = ourPkgs.joinToString(",") { "'$it'" }
-        val bins = listOf(
-            "sqlite3",
-            "/system/bin/sqlite3",
-            "/data/adb/magisk/busybox sqlite3",
-        )
-        for (bin in bins) {
-            val en = root.exec(
-                "$bin '$DB' \"SELECT enabled FROM modules WHERE module_pkg_name IN ($pkgList) LIMIT 1;\" 2>/dev/null",
-            )
-            if (!en.ok || en.out.isBlank()) continue
-            val enabled = en.out.trim().lineSequence().firstOrNull()?.trim().let {
-                it == "1" || it.equals("true", true)
-            }
-            val sc = root.exec(
-                "$bin '$DB' \"SELECT s.app_pkg_name FROM scope s JOIN modules m ON s.mid=m.mid " +
-                    "WHERE m.module_pkg_name IN ($pkgList) LIMIT 32;\" 2>/dev/null",
-            )
-            if (!sc.ok) {
-                return LsposedCfg(enabled = enabled, scopedAndroid = false, scopeKnown = false)
-            }
-            val pkgs = sc.out.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-            return LsposedCfg(
-                enabled = enabled,
-                scopedAndroid = pkgs.any { it in SYSTEM_SCOPE_PKGS },
-                scopeKnown = true,
-            )
-        }
-        return LsposedCfg(enabled = false, scopedAndroid = false, scopeKnown = false)
     }
 
     fun isAvailable(context: Context): Boolean = isManagerInstalled(context)

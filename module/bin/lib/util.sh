@@ -258,10 +258,12 @@ qsc_xp_bootstrap_logs() {
 	touch /data/system/qsc_xp.log /data/local/tmp/qsc_xp.log 2>/dev/null || true
 	chmod 666 /data/system/qsc_xp.log /data/local/tmp/qsc_xp.log 2>/dev/null || true
 	if [ -f /data/system/qsc_xp_alive ]; then
-		qsc_xp_file_log INFO "ok magisk: xp alive present"
+		qsc_xp_file_log INFO "ok magisk: xp alive present (③ injected)"
+	elif [ -f /data/system/qsc_xp_off ]; then
+		qsc_xp_file_log WARN "magisk: xp soft-off (/data/system/qsc_xp_off)"
 	else
-		# 与「作用域检测」无关：仅表示 system_server 未写出存活文件（未注入或写失败）
-		qsc_xp_file_log WARN "magisk: xp alive missing (module not in system_server yet — enable in LSPosed, scope=系统框架, reboot)"
+		# 与「作用域检测」无关：仅表示 system_server 未写出存活文件
+		qsc_xp_file_log WARN "magisk: xp alive missing (③ not injected — enable module, scope=system, reboot)"
 	fi
 }
 

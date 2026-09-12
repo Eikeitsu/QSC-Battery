@@ -14,12 +14,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.qsc.battery.data.AppContainer
-import com.qsc.battery.data.model.CurrentConfig
+import com.qsc.battery.ui.AppViewModelFactory
 import com.qsc.battery.ui.design.charge.BannerTone
 import com.qsc.battery.ui.design.charge.ChargeBanner
 import com.qsc.battery.ui.design.charge.ChargeChoiceRow
@@ -36,7 +37,6 @@ import com.qsc.battery.ui.design.charge.ChargeStickyActionBar
 import com.qsc.battery.ui.design.charge.ChargeTheme
 import com.qsc.battery.ui.design.charge.ChargeToggleRow
 import com.qsc.battery.ui.design.charge.ChargeTopBar
-import kotlinx.coroutines.launch
 
 private data class EditField(
     val title: String,
@@ -55,38 +55,35 @@ fun ConfigScreen(
     onOpenAdvanced: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null,
 ) {
-    var conf by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    var current by remember { mutableStateOf(CurrentConfig()) }
-    var ready by remember { mutableStateOf(false) }
-    var rootOk by remember { mutableStateOf(false) }
-    var moduleOk by remember { mutableStateOf(false) }
-    var daemonStatus by remember { mutableStateOf("") }
-    var stopSchedules by remember { mutableStateOf<List<String>>(emptyList()) }
-    var quietSchedules by remember { mutableStateOf<List<String>>(emptyList()) }
+    val factory = remember(container) { AppViewModelFactory(container) }
+    val vm: ConfigViewModel = viewModel(factory = factory)
+    val ui by vm.ui.collectAsStateWithLifecycle()
     var edit by remember { mutableStateOf<EditField?>(null) }
-    val scope = rememberCoroutineScope()
 
-    fun v(key: String) = conf[key].orEmpty()
-    fun setLocal(key: String, value: String) {
-        conf = conf.toMutableMap().apply { put(key, value) }
-    }
+    fun v(key: String) = vm.v(key)
+    fun setLocal(key: String, value: String) = vm.setLocal(key, value)
+    val current = ui.current
 
-    suspend fun reload() {
-        rootOk = container.root.isRootAvailable()
-        val st = container.statusRepository.load()
-        moduleOk = st.modulePresent
-        if (moduleOk) {
-            conf = container.configRepository.loadConf()
-            current = container.configRepository.loadCurrent()
-            daemonStatus = container.daemonRepository.status()
-            val (stop, quiet) = container.configRepository.loadSchedules()
-            stopSchedules = stop
-            quietSchedules = quiet
+    LaunchedEffect(Unit) { vm.reload() }
+    LaunchedEffect(ui.lastSaveMessage) {
+        ui.lastSaveMessage?.let {
+            snackbar.showSnackbar(it)
+            vm.consumeSaveMessage()
         }
-        ready = true
+    }
+    LaunchedEffect(ui.lastDaemonMessage) {
+        ui.lastDaemonMessage?.let {
+            snackbar.showSnackbar(it)
+            vm.consumeDaemonMessage()
+        }
     }
 
-    LaunchedEffect(Unit) { reload() }
+    val ready = ui.ready
+    val rootOk = ui.rootOk
+    val moduleOk = ui.moduleOk
+    val daemonStatus = ui.daemonStatus
+    val stopSchedules = ui.stopSchedules
+    val quietSchedules = ui.quietSchedules
 
     val notifyKinds = v("notify_charge_kinds")
         .split(',')
@@ -318,13 +315,13 @@ fun ConfigScreen(
 
                     ChargeSection(title = "电流控制") {
                         ChargeToggleRow("启用电流控制", current.current_control == 1) {
-                            current = current.copy(current_control = if (it) 1 else 0)
+                            vm.updateCurrent { c -> c.copy(current_control = if (it) 1 else 0) }
                         }
                         ChargeToggleRow("旁路充电", current.bypass_enable == 1) {
-                            current = current.copy(bypass_enable = if (it) 1 else 0)
+                            vm.updateCurrent { c -> c.copy(bypass_enable = if (it) 1 else 0) }
                         }
                         ChargeToggleRow("温度限流", current.temperature_current == 1) {
-                            current = current.copy(temperature_current = if (it) 1 else 0)
+                            vm.updateCurrent { c -> c.copy(temperature_current = if (it) 1 else 0) }
                         }
                         ChargeListRow(
                             title = "安全温度上限",
@@ -333,9 +330,9 @@ fun ConfigScreen(
                                 edit = EditField("安全温度上限", "°C", true, 1, {
                                     current.safety_temp_max.toString()
                                 }) {
-                                    current = current.copy(
-                                        safety_temp_max = it.toIntOrNull() ?: current.safety_temp_max,
-                                    )
+                                    vm.updateCurrent { c ->
+                                        c.copy(safety_temp_max = it.toIntOrNull() ?: c.safety_temp_max)
+                                    }
                                 }
                             },
                         )
@@ -345,19 +342,23 @@ fun ConfigScreen(
                             selectedId = current.default_current_max_limit.toString(),
                             summary = String.format("%.1f A", current.default_current_max_limit / 1_000_000.0),
                             onSelect = {
-                                current = current.copy(
-                                    default_current_max_limit = it.toLongOrNull()
-                                        ?: current.default_current_max_limit,
-                                )
+                                vm.updateCurrent { c ->
+                                    c.copy(
+                                        default_current_max_limit = it.toLongOrNull()
+                                            ?: c.default_current_max_limit,
+                                    )
+                                }
                             },
                             onCustom = {
                                 edit = EditField("默认限流 (µA)", "µA", true, 100_000, {
                                     current.default_current_max_limit.toString()
                                 }) {
-                                    current = current.copy(
-                                        default_current_max_limit = it.toLongOrNull()
-                                            ?: current.default_current_max_limit,
-                                    )
+                                    vm.updateCurrent { c ->
+                                        c.copy(
+                                            default_current_max_limit = it.toLongOrNull()
+                                                ?: c.default_current_max_limit,
+                                        )
+                                    }
                                 }
                             },
                         )
@@ -383,25 +384,13 @@ fun ConfigScreen(
                             ChargeSecondaryButton(
                                 text = "检查守护更新",
                                 equalHeight = true,
-                                onClick = {
-                                    scope.launch {
-                                        val msg = container.daemonRepository.check()
-                                        daemonStatus = container.daemonRepository.status()
-                                        snackbar.showSnackbar(msg)
-                                    }
-                                },
+                                onClick = { vm.checkDaemon() },
                             )
                             ChargeSecondaryButton(
                                 text = "下载并安装守护",
                                 equalHeight = true,
                                 onClick = {
-                                    scope.launch {
-                                        val msg = container.daemonRepository.install(
-                                            v("native_impl").ifBlank { "rust" },
-                                        )
-                                        daemonStatus = container.daemonRepository.status()
-                                        snackbar.showSnackbar(msg)
-                                    }
+                                    vm.installDaemon(v("native_impl").ifBlank { "rust" })
                                 },
                             )
                         }
@@ -414,19 +403,7 @@ fun ConfigScreen(
             ChargeStickyActionBar(clearSystemNav = advancedOnly) {
                 ChargePrimaryButton(
                     text = if (advancedOnly) "保存进阶项" else "保存",
-                    onClick = {
-                        scope.launch {
-                            val okConf = container.configRepository.setConfValues(conf)
-                            val okCur = container.configRepository.saveCurrent(current)
-                            snackbar.showSnackbar(
-                                if (okConf && okCur) {
-                                    if (advancedOnly) "已保存" else "已保存，下一轮循环生效"
-                                } else {
-                                    "保存失败"
-                                },
-                            )
-                        }
-                    },
+                    onClick = { vm.save(advancedOnly) },
                 )
             }
         }

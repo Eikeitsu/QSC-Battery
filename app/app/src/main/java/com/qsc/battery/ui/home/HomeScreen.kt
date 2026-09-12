@@ -9,19 +9,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.qsc.battery.data.AppContainer
-import com.qsc.battery.data.model.StatusBundle
+import com.qsc.battery.ui.AppViewModelFactory
 import com.qsc.battery.ui.design.charge.BannerTone
 import com.qsc.battery.ui.design.charge.ChargeBanner
 import com.qsc.battery.ui.design.charge.ChargeHero
@@ -35,58 +30,23 @@ import com.qsc.battery.ui.design.charge.ChargeToggleRow
 import com.qsc.battery.ui.design.charge.ChargeTopBar
 import com.qsc.battery.ui.design.charge.batteryStatusLabel
 import com.qsc.battery.ui.design.charge.isActivelyCharging
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import com.qsc.battery.ui.util.LifecycleResumePollEffect
 
 @Composable
 fun HomeScreen(
     container: AppContainer,
     onOpenStrategy: () -> Unit,
 ) {
-    var status by remember { mutableStateOf(StatusBundle()) }
-    var conf by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    var bootstrapped by remember { mutableStateOf(false) }
-    var rootSettled by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val factory = remember(container) { AppViewModelFactory(container) }
+    val vm: HomeViewModel = viewModel(factory = factory)
+    val ui by vm.ui.collectAsStateWithLifecycle()
 
-    suspend fun refresh(full: Boolean = false) {
-        val next = container.statusRepository.load()
-        status = next
-        if (full || next.modulePresent) {
-            if (next.modulePresent) conf = container.configRepository.loadConf()
-        }
-        rootSettled = true
-        bootstrapped = true
+    LifecycleResumePollEffect(intervalMs = 8_000) { first ->
+        vm.refresh(full = first)
     }
 
-    DisposableEffect(lifecycleOwner) {
-        var pollJob: Job? = null
-        val obs = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> {
-                    pollJob?.cancel()
-                    pollJob = scope.launch {
-                        refresh(full = !bootstrapped)
-                        while (isActive) {
-                            delay(8_000)
-                            refresh(full = false)
-                        }
-                    }
-                }
-                Lifecycle.Event.ON_PAUSE -> pollJob?.cancel()
-                else -> Unit
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(obs)
-        onDispose {
-            pollJob?.cancel()
-            lifecycleOwner.lifecycle.removeObserver(obs)
-        }
-    }
-
+    val status = ui.status
+    val conf = ui.conf
     val levelRaw = status.snapshot.level
     val levelPct = levelRaw.toFloatOrNull()?.div(100f)
     val levelText = if (levelRaw.isBlank()) "--%" else "${levelRaw}%"
@@ -119,7 +79,7 @@ fun HomeScreen(
                         style = ChargeTheme.typography.label,
                         color = ChargeTheme.colors.accent,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable { scope.launch { refresh(full = true) } },
+                        modifier = Modifier.clickable { vm.refreshAsync(full = true) },
                     )
                 },
             )
@@ -132,11 +92,11 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
         ) {
             when {
-                !bootstrapped -> ChargeMetricSkeleton()
-                rootSettled && !status.rootOk -> {
+                !ui.bootstrapped -> ChargeMetricSkeleton()
+                ui.rootSettled && !status.rootOk -> {
                     ChargeBanner("需要 Root 才能读写模块配置；主题与更新仍可用。", BannerTone.Warn)
                 }
-                rootSettled && !status.modulePresent -> {
+                ui.rootSettled && !status.modulePresent -> {
                     ChargeBanner("未检测到 Magisk 模块。可在「我的 → 更新」下载安装。", BannerTone.Info)
                     ChargeSection(title = "下一步") {
                         ChargeListRow(
@@ -160,12 +120,7 @@ fun HomeScreen(
                             title = "充电控制",
                             summary = if (status.moduleOff) "已关闭" else "模块运行中",
                             checked = !status.moduleOff,
-                            onCheckedChange = { enabled ->
-                                scope.launch {
-                                    container.statusRepository.setModuleEnabled(enabled)
-                                    refresh(full = false)
-                                }
-                            },
+                            onCheckedChange = { enabled -> vm.setModuleEnabled(enabled) },
                         )
                     }
 

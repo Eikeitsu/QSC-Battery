@@ -69,9 +69,11 @@ sh /data/adb/modules/QSC_Battery/bin/qsc.sh test-switch
 
 ## LSPosed 要勾什么？
 
-作用域只勾 **系统框架 `android`**。`qscd` 正常时 XP 几乎不干活；守护不可用时才在插拔边沿写 `/data/system/qsc_xp_wake` 协助唤醒。APP 通过 LSPosed 配置与存活标记检测 XP 是否启用/运行。
+作用域勾选 **系统框架**（LSPosed 里常显示为系统框架；配置库包名多为 **`system`**，偶见 `android`）。`qscd` 正常时 XP 几乎不干活；守护不可用时才在插拔边沿写 `/data/system/qsc_xp_wake` 协助唤醒。
 
-SELinux enforcing：选用 `/data/system/` 是常见可写路径，**多数机型可用**，但不能保证 100% OEM；失败会停写以免耗电。关：`touch /data/system/qsc_xp_off`。
+APP「我的 → LSPosed / XP」用官方 **XposedService**（不必重启即可看作用域；可一键请求）。**注入**到 `system_server` 仍需重启后看存活标记。
+
+SELinux enforcing：选用 `/data/system/` 是常见可写路径，**多数机型可用**，但不能保证 100% OEM；失败会停写以免耗电。软关闭：APP 开关或 `touch /data/system/qsc_xp_off`。
 
 ## 命令行在哪？
 

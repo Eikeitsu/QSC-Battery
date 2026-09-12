@@ -605,7 +605,12 @@ qsc_ps_mark_native_failure() {
 		"$reason" "${QSC_PS_NATIVE_MODE:-unknown}" "$rc" "$now" "$wall" \
 		>"$DATADIR/qscd_unusable.tmp" 2>/dev/null &&
 		mv -f "$DATADIR/qscd_unusable.tmp" "$DATADIR/qscd_unusable" 2>/dev/null
-	# 武装 XP 边沿唤醒（system_server 写 /data/system/qsc_xp_wake）
+	# 武装 XP 边沿唤醒（system_server 写 /data/system/qsc_xp_wake）；软关闭则跳过
+	if [ -f /data/system/qsc_xp_off ]; then
+		type qsc_xp_file_log >/dev/null 2>&1 &&
+			qsc_xp_file_log WARN "magisk: xp soft-off, skip arm (qscd unusable reason=$reason)"
+		return 0
+	fi
 	touch /data/system/qsc_xp_arm 2>/dev/null || true
 	type qsc_xp_file_log >/dev/null 2>&1 &&
 		qsc_xp_file_log WARN "ok magisk: xp armed (qscd unusable reason=$reason)"
@@ -625,7 +630,11 @@ qsc_ps_xp_wake_fresh() {
 qsc_ps_fallback_sleep() {
 	local secs="${1:-3}" left chunk=3
 	case "$secs" in ""|*[!0-9]*) secs=3 ;; esac
-	if [ ! -f /data/system/qsc_xp_arm ]; then
+	if [ -f /data/system/qsc_xp_off ] || [ ! -f /data/system/qsc_xp_arm ]; then
+		sleep "$secs"
+		return 0
+	fi
+	if [ -f /data/system/qsc_xp_no_wake ]; then
 		sleep "$secs"
 		return 0
 	fi

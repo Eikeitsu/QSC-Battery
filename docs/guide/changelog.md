@@ -9,14 +9,16 @@
 - 新增 Compose 伴侣 APP（包名 `com.qsc.battery`）：首页 / 策略 / 动态 / 我的；Root 读写模块，不挂后台保活
 - Charge 设计系统：主题（浅/深/AMOLED/动态取色）、调色板、首启权限引导、更新安装、配置档
 - 快捷设置磁贴切换模块软开关；安装包可内嵌 APK，刷模块时可选安装
-- 可选 **LSPosed**：系统框架插拔边沿唤醒（仅 `qscd` 不可用时）；`/data/system` 通道；APP 检测配置与存活标记
+- 可选 **LSPosed**：系统框架插拔边沿唤醒（仅 `qscd` 不可用时）；`/data/system` 通道
+- APP XP 按官方 **libxposed service** 重构：`XposedService.getScope` / `requestScope`、RemotePreferences、独立「LSPosed / XP」面板；三层状态（服务连接 / 作用域 / 注入）
+- XP：`deoptimize` + BatteryService 内部插拔态优先；软关闭 / 禁止唤醒与 Magisk 文件联动
 - 桌面动态图标：电量约 **10%** 分档；充电时电池/环形图标闪电为黄色；插拔电或打开 APP 时稀疏刷新
 - APP 安装范围：`minSdk 26`（Android 8+），`targetSdk 35`
 - LSPosed 模块列简介改为功能说明（去掉 API 文案）
 - 顶栏与正文间距统一（`pageContentTop`）
-- Magisk：`qscd` 失败时武装 XP；回退睡眠可被 `/data/system/qsc_xp_wake` 提前打断
+- Magisk：`qscd` 失败时武装 XP；回退睡眠可被 `/data/system/qsc_xp_wake` 提前打断；尊重 `qsc_xp_off`
 - **省电**：服务心跳写盘与独立心跳对齐 **180s**；XP 未武装缓存；回退 sleep 仅武装时切片；满轮/简介保持 **30min / 5min**
-- APP「动态」增加 **LSP** 页（只读本模块 `/data/system/qsc_xp.log`）
+- APP「动态」增加 **LSP** 页（合并多路径 XP 日志）
 - WebUI 曲线打开时刷新 **60s**（原 30s）
 
 ### 模块核心

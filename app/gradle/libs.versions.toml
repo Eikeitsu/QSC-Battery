@@ -45,3 +45,4 @@ libsu-io = { group = "com.github.topjohnwu.libsu", name = "io", version.ref = "l
 material-kolor = { group = "com.materialkolor", name = "material-kolor", version.ref = "materialKolor" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 libxposed-api = { group = "io.github.libxposed", name = "api", version.ref = "xposed" }
+libxposed-service = { group = "io.github.libxposed", name = "service", version.ref = "xposed" }

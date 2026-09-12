@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -32,9 +31,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.qsc.battery.core.PermStatus
 import com.qsc.battery.core.PermissionChecker
 import com.qsc.battery.core.PermissionSnapshot
@@ -46,6 +42,7 @@ import com.qsc.battery.ui.design.charge.ChargePrimaryButton
 import com.qsc.battery.ui.design.charge.ChargeScaffold
 import com.qsc.battery.ui.design.charge.ChargeSecondaryButton
 import com.qsc.battery.ui.design.charge.ChargeTheme
+import com.qsc.battery.ui.util.LifecycleResumeEffect
 import com.qsc.battery.xposed.XpRuntime
 import kotlinx.coroutines.launch
 
@@ -67,16 +64,7 @@ fun OnboardingScreen(
         xp = XpRuntime.probe(context, container.root)
     }
 
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val obs = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                scope.launch { refresh() }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(obs)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
-    }
+    LifecycleResumeEffect { refresh() }
 
     val notifyLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),

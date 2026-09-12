@@ -3,6 +3,7 @@ package com.qsc.battery
 import android.app.Application
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.icon.LauncherIconController
+import com.qsc.battery.xposed.XpServiceHolder
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +18,8 @@ class QscApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // libxposed service：与 HyperCeiler / 官方 example 相同，尽早注册以接收 LSPosed binder
+        XpServiceHolder.install()
         Shell.enableVerboseLogging = BuildConfig.DEBUG
         Shell.setDefaultBuilder(
             Shell.Builder.create()

@@ -13,8 +13,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 /**
  * LSPosed：仅系统框架；qscd 不可用（arm）时插拔边沿写唤醒文件。
- * 未武装时缓存 arm 检查，避免每次电池回调读 sysfs。
- * 关键日志多路径写入，供伴侣 APP / WebUI「LSP」读取。
+ * 不写充电节点。配置尊重 /data/system 文件（APP RemotePrefs 同步）。
  */
 class QscXposedModule : XposedModule() {
     private val hookedBattery = AtomicBoolean(false)
@@ -25,7 +24,10 @@ class QscXposedModule : XposedModule() {
     private var lastPlugged: Boolean? = null
 
     override fun onModuleLoaded(param: ModuleLoadedParam) {
-        if (!param.isSystemServer) return
+        if (!param.isSystemServer) {
+            runCatching { detach() }
+            return
+        }
         xpLog(Log.INFO, "ok loaded in system_server api=$apiVersion")
     }
 
@@ -44,28 +46,32 @@ class QscXposedModule : XposedModule() {
                 return
             }
             for (method in methods) {
+                runCatching { deoptimize(method) }
+                    .onFailure { xpLog(Log.DEBUG, "deoptimize skip: ${it.message}") }
                 hook(method)
                     .setPriority(XposedInterface.PRIORITY_DEFAULT)
                     .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
                     .intercept { chain ->
                         val result = chain.proceed()
-                        onBatteryProcessed()
+                        val host = runCatching { chain.thisObject }.getOrNull()
+                        onBatteryProcessed(host)
                         result
                     }
             }
-            xpLog(Log.INFO, "ok BatteryService hooked x${methods.size}")
+            xpLog(Log.INFO, "ok BatteryService hooked x${methods.size} (deoptimize attempted)")
         }.onFailure {
             hookedBattery.set(false)
             xpLog(Log.ERROR, "hook failed: ${it.message}", it)
         }
     }
 
-    private fun onBatteryProcessed() {
+    private fun onBatteryProcessed(service: Any?) {
         if (writeDisabled.get()) return
+        if (File(XpPrefs.OFF_PATH).isFile) return
+        if (File(XpPrefs.NO_WAKE_PATH).isFile) return
         if (!isArmedCached()) return
-        if (File(OFF_PATH).isFile) return
 
-        val plugged = readPluggedQuick()
+        val plugged = readPluggedFromService(service) ?: readPluggedSysfs()
         val prev = lastPlugged
         lastPlugged = plugged
         if (prev == null || prev == plugged) return
@@ -73,23 +79,57 @@ class QscXposedModule : XposedModule() {
         writeWake(if (plugged) "plug" else "unplug")
     }
 
-    /** 未武装时最多每 60s 再 stat 一次 arm，武装后每次回调都认（边沿要及时）。 */
     private fun isArmedCached(): Boolean {
         val now = System.currentTimeMillis()
         if (armCached.get()) {
-            if (File(ARM_PATH).isFile) return true
+            if (File(XpPrefs.ARM_PATH).isFile) return true
             armCached.set(false)
             armCacheAt.set(now)
             return false
         }
         if (now - armCacheAt.get() < ARM_RECHECK_MS) return false
         armCacheAt.set(now)
-        val on = File(ARM_PATH).isFile
+        val on = File(XpPrefs.ARM_PATH).isFile
         armCached.set(on)
         return on
     }
 
-    private fun readPluggedQuick(): Boolean {
+    /** 优先 BatteryService 内部状态，失败再 sysfs。 */
+    private fun readPluggedFromService(service: Any?): Boolean? {
+        if (service == null) return null
+        runCatching {
+            val f = findField(service.javaClass, "mPlugType") ?: return@runCatching
+            f.isAccessible = true
+            return f.getInt(service) != 0
+        }
+        runCatching {
+            val hiField = findField(service.javaClass, "mHealthInfo") ?: return@runCatching
+            hiField.isAccessible = true
+            val hi = hiField.get(service) ?: return@runCatching
+            val cls = hi.javaClass
+            fun flag(name: String): Boolean =
+                runCatching {
+                    val f = findField(cls, name) ?: return false
+                    f.isAccessible = true
+                    f.getBoolean(hi)
+                }.getOrDefault(false)
+            val plugged = flag("chargerAcOnline") || flag("chargerUsbOnline") ||
+                flag("chargerWirelessOnline") || flag("chargerDockOnline")
+            return plugged
+        }
+        return null
+    }
+
+    private fun findField(cls: Class<*>, name: String): java.lang.reflect.Field? {
+        var c: Class<*>? = cls
+        while (c != null) {
+            runCatching { return c.getDeclaredField(name) }
+            c = c.superclass
+        }
+        return null
+    }
+
+    private fun readPluggedSysfs(): Boolean {
         for (path in PLUG_ONLINE_PATHS) {
             val v = runCatching { File(path).readText().trim() }.getOrNull() ?: continue
             if (v == "1") return true
@@ -99,22 +139,22 @@ class QscXposedModule : XposedModule() {
 
     private fun writeAliveOnce() {
         if (writeDisabled.get()) return
-        val ok = writeText(ALIVE_PATH, "${System.currentTimeMillis()}\talive\n", append = false)
+        val ok = writeText(XpPrefs.ALIVE_PATH, "${System.currentTimeMillis()}\talive\n", append = false)
         if (ok) {
             failStreak.set(0)
-            xpLog(Log.INFO, "ok alive → $ALIVE_PATH")
+            xpLog(Log.INFO, "ok alive → ${XpPrefs.ALIVE_PATH}")
         } else {
             onWriteFailed("alive")
-            xpLog(Log.WARN, "alive write failed → $ALIVE_PATH")
+            xpLog(Log.WARN, "alive write failed → ${XpPrefs.ALIVE_PATH}")
         }
     }
 
     private fun writeWake(reason: String) {
         if (writeDisabled.get()) return
-        val ok = writeText(WAKE_PATH, "${System.currentTimeMillis()}\t$reason\n", append = false)
+        val ok = writeText(XpPrefs.WAKE_PATH, "${System.currentTimeMillis()}\t$reason\n", append = false)
         if (ok) {
             failStreak.set(0)
-            xpLog(Log.INFO, "ok wake $reason → $WAKE_PATH")
+            xpLog(Log.INFO, "ok wake $reason → ${XpPrefs.WAKE_PATH}")
         } else {
             onWriteFailed("wake:$reason")
             xpLog(Log.WARN, "wake write failed ($reason)")
@@ -142,6 +182,7 @@ class QscXposedModule : XposedModule() {
     }
 
     private fun appendLogLine(priority: Int, msg: String) {
+        if (priority == Log.DEBUG && !File(XpPrefs.VERBOSE_PATH).isFile) return
         val level = when (priority) {
             Log.ERROR -> "ERROR"
             Log.WARN -> "WARN"
@@ -166,9 +207,7 @@ class QscXposedModule : XposedModule() {
                 wrote = true
             }
         }
-        if (!wrote) {
-            Log.w(TAG, "xp file log write failed all paths: $msg")
-        }
+        if (!wrote) Log.w(TAG, "xp file log write failed all paths: $msg")
     }
 
     private fun xpLog(priority: Int, msg: String, tr: Throwable? = null) {
@@ -182,15 +221,8 @@ class QscXposedModule : XposedModule() {
         private const val LOG_MAX_BYTES = 48_000L
         private const val LOG_KEEP_BYTES = 24_000
 
-        const val ARM_PATH = "/data/system/qsc_xp_arm"
-        const val WAKE_PATH = "/data/system/qsc_xp_wake"
-        const val ALIVE_PATH = "/data/system/qsc_xp_alive"
-        const val OFF_PATH = "/data/system/qsc_xp_off"
-        const val LOG_PATH = "/data/system/qsc_xp.log"
-
-        /** system_server 可写候选；Magisk 另镜像到模块 data/xp.log */
         private val LOG_PATHS = listOf(
-            LOG_PATH,
+            "/data/system/qsc_xp.log",
             "/data/local/tmp/qsc_xp.log",
             "/cache/qsc_xp.log",
         )

@@ -13,8 +13,8 @@
 | 引导 | Root / 通知 / 安装包 / XP 检测                                         |
 | 首页 | 状态舞台、软开关、策略入口                                             |
 | 策略 | 常用停充/温度；进阶：持锁、无线、通知、App、省电、历史、电流部分、守护 |
-| 动态 | 运行日志 + 充电事件                                                    |
-| 我的 | 主题、更新、配置档、XP、磁贴说明、权限                                 |
+| 动态 | 运行日志 + 充电事件 + LSP（本模块 XP）                                 |
+| 我的 | 主题、更新、配置档、LSPosed/XP 面板、磁贴说明、权限                    |
 | 磁贴 | 快捷设置切换 `off_qsc`（需 Root+模块）                                 |
 
 ### 主题与图标
@@ -26,13 +26,18 @@
 
 ### LSPosed（可选）
 
-作用域只勾 **系统框架 `android`**。
+作用域勾选 **系统框架**（库中多为 `system`，兼容 `android`）。APP「我的 → LSPosed / XP」可一键 `requestScope`。
 
-- **作用**：仅当 Magisk 事件守护 `qscd` 不可用时，在插拔**边沿**向 `/data/system/qsc_xp_wake` 写一次标记，缩短轮询；平时几乎零开销
-- **通道**：`/data/system/`（system_server 在 SELinux enforcing 下通常可写；Magisk root 读取）。写失败则本启动停写
-- **检测**：APP 用 Root 读 LSPosed 配置与 `/data/system/qsc_xp_alive` 存活标记
-- 停充始终由 Magisk 模块负责
-- 排查：`adb logcat -s QscXp`
+三层状态（不必为①②重启；③注入需重启）：
+
+1. **服务已连接**：`XposedService` binder（官方 libxposed service，打开 APP 即可）
+2. **作用域已含 system**：`getScope()` / 一键请求
+3. **框架已注入**：`/data/system/qsc_xp_alive` 或 `runningTargets` 含 system_server
+
+- **作用**：仅当 Magisk 事件守护 `qscd` 不可用时，在插拔**边沿**写 `/data/system/qsc_xp_wake`，缩短轮询；平时几乎零开销
+- **通道**：`/data/system/`；开关经 RemotePreferences 同步 `qsc_xp_off` / `qsc_xp_no_wake`
+- **停充**始终由 Magisk 模块负责
+- 排查：动态页 LSP Tab，或 `adb logcat -s QscXp`
 
 ## 安装
 

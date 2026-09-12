@@ -661,5 +661,11 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- LSPosed / libxposed：框架向模块投递 binder，供 getScope() 等（无需自 hook） -->
+        <provider
+            android:name="io.github.libxposed.service.XposedProvider"
+            android:authorities="${applicationId}.XposedService"
+            android:exported="true" />
     </application>
 </manifest>
