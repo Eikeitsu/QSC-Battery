@@ -34,6 +34,7 @@ import com.qsc.battery.ui.design.charge.ChargePrimaryButton
 import com.qsc.battery.ui.design.charge.ChargeSecondaryButton
 import com.qsc.battery.ui.design.charge.ChargeSection
 import com.qsc.battery.ui.design.charge.ChargeSkeletonBox
+import com.qsc.battery.ui.design.charge.ChargeStickyActionBar
 import com.qsc.battery.ui.design.charge.ChargeTheme
 import com.qsc.battery.ui.design.charge.ChargeToggleRow
 import com.qsc.battery.ui.design.charge.ChargeTopBar
@@ -103,12 +104,19 @@ fun ConfigScreen(
                 subtitle = if (advancedOnly) null else "常用项一屏搞定，细节放进阶",
                 onBack = onBack,
             )
+            val showSave = ready && rootOk && moduleOk
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                    .padding(top = 0.dp, bottom = ChargeTheme.dimens.bottomBarContentGap),
+                    .padding(
+                        bottom = if (showSave) {
+                            ChargeTheme.dimens.stickyActionReserve
+                        } else {
+                            ChargeTheme.dimens.bottomBarContentGap
+                        },
+                    ),
                 verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
             ) {
                 if (!ready) {
@@ -410,13 +418,9 @@ fun ConfigScreen(
         }
 
         if (ready && rootOk && moduleOk) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    // 内容区已在底栏之上，勿再 navigationBarsPadding，否则会像多出一层蒙层
-                    .padding(bottom = 12.dp),
+            ChargeStickyActionBar(
+                modifier = Modifier.align(Alignment.BottomCenter),
+                clearSystemNav = advancedOnly,
             ) {
                 ChargePrimaryButton(
                     text = if (advancedOnly) "保存进阶项" else "保存",

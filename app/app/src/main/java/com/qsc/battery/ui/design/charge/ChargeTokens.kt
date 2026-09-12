@@ -41,10 +41,17 @@ data class ChargeTypography(
 data class ChargeDimens(
     val pageHorizontal: Dp = 20.dp,
     val sectionGap: Dp = 18.dp,
-    /** 顶栏标题区到底部内容的额外呼吸（顶栏自身也有底距） */
-    val topBarContentGap: Dp = 22.dp,
-    /** 主 Tab 内容相对底栏的留白（避开圆角底栏，各页统一） */
-    val bottomBarContentGap: Dp = 88.dp,
+    /** 状态栏 insets 之后，标题再下沉的距离 */
+    val topBarTitleTop: Dp = 18.dp,
+    /** 标题行底到页面正文的呼吸间距 */
+    val topBarContentGap: Dp = 28.dp,
+    /**
+     * 主 Tab 内容区底部留白。
+     * 底栏在 Scaffold 外单独占位，这里只需让最后一张卡片不要紧贴底栏顶边。
+     */
+    val bottomBarContentGap: Dp = 20.dp,
+    /** 策略页固定「保存」条预留高度（渐变 + 按钮 + 内边距） */
+    val stickyActionReserve: Dp = 96.dp,
     val radiusLg: Dp = 22.dp,
     val radiusMd: Dp = 16.dp,
     val primaryButton: Dp = 52.dp,

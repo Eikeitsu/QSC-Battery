@@ -98,37 +98,68 @@ fun ImmersiveBottomBar(
     content: @Composable RowScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(ChargeTheme.colors.surface),
+    ) {
+        // 顶部分割线：干净收口，不叠半透明蒙层
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(ChargeTheme.colors.stroke),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(horizontal = 10.dp)
+                .padding(top = 10.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
+    }
+}
+
+/**
+ * 策略/进阶页底部固定操作条：上方短渐变 + 不透明底，避免按钮「浮」在选项上透出内容。
+ * @param clearSystemNav 无底部 Tab 时（进阶页）需避开系统手势条
+ */
+@Composable
+fun ChargeStickyActionBar(
+    modifier: Modifier = Modifier,
+    clearSystemNav: Boolean = false,
+    content: @Composable () -> Unit,
+) {
     val bg = ChargeTheme.colors.background
     Column(
         modifier = modifier.fillMaxWidth(),
     ) {
-        // 各主 Tab 统一：底栏上方淡入，避免有的页有「蒙层」有的没有
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(36.dp)
+                .height(28.dp)
                 .background(
                     Brush.verticalGradient(
-                        listOf(bg.copy(alpha = 0f), bg.copy(alpha = 0.72f), bg.copy(alpha = 0.96f)),
+                        listOf(bg.copy(alpha = 0f), bg.copy(alpha = 0.88f), bg),
                     ),
                 ),
         )
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(shape)
-                .background(ChargeTheme.colors.surface)
+                .background(bg)
+                .then(
+                    if (clearSystemNav) Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+                    else Modifier,
+                )
+                .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
+                .padding(bottom = 12.dp),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(horizontal = 10.dp)
-                    .padding(top = 10.dp, bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                content = content,
-            )
+            content()
         }
     }
 }

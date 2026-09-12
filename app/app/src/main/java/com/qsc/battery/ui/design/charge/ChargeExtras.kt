@@ -60,8 +60,8 @@ fun ChargeTopBar(
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     /**
-     * 顶栏 = 标题行 + 底部空气层。
-     * 空气层与页面同色，不是分割线/假白条；用来把内容「推」开。
+     * 顶栏节奏：状态栏 → 标题区 → 与正文的明确空隙。
+     * 空隙与页面同色，不是分割线；用来建立层级，避免标题贴内容。
      */
     Column(
         modifier = modifier
@@ -73,7 +73,7 @@ fun ChargeTopBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                .padding(top = 10.dp, bottom = 2.dp),
+                .padding(top = ChargeTheme.dimens.topBarTitleTop, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) {
@@ -95,7 +95,7 @@ fun ChargeTopBar(
                     color = ChargeTheme.colors.ink,
                 )
                 if (!subtitle.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = subtitle,
                         style = ChargeTheme.typography.caption,
