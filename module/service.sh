@@ -196,6 +196,8 @@ QSC_SERVICE_HEARTBEAT_LAST=0
 QSC_SERVICE_LOOP_COUNT=0
 QSC_SERVICE_FULL_ROUNDS=0
 QSC_SERVICE_DIAG_LAST=0
+# 清掉上一进程残留，避免热更新 verifier 读到旧 loop_count 误判已接管
+printf '0\n' >"$DATADIR/service_loop_count" 2>/dev/null
 printf '%s\n' "$QSC_SERVICE_BOOT_AT" >"$DATADIR/service_heartbeat" 2>/dev/null
 
 QSC_HOT_TXN_STATE="/data/adb/qsc/hot_update/transactions/QSC_Battery/state"
@@ -322,11 +324,12 @@ qsc_service_heartbeat() {
 	local now pending
 	now="${QSC_PS_NOW:-$(date +%s 2>/dev/null)}"
 	case "$now" in ""|*[!0-9]*) return 0 ;; esac
+	# loop_count 每轮都写：热更新 verifier 要尽快看到 loops>0，不能等 180s 心跳门闩
+	printf '%s\n' "$QSC_SERVICE_LOOP_COUNT" >"$DATADIR/service_loop_count" 2>/dev/null
 	# 与独立心跳进程一致：约 180s 写一次，避免近阈值短循环时每几秒刷盘
 	if [ "$QSC_SERVICE_HEARTBEAT_LAST" -eq 0 ] ||
 		[ "$((now - QSC_SERVICE_HEARTBEAT_LAST))" -ge 180 ] 2>/dev/null; then
 		printf '%s\n' "$now" >"$DATADIR/service_heartbeat" 2>/dev/null
-		printf '%s\n' "$QSC_SERVICE_LOOP_COUNT" >"$DATADIR/service_loop_count" 2>/dev/null
 		printf 'timestamp=%s\nloops=%s\nfull_rounds=%s\nnative_wakes=%s\nwake_reason=%s\n' \
 			"$now" "$QSC_SERVICE_LOOP_COUNT" "$QSC_SERVICE_FULL_ROUNDS" \
 			"${QSC_PS_WAKE_COUNT:-0}" "${QSC_PS_LAST_WAKE_REASON:-}" \

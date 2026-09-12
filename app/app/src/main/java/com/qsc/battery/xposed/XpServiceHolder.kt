@@ -14,8 +14,7 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 
 /**
- * 对齐 HyperCeiler ScopeManager / libxposed example：
- * Application 注册 listener，经 XposedProvider 接收 binder。
+ * 官方 libxposed service：Application 注册 listener，经 XposedProvider 接收 binder。
  */
 object XpServiceHolder : XposedServiceHelper.OnServiceListener {
     private val serviceRef = AtomicReference<XposedService?>(null)
@@ -95,7 +94,7 @@ object XpServiceHolder : XposedServiceHelper.OnServiceListener {
         runCatching { svc?.getRemotePreferences(XpPrefs.REMOTE_GROUP) }.getOrNull()
 
     /**
-     * 请求系统框架作用域（LSPosed UI 确认为 `system`）。
+     * 请求 Android系统作用域（包名 `android` → system_server）。
      * @return 结果说明；null 表示服务不可用
      */
     suspend fun requestSystemScope(): String? {
@@ -104,10 +103,16 @@ object XpServiceHolder : XposedServiceHelper.OnServiceListener {
             val listener = object : XposedService.OnScopeEventListener {
                 override fun onScopeRequestApproved(approved: List<String>) {
                     if (!cont.isActive) return
-                    val ok = approved.any { it.trim().lowercase() in XpPrefs.SYSTEM_SCOPE_PKGS }
+                    val ok = approved.any {
+                        it.trim().equals(XpPrefs.PRIMARY_SCOPE, ignoreCase = true)
+                    }
                     cont.resume(
-                        if (ok) "已批准系统框架作用域"
-                        else "请求完成，返回：${approved.joinToString().ifBlank { "(空)" }}",
+                        if (ok) {
+                            "已批准 ${XpPrefs.scopeLabel(XpPrefs.PRIMARY_SCOPE)}；请重启完成注入"
+                        } else {
+                            "请求完成，返回：${approved.joinToString().ifBlank { "(空)" }}。" +
+                                "请确认勾选 Android系统 (android)"
+                        },
                     )
                 }
 
@@ -116,7 +121,7 @@ object XpServiceHolder : XposedServiceHelper.OnServiceListener {
                 }
             }
             try {
-                svc.requestScope(listOf("system"), listener)
+                svc.requestScope(listOf(XpPrefs.PRIMARY_SCOPE), listener)
             } catch (e: Throwable) {
                 if (cont.isActive) cont.resume("请求异常：${e.message}")
             }

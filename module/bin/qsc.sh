@@ -1,7 +1,8 @@
 #!/system/bin/sh
 # QSC-Battery 统一 CLI
 # 用法：
-#   sh /data/adb/modules/QSC_Battery/bin/qsc.sh <命令> [参数...]
+#   /data/adb/qsc/bin/qsc <命令> …
+#   sh /data/adb/modules/QSC_Battery/bin/qsc.sh <命令> …
 
 MODDIR="${MODDIR:-/data/adb/modules/QSC_Battery}"
 BINDIR="$MODDIR/bin"
@@ -21,7 +22,8 @@ qsc_cli_usage() {
 	cat <<EOF
 QSC-Battery CLI
 
-用法: sh $BINDIR/qsc.sh <命令> [参数]
+用法: /data/adb/qsc/bin/qsc <命令> [参数]
+      （等价于 sh $BINDIR/qsc.sh <命令>）
 
 命令:
   status [--raw]          电池/模块状态（默认人类可读；--raw 为 APP 分段格式）
@@ -40,10 +42,12 @@ QSC-Battery CLI
   version                 模块版本
   help                    显示本帮助
 
+入口: /data/adb/qsc/bin/qsc（不挂 system）
+
 示例:
-  sh $BINDIR/qsc.sh status
-  sh $BINDIR/qsc.sh config set power_stop 80
-  sh $BINDIR/qsc.sh off
+  /data/adb/qsc/bin/qsc status
+  /data/adb/qsc/bin/qsc config set power_stop 80
+  /data/adb/qsc/bin/qsc off
 EOF
 }
 

@@ -314,7 +314,8 @@ esac
 }
 _i=0
 _verified=0
-while [ "$_i" -lt 40 ]; do
+# 服务启动有 sleep 5 + 初始化；给足时间进入主循环并拉起简介 worker
+while [ "$_i" -lt 90 ]; do
 	_pid="$(cat "$OLD/data/service_pid" 2>/dev/null | tr -d ' \r\n')"
 	_hb="$(cat "$OLD/data/service_heartbeat" 2>/dev/null | tr -d ' \r\n')"
 	_loops="$(cat "$OLD/data/service_loop_count" 2>/dev/null | tr -d ' \r\n')"
@@ -326,11 +327,13 @@ while [ "$_i" -lt 40 ]; do
 			if kill -0 "$_pid" 2>/dev/null &&
 				[ "$_loops" -gt 0 ] 2>/dev/null &&
 				kill -0 "$_worker_pid" 2>/dev/null; then
+				# 心跳约 180s 写一次（省电）；窗口须与 description_worker（400s）一致。
+				# 旧逻辑要求 ≤10s，热更新几乎必走 fallback →「热更新未完成」。
 				_now="$(date +%s 2>/dev/null)"
 				[ "$_now" -ge "$_hb" ] 2>/dev/null &&
-					[ "$((_now - _hb))" -le 10 ] 2>/dev/null &&
+					[ "$((_now - _hb))" -le 400 ] 2>/dev/null &&
 					[ "$_now" -ge "$_worker_refresh" ] 2>/dev/null &&
-					[ "$((_now - _worker_refresh))" -le 40 ] 2>/dev/null &&
+					[ "$((_now - _worker_refresh))" -le 90 ] 2>/dev/null &&
 					_verified=1
 			fi
 			;;

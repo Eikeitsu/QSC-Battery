@@ -26,12 +26,12 @@
 
 ### LSPosed（可选）
 
-作用域勾选 **系统框架**（库中多为 `system`，兼容 `android`）。APP「我的 → LSPosed / XP」可一键 `requestScope`。
+作用域勾选 **Android系统**（包名 `android`；列表里的「系统框架」`system` 一般不是）。APP「我的 → LSPosed / XP」可一键 `requestScope("android")`。
 
 三层状态（不必为①②重启；③注入需重启）：
 
 1. **服务已连接**：`XposedService` binder（官方 libxposed service，打开 APP 即可）
-2. **作用域已含 system**：`getScope()` / 一键请求
+2. **作用域已含 android**：`getScope()` / 一键请求
 3. **框架已注入**：`/data/system/qsc_xp_alive` 或 `runningTargets` 含 system_server
 
 - **作用**：仅当 Magisk 事件守护 `qscd` 不可用时，在插拔**边沿**写 `/data/system/qsc_xp_wake`，缩短轮询；平时几乎零开销

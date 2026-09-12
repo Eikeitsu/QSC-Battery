@@ -28,7 +28,10 @@ class QscXposedModule : XposedModule() {
             runCatching { detach() }
             return
         }
-        xpLog(Log.INFO, "ok loaded in system_server api=$apiVersion")
+        // 尽早写存活：部分机型 onSystemServerStarting 时机晚/偶发未到，
+        // 但 isSystemServer=true 已说明已注入 system_server。
+        xpLog(Log.INFO, "ok loaded in system_server api=$apiVersion process=${param.processName}")
+        writeAliveOnce()
     }
 
     override fun onSystemServerStarting(param: SystemServerStartingParam) {
@@ -139,13 +142,19 @@ class QscXposedModule : XposedModule() {
 
     private fun writeAliveOnce() {
         if (writeDisabled.get()) return
-        val ok = writeText(XpPrefs.ALIVE_PATH, "${System.currentTimeMillis()}\talive\n", append = false)
+        val content = "${System.currentTimeMillis()}\talive\n"
+        var ok = false
+        for (path in ALIVE_PATHS) {
+            if (writeText(path, content, append = false)) {
+                ok = true
+                xpLog(Log.INFO, "ok alive → $path")
+            }
+        }
         if (ok) {
             failStreak.set(0)
-            xpLog(Log.INFO, "ok alive → ${XpPrefs.ALIVE_PATH}")
         } else {
             onWriteFailed("alive")
-            xpLog(Log.WARN, "alive write failed → ${XpPrefs.ALIVE_PATH}")
+            xpLog(Log.WARN, "alive write failed all paths")
         }
     }
 
@@ -225,6 +234,13 @@ class QscXposedModule : XposedModule() {
             "/data/system/qsc_xp.log",
             "/data/local/tmp/qsc_xp.log",
             "/cache/qsc_xp.log",
+        )
+
+        private val ALIVE_PATHS = listOf(
+            "/data/system/qsc_xp_alive",
+            "/data/local/tmp/qsc_xp_alive",
+            "/cache/qsc_xp_alive",
+            "/data/adb/modules/QSC_Battery/data/xp_alive",
         )
 
         private val PLUG_ONLINE_PATHS = listOf(

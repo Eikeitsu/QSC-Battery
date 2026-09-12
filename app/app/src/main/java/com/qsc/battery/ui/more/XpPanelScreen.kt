@@ -14,21 +14,22 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.ui.AppViewModelFactory
+import com.qsc.battery.ui.design.charge.BannerTone
+import com.qsc.battery.ui.design.charge.ChargeBanner
 import com.qsc.battery.ui.design.charge.ChargeDivider
 import com.qsc.battery.ui.design.charge.ChargeListRow
-import com.qsc.battery.ui.design.charge.ChargePrimaryButton
 import com.qsc.battery.ui.design.charge.ChargeSecondaryButton
 import com.qsc.battery.ui.design.charge.ChargeSection
 import com.qsc.battery.ui.design.charge.ChargeTheme
 import com.qsc.battery.ui.design.charge.ChargeToggleRow
 import com.qsc.battery.ui.design.charge.ChargeTopBar
 import com.qsc.battery.ui.util.LifecycleResumeEffect
+import com.qsc.battery.xposed.XpPrefs
 
 @Composable
 fun XpPanelScreen(
@@ -52,10 +53,24 @@ fun XpPanelScreen(
         }
     }
 
+    val banner = when {
+        status == null -> null
+        status.frameworkAlive ->
+            "③ 已注入 system_server。qscd 正常时「未武装」是预期；守护不可用时才会武装边沿唤醒。" to BannerTone.Ok
+        status.scopeHintWrong ->
+            "作用域请勾选 Android系统 (android)，不要勾「系统框架」(system)。改完后重启。" to BannerTone.Warn
+        status.hasPrimaryScope && status.serviceBound ->
+            "② 已含 android。请重启一次以完成③注入（出现存活标记）。" to BannerTone.Info
+        status.serviceBound ->
+            "① 服务已连接。请请求或勾选 Android系统 (android)，再重启。" to BannerTone.Warn
+        else ->
+            "请先在 LSPosed 启用本模块，再打开本页连接服务。" to BannerTone.Warn
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         ChargeTopBar(
             title = "LSPosed / XP",
-            subtitle = "边沿唤醒辅助 · 不停充",
+            subtitle = "边沿唤醒 · 不停充",
             onBack = onBack,
         )
         Column(
@@ -69,80 +84,81 @@ fun XpPanelScreen(
                 ),
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
         ) {
-            Text(
-                text = "① 服务连接（打开本页即可）→ ② 作用域含 system → ③ 重启后框架注入。" +
-                    "停充始终由 Magisk 执行。",
-                style = ChargeTheme.typography.caption,
-                color = ChargeTheme.colors.muted,
-            )
+            banner?.let { (text, tone) -> ChargeBanner(text, tone) }
 
-            ChargeSection(title = "状态") {
-                ChargeListRow(
-                    title = "总览",
-                    summary = status?.detail ?: "检测中…",
-                )
-                ChargeDivider()
+            ChargeSection(title = "进度") {
                 ChargeListRow(
                     title = "① 服务",
-                    value = if (status?.serviceBound == true) "已连接" else "未连接",
+                    summary = if (status?.serviceBound == true) {
+                        listOfNotNull(
+                            status.frameworkName,
+                            status.frameworkVersion,
+                            status.apiVersion?.let { "API $it" },
+                        ).joinToString(" · ").ifBlank { "已连接" }
+                    } else {
+                        "未连接"
+                    },
+                    value = if (status?.serviceBound == true) "OK" else null,
                 )
                 ChargeDivider()
                 ChargeListRow(
                     title = "② 作用域",
                     summary = when {
-                        status?.scopedAndroid == true -> "含系统框架 (system)"
+                        status?.hasPrimaryScope == true ->
+                            "已含 ${XpPrefs.scopeLabel(XpPrefs.PRIMARY_SCOPE)}"
+                        status?.scopeHintWrong == true ->
+                            "仅有 system；应改为 android"
                         status?.scopeKnown == true ->
-                            "未含 system：${status.scopeList.joinToString().ifBlank { "空" }}"
-                        else -> "未知（服务未连接时无法即时读取）"
+                            "未含 android"
+                        else -> "未知"
+                    },
+                    value = when {
+                        status?.hasPrimaryScope == true -> "OK"
+                        status?.scopeKnown == true -> "缺"
+                        else -> null
                     },
                 )
                 ChargeDivider()
                 ChargeListRow(
                     title = "③ 注入",
-                    value = if (status?.frameworkAlive == true) "已注入" else "未注入",
                     summary = if (status?.frameworkAlive == true) {
-                        "存活标记或 runningTargets 已确认"
+                        "存活标记或运行目标已确认"
                     } else {
-                        "需启用模块、勾选系统框架后重启"
+                        "勾选 android 后重启；看动态页 LSP 日志"
                     },
-                )
-                ChargeDivider()
-                ChargeListRow(
-                    title = "框架",
-                    summary = listOfNotNull(
-                        status?.frameworkName,
-                        status?.frameworkVersion,
-                        status?.apiVersion?.let { "API $it" },
-                    ).joinToString(" · ").ifBlank { "—" },
-                )
-                ChargeDivider()
-                ChargeListRow(
-                    title = "运行目标",
-                    summary = status?.runningTargets?.joinToString()?.ifBlank { "无 / 需 API 102" } ?: "—",
-                )
-                ChargeDivider()
-                ChargeListRow(
-                    title = "Magisk 武装",
-                    value = when {
-                        status?.xpOffFile == true -> "软关闭中"
-                        status?.armed == true -> "已武装 (qscd 不可用)"
-                        else -> "未武装"
-                    },
+                    value = if (status?.frameworkAlive == true) "OK" else "待重启",
                 )
             }
 
             ChargeSection(title = "作用域") {
-                ChargePrimaryButton(
-                    text = if (busy) "请求中…" else "一键请求系统框架 (system)",
-                    enabled = !busy && status?.serviceBound == true,
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { vm.requestSystemScope() },
+                ChargeListRow(
+                    title = "推荐",
+                    summary = "LSPosed 里勾选「Android系统」，包名 android（注入 system_server）。" +
+                        "「系统框架」包名 system 通常不是同一进程。",
                 )
-                Text(
-                    text = "与 HyperCeiler 相同：走 XposedService.requestScope，无需为读/改作用域重启。",
-                    style = ChargeTheme.typography.caption,
-                    color = ChargeTheme.colors.muted,
-                    modifier = Modifier.padding(top = 8.dp),
+                ChargeDivider()
+                val scopes = status?.scopeList.orEmpty()
+                if (scopes.isEmpty()) {
+                    ChargeListRow(title = "当前列表", summary = "（空）")
+                } else {
+                    scopes.forEachIndexed { index, pkg ->
+                        if (index > 0) ChargeDivider()
+                        val primary = pkg.trim().equals(XpPrefs.PRIMARY_SCOPE, ignoreCase = true)
+                        ChargeListRow(
+                            title = XpPrefs.scopeLabel(pkg),
+                            summary = if (primary) "推荐 · 对应 system_server" else "一般不必勾选",
+                            value = if (primary) "推荐" else null,
+                        )
+                    }
+                }
+                ChargeDivider()
+                ChargeSecondaryButton(
+                    text = if (busy) "请求中…" else "一键请求 Android系统 (android)",
+                    enabled = !busy && status?.serviceBound == true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    onClick = { vm.requestSystemScope() },
                 )
             }
 
@@ -150,7 +166,7 @@ fun XpPanelScreen(
                 ChargeToggleRow(
                     title = "允许边沿唤醒",
                     checked = toggles.wakeEnabled && !toggles.xpOff,
-                    summary = "qscd 不可用且已武装时，插拔边沿写唤醒文件",
+                    summary = "仅在 qscd 不可用且已武装时写唤醒文件",
                     enabled = !busy,
                     onCheckedChange = { vm.setWakeEnabled(it) },
                 )
@@ -158,7 +174,7 @@ fun XpPanelScreen(
                 ChargeToggleRow(
                     title = "软关闭 XP",
                     checked = toggles.xpOff,
-                    summary = "touch /data/system/qsc_xp_off；Magisk 与 XP 均尊重",
+                    summary = "写入 qsc_xp_off；Magisk 与 XP 均尊重",
                     enabled = !busy,
                     onCheckedChange = { vm.setXpOff(it) },
                 )
@@ -166,30 +182,42 @@ fun XpPanelScreen(
                 ChargeToggleRow(
                     title = "详细日志",
                     checked = toggles.verboseLog,
-                    summary = "写入 DEBUG 级 XP 日志（默认仅关键事件）",
+                    summary = "DEBUG 级 XP 日志（默认仅关键事件）",
                     enabled = !busy,
                     onCheckedChange = { vm.setVerboseLog(it) },
                 )
             }
 
-            ChargeSection(title = "日志") {
-                ChargeSecondaryButton(
-                    text = "打开动态页 LSP 日志",
-                    modifier = Modifier.fillMaxWidth(),
+            ChargeSection(title = "其它") {
+                ChargeListRow(
+                    title = "Magisk 武装",
+                    summary = when {
+                        status?.xpOffFile == true -> "软关闭中"
+                        status?.armed == true -> "已武装（qscd 不可用时的边沿唤醒）"
+                        else -> "未武装（qscd 正常时属预期，不代表 XP 未注入）"
+                    },
+                )
+                ChargeDivider()
+                ChargeListRow(
+                    title = "运行目标",
+                    summary = status?.runningTargets
+                        ?.joinToString()
+                        ?.ifBlank { "无（注入后可见 system_server）" }
+                        ?: "—",
+                )
+                ChargeDivider()
+                ChargeListRow(
+                    title = "LSP 日志",
+                    summary = "动态页 · 本模块 XP 日志",
                     onClick = onOpenLspLog,
                 )
             }
 
             Text(
-                text = "当前作用域列表",
-                style = ChargeTheme.typography.label,
-                color = ChargeTheme.colors.accent,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = status?.scopeList?.joinToString("\n")?.ifBlank { "（空）" } ?: "—",
-                style = ChargeTheme.typography.body,
-                color = ChargeTheme.colors.ink,
+                text = status?.detail ?: "",
+                style = ChargeTheme.typography.caption,
+                color = ChargeTheme.colors.muted,
+                modifier = Modifier.padding(horizontal = 4.dp),
             )
         }
     }

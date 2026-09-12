@@ -22,8 +22,8 @@ function unixFileMode(unixPath) {
     unixPath.endsWith(".sh") ||
     base === "update-binary" ||
     base === "updater-script" ||
-    // 原生事件等待器：qscd/qscdc + 可选 ABI 后缀，安装时改名为 bin/qscd
-    /^qscdc?(-[a-z0-9]+)?$/.test(base);
+    // 原生二进制：qscd/qscdc 守护 + qsc CLI（均可带 -arm64/-arm 后缀）
+    /^qsc(d|dc)?(-[a-z0-9]+)?$/.test(base);
   return exec ? 0o100755 : 0o100644;
 }
 

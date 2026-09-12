@@ -99,9 +99,10 @@ for (const zip of zips) {
   }
 
   const want = new Set(VARIANT_BINARIES[variant]);
+  const cliBins = ["bin/qsc-arm64", "bin/qsc-arm"];
   for (const bin of ALL_BINARIES) {
     const present = names.includes(bin);
-    // 多出来的二进制一律算错：变体之间只应差在带哪套守护
+    // 多出来的守护二进制一律算错：变体之间只应差在带哪套守护
     if (!want.has(bin) && present) {
       fail(`${zip}: unexpected ${bin} (variant ${variant})`);
       continue;
@@ -113,6 +114,15 @@ for (const zip of zips) {
       fail(`${zip}: missing ${bin}`);
     } else {
       console.warn(`[verify-zips] ${zip}: missing ${bin} — 本地未编译原生守护，已跳过`);
+    }
+  }
+  for (const bin of cliBins) {
+    if (names.includes(bin)) continue;
+    const built = existsSync(join(moduleRoot, bin));
+    if (nativeRequired || built) {
+      fail(`${zip}: missing CLI ${bin}`);
+    } else {
+      console.warn(`[verify-zips] ${zip}: missing ${bin} — 本地未编译 qsc CLI，已跳过`);
     }
   }
 

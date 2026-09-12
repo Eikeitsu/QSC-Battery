@@ -18,7 +18,7 @@ class QscApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // libxposed service：与 HyperCeiler / 官方 example 相同，尽早注册以接收 LSPosed binder
+        // libxposed service：尽早注册 listener，经 XposedProvider 接收 LSPosed binder
         XpServiceHolder.install()
         Shell.enableVerboseLogging = BuildConfig.DEBUG
         Shell.setDefaultBuilder(

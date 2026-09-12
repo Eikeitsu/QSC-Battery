@@ -11,7 +11,7 @@ import java.io.File
 /**
  * XP / LSPosed 三层状态：
  * 1. 服务已连接（XposedService binder）— 打开 APP 即可，不必重启
- * 2. 作用域已含 system — getScope / 一键 requestScope
+ * 2. 作用域已含 android（Android系统）— getScope / 一键 requestScope
  * 3. 框架已注入 — qsc_xp_alive 或 runningTargets 含 system_server
  */
 object XpRuntime {
@@ -52,6 +52,10 @@ object XpRuntime {
         val frameworkAlive: Boolean,
         val serviceBound: Boolean,
         val scopeList: List<String>,
+        /** 已勾选推荐的 android（Android系统） */
+        val hasPrimaryScope: Boolean,
+        /** 仅有 system、没有 android 时的误勾提示 */
+        val scopeHintWrong: Boolean,
         val runningTargets: List<String>,
         val frameworkName: String?,
         val frameworkVersion: String?,
@@ -100,7 +104,7 @@ object XpRuntime {
             api = info?.apiVersion
             scopeList = XpServiceHolder.scopeList(svc)
             scopeKnown = true
-            scopedAndroid = scopeList.any { it.lowercase() in XpPrefs.SYSTEM_SCOPE_PKGS }
+            scopedAndroid = XpPrefs.hasAnyFrameworkScope(scopeList)
             running = XpServiceHolder.runningTargetNames(svc)
         } else if (hasRoot && root.exists(DB)) {
             val cfg = readLsposedConfigDb(context, root, ourPkgs)
@@ -116,15 +120,24 @@ object XpRuntime {
         }
 
         var alive = false
-        if (hasRoot && root.exists(XpPrefs.ALIVE_PATH)) {
-            val raw = root.readFile(XpPrefs.ALIVE_PATH)
-            val ts = raw?.lineSequence()?.firstOrNull()?.substringBefore('\t')?.toLongOrNull()
-            alive = if (ts != null) {
-                val age = System.currentTimeMillis() - ts
-                age in 0..ALIVE_MAX_AGE_MS
-            } else {
-                true
+        if (hasRoot) {
+            for (path in XpPrefs.ALIVE_CANDIDATES) {
+                if (!root.exists(path)) continue
+                val raw = root.readFile(path) ?: continue
+                if (!raw.contains("alive")) continue
+                val ts = raw.lineSequence().firstOrNull()?.substringBefore('\t')?.toLongOrNull()
+                alive = if (ts != null) {
+                    val age = System.currentTimeMillis() - ts
+                    age in 0..ALIVE_MAX_AGE_MS
+                } else {
+                    true
+                }
+                if (alive) break
             }
+        }
+        // 文件写失败时仍可凭日志判定已注入（loaded / hooked / alive 行）
+        if (!alive && hasRoot) {
+            alive = probeAliveFromXpLog(root)
         }
         val targetInjected = running.any {
             val n = it.lowercase()
@@ -137,6 +150,12 @@ object XpRuntime {
 
         val armed = hasRoot && root.exists(XpPrefs.ARM_PATH)
         val xpOff = hasRoot && root.exists(XpPrefs.OFF_PATH)
+        val hasPrimary = XpPrefs.hasPrimaryScope(scopeList) || alive || targetInjected
+        val wrongScope = scopeKnown &&
+            XpPrefs.hasAnyFrameworkScope(scopeList) &&
+            !XpPrefs.hasPrimaryScope(scopeList) &&
+            !alive &&
+            !targetInjected
 
         val level = when {
             alive || targetInjected -> Level.Active
@@ -151,19 +170,23 @@ object XpRuntime {
         val detail = when (level) {
             Level.Active -> "③ 框架已注入$fwHint"
             Level.Enabled -> when {
+                wrongScope ->
+                    "② 当前勾了 system（系统框架），请改勾 Android系统 (android) 后重启"
+                hasPrimary && viaService ->
+                    "② 服务已连接且作用域含 android$fwHint；重启后出现存活标记即③完成"
+                hasPrimary ->
+                    "作用域已含 android；打开 APP 建立服务连接，重启后完成注入"
                 scopedAndroid && viaService ->
-                    "② 服务已连接且作用域含系统框架$fwHint；重启后出现存活标记即③注入完成"
-                scopedAndroid ->
-                    "作用域含系统框架；打开 APP 建立服务连接，重启后完成注入"
+                    "① 服务已连接$fwHint；作用域需含 Android系统 (android)"
                 scopeKnown && viaService ->
-                    "① 服务已连接$fwHint，请勾选/请求系统框架（system）"
+                    "① 服务已连接$fwHint，请勾选/请求 Android系统 (android)"
                 viaService ->
                     "① 服务已连接$fwHint"
                 else ->
                     "模块已启用；打开本 APP 以连接 LSPosed 服务"
             }
             Level.Framework ->
-                "已检测到 LSPosed，请启用本模块并勾选系统框架；读作用域不必重启，注入需重启"
+                "已检测到 LSPosed，请启用本模块并勾选 Android系统 (android)；读作用域不必重启，注入需重启"
             Level.ManagerOnly -> "已安装 LSPosed 管理器"
             Level.None -> if (hasRoot) "未检测到 LSPosed" else "检测 XP 需 Root；或先安装 LSPosed"
         }
@@ -173,11 +196,13 @@ object XpRuntime {
             managerInstalled = manager,
             frameworkPresent = framework || viaService || (manager && !hasRoot),
             enabledInManager = enabled || viaService,
-            scopedAndroid = scopedAndroid,
+            scopedAndroid = scopedAndroid || hasPrimary,
             scopeKnown = scopeKnown,
             frameworkAlive = alive || targetInjected,
             serviceBound = viaService,
             scopeList = scopeList,
+            hasPrimaryScope = hasPrimary,
+            scopeHintWrong = wrongScope,
             runningTargets = running,
             frameworkName = fwName,
             frameworkVersion = fwVer,
@@ -277,4 +302,26 @@ object XpRuntime {
     }
 
     fun isAvailable(context: Context): Boolean = isManagerInstalled(context)
+
+    private suspend fun probeAliveFromXpLog(root: RootBridge): Boolean {
+        val paths = listOf(
+            "/data/system/qsc_xp.log",
+            "/data/local/tmp/qsc_xp.log",
+            "/cache/qsc_xp.log",
+            "/data/adb/modules/QSC_Battery/data/xp.log",
+        ).joinToString(" ") { "'$it'" }
+        val r = root.exec(
+            """
+            for f in $paths; do
+              [ -f "${'$'}f" ] || continue
+              if grep -E 'ok loaded in system_server|ok alive|BatteryService hooked' "${'$'}f" >/dev/null 2>&1; then
+                echo HIT
+                exit 0
+              fi
+            done
+            echo MISS
+            """.trimIndent(),
+        )
+        return r.out.contains("HIT")
+    }
 }

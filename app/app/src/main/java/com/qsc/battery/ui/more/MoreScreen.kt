@@ -152,7 +152,7 @@ fun MoreScreen(
                 ChargeListRow(
                     title = "LSPosed / XP",
                     summary = xpStatus?.detail
-                        ?: "可选：启用本模块，作用域勾选系统框架(system)；qscd 不可用时边沿唤醒 Magisk",
+                        ?: "可选：启用本模块，作用域勾选 Android系统(android)；qscd 不可用时边沿唤醒 Magisk",
                     onClick = onOpenXp,
                 )
                 ChargeDivider()

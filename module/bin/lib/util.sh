@@ -252,18 +252,31 @@ qsc_xp_file_log() {
 	fi
 }
 
-# 启动时：预置可写日志落点 + 记录探活（不 cat 全量，避免重启重复；APP 会合并多路径）
+# 启动时：预置可写日志/存活落点 + 记录探活（不 cat 全量，避免重启重复；APP 会合并多路径）
 qsc_xp_bootstrap_logs() {
 	mkdir -p "$DATADIR" 2>/dev/null || true
 	touch /data/system/qsc_xp.log /data/local/tmp/qsc_xp.log 2>/dev/null || true
 	chmod 666 /data/system/qsc_xp.log /data/local/tmp/qsc_xp.log 2>/dev/null || true
-	if [ -f /data/system/qsc_xp_alive ]; then
+	# 不要预建空的 alive 文件：空文件会被误判为已注入
+	_alive=0
+	for _p in /data/system/qsc_xp_alive /data/local/tmp/qsc_xp_alive \
+		/cache/qsc_xp_alive "$DATADIR/xp_alive"; do
+		if [ -s "$_p" ] && grep -q alive "$_p" 2>/dev/null; then
+			_alive=1
+			break
+		fi
+	done
+	if [ "$_alive" = "1" ]; then
 		qsc_xp_file_log INFO "ok magisk: xp alive present (③ injected)"
 	elif [ -f /data/system/qsc_xp_off ]; then
 		qsc_xp_file_log WARN "magisk: xp soft-off (/data/system/qsc_xp_off)"
+	elif grep -E 'ok loaded in system_server|BatteryService hooked' \
+		/data/system/qsc_xp.log /data/local/tmp/qsc_xp.log "$DATADIR/xp.log" \
+		>/dev/null 2>&1; then
+		qsc_xp_file_log INFO "ok magisk: xp log shows injection (alive file may be blocked)"
 	else
-		# 与「作用域检测」无关：仅表示 system_server 未写出存活文件
-		qsc_xp_file_log WARN "magisk: xp alive missing (③ not injected — enable module, scope=system, reboot)"
+		# 与「作用域检测」无关：仅表示 system_server 未写出存活证据
+		qsc_xp_file_log WARN "magisk: xp alive missing (③ not injected — enable module, scope=android, reboot)"
 	fi
 }
 

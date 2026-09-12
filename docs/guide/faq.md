@@ -9,10 +9,10 @@
 5. 插电后测开关，或自定义 `power_switch`：
 
 ```bash
-sh /data/adb/modules/QSC_Battery/bin/qsc.sh status
-sh /data/adb/modules/QSC_Battery/bin/qsc.sh diagnose
+/data/adb/qsc/bin/qsc status
+/data/adb/qsc/bin/qsc diagnose
 # 插电：
-sh /data/adb/modules/QSC_Battery/bin/qsc.sh test-switch
+/data/adb/qsc/bin/qsc test-switch
 ```
 
 报告常在 `/sdcard/qsc_diagnose.txt`。也可用 WebUI「策略 → 测开关与缓存」。
@@ -69,9 +69,9 @@ sh /data/adb/modules/QSC_Battery/bin/qsc.sh test-switch
 
 ## LSPosed 要勾什么？
 
-作用域勾选 **系统框架**（LSPosed 里常显示为系统框架；配置库包名多为 **`system`**，偶见 `android`）。`qscd` 正常时 XP 几乎不干活；守护不可用时才在插拔边沿写 `/data/system/qsc_xp_wake` 协助唤醒。
+作用域勾选 **Android系统**（包名 **`android`**，对应 `system_server`）。部分机型列表里还有「系统框架」包名 `system`，一般**不是**同一进程，不必勾。`qscd` 正常时 XP 几乎不干活；守护不可用时才在插拔边沿写 `/data/system/qsc_xp_wake` 协助唤醒。
 
-APP「我的 → LSPosed / XP」用官方 **XposedService**（不必重启即可看作用域；可一键请求）。**注入**到 `system_server` 仍需重启后看存活标记。
+APP「我的 → LSPosed / XP」用官方 **XposedService**（不必重启即可看作用域；可一键请求 `android`）。**注入**到 `system_server` 仍需重启后看存活标记。
 
 SELinux enforcing：选用 `/data/system/` 是常见可写路径，**多数机型可用**，但不能保证 100% OEM；失败会停写以免耗电。软关闭：APP 开关或 `touch /data/system/qsc_xp_off`。
 

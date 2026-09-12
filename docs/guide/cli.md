@@ -1,12 +1,15 @@
 # 命令行 CLI
 
-模块内统一入口：
+装完模块后：
 
 ```bash
-sh /data/adb/modules/QSC_Battery/bin/qsc.sh help
+/data/adb/qsc/bin/qsc help
+/data/adb/qsc/bin/qsc status
 ```
 
-需 Root（adb root / su）。
+入口在 `/data/adb/qsc/bin/`，**不挂载** `system/bin`（避免暴露 Magisk）。需 Root（`adb shell` / `su`）。
+
+底层仍是模块内 `bin/qsc.sh`；`qsc` 是原生薄包装（无 NDK 时安装 shell 回退）。
 
 ## 常用命令
 
@@ -28,22 +31,23 @@ sh /data/adb/modules/QSC_Battery/bin/qsc.sh help
 ## 示例
 
 ```bash
-MOD=/data/adb/modules/QSC_Battery
-sh $MOD/bin/qsc.sh status
-sh $MOD/bin/qsc.sh config set power_stop 80
-sh $MOD/bin/qsc.sh config set power_start 70
-sh $MOD/bin/qsc.sh off          # 暂停逻辑
-sh $MOD/bin/qsc.sh on
-sh $MOD/bin/qsc.sh events
-sh $MOD/bin/qsc.sh diagnose
+/data/adb/qsc/bin/qsc status
+/data/adb/qsc/bin/qsc config set power_stop 80
+/data/adb/qsc/bin/qsc config set power_start 70
+/data/adb/qsc/bin/qsc off
+/data/adb/qsc/bin/qsc on
+/data/adb/qsc/bin/qsc events
+/data/adb/qsc/bin/qsc diagnose
 # 插电后：
-sh $MOD/bin/qsc.sh test-switch
+/data/adb/qsc/bin/qsc test-switch
 ```
 
 ## 相关脚本
 
 | 脚本                                  | 说明           |
 | ------------------------------------- | -------------- |
+| `/data/adb/qsc/bin/qsc`               | 外部 CLI 入口  |
+| `bin/qsc.sh`                          | 实际命令实现   |
 | `bin/diagnose.sh`                     | 诊断报告       |
 | `bin/test_switch.sh`                  | 完整测开关     |
 | `bin/detect_device.sh`                | 机型探测       |

@@ -153,9 +153,19 @@ const NATIVE_IMPLS = [
   { name: "c", script: "build-native-c.mjs", bins: ["qscdc-arm64", "qscdc-arm"] },
 ];
 function ensureNative() {
+  // CLI 包装对所有变体都打：体积很小，装完即可 /data/adb/qsc/bin/qsc
+  const cliScript = join(repoRoot, "tooling", "scripts", "build-native-cli.mjs");
+  const cliBins = ["qsc-arm64", "qsc-arm"];
+  if (cliBins.every((name) => existsSync(join(moduleRoot, "bin", name)))) {
+    log("native qsc cli up to date");
+  } else if (existsSync(cliScript)) {
+    log("building native qsc cli");
+    execSync(`node ${JSON.stringify(cliScript)}`, { cwd: repoRoot, stdio: "inherit" });
+  }
+
   const wanted = new Set(NATIVE_VARIANTS[variant]);
   if (!wanted.size) {
-    log("native: sh 变体，跳过二进制构建");
+    log("native qscd: sh 变体，跳过守护构建");
     return;
   }
   for (const impl of NATIVE_IMPLS) {
@@ -266,6 +276,16 @@ log(`bin/lib: ${libFiles.join(", ")}`);
       ? `native (${variant}): ${shipped.join(", ")}`
       : `native (${variant}): none — 由 WebUI 按需下载`,
   );
+
+  const cliBins = ["qsc-arm64", "qsc-arm"].filter((name) =>
+    existsSync(join(moduleRoot, "bin", name)),
+  );
+  for (const name of cliBins) copyFromModule(join("bin", name));
+  if (cliBins.length) {
+    log(`cli: ${cliBins.join(", ")}`);
+  } else {
+    log("cli: missing qsc-arm64/arm — 安装时退回 shell 包装");
+  }
 }
 if (includeDebug) {
   for (const file of BIN_DEBUG_EXTRA) copyFromModule(join("bin", file));

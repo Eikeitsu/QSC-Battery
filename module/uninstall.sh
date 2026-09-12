@@ -54,6 +54,8 @@ rm -rf \
 	/data/adb/.qsc_hot_update.sh \
 	/data/adb/.QSC_Battery.hot_update.lock \
 	/data/adb/modules_update/QSC_Battery 2>/dev/null
+rm -f /data/adb/qsc/bin/qsc 2>/dev/null
+rmdir /data/adb/qsc/bin 2>/dev/null
 rmdir /data/adb/qsc/runtime/diagnostics 2>/dev/null
 rmdir /data/adb/qsc/runtime 2>/dev/null
 rmdir /data/adb/qsc 2>/dev/null

@@ -647,6 +647,9 @@ install_companion_app() {
 		ui_print "- 正在安装内嵌伴侣 APP..."
 		if pm install -r "$_bundled_apk" >/dev/null 2>&1; then
 			ui_print "- 伴侣 APP 已安装"
+			# 运行期不需要模块目录里的 APK；装进系统后删掉，少占 /data/adb 空间
+			rm -rf "$MODPATH/apk" 2>/dev/null
+			rm -f "$MODPATH/QSC-Battery.apk" 2>/dev/null
 		else
 			ui_print "- APP 安装失败（签名冲突或 pm 不可用）"
 			ui_print "- 可手动安装: $_bundled_apk"
@@ -691,6 +694,37 @@ install_companion_app() {
 }
 install_companion_app
 
+# 外部 CLI：仅装到 /data/adb/qsc/bin/qsc（不挂 system，避免暴露 Magisk）
+install_qsc_cli() {
+	ui_print "--------------------------------"
+	ui_print " 命令行 CLI"
+	_abi="$(getprop ro.product.cpu.abi 2>/dev/null)"
+	case "$_abi" in
+		arm64* | *arm64*) _cli_src="$MODPATH/bin/qsc-arm64" ;;
+		*) _cli_src="$MODPATH/bin/qsc-arm" ;;
+	esac
+	mkdir -p /data/adb/qsc/bin 2>/dev/null
+	_installed=0
+	if [ -f "$_cli_src" ] && [ -s "$_cli_src" ]; then
+		cp -f "$_cli_src" /data/adb/qsc/bin/qsc 2>/dev/null && _installed=1
+		cp -f "$_cli_src" "$MODPATH/bin/qsc" 2>/dev/null || true
+	fi
+	if [ "$_installed" != "1" ]; then
+		cat >/data/adb/qsc/bin/qsc <<'QSC_CLI_EOF'
+#!/system/bin/sh
+exec sh "${QSC_MODDIR:-/data/adb/modules/QSC_Battery}/bin/qsc.sh" "$@"
+QSC_CLI_EOF
+		cp -f /data/adb/qsc/bin/qsc "$MODPATH/bin/qsc" 2>/dev/null || true
+		ui_print "- 已安装 shell 版 CLI（包内无原生二进制）"
+	else
+		ui_print "- 已安装原生 CLI"
+	fi
+	chmod 0755 /data/adb/qsc/bin/qsc "$MODPATH/bin/qsc" 2>/dev/null
+	rm -f "$MODPATH/bin/qsc-arm64" "$MODPATH/bin/qsc-arm" 2>/dev/null
+	ui_print "- 用法: /data/adb/qsc/bin/qsc status"
+}
+install_qsc_cli
+
 ui_print "--------------------------------"
 ui_print " 目录结构: "
 ui_print "  bin/     核心脚本 "
@@ -722,6 +756,8 @@ set_perm "$MODPATH/hotinstall.sh" root root 0755
 [ -f "$MODPATH/bin/qscd" ] && set_perm "$MODPATH/bin/qscd" root root 0755
 [ -f "$MODPATH/bin/qscd_fetch.sh" ] && set_perm "$MODPATH/bin/qscd_fetch.sh" root root 0755
 [ -f "$MODPATH/bin/qsc_status.sh" ] && set_perm "$MODPATH/bin/qsc_status.sh" root root 0755
+[ -f "$MODPATH/bin/qsc" ] && set_perm "$MODPATH/bin/qsc" root root 0755
+[ -f /data/adb/qsc/bin/qsc ] && set_perm /data/adb/qsc/bin/qsc root root 0755
 
 # 非首次：本模块无 system/sepolicy 等开机挂载，更新默认可免重启
 ui_print "--------------------------------"

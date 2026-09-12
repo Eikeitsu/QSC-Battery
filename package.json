@@ -9,6 +9,7 @@
     "build:web": "node tooling/scripts/build-web.mjs",
     "build:native": "node tooling/scripts/build-native.mjs",
     "build:native:c": "node tooling/scripts/build-native-c.mjs",
+    "build:native:cli": "node tooling/scripts/build-native-cli.mjs",
     "typecheck:web": "vue-tsc --noEmit -p webui/tsconfig.json",
     "lint:js": "eslint webui tooling docs/.vitepress eslint.config.js stylelint.config.js commitlint.config.js --max-warnings 0",
     "lint:js:fix": "npm run lint:js -- --fix",
