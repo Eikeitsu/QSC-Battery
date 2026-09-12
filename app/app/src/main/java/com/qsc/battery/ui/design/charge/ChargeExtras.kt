@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -58,48 +59,57 @@ fun ChargeTopBar(
     subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    // 用内边距呼吸，不用分割线/渐变白条——避免「线下一截白」
-    Row(
+    /**
+     * 顶栏 = 标题行 + 底部空气层。
+     * 空气层与页面同色，不是分割线/假白条；用来把内容「推」开。
+     */
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .background(ChargeTheme.colors.background)
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-            .padding(top = 12.dp, bottom = 18.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .windowInsetsPadding(WindowInsets.statusBars),
     ) {
-        if (onBack != null) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = "返回",
-                tint = ChargeTheme.colors.ink,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onBack)
-                    .padding(8.dp),
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = ChargeTheme.typography.title,
-                color = ChargeTheme.colors.ink,
-            )
-            if (!subtitle.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    style = ChargeTheme.typography.caption,
-                    color = ChargeTheme.colors.muted,
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
+                .padding(top = 10.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (onBack != null) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = "返回",
+                    tint = ChargeTheme.colors.ink,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onBack)
+                        .padding(8.dp),
                 )
             }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = ChargeTheme.typography.title,
+                    color = ChargeTheme.colors.ink,
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = subtitle,
+                        style = ChargeTheme.typography.caption,
+                        color = ChargeTheme.colors.muted,
+                    )
+                }
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                content = actions,
+            )
         }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            content = actions,
-        )
+        Spacer(modifier = Modifier.height(ChargeTheme.dimens.topBarContentGap))
     }
 }
 
@@ -270,16 +280,14 @@ fun ChargeScreen(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxSize()) {
         topBar()
         Column(
             modifier = Modifier
+                .weight(1f, fill = true)
                 .fillMaxWidth()
                 .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                .padding(
-                    top = ChargeTheme.dimens.topBarContentGap,
-                    bottom = ChargeTheme.dimens.sectionGap,
-                ),
+                .padding(bottom = ChargeTheme.dimens.bottomBarContentGap),
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
             content = content,
         )
@@ -351,12 +359,24 @@ object ChargePresets {
     )
 }
 
-fun batteryStatusLabel(raw: String): String = when (raw.trim().lowercase()) {
-    "charging" -> "充电中"
-    "full" -> "已充满"
-    "discharging" -> "未充电"
-    "not charging", "not_charging" -> "未充电"
-    "unknown", "" -> "未知"
+fun batteryStatusLabel(
+    raw: String,
+    powered: Boolean = false,
+    stopped: Boolean = false,
+): String = when (raw.trim().lowercase()) {
+    "charging", "2" -> "充电中"
+    "full", "5" -> "已充满"
+    "discharging", "3" -> "未充电"
+    "not charging", "not_charging", "4" -> when {
+        stopped -> "已停充"
+        powered -> "供电中" // MCA 等机型插电时常报 Not charging
+        else -> "未充电"
+    }
+    "unknown", "1", "" -> when {
+        stopped -> "已停充"
+        powered -> "已插电"
+        else -> "未知"
+    }
     else -> raw.ifBlank { "未知" }
 }
 
@@ -373,8 +393,14 @@ fun chargeEventTypeLabel(type: String): String = when (type.uppercase()) {
     else -> type
 }
 
+/**
+ * 是否展示充电动效。
+ * 模块 snapshot 常把 status 写成数字（2=Charging），且 MCA 机型插电时可能是 4/Not charging。
+ */
 fun isActivelyCharging(statusRaw: String, powered: Boolean, stopped: Boolean): Boolean {
-    if (!powered || stopped) return false
-    return statusRaw.trim().equals("Charging", ignoreCase = true) ||
-        statusRaw.trim() == "充电中"
+    if (stopped || !powered) return false
+    return when (statusRaw.trim().lowercase()) {
+        "3", "discharging" -> false
+        else -> true // 已插电且未停充：含 2/Charging、5/Full、4/Not charging(MCA)
+    }
 }

@@ -2,8 +2,10 @@ package com.qsc.battery.ui.more
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -73,7 +75,7 @@ fun MoreScreen(
             )
         }
         if (container.root.isRootAvailable()) {
-            val off = container.root.exists("/data/adb/qsc/xp_power_events_off")
+            val off = container.root.exists("/data/local/tmp/qsc_xp_power_events_off")
             container.settingsRepository.setXpPowerEvents(!off)
         }
     }
@@ -88,9 +90,7 @@ fun MoreScreen(
     }
 
     ChargeScreen(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+        modifier = Modifier.fillMaxSize(),
         topBar = {
             ChargeTopBar(
                 title = "我的",
@@ -98,6 +98,12 @@ fun MoreScreen(
             )
         },
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
+        ) {
         val chips = buildList {
             add(if (permHint.contains("Root ✓")) "Root ✓" else "Root ✗")
             add(if (permHint.contains("通知 ✓")) "通知 ✓" else "通知 ✗")
@@ -171,8 +177,8 @@ fun MoreScreen(
                     scope.launch {
                         container.settingsRepository.setXpPowerEvents(enabled)
                         if (container.root.isRootAvailable()) {
-                            if (enabled) container.root.rm("/data/adb/qsc/xp_power_events_off")
-                            else container.root.exec("mkdir -p /data/adb/qsc; touch /data/adb/qsc/xp_power_events_off")
+                            if (enabled) container.root.rm("/data/local/tmp/qsc_xp_power_events_off")
+                            else container.root.exec("touch /data/local/tmp/qsc_xp_power_events_off")
                         }
                         refreshMeta()
                     }
@@ -197,6 +203,7 @@ fun MoreScreen(
                 title = "说明",
                 summary = "底层由 Magisk 模块执行；本应用仅配置与展示。",
             )
+        }
         }
     }
 

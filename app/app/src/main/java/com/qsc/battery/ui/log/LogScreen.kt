@@ -80,7 +80,7 @@ fun LogScreen(container: AppContainer) {
                         .background(ChargeTheme.colors.background)
                         .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
                         .padding(
-                            top = ChargeTheme.dimens.topBarContentGap,
+                            top = 4.dp,
                             bottom = 14.dp,
                         ),
                     verticalArrangement = Arrangement.spacedBy(12.dp),

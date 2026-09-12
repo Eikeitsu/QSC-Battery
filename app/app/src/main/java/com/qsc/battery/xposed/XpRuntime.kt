@@ -7,8 +7,16 @@ import kotlinx.coroutines.withContext
 
 /** LSPosed / 框架侧状态探测（分层：管理器 / 框架 / 本模块心跳）。 */
 object XpRuntime {
-    const val HEARTBEAT_PATH = "/data/adb/qsc/xp_heartbeat"
+    /** 兼容旧路径；实际探测见 [HEARTBEAT_CANDIDATES]。 */
+    const val HEARTBEAT_PATH = "/data/local/tmp/qsc_xp_heartbeat"
     private const val HEARTBEAT_MAX_AGE_MS = 24L * 60L * 60L * 1000L
+
+    private val HEARTBEAT_CANDIDATES = listOf(
+        "/data/local/tmp/qsc_xp_heartbeat",
+        "/data/system/qsc_xp_heartbeat",
+        "/cache/qsc_xp_heartbeat",
+        "/data/adb/qsc/xp_heartbeat",
+    )
 
     private val MANAGER_PACKAGES = listOf(
         "org.lsposed.manager",
@@ -25,11 +33,6 @@ object XpRuntime {
         "/data/adb/modules/zygisk_lsposed_debug",
     )
 
-    private val MODULE_SCOPE_HINTS = listOf(
-        "/data/adb/lspd/config",
-        "/data/misc/lspd",
-    )
-
     enum class Level { None, ManagerOnly, Framework, Injected }
 
     data class Status(
@@ -40,6 +43,7 @@ object XpRuntime {
         val detail: String,
         val heartbeatAgeMs: Long? = null,
         val heartbeatReason: String? = null,
+        val heartbeatPath: String? = null,
     )
 
     fun isManagerInstalled(context: Context): Boolean {
@@ -61,15 +65,37 @@ object XpRuntime {
         } else {
             false
         }
-        val heartbeat = if (hasRoot) root.readFile(HEARTBEAT_PATH) else null
-        val parsed = parseHeartbeat(heartbeat)
-        val injected = parsed != null && parsed.ageMs in 0..HEARTBEAT_MAX_AGE_MS
-        val scopeHint = if (hasRoot && framework && !injected) {
-            MODULE_SCOPE_HINTS.any { root.exists(it) }
-        } else {
-            false
+
+        var parsed: Heartbeat? = null
+        var pathUsed: String? = null
+        if (hasRoot) {
+            for (path in HEARTBEAT_CANDIDATES) {
+                val raw = root.readFile(path) ?: continue
+                val hb = parseHeartbeat(raw) ?: continue
+                if (parsed == null || hb.ageMs < parsed.ageMs) {
+                    parsed = hb
+                    pathUsed = path
+                }
+            }
+            // 也扫 LSPosed 模块私有目录（若某版落过盘）
+            val remote = root.exec(
+                "find /data/adb/lspd/modules -type f -name 'xp_heartbeat' 2>/dev/null | head -n 5",
+            )
+            if (remote.ok) {
+                for (line in remote.out.lineSequence()) {
+                    val p = line.trim()
+                    if (p.isEmpty()) continue
+                    val raw = root.readFile(p) ?: continue
+                    val hb = parseHeartbeat(raw) ?: continue
+                    if (parsed == null || hb.ageMs < parsed.ageMs) {
+                        parsed = hb
+                        pathUsed = p
+                    }
+                }
+            }
         }
 
+        val injected = parsed != null && parsed.ageMs in 0..HEARTBEAT_MAX_AGE_MS
         val level = when {
             injected -> Level.Injected
             framework -> Level.Framework
@@ -80,16 +106,17 @@ object XpRuntime {
         val detail = when (level) {
             Level.Injected -> {
                 val reason = parsed?.reason?.takeIf { it.isNotBlank() }?.let { "（$it）" }.orEmpty()
-                "已注入系统并写入心跳$reason"
+                val where = pathUsed?.let { " @$it" }.orEmpty()
+                "已注入系统并写入心跳$reason$where"
             }
             Level.Framework -> when {
                 !hasRoot -> "已安装管理器；需 Root 才能确认框架与注入"
-                heartbeat.isNullOrBlank() ->
-                    "已检测到 LSPosed 框架，但尚无本模块心跳。请确认：作用域勾选系统框架(android) → 启用模块 → 重启手机（或强制停止系统框架）。"
                 parsed == null ->
-                    "已检测到框架，但心跳文件无法解析。可尝试重启后查看。"
+                    "已检测到 LSPosed，但尚无本模块心跳。请确认作用域勾选系统框架(android) 后软重启/重启，" +
+                        "并用 adb logcat -s QscXp 查看是否有 onModuleLoaded / heartbeat 日志。"
                 else ->
-                    "已检测到框架，心跳已过期（约 ${parsed.ageMs / 3_600_000} 小时前）。模块可能未勾选 android 作用域，或重启后钩子未触发。请重新启用并重启。"
+                    "已检测到框架，心跳已过期（约 ${parsed.ageMs / 3_600_000} 小时前@$pathUsed）。" +
+                        "请重新启用模块并重启，或检查 logcat QscXp。"
             }
             Level.ManagerOnly ->
                 "已安装 LSPosed 管理器，请启用本模块并勾选系统框架(android) 后重启"
@@ -97,12 +124,6 @@ object XpRuntime {
                 "未检测到 LSPosed 管理器或框架目录"
             } else {
                 "未检测到 LSPosed 管理器（无 Root 时无法扫描框架目录）"
-            }
-        }.let { base ->
-            if (scopeHint && level == Level.Framework) {
-                "$base 已看到 lspd 配置目录，优先检查本模块是否对本机生效。"
-            } else {
-                base
             }
         }
 
@@ -114,6 +135,7 @@ object XpRuntime {
             detail = detail,
             heartbeatAgeMs = parsed?.ageMs,
             heartbeatReason = parsed?.reason,
+            heartbeatPath = pathUsed,
         )
     }
 

@@ -42,6 +42,7 @@ const BIN_RELEASE = [
   "test_switch.sh",
   "qscd_fetch.sh",
   "qsc_status.sh",
+  "qsc.sh",
 ];
 const BIN_DEBUG_EXTRA = ["testing.sh", "diag2.sh"];
 

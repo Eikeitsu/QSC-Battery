@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 新增模块命令行 `bin/qsc.sh`：status / on|off / config / log|events / diagnose 等
+
 ## 2026.09.01
 
 - 修复因充放电曲线导致的webui卡顿，优化页面加载性能

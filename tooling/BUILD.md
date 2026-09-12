@@ -194,7 +194,7 @@ git push origin v2026.07.17.2
 
 ## 发布包内容
 
-**正式包** `QSC-Battery_v<version>.zip`：入口脚本 + `bin/lib/*` + 只读 `diagnose.sh` / `test_switch.sh`。
+**正式包** `QSC-Battery_v<version>.zip`：入口脚本 + `bin/lib/*` + 只读 `diagnose.sh` / `test_switch.sh` + 统一 CLI `qsc.sh`。
 
 **调试包** `QSC-Battery_v<version>-debug.zip`：另含 `testing.sh`、`diag2.sh`，并带 `bin/.qsc_debug`。
 

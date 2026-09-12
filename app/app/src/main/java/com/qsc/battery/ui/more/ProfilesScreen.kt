@@ -56,7 +56,7 @@ fun ProfilesScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
                 .padding(
-                    top = ChargeTheme.dimens.topBarContentGap,
+                    top = 4.dp,
                     bottom = ChargeTheme.dimens.sectionGap,
                 ),
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),

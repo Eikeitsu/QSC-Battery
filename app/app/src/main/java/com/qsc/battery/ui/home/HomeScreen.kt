@@ -90,7 +90,11 @@ fun HomeScreen(
     val levelRaw = status.snapshot.level
     val levelPct = levelRaw.toFloatOrNull()?.div(100f)
     val levelText = if (levelRaw.isBlank()) "--%" else "${levelRaw}%"
-    val chargeLabel = batteryStatusLabel(status.snapshot.status)
+    val chargeLabel = batteryStatusLabel(
+        status.snapshot.status,
+        powered = status.snapshot.powered,
+        stopped = status.chargingStopped,
+    )
     val statusLine = buildString {
         append(if (status.snapshot.powered) "已插电" else "未插电")
         append(" · ")

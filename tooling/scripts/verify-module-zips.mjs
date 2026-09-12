@@ -29,7 +29,7 @@ function readVersion() {
 const nativeRequired = process.env.CI === "true" || process.env.REQUIRE_NATIVE === "1";
 
 /** 每个变体都必须带的脚本：热更新与守护下载入口 */
-const REQUIRED_ENTRIES = ["hotinstall.sh", "bin/lib/hot_update.sh", "bin/qscd_fetch.sh"];
+const REQUIRED_ENTRIES = ["hotinstall.sh", "bin/lib/hot_update.sh", "bin/qscd_fetch.sh", "bin/qsc.sh"];
 
 /** 变体 → 必须存在的原生二进制；未列出的一律不允许出现 */
 const VARIANT_BINARIES = {

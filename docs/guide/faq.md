@@ -9,12 +9,15 @@
 5. 若机型较新或停充无效：模块管理器 **Action** → 音量上刷新；**音量下**在已插电时快速测开关（未插电则写诊断报告 `/sdcard/qsc_diagnose.txt`）。也可在 WebUI「策略 → 测开关与缓存」，将有效节点写入 `device.profile` 的 `preferred_switch`。或在「策略 → 自定义供电开关」/ `config.conf` 填写 `power_switch`。升级后若出现充电反复启停，可到「策略 → 测开关与缓存」清除开关缓存后重启。手动执行：
 
 ```bash
+sh /data/adb/modules/QSC_Battery/bin/qsc.sh status
+sh /data/adb/modules/QSC_Battery/bin/qsc.sh config set power_stop 80
+sh /data/adb/modules/QSC_Battery/bin/qsc.sh off
 sh /data/adb/modules/QSC_Battery/bin/diagnose.sh
 # 插电后：
 sh /data/adb/modules/QSC_Battery/bin/test_switch.sh
 ```
 
-报告在 `/sdcard/qsc_diagnose.txt`，可反馈给维护者适配。重新探测机型可执行 `bin/detect_device.sh`。含写入测试的 `testing` / `diag2` 仅在调试包 `QSC-Battery_v*-debug.zip` 中提供；正式包已含受控的 `test_switch`（测完必恢复充电）。
+统一 CLI 见 `bin/qsc.sh help`。报告在 `/sdcard/qsc_diagnose.txt`，可反馈给维护者适配。重新探测机型可执行 `bin/detect_device.sh` 或 `qsc.sh detect`。含写入测试的 `testing` / `diag2` 仅在调试包 `QSC-Battery_v*-debug.zip` 中提供；正式包已含受控的 `test_switch`（测完必恢复充电）。
 
 ## 小米 / 澎湃反复充断电？
 

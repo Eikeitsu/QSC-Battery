@@ -4,7 +4,7 @@ Kotlin + Jetpack Compose（**Charge** 设计系统 · 沉浸式状态产品）�
 
 **可不安装模块单独使用**（主题、检查更新、下载模块）。装上模块并授予 Root 后才能读写停充配置。
 
-可选 **LSPosed 增强**（现代 API 102）：系统侧供电事件补强（不写充电节点）；注入后写心跳文件供 APP 检测。
+可选 **LSPosed 增强**（现代 API 102）：系统侧供电事件补强（不写充电节点）；注入后写心跳到 `/data/local/tmp/qsc_xp_heartbeat`（及备用路径）供 APP 检测。排查：`adb logcat -s QscXp`。
 
 ## 功能
 

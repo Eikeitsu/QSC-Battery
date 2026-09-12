@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHost
@@ -53,6 +54,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.text.font.FontWeight
@@ -95,21 +97,28 @@ fun ImmersiveBottomBar(
     modifier: Modifier = Modifier,
     content: @Composable RowScope.() -> Unit,
 ) {
-    val bg = ChargeTheme.colors.surface.copy(alpha = 0.94f)
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(bg),
+    val shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
+    Column(
+        modifier = modifier.fillMaxWidth(),
     ) {
-        Row(
+        // 与内容区分：圆角表面托住导航，不用硬分割线
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(horizontal = 6.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-            content = content,
-        )
+                .clip(shape)
+                .background(ChargeTheme.colors.surface)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(horizontal = 10.dp)
+                    .padding(top = 10.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                content = content,
+            )
+        }
     }
 }
 
@@ -194,34 +203,27 @@ fun RowScope.ChargeNavItem(
         animationSpec = tween(220),
         label = "navColor",
     )
-    val indicator by animateFloatAsState(
+    val pillAlpha by animateFloatAsState(
         targetValue = if (selected) 1f else 0f,
         animationSpec = tween(220),
-        label = "navIndicator",
+        label = "navPill",
     )
     Column(
         modifier = Modifier
             .weight(1f)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .background(accent.copy(alpha = 0.12f * pillAlpha))
             .clickable(onClick = onClick)
-            .padding(vertical = 4.dp),
+            .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            modifier = Modifier
-                .height(3.dp)
-                .width(18.dp)
-                .clip(CircleShape)
-                .background(accent.copy(alpha = indicator)),
-        )
-        Spacer(modifier = Modifier.height(6.dp))
         androidx.compose.foundation.Image(
             painter = rememberVectorPainter(icon),
             contentDescription = label,
             modifier = Modifier.size(22.dp),
             colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(color),
         )
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = label,
             style = ChargeTheme.typography.caption,
@@ -309,21 +311,37 @@ fun ChargeHero(
     val ink = ChargeTheme.colors.ink
     val muted = ChargeTheme.colors.muted
 
-    val pulse = if (charging) {
-        val t = rememberInfiniteTransition(label = "chargePulse")
-        t.animateFloat(
-            initialValue = 0.12f,
-            targetValue = 0.32f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1600, easing = LinearEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "glow",
-        ).value
-    } else {
-        0.18f
-    }
-    val glow = ChargeTheme.colors.accent.copy(alpha = pulse)
+    val infinite = rememberInfiniteTransition(label = "chargeMotion")
+    val spin by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "spin",
+    )
+    val breath by infinite.animateFloat(
+        initialValue = 0.22f,
+        targetValue = 0.55f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "breath",
+    )
+    val boltAlpha by infinite.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "bolt",
+    )
+
+    val glowAlpha = if (charging) breath else 0.14f
+    val glow = progress.copy(alpha = glowAlpha)
 
     Column(
         modifier = Modifier
@@ -355,10 +373,57 @@ fun ChargeHero(
                     size = arcSize,
                     topLeft = topLeft,
                 )
+                if (charging) {
+                    // 明显的旋转高亮段，一眼能看出在动
+                    rotate(degrees = spin) {
+                        drawArc(
+                            color = Color.White.copy(alpha = 0.92f),
+                            startAngle = -90f,
+                            sweepAngle = 42f,
+                            useCenter = false,
+                            style = Stroke(width = stroke * 1.25f, cap = StrokeCap.Round),
+                            size = arcSize,
+                            topLeft = topLeft,
+                        )
+                        drawArc(
+                            color = progress.copy(alpha = 0.55f),
+                            startAngle = -48f,
+                            sweepAngle = 70f,
+                            useCenter = false,
+                            style = Stroke(width = stroke * 0.55f, cap = StrokeCap.Round),
+                            size = arcSize,
+                            topLeft = topLeft,
+                        )
+                    }
+                }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(text = levelText, style = display, color = ink)
                 Text(text = statusLine, style = body, color = muted)
+                if (charging) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(progress.copy(alpha = 0.16f))
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Bolt,
+                            contentDescription = null,
+                            tint = progress.copy(alpha = boltAlpha),
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = "充电中",
+                            style = caption,
+                            color = progress,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
             }
         }
         Spacer(modifier = Modifier.height(10.dp))
