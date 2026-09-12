@@ -16,5 +16,5 @@
     <string name="icon_switch_summary">切换应用在桌面上显示的图标</string>
     <string name="tile_label">充电控制</string>
     <string name="tile_description">查看或切换模块软开关</string>
-    <string name="xposed_description">可选增强：系统侧供电事件补强（Xposed API 102），不参与节点停充写入</string>
+    <string name="xposed_description">可选：系统框架插拔边沿唤醒（仅 qscd 不可用时）；不写充电节点，停充由 Magisk 负责</string>
 </resources>

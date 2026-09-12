@@ -1,6 +1,6 @@
 # 伴侣 APP
 
-包名 `com.qsc.battery` · 桌面名 **充电控制** · Kotlin + Jetpack Compose。
+包名 `com.qsc.battery` · 桌面名 **充电控制** · Kotlin + Jetpack Compose · Android 8+（`minSdk 26`）。
 
 只负责配置、状态、更新与主题；**不挂后台保活**。停充逻辑始终由 Magisk 模块执行。
 
@@ -21,15 +21,17 @@
 
 - 颜色模式：跟随系统 / 浅 / 深 / 纯黑 AMOLED / 动态取色
 - 调色板与种子色
-- **动态桌面图标**：电量约 20% 一档；充电时闪电为黄色；默认/环形两套风格
+- **动态桌面图标**（默认关）：电量约 10% 一档；充电时闪电为黄色；默认/环形两套风格
 - 仅打开 APP 或插拔电等稀疏时机刷新（不监听每秒 `BATTERY_CHANGED`）
 
 ### LSPosed（可选）
 
-现代 API **102**，作用域建议勾选系统框架 `android`。
+作用域只勾 **系统框架 `android`**（不要勾本 APP）。
 
-- Hook 供电相关路径，写唤醒提示供模块缩短等待（**不写充电节点**）
-- APP 内可关「XP 供电事件补强」；也可放 `/data/local/tmp/qsc_xp_power_events_off`
+- **作用**：仅当 Magisk 事件守护 `qscd` 不可用时，在插拔**边沿**向 `/data/system/qsc_xp_wake` 写一次标记，缩短轮询；平时几乎零开销
+- **通道**：`/data/system/`（system_server 在 SELinux enforcing 下通常可写；Magisk root 读取）。写失败则本启动停写
+- **检测**：APP 用 Root 读 LSPosed `modules_config.db` + `/data/system/qsc_xp_alive`，**不**自 hook
+- 停充始终由 Magisk 模块负责
 - 排查：`adb logcat -s QscXp`
 
 ## 安装

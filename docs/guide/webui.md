@@ -74,4 +74,4 @@ WebUI 在模块管理器中打开（KernelSU、SukiSU、MMRL、WebUI-X 等）。
 
 ## 与 APP 的关系
 
-WebUI 与伴侣 APP 读写同一套模块配置。可只装其一，或两者同用。APP 另有主题图标、磁贴、LSPosed 开关等，见 [伴侣 APP](/guide/app)。
+WebUI 与伴侣 APP 读写同一套模块配置。可只装其一，或两者同用。APP 另有主题图标、磁贴、LSPosed 状态等，见 [伴侣 APP](/guide/app)。

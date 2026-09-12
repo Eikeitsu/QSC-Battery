@@ -221,7 +221,7 @@ function startFastTimer() {
   refreshTimer = setInterval(() => {
     chartNow.value = Math.floor(Date.now() / 1000);
     void history.refreshFast(samplingEnabled.value, false);
-  }, 30_000);
+  }, 60_000);
 }
 
 onMounted(() => {

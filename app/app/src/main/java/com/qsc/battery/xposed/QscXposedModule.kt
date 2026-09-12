@@ -4,75 +4,43 @@ import android.util.Log
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
-import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 import io.github.libxposed.api.XposedModuleInterface.SystemServerStartingParam
 import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * 现代 Xposed API 102 入口。
- *
- * 作用域：系统框架 `android`（见 META-INF/xposed/scope.list）。
- * 仅做供电变化提示落盘，不写任何充电控制节点。
- *
- * 注意：system_server 通常 **不能** 写 `/data/adb/`（SELinux），
- * 心跳必须落到 system 可写路径（如 /data/local/tmp、/data/system）。
+ * LSPosed：仅系统框架；qscd 不可用（arm）时插拔边沿写唤醒文件。
+ * 未武装时缓存 arm 检查，避免每次电池回调读 sysfs。
+ * 关键日志写入 [LOG_PATH]，供伴侣 APP 动态页「LSP」读取。
  */
 class QscXposedModule : XposedModule() {
-    private val lastWrite = AtomicLong(0L)
-    private val hooked = AtomicBoolean(false)
+    private val hookedBattery = AtomicBoolean(false)
+    private val writeDisabled = AtomicBoolean(false)
+    private val failStreak = AtomicInteger(0)
+    private val armCacheAt = AtomicLong(0L)
+    private val armCached = AtomicBoolean(false)
+    private var lastPlugged: Boolean? = null
 
     override fun onModuleLoaded(param: ModuleLoadedParam) {
-        val props = frameworkProperties
-        val capSystem = props and XposedInterface.PROP_CAP_SYSTEM != 0L
-        val capRemote = props and XposedInterface.PROP_CAP_REMOTE != 0L
-        xpLog(
-            Log.INFO,
-            "onModuleLoaded process=${param.processName} isSystemServer=${param.isSystemServer} " +
-                "api=$apiVersion fw=$frameworkName/$frameworkVersion($frameworkVersionCode) " +
-                "PROP_CAP_SYSTEM=$capSystem PROP_CAP_REMOTE=$capRemote props=0x${props.toString(16)}",
-        )
-        if (!capSystem && param.isSystemServer) {
-            xpLog(Log.WARN, "framework reports no PROP_CAP_SYSTEM but loaded in system_server")
-        }
-        if (param.isSystemServer) {
-            writeHeartbeat("module_loaded_system_server")
-        } else {
-            writeHeartbeat("module_loaded_${param.processName}")
-        }
+        if (!param.isSystemServer) return
+        xpLog(Log.INFO, "loaded in system_server api=$apiVersion")
     }
 
     override fun onSystemServerStarting(param: SystemServerStartingParam) {
-        xpLog(Log.INFO, "onSystemServerStarting classLoader=${param.classLoader}")
-        writeHeartbeat("system_server_starting")
+        writeAliveOnce()
         hookBatteryService(param.classLoader)
     }
 
-    override fun onPackageReady(param: PackageReadyParam) {
-        // 系统服务主路径是 onSystemServerStarting；这里只记日志，避免重复 hook
-        xpLog(
-            Log.DEBUG,
-            "onPackageReady pkg=${param.packageName} isFirst=${param.isFirstPackage}",
-        )
-    }
-
     private fun hookBatteryService(loader: ClassLoader) {
-        if (!hooked.compareAndSet(false, true)) {
-            xpLog(Log.INFO, "BatteryService hook already installed")
-            return
-        }
+        if (!hookedBattery.compareAndSet(false, true)) return
         runCatching {
             val cls = loader.loadClass("com.android.server.BatteryService")
             val methods = cls.declaredMethods.filter { it.name == "processValuesLocked" }
             if (methods.isEmpty()) {
-                xpLog(
-                    Log.WARN,
-                    "BatteryService.processValuesLocked not found; " +
-                        "methods=${cls.declaredMethods.map { it.name }.distinct().sorted()}",
-                )
-                // 仍算已注入：启动心跳已写入
-                writeHeartbeat("hook_miss_processValuesLocked")
+                xpLog(Log.WARN, "processValuesLocked missing")
                 return
             }
             for (method in methods) {
@@ -84,118 +52,139 @@ class QscXposedModule : XposedModule() {
                         onBatteryProcessed()
                         result
                     }
-                xpLog(Log.INFO, "hooked ${method.declaringClass.name}.${method.name}${method.parameterCount}")
             }
-            writeHeartbeat("hooked_processValuesLocked_x${methods.size}")
+            xpLog(Log.INFO, "BatteryService hooked x${methods.size}")
         }.onFailure {
-            hooked.set(false)
-            xpLog(Log.ERROR, "hook BatteryService failed: ${it.message}", it)
-            writeHeartbeat("hook_failed")
+            hookedBattery.set(false)
+            xpLog(Log.ERROR, "hook failed: ${it.message}", it)
         }
     }
 
     private fun onBatteryProcessed() {
-        if (!powerEventsEnabled()) {
-            xpLog(Log.DEBUG, "power events disabled by flag $XP_OFF_FLAG")
-            return
-        }
+        if (writeDisabled.get()) return
+        if (!isArmedCached()) return
+        if (File(OFF_PATH).isFile) return
+
+        val plugged = readPluggedQuick()
+        val prev = lastPlugged
+        lastPlugged = plugged
+        if (prev == null || prev == plugged) return
+
+        writeWake(if (plugged) "plug" else "unplug")
+    }
+
+    /** 未武装时最多每 60s 再 stat 一次 arm，武装后每次回调都认（边沿要及时）。 */
+    private fun isArmedCached(): Boolean {
         val now = System.currentTimeMillis()
-        if (now - lastWrite.get() < 15_000L) return
-        lastWrite.set(now)
-        writeWakeHint("battery_process")
-        writeHeartbeat("battery_process")
+        if (armCached.get()) {
+            if (File(ARM_PATH).isFile) return true
+            armCached.set(false)
+            armCacheAt.set(now)
+            return false
+        }
+        if (now - armCacheAt.get() < ARM_RECHECK_MS) return false
+        armCacheAt.set(now)
+        val on = File(ARM_PATH).isFile
+        armCached.set(on)
+        return on
     }
 
-    private fun powerEventsEnabled(): Boolean = !File(XP_OFF_FLAG).exists()
-
-    private fun writeHeartbeat(reason: String) {
-        val line = "${System.currentTimeMillis()}\t$reason\n"
-        var ok = 0
-        for (path in HEARTBEAT_PATHS) {
-            val result = writeTextFile(path, line, append = false)
-            if (result == null) {
-                ok++
-                xpLog(Log.INFO, "heartbeat ok → $path ($reason)")
-            } else {
-                xpLog(Log.WARN, "heartbeat fail → $path: $result")
-            }
+    private fun readPluggedQuick(): Boolean {
+        for (path in PLUG_ONLINE_PATHS) {
+            val v = runCatching { File(path).readText().trim() }.getOrNull() ?: continue
+            if (v == "1") return true
         }
-        if (ok == 0) {
-            xpLog(Log.ERROR, "heartbeat wrote nowhere; check SELinux / path permissions ($reason)")
-        }
+        return false
     }
 
-    private fun writeWakeHint(action: String) {
-        val line = "${System.currentTimeMillis()}\t$action\n"
-        for (path in WAKE_HINT_PATHS) {
-            val err = writeTextFile(path, line, append = true, trimBytes = 64_000)
-            if (err == null) {
-                xpLog(Log.DEBUG, "wake hint → $path ($action)")
-                return
-            }
-            xpLog(Log.DEBUG, "wake hint skip $path: $err")
+    private fun writeAliveOnce() {
+        if (writeDisabled.get()) return
+        val ok = writeText(ALIVE_PATH, "${System.currentTimeMillis()}\talive\n", append = false)
+        if (ok) {
+            failStreak.set(0)
+            xpLog(Log.INFO, "alive → $ALIVE_PATH")
+        } else {
+            onWriteFailed("alive")
         }
     }
 
-    /** @return null on success, error message on failure */
-    private fun writeTextFile(
-        path: String,
-        content: String,
-        append: Boolean,
-        trimBytes: Long = 0,
-    ): String? {
+    private fun writeWake(reason: String) {
+        if (writeDisabled.get()) return
+        val ok = writeText(WAKE_PATH, "${System.currentTimeMillis()}\t$reason\n", append = false)
+        if (ok) {
+            failStreak.set(0)
+            xpLog(Log.INFO, "wake $reason → $WAKE_PATH")
+        } else {
+            onWriteFailed("wake:$reason")
+        }
+    }
+
+    private fun onWriteFailed(what: String) {
+        val n = failStreak.incrementAndGet()
+        if (n >= 2) {
+            writeDisabled.set(true)
+            xpLog(Log.WARN, "write disabled for this boot after failures ($what)")
+        }
+    }
+
+    private fun writeText(path: String, content: String, append: Boolean): Boolean {
         return try {
             val f = File(path)
-            val parent = f.parentFile ?: return "no parent"
-            if (!parent.exists() && !parent.mkdirs()) {
-                return "mkdirs failed: ${parent.absolutePath}"
-            }
-            if (append) {
-                f.appendText(content)
-                if (trimBytes > 0 && f.length() > trimBytes) {
-                    f.writeText(content)
+            val parent = f.parentFile ?: return false
+            if (!parent.exists() && !parent.mkdirs()) return false
+            FileOutputStream(f, append).use { it.write(content.toByteArray()) }
+            true
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    private fun appendLogLine(priority: Int, msg: String) {
+        val level = when (priority) {
+            Log.ERROR -> "ERROR"
+            Log.WARN -> "WARN"
+            Log.DEBUG -> "DEBUG"
+            else -> "INFO"
+        }
+        val line = "${System.currentTimeMillis()}\t$level\t$msg\n"
+        runCatching {
+            val f = File(LOG_PATH)
+            f.parentFile?.mkdirs()
+            FileOutputStream(f, true).use { it.write(line.toByteArray()) }
+            if (f.length() > LOG_MAX_BYTES) {
+                val keep = f.readBytes().let { bytes ->
+                    val start = (bytes.size - LOG_KEEP_BYTES).coerceAtLeast(0)
+                    bytes.copyOfRange(start, bytes.size)
                 }
-            } else {
-                f.writeText(content)
+                FileOutputStream(f, false).use { it.write(keep) }
             }
-            // 尽量让 APP/shell 可读
-            runCatching {
-                f.setReadable(true, false)
-                f.setWritable(true, false)
-            }
-            null
-        } catch (t: Throwable) {
-            t.javaClass.simpleName + ": " + (t.message ?: "unknown")
         }
     }
 
     private fun xpLog(priority: Int, msg: String, tr: Throwable? = null) {
-        // LSPosed 日志 + logcat，便于 adb logcat -s QscXp 排查
-        if (tr != null) {
-            log(priority, TAG, msg, tr)
-            Log.println(priority, TAG, msg + "\n" + Log.getStackTraceString(tr))
-        } else {
-            log(priority, TAG, msg)
-            Log.println(priority, TAG, msg)
-        }
+        if (tr != null) log(priority, TAG, msg, tr) else log(priority, TAG, msg)
+        appendLogLine(priority, if (tr != null) "$msg (${tr.javaClass.simpleName})" else msg)
     }
 
     companion object {
         private const val TAG = "QscXp"
-        private const val XP_OFF_FLAG = "/data/local/tmp/qsc_xp_power_events_off"
+        private const val ARM_RECHECK_MS = 60_000L
+        private const val LOG_MAX_BYTES = 48_000L
+        private const val LOG_KEEP_BYTES = 24_000
 
-        /** system_server 可写优先；/data/adb 常被 SELinux 拒绝，仅作兜底 */
-        val HEARTBEAT_PATHS = listOf(
-            "/data/local/tmp/qsc_xp_heartbeat",
-            "/data/system/qsc_xp_heartbeat",
-            "/cache/qsc_xp_heartbeat",
-            "/data/adb/qsc/xp_heartbeat",
-        )
+        const val ARM_PATH = "/data/system/qsc_xp_arm"
+        const val WAKE_PATH = "/data/system/qsc_xp_wake"
+        const val ALIVE_PATH = "/data/system/qsc_xp_alive"
+        const val OFF_PATH = "/data/system/qsc_xp_off"
+        const val LOG_PATH = "/data/system/qsc_xp.log"
 
-        private val WAKE_HINT_PATHS = listOf(
-            "/data/local/tmp/qsc_xp_power_event",
-            "/data/system/qsc_xp_power_event",
-            "/data/adb/qsc/xp_power_event",
+        private val PLUG_ONLINE_PATHS = listOf(
+            "/sys/class/power_supply/usb/online",
+            "/sys/class/power_supply/usb/present",
+            "/sys/class/power_supply/pc_port/online",
+            "/sys/class/power_supply/ac/online",
+            "/sys/class/power_supply/wireless/online",
+            "/sys/class/power_supply/dc/online",
         )
     }
 }

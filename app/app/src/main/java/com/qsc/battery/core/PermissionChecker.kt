@@ -21,13 +21,28 @@ data class PermissionSnapshot(
     val root: PermStatus,
     val notifications: PermStatus,
     val installPackages: PermStatus,
+    /** LSPosed 中本 XP 模块已启用或已在框架运行 */
     val xposedActive: PermStatus,
     val modulePresent: Boolean,
 )
 
 class PermissionChecker(private val context: Context) {
-    suspend fun snapshot(modulePresent: Boolean): PermissionSnapshot = withContext(Dispatchers.IO) {
+    suspend fun snapshot(
+        modulePresent: Boolean,
+        rootBridge: RootBridge = RootBridge(),
+    ): PermissionSnapshot = withContext(Dispatchers.IO) {
         val rootOk = runCatching { Shell.getShell().isRoot }.getOrDefault(false)
+        val xp = if (rootOk) {
+            runCatching { XpRuntime.probe(context, rootBridge) }.getOrNull()
+        } else {
+            null
+        }
+        val xpStatus = when {
+            xp?.activated == true -> PermStatus.Ok
+            xp?.managerInstalled == true || xp?.frameworkPresent == true -> PermStatus.Unknown
+            XpRuntime.isManagerInstalled(context) -> PermStatus.Unknown
+            else -> PermStatus.Missing
+        }
         PermissionSnapshot(
             root = if (rootOk) PermStatus.Ok else PermStatus.Missing,
             notifications = if (Build.VERSION.SDK_INT < 33) {
@@ -45,7 +60,7 @@ class PermissionChecker(private val context: Context) {
             } else {
                 PermStatus.Missing
             },
-            xposedActive = if (XpRuntime.isAvailable(context)) PermStatus.Ok else PermStatus.Missing,
+            xposedActive = xpStatus,
             modulePresent = modulePresent,
         )
     }

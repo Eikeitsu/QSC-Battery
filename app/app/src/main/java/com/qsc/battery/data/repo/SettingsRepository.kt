@@ -27,7 +27,6 @@ class SettingsRepository(private val context: Context) {
         val alternativeIcon = booleanPreferencesKey("alternative_icon")
         val dynamicBatteryIcon = booleanPreferencesKey("dynamic_battery_icon")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
-        val xpPowerEvents = booleanPreferencesKey("xp_power_events")
     }
 
     val settings: Flow<ThemeSettings> = context.settingsStore.data.map { prefs ->
@@ -46,10 +45,6 @@ class SettingsRepository(private val context: Context) {
         it[Keys.onboardingDone] ?: false
     }
 
-    val xpPowerEventsEnabled: Flow<Boolean> = context.settingsStore.data.map {
-        it[Keys.xpPowerEvents] ?: true
-    }
-
     suspend fun alternativeIconEnabled(): Boolean =
         context.settingsStore.data.first()[Keys.alternativeIcon] ?: false
 
@@ -58,13 +53,6 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setOnboardingDone(done: Boolean) {
         context.settingsStore.edit { it[Keys.onboardingDone] = done }
-    }
-
-    suspend fun setXpPowerEvents(enabled: Boolean) {
-        context.settingsStore.edit { it[Keys.xpPowerEvents] = enabled }
-        context.getSharedPreferences("qsc_xp", Context.MODE_PRIVATE).edit()
-            .putBoolean("xp_power_events", enabled)
-            .apply()
     }
 
     suspend fun setColorMode(mode: ColorMode) {

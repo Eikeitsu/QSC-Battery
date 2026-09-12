@@ -11,6 +11,8 @@ object ModulePaths {
     const val LOG_FILE = "$DATADIR/log.log"
     const val CHARGE_EVENTS = "$DATADIR/charge_events.log"
     const val CHARGE_HISTORY = "$DATADIR/charge_history.csv"
+    /** LSPosed XP 稀疏日志（system_server 写入，Root 可读） */
+    const val XP_LOG = "/data/system/qsc_xp.log"
     const val HEALTH_HISTORY = "$DATADIR/health_history.csv"
     const val POWER_SWITCH_FLAG = "$DATADIR/power_switch"
     const val MODULE_PROP = "$MODDIR/module.prop"

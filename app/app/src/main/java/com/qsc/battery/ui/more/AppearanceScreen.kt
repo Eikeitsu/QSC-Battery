@@ -138,7 +138,7 @@ fun AppearanceScreen(
                 ChargeToggleRow(
                     title = "动态电量图标",
                     checked = settings.dynamicBatteryIcon,
-                    summary = "电池与环形均按约 10% 分档；打开应用或插拔电时刷新，矢量资源不占体积",
+                    summary = "默认关闭。按约 10% 分档；打开应用或插拔电时刷新（切入口可能闪一下）",
                     onCheckedChange = { scope.launch { container.settingsRepository.setDynamicBatteryIcon(it) } },
                 )
             }

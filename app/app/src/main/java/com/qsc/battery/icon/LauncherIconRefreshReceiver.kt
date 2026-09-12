@@ -33,8 +33,8 @@ class LauncherIconRefreshReceiver : BroadcastReceiver() {
                 if (container != null) {
                     LauncherIconController.syncFromSettings(app, container.settingsRepository)
                 } else {
-                    // 进程未完全起来时仍按默认偏好尝试（动态开、非备用）
-                    LauncherIconController.apply(app, alternative = false, dynamic = true)
+                    // 进程未就绪时与默认偏好一致：动态关、非备用
+                    LauncherIconController.apply(app, alternative = false, dynamic = false)
                 }
             } finally {
                 pending.finish()

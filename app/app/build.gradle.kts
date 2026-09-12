@@ -9,12 +9,12 @@ plugins {
 
 android {
     namespace = "com.qsc.battery"
-    compileSdk = 37
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.qsc.battery"
-        minSdk = 33
-        targetSdk = 37
+        minSdk = 26
+        targetSdk = 35
         versionCode = 2026091201
         versionName = "0.3.1"
         ndk {

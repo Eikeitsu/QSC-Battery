@@ -41,30 +41,45 @@ import com.qsc.battery.ui.design.charge.ChargeTopBar
 import com.qsc.battery.ui.design.charge.chargeEventTypeLabel
 import kotlinx.coroutines.launch
 
-private enum class LogTab { Runtime, Events }
+private enum class LogTab { Runtime, Events, Lsp }
 
 @Composable
 fun LogScreen(container: AppContainer) {
     var tab by remember { mutableStateOf(LogTab.Runtime) }
     var level by remember { mutableStateOf("") }
     var lines by remember { mutableStateOf<List<LogLine>>(emptyList()) }
+    var xpLines by remember { mutableStateOf<List<LogLine>>(emptyList()) }
     var events by remember { mutableStateOf<List<ChargeEvent>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
-        loading = lines.isEmpty() && events.isEmpty()
+        loading = lines.isEmpty() && events.isEmpty() && xpLines.isEmpty()
         lines = container.logRepository.loadLogTail()
         events = container.logRepository.loadEvents()
+        if (tab == LogTab.Lsp || xpLines.isNotEmpty()) {
+            xpLines = container.logRepository.loadXpLog()
+        }
         loading = false
     }
 
+    suspend fun refreshXp() {
+        xpLines = container.logRepository.loadXpLog()
+    }
+
     LaunchedEffect(Unit) { refresh() }
+    LaunchedEffect(tab) {
+        if (tab == LogTab.Lsp) refreshXp()
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         ChargeTopBar(
             title = "动态",
-            subtitle = "运行日志与充电事件",
+            subtitle = when (tab) {
+                LogTab.Runtime -> "Magisk 运行日志"
+                LogTab.Events -> "充电事件"
+                LogTab.Lsp -> "本模块 XP 日志"
+            },
         )
 
         LazyColumn(
@@ -85,11 +100,21 @@ fun LogScreen(container: AppContainer) {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     ChargeSegmented(
-                        options = listOf("运行", "事件"),
-                        selectedIndex = if (tab == LogTab.Runtime) 0 else 1,
-                        onSelect = { tab = if (it == 0) LogTab.Runtime else LogTab.Events },
+                        options = listOf("运行", "事件", "LSP"),
+                        selectedIndex = when (tab) {
+                            LogTab.Runtime -> 0
+                            LogTab.Events -> 1
+                            LogTab.Lsp -> 2
+                        },
+                        onSelect = {
+                            tab = when (it) {
+                                1 -> LogTab.Events
+                                2 -> LogTab.Lsp
+                                else -> LogTab.Runtime
+                            }
+                        },
                     )
-                    if (tab == LogTab.Runtime) {
+                    if (tab == LogTab.Runtime || tab == LogTab.Lsp) {
                         ChargeChipGroup(
                             chips = ChargePresets.logLevels,
                             selectedId = level,
@@ -104,7 +129,14 @@ fun LogScreen(container: AppContainer) {
                             text = "刷新",
                             equalHeight = true,
                             modifier = Modifier.weight(1f),
-                            onClick = { scope.launch { refresh() } },
+                            onClick = {
+                                scope.launch {
+                                    when (tab) {
+                                        LogTab.Lsp -> refreshXp()
+                                        else -> refresh()
+                                    }
+                                }
+                            },
                         )
                         ChargeSecondaryButton(
                             text = "清空",
@@ -112,9 +144,15 @@ fun LogScreen(container: AppContainer) {
                             modifier = Modifier.weight(1f),
                             onClick = {
                                 scope.launch {
-                                    if (tab == LogTab.Runtime) container.logRepository.clearLog()
-                                    else container.logRepository.clearEvents()
-                                    refresh()
+                                    when (tab) {
+                                        LogTab.Runtime -> container.logRepository.clearLog()
+                                        LogTab.Events -> container.logRepository.clearEvents()
+                                        LogTab.Lsp -> container.logRepository.clearXpLog()
+                                    }
+                                    when (tab) {
+                                        LogTab.Lsp -> refreshXp()
+                                        else -> refresh()
+                                    }
                                 }
                             },
                         )
@@ -122,7 +160,7 @@ fun LogScreen(container: AppContainer) {
                 }
             }
 
-            if (loading) {
+            if (loading && tab != LogTab.Lsp) {
                 item {
                     Column(
                         modifier = Modifier.padding(horizontal = ChargeTheme.dimens.pageHorizontal),
@@ -131,35 +169,50 @@ fun LogScreen(container: AppContainer) {
                         repeat(4) { ChargeSkeletonBox(height = 48.dp) }
                     }
                 }
-            } else if (tab == LogTab.Runtime) {
-                val filtered = lines.filter { level.isEmpty() || it.level == level }
-                if (filtered.isEmpty()) {
-                    item {
-                        Text(
-                            text = "暂无运行日志",
-                            style = ChargeTheme.typography.body,
-                            color = ChargeTheme.colors.muted,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
-                        )
-                    }
-                } else {
-                    items(filtered) { line ->
-                        LogRuntimeRow(line)
+            } else when (tab) {
+                LogTab.Runtime -> {
+                    val filtered = lines.filter { level.isEmpty() || it.level == level }
+                    if (filtered.isEmpty()) {
+                        item {
+                            Text(
+                                text = "暂无运行日志",
+                                style = ChargeTheme.typography.body,
+                                color = ChargeTheme.colors.muted,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+                            )
+                        }
+                    } else {
+                        items(filtered) { LogRuntimeRow(it) }
                     }
                 }
-            } else {
-                if (events.isEmpty()) {
-                    item {
-                        Text(
-                            text = "暂无充电事件",
-                            style = ChargeTheme.typography.body,
-                            color = ChargeTheme.colors.muted,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
-                        )
+                LogTab.Events -> {
+                    if (events.isEmpty()) {
+                        item {
+                            Text(
+                                text = "暂无充电事件",
+                                style = ChargeTheme.typography.body,
+                                color = ChargeTheme.colors.muted,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+                            )
+                        }
+                    } else {
+                        items(events.asReversed()) { EventRow(it) }
                     }
-                } else {
-                    items(events.asReversed()) { e ->
-                        EventRow(e)
+                }
+                LogTab.Lsp -> {
+                    val filtered = xpLines.filter { level.isEmpty() || it.level == level }
+                    if (filtered.isEmpty()) {
+                        item {
+                            Text(
+                                text = "暂无本模块 XP 日志。启用 LSPosed 并勾选系统框架后重启；" +
+                                    "仅记录加载/hook/存活/唤醒等关键事件（/data/system/qsc_xp.log）。",
+                                style = ChargeTheme.typography.body,
+                                color = ChargeTheme.colors.muted,
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+                            )
+                        }
+                    } else {
+                        items(filtered.asReversed()) { LogRuntimeRow(it) }
                     }
                 }
             }

@@ -159,7 +159,7 @@ describe("useChargeHistoryStore", () => {
   });
 
   it("uses configured TTL constants", () => {
-    expect(FAST_TTL_MS).toBe(30_000);
+    expect(FAST_TTL_MS).toBe(60_000);
     expect(SYSTEM_TTL_MS).toBe(5 * 60_000);
   });
 });

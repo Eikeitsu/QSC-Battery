@@ -3,8 +3,8 @@
 Generate adaptive-icon VectorDrawable XML from one logic template.
 
 Launcher icons cannot tint at runtime on the home screen — Android only
-switches discrete activity-alias resources. We keep few buckets (20%) and
-encode charge state (yellow bolt) in the same generator logic.
+switches discrete activity-alias resources. Buckets are ~10% steps;
+charge state uses a yellow bolt from the same generator logic.
 """
 from __future__ import annotations
 
@@ -17,8 +17,9 @@ mipmap = app_res / "mipmap-anydpi-v26"
 drawable.mkdir(parents=True, exist_ok=True)
 mipmap.mkdir(parents=True, exist_ok=True)
 
-# Fewer buckets → fewer vectors (6 levels × 2 styles × 2 charge = 24)
-LEVELS = [0, 20, 40, 60, 80, 100]
+# Fewer buckets was tried; restore ~10% steps (calendar-style).
+# 11 levels × 2 styles × 2 charge = 44 vectors (still generated from one template).
+LEVELS = list(range(0, 101, 10))
 BOLT_IDLE = "#095C42"
 BOLT_CHG = "#FFC107"  # yellow when charging
 

@@ -63,7 +63,7 @@ fun OnboardingScreen(
 
     suspend fun refresh() {
         val st = container.statusRepository.load()
-        snap = checker.snapshot(st.modulePresent)
+        snap = checker.snapshot(st.modulePresent, container.root)
         xp = XpRuntime.probe(context, container.root)
     }
 
@@ -106,7 +106,7 @@ fun OnboardingScreen(
                     ChargeBanner(
                         text = "本应用用于配置与查看 Magisk「充电控制」模块，不在后台执行停充逻辑。\n\n" +
                             "接下来会检测权限。没有全部授权也能用主题与检查更新；停充配置需要 Root。\n\n" +
-                            "LSPosed 增强为可选项，不写充电节点。",
+                            "LSPosed 为可选项：系统框架插拔边沿可在事件守护不可用时协助唤醒模块。",
                     )
                     ChargePrimaryButton("开始检测", onClick = { step = 1 })
                 }
@@ -229,26 +229,28 @@ fun OnboardingScreen(
                         color = ChargeTheme.colors.ink,
                     )
                     ChargeBanner(
-                        text = "为什么可选：系统 BatteryService 变化时写事件提示，帮助模块更快感知插拔。\n" +
-                            "不增强也不影响停充。请在 LSPosed 中启用本模块，作用域勾选系统框架(android)，然后重启。",
+                        text = "为什么可选：qscd 事件等待不可用时，由系统框架在插拔边沿写唤醒标记，缩短 Magisk 轮询。\n" +
+                            "不写充电节点。请启用本模块，作用域勾选「系统框架(android)」后重启。\n" +
+                            "状态来自 LSPosed 配置与 /data/system 存活标记，不自 hook APP。",
                     )
                     val status = xp
                     StatusBlock(
                         title = when (status?.level) {
-                            XpRuntime.Level.Injected -> "已注入运行"
-                            XpRuntime.Level.Framework -> "框架已装"
+                            XpRuntime.Level.Active -> "XP 已运行"
+                            XpRuntime.Level.Enabled -> "XP 已启用"
+                            XpRuntime.Level.Framework -> "框架已装未启用"
                             XpRuntime.Level.ManagerOnly -> "管理器已装"
-                            else -> "未检测到"
+                            else -> "未检测到 XP"
                         },
-                        ok = status?.level == XpRuntime.Level.Injected || status?.level == XpRuntime.Level.Framework,
+                        ok = status?.activated == true,
                         detail = status?.detail
-                            ?: "可安装 LSPosed 后启用本模块（API 102），作用域勾选系统框架",
+                            ?: "安装 LSPosed 后启用本模块，作用域勾选系统框架",
                     )
                     ChargeBanner(
                         text = if (snap?.modulePresent == true) {
-                            "已检测到 Magisk 模块。"
+                            "Magisk 模块：已激活"
                         } else {
-                            "尚未安装 Magisk 模块，可稍后在「我的 → 更新」下载。"
+                            "Magisk 模块：未检测到，可稍后在「我的 → 更新」下载。"
                         },
                     )
                     ChargePrimaryButton(
@@ -256,7 +258,6 @@ fun OnboardingScreen(
                         onClick = {
                             scope.launch {
                                 container.settingsRepository.setOnboardingDone(true)
-                                container.settingsRepository.setXpPowerEvents(true)
                                 onFinished()
                             }
                         },

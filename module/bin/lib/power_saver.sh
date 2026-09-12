@@ -282,7 +282,7 @@ qsc_ps_plugged_scan() {
 
 # 未插电且无停充维持时可跳过整轮；仍按 QSC_PS_FULL_MAX_GAP 定期跑满轮，
 # 保证曲线采样、简介刷新、配置纠正不会长期停摆。
-# 日用待机优先：默认 30 分钟才强制满轮（有 qscd 插拔仍即时唤醒）。
+# 日用待机：30 分钟强制满轮（有 qscd 时插拔仍即时唤醒；再拉长会让简介/配置纠正偏钝）。
 QSC_PS_FULL_MAX_GAP=1800
 
 qsc_ps_can_skip_round() {
@@ -310,7 +310,7 @@ QSC_PS_DESC_SIG=""
 QSC_PS_DESC_TS=0
 # 简介是用户可见的运行状态，最长允许按省电策略等待；真正没有变化时
 # qsc_ps_refresh_desc 仍会被指纹短路，不会产生重复 module.prop 写入。
-# 未插电待机：5 分钟内同一指纹不写盘（主循环与 worker 都会走这里）。
+# 未插电待机：5 分钟内同一指纹不写盘（再拉长对省电收益很小，简介会显得卡住）。
 QSC_PS_DESC_MIN_GAP=300
 
 # 参数: 当前单调秒（service.sh 已经读过 /proc/uptime，不再重复读）
@@ -605,21 +605,48 @@ qsc_ps_mark_native_failure() {
 		"$reason" "${QSC_PS_NATIVE_MODE:-unknown}" "$rc" "$now" "$wall" \
 		>"$DATADIR/qscd_unusable.tmp" 2>/dev/null &&
 		mv -f "$DATADIR/qscd_unusable.tmp" "$DATADIR/qscd_unusable" 2>/dev/null
+	# 武装 XP 边沿唤醒（system_server 写 /data/system/qsc_xp_wake）
+	touch /data/system/qsc_xp_arm 2>/dev/null || true
+}
+
+# XP 唤醒文件是否在近几秒内更新（root 可读 /data/system）
+qsc_ps_xp_wake_fresh() {
+	local f=/data/system/qsc_xp_wake mt now
+	[ -f "$f" ] || return 1
+	mt="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
+	now="$(date +%s 2>/dev/null || echo 0)"
+	case "$mt:$now" in *[!0-9:]*) return 1 ;; esac
+	[ "$mt" -gt 0 ] 2>/dev/null && [ "$((now - mt))" -le 20 ] 2>/dev/null
+}
+
+# qscd 不可用时的睡眠：仅在已武装 XP 时用短片打断；否则一次 sleep，少唤醒
+qsc_ps_fallback_sleep() {
+	local secs="${1:-3}" left chunk=3
+	case "$secs" in ""|*[!0-9]*) secs=3 ;; esac
+	if [ ! -f /data/system/qsc_xp_arm ]; then
+		sleep "$secs"
+		return 0
+	fi
+	if qsc_ps_xp_wake_fresh; then
+		rm -f /data/system/qsc_xp_wake 2>/dev/null || true
+		return 0
+	fi
+	left=$secs
+	while [ "$left" -gt 0 ] 2>/dev/null; do
+		chunk=3
+		[ "$left" -lt "$chunk" ] 2>/dev/null && chunk=$left
+		sleep "$chunk"
+		left=$((left - chunk))
+		if qsc_ps_xp_wake_fresh; then
+			rm -f /data/system/qsc_xp_wake 2>/dev/null || true
+			return 0
+		fi
+	done
 }
 
 qsc_ps_wait() {
 	local secs="${1:-30}" floor fallback_secs
 	local rc backoff now
-	# XP 可选增强：若近期有供电事件提示文件，缩短本轮等待
-	if [ -f /data/adb/qsc/xp_power_event ] || [ -f /data/local/tmp/qsc_xp_power_event ]; then
-		_xp_f=/data/adb/qsc/xp_power_event
-		[ -f "$_xp_f" ] || _xp_f=/data/local/tmp/qsc_xp_power_event
-		_xp_mt=$(stat -c %Y "$_xp_f" 2>/dev/null || echo 0)
-		_xp_now=$(date +%s 2>/dev/null || echo 0)
-		if [ "$_xp_mt" -gt 0 ] 2>/dev/null && [ "$((_xp_now - _xp_mt))" -le 20 ] 2>/dev/null; then
-			[ "$secs" -gt 3 ] 2>/dev/null && secs=3
-		fi
-	fi
 	floor="${QSC_PS_WAIT_FLOOR:-3}"
 	[ "$secs" -lt "$floor" ] 2>/dev/null && floor="$secs"
 	fallback_secs="${QSC_PS_WAIT_FALLBACK:-${QSC_PS_LOOP:-3}}"
@@ -635,7 +662,7 @@ qsc_ps_wait() {
 			QSC_PS_WAIT_HELPER_OK=1
 			QSC_PS_WAIT_FAILURES=0
 			QSC_PS_WAIT_NEXT_RETRY=0
-			rm -f "$DATADIR/qscd_unusable" 2>/dev/null
+			rm -f "$DATADIR/qscd_unusable" /data/system/qsc_xp_arm 2>/dev/null
 			qsc_log_once_clear qscd
 			return 0
 		fi
@@ -672,7 +699,7 @@ qsc_ps_wait() {
 	type qsc_runtime_trace >/dev/null 2>&1 &&
 		qsc_runtime_trace "H9" "fallback_sleep_enter" "$fallback_secs"
 	# endregion
-	sleep "$fallback_secs"
+	qsc_ps_fallback_sleep "$fallback_secs"
 	# region agent log
 	type qsc_runtime_trace >/dev/null 2>&1 &&
 		qsc_runtime_trace "H9" "fallback_sleep_exit" "$?"

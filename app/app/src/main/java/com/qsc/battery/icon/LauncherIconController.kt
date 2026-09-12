@@ -7,7 +7,7 @@ import android.os.BatteryManager
 import com.qsc.battery.data.repo.SettingsRepository
 
 /**
- * 桌面图标按电量约 20% 档 + 是否充电切换（activity-alias）。
+ * 桌面图标按电量约 10% 档 + 是否充电切换（activity-alias）。
  *
  * 关键：必须先启用目标 alias，再禁用其它；否则部分机型会在短暂「零启动器入口」
  * 时把图标藏掉，甚至把刚打开的界面搞没。失败时强制回退 MainActivityDefault。
@@ -19,13 +19,13 @@ object LauncherIconController {
     private const val PKG = "com.qsc.battery"
     private const val DEFAULT_ALIAS = "$PKG.MainActivityDefault"
 
-    /** 0,20,...,100 */
-    val BUCKETS: IntArray = intArrayOf(0, 20, 40, 60, 80, 100)
+    /** 0,10,...,100 */
+    val BUCKETS: IntArray = IntArray(11) { it * 10 }
 
     fun bucketForLevel(level: Int): Int {
         val pct = level.coerceIn(0, 100)
         if (pct >= 100) return 100
-        return (pct / 20) * 20
+        return (pct / 10) * 10
     }
 
     fun readBatteryPercent(context: Context): Int {

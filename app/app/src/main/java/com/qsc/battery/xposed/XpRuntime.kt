@@ -1,23 +1,18 @@
 package com.qsc.battery.xposed
 
 import android.content.Context
+import com.qsc.battery.BuildConfig
 import com.qsc.battery.core.RootBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** LSPosed / 框架侧状态探测（分层：管理器 / 框架 / 本模块心跳）。 */
+/**
+ * XP / LSPosed 状态（不自 hook）：
+ * - 管理器 / 框架目录
+ * - `modules_config.db` 是否启用本模块、作用域是否含 `android`
+ * - `/data/system/qsc_xp_alive` 是否由 system_server 写出（实际已加载）
+ */
 object XpRuntime {
-    /** 兼容旧路径；实际探测见 [HEARTBEAT_CANDIDATES]。 */
-    const val HEARTBEAT_PATH = "/data/local/tmp/qsc_xp_heartbeat"
-    private const val HEARTBEAT_MAX_AGE_MS = 24L * 60L * 60L * 1000L
-
-    private val HEARTBEAT_CANDIDATES = listOf(
-        "/data/local/tmp/qsc_xp_heartbeat",
-        "/data/system/qsc_xp_heartbeat",
-        "/cache/qsc_xp_heartbeat",
-        "/data/adb/qsc/xp_heartbeat",
-    )
-
     private val MANAGER_PACKAGES = listOf(
         "org.lsposed.manager",
         "org.lsposed.manager.lpha",
@@ -31,124 +26,127 @@ object XpRuntime {
         "/data/adb/modules/LSPosed",
         "/data/adb/modules/riru_lsposed",
         "/data/adb/modules/zygisk_lsposed_debug",
+        "/data/adb/modules/lsposed",
     )
 
-    enum class Level { None, ManagerOnly, Framework, Injected }
+    private const val DB = "/data/adb/lspd/config/modules_config.db"
+    private const val ALIVE = "/data/system/qsc_xp_alive"
+    private const val ALIVE_MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
+
+    enum class Level {
+        /** 未装管理器/框架 */
+        None,
+        /** 仅管理器 */
+        ManagerOnly,
+        /** 框架在，本模块未启用 */
+        Framework,
+        /** 管理器里已启用（或已含 android 作用域） */
+        Enabled,
+        /** system_server 已写出存活标记（真正跑起来） */
+        Active,
+    }
 
     data class Status(
         val level: Level,
         val managerInstalled: Boolean,
         val frameworkPresent: Boolean,
-        val injected: Boolean,
+        /** LSPosed 配置中本模块 enabled */
+        val enabledInManager: Boolean,
+        /** 作用域含 android */
+        val scopedAndroid: Boolean,
+        /** 存活标记存在且未过期 */
+        val frameworkAlive: Boolean,
         val detail: String,
-        val heartbeatAgeMs: Long? = null,
-        val heartbeatReason: String? = null,
-        val heartbeatPath: String? = null,
-    )
+    ) {
+        val activated: Boolean get() = level == Level.Enabled || level == Level.Active
+    }
 
     fun isManagerInstalled(context: Context): Boolean {
         val pm = context.packageManager
         return MANAGER_PACKAGES.any { pkg ->
             runCatching {
+                @Suppress("DEPRECATION")
                 pm.getPackageInfo(pkg, 0)
                 true
             }.getOrDefault(false)
         }
     }
 
-    /** 无 Root 时仅能看管理器；有 Root 时看框架目录 + 心跳。 */
     suspend fun probe(context: Context, root: RootBridge): Status = withContext(Dispatchers.IO) {
+        val ourPkgs = listOf(BuildConfig.APPLICATION_ID, "com.qsc.battery", "com.qsc.battery.debug").distinct()
         val manager = isManagerInstalled(context)
         val hasRoot = root.isRootAvailable()
-        val framework = if (hasRoot) {
-            FRAMEWORK_PATHS.any { root.exists(it) }
-        } else {
-            false
-        }
+        val framework = if (hasRoot) FRAMEWORK_PATHS.any { root.exists(it) } else false
 
-        var parsed: Heartbeat? = null
-        var pathUsed: String? = null
-        if (hasRoot) {
-            for (path in HEARTBEAT_CANDIDATES) {
-                val raw = root.readFile(path) ?: continue
-                val hb = parseHeartbeat(raw) ?: continue
-                if (parsed == null || hb.ageMs < parsed.ageMs) {
-                    parsed = hb
-                    pathUsed = path
-                }
-            }
-            // 也扫 LSPosed 模块私有目录（若某版落过盘）
-            val remote = root.exec(
-                "find /data/adb/lspd/modules -type f -name 'xp_heartbeat' 2>/dev/null | head -n 5",
+        var enabled = false
+        var scopedAndroid = false
+        if (hasRoot && root.exists(DB)) {
+            val pkgList = ourPkgs.joinToString(",") { "'$it'" }
+            val en = root.exec(
+                "sqlite3 '$DB' \"SELECT enabled FROM modules WHERE module_pkg_name IN ($pkgList) LIMIT 1;\" 2>/dev/null",
             )
-            if (remote.ok) {
-                for (line in remote.out.lineSequence()) {
-                    val p = line.trim()
-                    if (p.isEmpty()) continue
-                    val raw = root.readFile(p) ?: continue
-                    val hb = parseHeartbeat(raw) ?: continue
-                    if (parsed == null || hb.ageMs < parsed.ageMs) {
-                        parsed = hb
-                        pathUsed = p
-                    }
-                }
+            if (en.ok) {
+                val v = en.out.trim()
+                enabled = v == "1" || v.equals("true", true)
+            } else {
+                // 无 sqlite3：退回 strings 粗检
+                val rough = root.exec(
+                    "strings '$DB' 2>/dev/null | tr '\\0' '\\n' | grep -E 'com\\.qsc\\.battery' | head -n 5",
+                )
+                enabled = rough.ok && rough.out.contains("com.qsc.battery")
+            }
+            val sc = root.exec(
+                "sqlite3 '$DB' \"SELECT s.app_pkg_name FROM scope s " +
+                    "JOIN modules m ON s.mid=m.mid " +
+                    "WHERE m.module_pkg_name IN ($pkgList) AND s.app_pkg_name='android' LIMIT 1;\" 2>/dev/null",
+            )
+            scopedAndroid = sc.ok && sc.out.trim() == "android"
+        }
+
+        var alive = false
+        if (hasRoot && root.exists(ALIVE)) {
+            val raw = root.readFile(ALIVE)
+            val ts = raw?.lineSequence()?.firstOrNull()?.substringBefore('\t')?.toLongOrNull()
+            if (ts != null) {
+                val age = System.currentTimeMillis() - ts
+                alive = age in 0..ALIVE_MAX_AGE_MS
+            } else {
+                alive = true
             }
         }
 
-        val injected = parsed != null && parsed.ageMs in 0..HEARTBEAT_MAX_AGE_MS
         val level = when {
-            injected -> Level.Injected
+            alive -> Level.Active
+            enabled && scopedAndroid -> Level.Enabled
+            enabled -> Level.Enabled
             framework -> Level.Framework
             manager -> Level.ManagerOnly
             else -> Level.None
         }
 
         val detail = when (level) {
-            Level.Injected -> {
-                val reason = parsed?.reason?.takeIf { it.isNotBlank() }?.let { "（$it）" }.orEmpty()
-                val where = pathUsed?.let { " @$it" }.orEmpty()
-                "已注入系统并写入心跳$reason$where"
-            }
-            Level.Framework -> when {
-                !hasRoot -> "已安装管理器；需 Root 才能确认框架与注入"
-                parsed == null ->
-                    "已检测到 LSPosed，但尚无本模块心跳。请确认作用域勾选系统框架(android) 后软重启/重启，" +
-                        "并用 adb logcat -s QscXp 查看是否有 onModuleLoaded / heartbeat 日志。"
-                else ->
-                    "已检测到框架，心跳已过期（约 ${parsed.ageMs / 3_600_000} 小时前@$pathUsed）。" +
-                        "请重新启用模块并重启，或检查 logcat QscXp。"
-            }
-            Level.ManagerOnly ->
-                "已安装 LSPosed 管理器，请启用本模块并勾选系统框架(android) 后重启"
-            Level.None -> if (hasRoot) {
-                "未检测到 LSPosed 管理器或框架目录"
+            Level.Active -> "XP 已在系统框架运行（存活标记）" +
+                if (enabled) "" else "；管理器配置可读性有限"
+            Level.Enabled -> if (scopedAndroid) {
+                "LSPosed 已启用本模块且作用域含系统框架；若刚改过请重启"
             } else {
-                "未检测到 LSPosed 管理器（无 Root 时无法扫描框架目录）"
+                "LSPosed 已启用本模块，但作用域未含「系统框架(android)」，插拔唤醒不会生效"
             }
+            Level.Framework -> "已检测到 LSPosed，请启用「充电控制」模块并勾选系统框架后重启"
+            Level.ManagerOnly -> "已安装 LSPosed 管理器"
+            Level.None -> if (hasRoot) "未检测到 LSPosed" else "检测 XP 需 Root 读配置；或先安装 LSPosed"
         }
 
         Status(
             level = level,
             managerInstalled = manager,
             frameworkPresent = framework || (manager && !hasRoot),
-            injected = injected,
+            enabledInManager = enabled,
+            scopedAndroid = scopedAndroid,
+            frameworkAlive = alive,
             detail = detail,
-            heartbeatAgeMs = parsed?.ageMs,
-            heartbeatReason = parsed?.reason,
-            heartbeatPath = pathUsed,
         )
     }
 
     fun isAvailable(context: Context): Boolean = isManagerInstalled(context)
-
-    private data class Heartbeat(val ageMs: Long, val reason: String?)
-
-    private fun parseHeartbeat(raw: String?): Heartbeat? {
-        if (raw.isNullOrBlank()) return null
-        val first = raw.lineSequence().firstOrNull()?.trim() ?: return null
-        val ts = first.substringBefore('\t').toLongOrNull() ?: return null
-        val reason = first.substringAfter('\t', "").ifBlank { null }
-        val age = System.currentTimeMillis() - ts
-        return Heartbeat(ageMs = age, reason = reason)
-    }
 }

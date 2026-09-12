@@ -3,14 +3,14 @@
 Kotlin + Jetpack Compose。配置 / 状态 / 更新 / 主题；**不挂后台保活**。停充由 Magisk 模块执行。
 
 - 用户文档：[伴侣 APP](https://eikeitsu.github.io/QSC-Battery/guide/app.html)
-- 包名 `com.qsc.battery` · `minSdk 33` · `compileSdk/targetSdk 37`
+- 包名 `com.qsc.battery` · `minSdk 26`（Android 8+）· `compileSdk/targetSdk 35`
 
 ## 功能摘要
 
 - 首页 / 策略 / 动态 / 我的；Root 读写模块
 - 主题：浅/深/AMOLED/动态取色、调色板
-- 动态桌面图标（约 20% 档 + 充电黄闪）；快捷设置磁贴
-- 可选 LSPosed API 102 供电事件补强（不写充电节点）
+- 动态桌面图标（约 10% 档 + 充电黄闪）；快捷设置磁贴
+- 可选 LSPosed：系统框架插拔边沿唤醒（qscd 降级时）；配置/存活标记检测
 - 首启引导、配置档、检查模块/自身更新
 
 ## 构建

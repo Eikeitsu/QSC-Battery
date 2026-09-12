@@ -12,7 +12,7 @@ PARENT_PID="${1:-0}"
 
 WORKER_PID_FILE="$DATADIR/description_worker.pid"
 WORKER_LOCK="$DATADIR/.description_worker.lock"
-# 插电：2 分钟；未插电：默认 5 分钟（与 DESC_MIN_GAP / idle 对齐）
+# 插电：2 分钟；未插电：5 分钟（与 DESC_MIN_GAP / idle 对齐，不过分迟钝）
 REFRESH_PLUGGED=120
 REFRESH_IDLE=300
 

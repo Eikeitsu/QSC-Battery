@@ -4,7 +4,7 @@
 
 - 已安装 **Magisk** 或 **KernelSU**（或兼容方案）
 - 使用 WebUI 需支持模块 WebUI 的管理器（如 KernelSU / SukiSU / MMRL / WebUI-X）
-- 伴侣 APP 需 Android 13+（`minSdk 33`），读写模块需 Root
+- 伴侣 APP 需 Android 8+（`minSdk 26`），读写模块需 Root
 
 ## 选哪个包
 

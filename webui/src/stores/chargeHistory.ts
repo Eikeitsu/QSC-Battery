@@ -4,7 +4,8 @@ import * as api from "@/shared/api";
 import type { HistoryPoint } from "@/shared/api/history";
 
 export const SYSTEM_TTL_MS = 5 * 60_000;
-export const FAST_TTL_MS = 30_000;
+/** 首页曲线：打开 WebUI 时读模块 CSV；与 history_interval 同量级，避免过勤 exec */
+export const FAST_TTL_MS = 60_000;
 const FETCH_LIMIT = 480;
 const DISPLAY_LIMIT = 120;
 

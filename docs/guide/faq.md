@@ -69,7 +69,9 @@ sh /data/adb/modules/QSC_Battery/bin/qsc.sh test-switch
 
 ## LSPosed 要勾什么？
 
-作用域勾系统框架 `android`。模块**不写**充电节点；仅供电事件提示。关补强：APP 开关或 `qsc_xp_power_events_off` 文件。
+作用域只勾 **系统框架 `android`**（不要勾本 APP）。`qscd` 正常时 XP 几乎不干活；守护不可用时才在插拔边沿写 `/data/system/qsc_xp_wake` 协助唤醒。APP 通过 LSPosed 配置与存活标记检测 XP 是否启用/运行，不自 hook。
+
+SELinux enforcing：选用 `/data/system/` 是常见可写路径，**多数机型可用**，但不能保证 100% OEM；失败会停写以免耗电。关：`touch /data/system/qsc_xp_off`。
 
 ## 命令行在哪？
 

@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qsc.battery.BuildConfig
 import com.qsc.battery.core.PermStatus
 import com.qsc.battery.core.PermissionChecker
@@ -37,7 +36,6 @@ import com.qsc.battery.ui.design.charge.ChargeListRow
 import com.qsc.battery.ui.design.charge.ChargeScreen
 import com.qsc.battery.ui.design.charge.ChargeSection
 import com.qsc.battery.ui.design.charge.ChargeTheme
-import com.qsc.battery.ui.design.charge.ChargeToggleRow
 import com.qsc.battery.ui.design.charge.ChargeTopBar
 import com.qsc.battery.xposed.XpRuntime
 import kotlinx.coroutines.launch
@@ -53,30 +51,26 @@ fun MoreScreen(
     var permHint by remember { mutableStateOf("") }
     var xpStatus by remember { mutableStateOf<XpRuntime.Status?>(null) }
     var tileSheet by remember { mutableStateOf(false) }
-    val xpEnabled by container.settingsRepository.xpPowerEventsEnabled.collectAsStateWithLifecycle(initialValue = true)
     val scope = rememberCoroutineScope()
     val checker = remember { PermissionChecker(container.appContext) }
 
     suspend fun refreshMeta() {
         val st = container.statusRepository.load()
-        val snap = checker.snapshot(st.modulePresent)
+        val snap = checker.snapshot(st.modulePresent, container.root)
         xpStatus = XpRuntime.probe(container.appContext, container.root)
         permHint = buildString {
             append(if (snap.root == PermStatus.Ok) "Root ✓  " else "Root ✗  ")
+            append(if (snap.modulePresent) "模块 ✓  " else "模块 ✗  ")
             append(if (snap.notifications == PermStatus.Ok) "通知 ✓  " else "通知 ✗  ")
-            append(if (snap.installPackages == PermStatus.Ok) "安装 ✓  " else "安装 ✗  ")
             append(
                 when (xpStatus?.level) {
-                    XpRuntime.Level.Injected -> "XP 注入 ✓"
-                    XpRuntime.Level.Framework -> "XP 框架 ○"
+                    XpRuntime.Level.Active -> "XP ✓"
+                    XpRuntime.Level.Enabled -> "XP 已启用"
+                    XpRuntime.Level.Framework -> "XP 未启用"
                     XpRuntime.Level.ManagerOnly -> "XP 管理器 ○"
                     else -> "XP ✗"
                 },
             )
-        }
-        if (container.root.isRootAvailable()) {
-            val off = container.root.exists("/data/local/tmp/qsc_xp_power_events_off")
-            container.settingsRepository.setXpPowerEvents(!off)
         }
     }
 
@@ -106,12 +100,12 @@ fun MoreScreen(
         ) {
         val chips = buildList {
             add(if (permHint.contains("Root ✓")) "Root ✓" else "Root ✗")
-            add(if (permHint.contains("通知 ✓")) "通知 ✓" else "通知 ✗")
-            add(if (permHint.contains("安装 ✓")) "安装 ✓" else "安装 ✗")
+            add(if (permHint.contains("模块 ✓")) "模块 ✓" else "模块 ✗")
             add(
                 when (xpStatus?.level) {
-                    XpRuntime.Level.Injected -> "XP 已注入"
-                    XpRuntime.Level.Framework -> "XP 框架未注入"
+                    XpRuntime.Level.Active -> "XP 已运行"
+                    XpRuntime.Level.Enabled -> "XP 已启用"
+                    XpRuntime.Level.Framework -> "XP 未启用"
                     XpRuntime.Level.ManagerOnly -> "XP 仅管理器"
                     else -> "XP 未检测"
                 },
@@ -168,21 +162,10 @@ fun MoreScreen(
                 },
             )
             ChargeDivider()
-            ChargeToggleRow(
-                title = "XP 供电事件补强",
-                checked = xpEnabled,
+            ChargeListRow(
+                title = "LSPosed / XP",
                 summary = xpStatus?.detail
-                    ?: "需安装并启用 LSPosed，作用域勾选系统框架(android)",
-                onCheckedChange = { enabled ->
-                    scope.launch {
-                        container.settingsRepository.setXpPowerEvents(enabled)
-                        if (container.root.isRootAvailable()) {
-                            if (enabled) container.root.rm("/data/local/tmp/qsc_xp_power_events_off")
-                            else container.root.exec("touch /data/local/tmp/qsc_xp_power_events_off")
-                        }
-                        refreshMeta()
-                    }
-                },
+                    ?: "可选：启用本模块，作用域勾选系统框架(android)；qscd 不可用时边沿唤醒 Magisk",
             )
             ChargeDivider()
             ChargeListRow(

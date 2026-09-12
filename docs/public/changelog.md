@@ -9,9 +9,15 @@
 - 新增 Compose 伴侣 APP（包名 `com.qsc.battery`）：首页 / 策略 / 动态 / 我的；Root 读写模块，不挂后台保活
 - Charge 设计系统：主题（浅/深/AMOLED/动态取色）、调色板、首启权限引导、更新安装、配置档
 - 快捷设置磁贴切换模块软开关；安装包可内嵌 APK，刷模块时可选安装
-- 可选 **LSPosed** 供电事件补强（现代 API 102，作用域系统框架；**不写**充电节点）
-- 桌面动态图标：电量约 20% 分档；充电时电池/环形图标闪电为黄色；插拔电或打开 APP 时稀疏刷新
+- 可选 **LSPosed**：系统框架插拔边沿唤醒（仅 `qscd` 不可用时）；`/data/system` 通道；APP 检测配置/存活标记（不自 hook）
+- 桌面动态图标：电量约 **10%** 分档；充电时电池/环形图标闪电为黄色；插拔电或打开 APP 时稀疏刷新
+- APP 安装范围：`minSdk 26`（Android 8+），`targetSdk 35`
+- LSPosed 模块列简介改为功能说明（去掉 API 文案）
 - 顶栏与正文间距统一（`pageContentTop`）
+- Magisk：`qscd` 失败时武装 XP；回退睡眠可被 `/data/system/qsc_xp_wake` 提前打断
+- **省电**：服务心跳写盘与独立心跳对齐 **180s**；XP 未武装缓存；回退 sleep 仅武装时切片；满轮/简介保持 **30min / 5min**
+- APP「动态」增加 **LSP** 页（只读本模块 `/data/system/qsc_xp.log`）
+- WebUI 曲线打开时刷新 **60s**（原 30s）
 
 ### 模块核心
 
@@ -22,6 +28,7 @@
 - 扩展硬件旁路节点与反极性探测；移除危险旁路自动探测
 - 修复停充与插线判定；**一加等假「充电中」**：简介/插电判定不再仅凭 `status=Charging` 或 dumpsys powered，需端口 online/present 等证据
 - 原生守护：Rust `plugged`/`diagnose`、精简 wake 日志；C 版 `cat`/`stat` 子命令
+- **CI**：停充用例适配 MCA「供电中」简介；Lint 不再错误安装 busybox 包；统一 `checkout@v5` / `setup-node@v5`；抽取 `setup-android` 复合动作
 - **保留更新改为「核心配置」**：音量上只迁移停充阈值/温控/通知/开关/时段等；`power_saver` 与 `loop_interval_*` 等省电运行参数一律用新版默认，避免旧间隔盖掉本版优化
 - **待机省电**：修复事件等待时父 shell 每秒轮询（抵消 qscd）；心跳 5s→**180s**；简介间隔 300s；满轮 30min；默认未插电 idle 90s / native **600s**（上限 900）；同 tick 缓存插电判定；简介 worker 未插电拉长周期
 - **修复 APP 桌面无图标**：动态图标切换改为「先启用目标 alias 再禁用其它」，失败回退默认入口；动态电量图标默认关闭（可在外观中开启）

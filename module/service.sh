@@ -187,6 +187,7 @@ rm -f "$DATADIR/unplug_streak"
 # 守护可用性每次启动重新判定（可能换了二进制或换了机型）
 rm -f "$DATADIR/qscd_unusable" "$DATADIR/qscd_features" \
 	"$DATADIR/qscd_last_wake_reason"
+rm -f /data/system/qsc_xp_arm 2>/dev/null || true
 rm -f "$DATADIR/power_off"
 echo "$(date +%F_%T) service.sh 启动，开始循环" > "$DATADIR/service_start.log"
 QSC_SERVICE_HEARTBEAT_LAST=0
@@ -319,8 +320,9 @@ qsc_service_heartbeat() {
 	local now pending
 	now="${QSC_PS_NOW:-$(date +%s 2>/dev/null)}"
 	case "$now" in ""|*[!0-9]*) return 0 ;; esac
+	# 与独立心跳进程一致：约 180s 写一次，避免近阈值短循环时每几秒刷盘
 	if [ "$QSC_SERVICE_HEARTBEAT_LAST" -eq 0 ] ||
-		[ "$((now - QSC_SERVICE_HEARTBEAT_LAST))" -ge 5 ] 2>/dev/null; then
+		[ "$((now - QSC_SERVICE_HEARTBEAT_LAST))" -ge 180 ] 2>/dev/null; then
 		printf '%s\n' "$now" >"$DATADIR/service_heartbeat" 2>/dev/null
 		printf '%s\n' "$QSC_SERVICE_LOOP_COUNT" >"$DATADIR/service_loop_count" 2>/dev/null
 		printf 'timestamp=%s\nloops=%s\nfull_rounds=%s\nnative_wakes=%s\nwake_reason=%s\n' \
