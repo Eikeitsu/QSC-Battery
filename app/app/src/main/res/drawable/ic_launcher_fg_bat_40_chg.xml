@@ -17,11 +17,11 @@
     <path
         android:fillColor="#FFFFFF"
         android:fillAlpha="0.28"
-        android:pathData="M43.25,37.0 H43.25 Q46.0,37.0 46.0,39.75 V65.25 Q46.0,68.0 43.25,68.0 H43.25 Q40.5,68.0 40.5,65.25 V39.75 Q40.5,37.0 43.25,37.0 Z" />
+        android:pathData="M41.0,38.0 H45.0 V66.0 H41.0 Z" />
     <path
         android:fillColor="#7EECBE"
-        android:pathData="M47.0,55.0 H61.0 Q66.5,55.0 66.5,60.5 V69.0 Q66.5,74.5 61.0,74.5 H47.0 Q41.5,74.5 41.5,69.0 V60.5 Q41.5,55.0 47.0,55.0 Z" />
+        android:pathData="M47.0,58.9 H61.0 Q66.5,58.9 66.5,64.4 V69.0 Q66.5,74.5 61.0,74.5 H47.0 Q41.5,74.5 41.5,69.0 V64.4 Q41.5,58.9 47.0,58.9 Z" />
     <path
-        android:fillColor="#095C42"
-        android:pathData="M55.60,55.15 L49.20,65.07 L53.68,65.07 L51.12,74.35 L59.44,63.15 L54.96,63.15 Z" />
+        android:fillColor="#FFC107"
+        android:pathData="M55.60,57.10 L49.20,67.02 L53.68,67.02 L51.12,76.30 L59.44,65.10 L54.96,65.10 Z" />
 </vector>

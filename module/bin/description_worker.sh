@@ -10,11 +10,11 @@ PARENT_PID="${1:-0}"
 
 WORKER_PID_FILE="$DATADIR/description_worker.pid"
 WORKER_LOCK="$DATADIR/.description_worker.lock"
-REFRESH_SECS="${QSC_PS_DESC_MIN_GAP:-30}"
+REFRESH_SECS="${QSC_PS_DESC_MIN_GAP:-120}"
 case "$REFRESH_SECS" in
-	""|*[!0-9]*) REFRESH_SECS=30 ;;
+	""|*[!0-9]*) REFRESH_SECS=120 ;;
 esac
-[ "$REFRESH_SECS" -ge 10 ] 2>/dev/null || REFRESH_SECS=10
+[ "$REFRESH_SECS" -ge 30 ] 2>/dev/null || REFRESH_SECS=30
 
 case "$PARENT_PID" in
 	""|*[!0-9]*) PARENT_PID=0 ;;
@@ -59,7 +59,7 @@ worker_service_ready() {
 	[ -n "$heartbeat" ] && [ -n "$now" ] || return 1
 	case "$heartbeat:$now" in *[!0-9:]*) return 1 ;; esac
 	[ "$now" -ge "$heartbeat" ] 2>/dev/null &&
-		[ "$((now - heartbeat))" -le 15 ] 2>/dev/null
+		[ "$((now - heartbeat))" -le 120 ] 2>/dev/null
 }
 
 worker_state() {

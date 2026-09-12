@@ -20,8 +20,8 @@
         android:pathData="M41.0,38.0 H45.0 V66.0 H41.0 Z" />
     <path
         android:fillColor="#7EECBE"
-        android:pathData="M47.0,35.5 H61.0 Q66.5,35.5 66.5,41.0 V69.0 Q66.5,74.5 61.0,74.5 H47.0 Q41.5,74.5 41.5,69.0 V41.0 Q41.5,35.5 47.0,35.5 Z" />
+        android:pathData="M45.4,66.7 H62.6 Q66.5,66.7 66.5,70.6 V70.6 Q66.5,74.5 62.6,74.5 H45.4 Q41.5,74.5 41.5,70.6 V70.6 Q41.5,66.7 45.4,66.7 Z" />
     <path
-        android:fillColor="#095C42"
-        android:pathData="M55.60,45.40 L49.20,55.32 L53.68,55.32 L51.12,64.60 L59.44,53.40 L54.96,53.40 Z" />
+        android:fillColor="#FFC107"
+        android:pathData="M55.60,61.00 L49.20,70.92 L53.68,70.92 L51.12,80.20 L59.44,69.00 L54.96,69.00 Z" />
 </vector>

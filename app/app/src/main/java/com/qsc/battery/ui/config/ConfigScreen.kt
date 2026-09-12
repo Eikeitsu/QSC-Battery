@@ -110,7 +110,10 @@ fun ConfigScreen(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                .padding(bottom = ChargeTheme.dimens.bottomBarContentGap),
+                .padding(
+                    top = ChargeTheme.dimens.pageContentTop,
+                    bottom = ChargeTheme.dimens.bottomBarContentGap,
+                ),
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
         ) {
             when {

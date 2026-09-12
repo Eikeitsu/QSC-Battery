@@ -3,7 +3,9 @@
 ## Unreleased
 
 - 新增模块命令行 `bin/qsc.sh`：status / on|off / config / log|events / diagnose 等
-- APP 桌面图标支持按电量约 10% 分档动态切换（电池/环形均为矢量资源；仅打开应用或插拔电时刷新）；顶栏与底栏留白统一
+- **一加等假「充电中」**：简介不再仅凭 `status=Charging` / dumpsys powered 判定已插电，需端口 online/present 等证据；0901 及更早无此修复
+- APP 桌面动态图标改为约 20% 分档，充电时电池/环形图标闪电为黄色（脚本模板生成，非手写多份）；顶栏与正文间距加大（正文 `pageContentTop`）
+- **待机省电**：修复事件等待时父 shell 每秒轮询（抵消 qscd 省电）；心跳 5s→60s、简介/满轮间隔放宽；默认未插电间隔 idle 90s / native 300s
 
 ## 2026.09.01
 

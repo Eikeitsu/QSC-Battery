@@ -43,8 +43,10 @@ data class ChargeDimens(
     val sectionGap: Dp = 16.dp,
     /** 状态栏 insets 之后，标题再略下沉 */
     val topBarTitleTop: Dp = 12.dp,
-    /** 标题区到底文：适中即可，过大首页会空一截 */
-    val topBarContentGap: Dp = 12.dp,
+    /** 顶栏标题区自身底距（宜小；与正文的空隙交给 pageContentTop） */
+    val topBarContentGap: Dp = 4.dp,
+    /** 正文顶部相对顶栏的 padding（各页统一加在内容区） */
+    val pageContentTop: Dp = 20.dp,
     /** 主 Tab 内容相对底栏顶边的呼吸 */
     val bottomBarContentGap: Dp = 16.dp,
     val radiusLg: Dp = 22.dp,

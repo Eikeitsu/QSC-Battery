@@ -55,7 +55,7 @@ fun AppearanceScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
                 .padding(
-                    top = 0.dp,
+                    top = ChargeTheme.dimens.pageContentTop,
                     bottom = ChargeTheme.dimens.sectionGap,
                 ),
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),

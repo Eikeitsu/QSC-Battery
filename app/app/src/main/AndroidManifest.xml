@@ -53,7 +53,7 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- 动态电量：每 10% 一档 -->
+        <!-- 动态电量：约 20% 一档；*_chg 为充电黄闪 -->
         <activity-alias
             android:name=".MainActivityBat00"
             android:enabled="false"
@@ -68,12 +68,12 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".MainActivityBat10"
+            android:name=".MainActivityBat00c"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_bat_10"
+            android:icon="@mipmap/ic_launcher_bat_00_chg"
             android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_bat_10"
+            android:roundIcon="@mipmap/ic_launcher_bat_00_chg"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -94,12 +94,12 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".MainActivityBat30"
+            android:name=".MainActivityBat20c"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_bat_30"
+            android:icon="@mipmap/ic_launcher_bat_20_chg"
             android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_bat_30"
+            android:roundIcon="@mipmap/ic_launcher_bat_20_chg"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -120,12 +120,12 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".MainActivityBat50"
+            android:name=".MainActivityBat40c"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_bat_50"
+            android:icon="@mipmap/ic_launcher_bat_40_chg"
             android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_bat_50"
+            android:roundIcon="@mipmap/ic_launcher_bat_40_chg"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -146,12 +146,12 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".MainActivityBat70"
+            android:name=".MainActivityBat60c"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_bat_70"
+            android:icon="@mipmap/ic_launcher_bat_60_chg"
             android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_bat_70"
+            android:roundIcon="@mipmap/ic_launcher_bat_60_chg"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -172,12 +172,12 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".MainActivityBat90"
+            android:name=".MainActivityBat80c"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_bat_90"
+            android:icon="@mipmap/ic_launcher_bat_80_chg"
             android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_bat_90"
+            android:roundIcon="@mipmap/ic_launcher_bat_80_chg"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -197,8 +197,21 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
+        <activity-alias
+            android:name=".MainActivityBat100c"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_bat_100_chg"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_bat_100_chg"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
-        <!-- 环形风格动态电量：每 10% 一档 -->
+        <!-- 环形风格动态电量 -->
         <activity-alias
             android:name=".MainActivityAlt00"
             android:enabled="false"
@@ -213,12 +226,12 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".MainActivityAlt10"
+            android:name=".MainActivityAlt00c"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_alt_10"
+            android:icon="@mipmap/ic_launcher_alt_00_chg"
             android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_alt_10"
+            android:roundIcon="@mipmap/ic_launcher_alt_00_chg"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -239,12 +252,12 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".MainActivityAlt30"
+            android:name=".MainActivityAlt20c"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_alt_30"
+            android:icon="@mipmap/ic_launcher_alt_20_chg"
             android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_alt_30"
+            android:roundIcon="@mipmap/ic_launcher_alt_20_chg"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -265,12 +278,12 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".MainActivityAlt50"
+            android:name=".MainActivityAlt40c"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_alt_50"
+            android:icon="@mipmap/ic_launcher_alt_40_chg"
             android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_alt_50"
+            android:roundIcon="@mipmap/ic_launcher_alt_40_chg"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -291,12 +304,12 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".MainActivityAlt70"
+            android:name=".MainActivityAlt60c"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_alt_70"
+            android:icon="@mipmap/ic_launcher_alt_60_chg"
             android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_alt_70"
+            android:roundIcon="@mipmap/ic_launcher_alt_60_chg"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -317,12 +330,12 @@
             </intent-filter>
         </activity-alias>
         <activity-alias
-            android:name=".MainActivityAlt90"
+            android:name=".MainActivityAlt80c"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_alt_90"
+            android:icon="@mipmap/ic_launcher_alt_80_chg"
             android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_alt_90"
+            android:roundIcon="@mipmap/ic_launcher_alt_80_chg"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -336,6 +349,19 @@
             android:icon="@mipmap/ic_launcher_alt_100"
             android:label="@string/app_name"
             android:roundIcon="@mipmap/ic_launcher_alt_100"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityAlt100c"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_alt_100_chg"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_alt_100_chg"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

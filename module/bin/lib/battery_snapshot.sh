@@ -50,11 +50,10 @@ qsc_battery_snapshot_read() {
 	case "$_QSC_SNAP_STATUS" in
 		Charging)
 			QSC_BATTERY_STATUS=2
-			QSC_BATTERY_POWERED="powered: true"
+			# 不在此直接认「已插电」：部分机型（如一加）未插电仍报 Charging
 			;;
 		Full)
 			QSC_BATTERY_STATUS=5
-			QSC_BATTERY_POWERED="powered: true"
 			;;
 		Discharging)
 			QSC_BATTERY_STATUS=3
@@ -103,15 +102,20 @@ qsc_battery_snapshot_read() {
 	[ -n "$QSC_BATTERY_TEMP" ] && : || QSC_BATTERY_TEMP="$_QSC_SNAP_TEMP"
 	if [ -z "$QSC_BATTERY_STATUS" ]; then
 		case "$_QSC_SNAP_STATUS" in
-			Charging) QSC_BATTERY_STATUS=2; QSC_BATTERY_POWERED="powered: true" ;;
-			Full) QSC_BATTERY_STATUS=5; QSC_BATTERY_POWERED="powered: true" ;;
+			Charging) QSC_BATTERY_STATUS=2 ;;
+			Full) QSC_BATTERY_STATUS=5 ;;
 			Discharging) QSC_BATTERY_STATUS=3 ;;
 			"Not charging") QSC_BATTERY_STATUS=4 ;;
 		esac
 	fi
-	if [ -z "$QSC_BATTERY_POWERED" ] && qsc_ps_plugged; then
-		QSC_BATTERY_POWERED="powered: true"
-		[ "$QSC_BATTERY_STATUS" = "3" ] && QSC_BATTERY_STATUS=2
+	# 插电以端口交叉判定为准：勿仅凭 status=Charging；一加等机型
+	# dumpsys 也可能误报 powered:true，无 online/present 证据时清掉。
+	if type qsc_ps_plugged >/dev/null 2>&1; then
+		if qsc_ps_plugged; then
+			QSC_BATTERY_POWERED="powered: true"
+		else
+			QSC_BATTERY_POWERED=""
+		fi
 	fi
 	QSC_BATTERY_READ_AT="$(date +%s 2>/dev/null)"
 	[ -n "$QSC_BATTERY_SOURCE" ] || QSC_BATTERY_SOURCE="fallback"

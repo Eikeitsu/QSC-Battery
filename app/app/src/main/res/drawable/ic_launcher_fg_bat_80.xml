@@ -17,7 +17,7 @@
     <path
         android:fillColor="#FFFFFF"
         android:fillAlpha="0.28"
-        android:pathData="M43.25,37.0 H43.25 Q46.0,37.0 46.0,39.75 V65.25 Q46.0,68.0 43.25,68.0 H43.25 Q40.5,68.0 40.5,65.25 V39.75 Q40.5,37.0 43.25,37.0 Z" />
+        android:pathData="M41.0,38.0 H45.0 V66.0 H41.0 Z" />
     <path
         android:fillColor="#7EECBE"
         android:pathData="M47.0,43.3 H61.0 Q66.5,43.3 66.5,48.8 V69.0 Q66.5,74.5 61.0,74.5 H47.0 Q41.5,74.5 41.5,69.0 V48.8 Q41.5,43.3 47.0,43.3 Z" />

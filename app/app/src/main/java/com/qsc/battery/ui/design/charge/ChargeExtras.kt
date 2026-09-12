@@ -287,7 +287,10 @@ fun ChargeScreen(
                 .weight(1f, fill = true)
                 .fillMaxWidth()
                 .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                .padding(bottom = ChargeTheme.dimens.bottomBarContentGap),
+                .padding(
+                    top = ChargeTheme.dimens.pageContentTop,
+                    bottom = ChargeTheme.dimens.bottomBarContentGap,
+                ),
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
             content = content,
         )
@@ -363,21 +366,19 @@ fun batteryStatusLabel(
     raw: String,
     powered: Boolean = false,
     stopped: Boolean = false,
-): String = when (raw.trim().lowercase()) {
-    "charging", "2" -> "充电中"
-    "full", "5" -> "已充满"
-    "discharging", "3" -> "未充电"
-    "not charging", "not_charging", "4" -> when {
-        stopped -> "已停充"
-        powered -> "供电中" // MCA 等机型插电时常报 Not charging
-        else -> "未充电"
+): String {
+    if (stopped) return "已停充"
+    return when (raw.trim().lowercase()) {
+        "charging", "2" -> if (powered) "充电中" else "未充电"
+        "full", "5" -> if (powered) "已充满" else "未充电"
+        "discharging", "3" -> "未充电"
+        "not charging", "not_charging", "4" -> if (powered) "供电中" else "未充电"
+        "unknown", "1", "" -> if (powered) "已插电" else "未知"
+        else -> when {
+            powered -> raw.ifBlank { "已插电" }
+            else -> "未充电"
+        }
     }
-    "unknown", "1", "" -> when {
-        stopped -> "已停充"
-        powered -> "已插电"
-        else -> "未知"
-    }
-    else -> raw.ifBlank { "未知" }
 }
 
 fun chargeEventTypeLabel(type: String): String = when (type.uppercase()) {
@@ -394,13 +395,18 @@ fun chargeEventTypeLabel(type: String): String = when (type.uppercase()) {
 }
 
 /**
- * 是否展示充电动效。
- * 模块 snapshot 常把 status 写成数字（2=Charging），且 MCA 机型插电时可能是 4/Not charging。
+ * 是否展示充电动效 / 「充电中」角标。
+ * 必须已插电且未停充；未插电时即使 status=2 也不显示充电中。
  */
 fun isActivelyCharging(statusRaw: String, powered: Boolean, stopped: Boolean): Boolean {
     if (stopped || !powered) return false
     return when (statusRaw.trim().lowercase()) {
         "3", "discharging" -> false
-        else -> true // 已插电且未停充：含 2/Charging、5/Full、4/Not charging(MCA)
+        "charging", "2" -> true
+        "full", "5" -> true
+        // MCA 等：插电时常报 Not charging，仍给轻量动效提示「在充电路径上」
+        "not charging", "not_charging", "4" -> true
+        "unknown", "1", "" -> true
+        else -> true
     }
 }

@@ -222,11 +222,16 @@ qsc_ps_plugged() {
 	fi
 	# MCA 的 battery/status 常为 Not charging，但此时仍是插线状态；
 	# 若此时 current_now < 0 则说明电池在放电，按未插线处理，避免误判。
+	# Charging/Full：一加等机型未插电仍可能报 Charging——无端口 online/present
+	# 证据时不得仅凭 status 判已插电（否则简介会显示「充电中」）。
 	if qsc_ps_read "$PSDIR/battery/status"; then
 		case "$QSC_PS_VAL" in
 			Charging|Full)
-				qsc_ps_dbg ps_status debug "判定已插电：电池状态 $QSC_PS_VAL"
-				return 0
+				if qsc_ps_read "$PSDIR/battery/online" && [ "$QSC_PS_VAL" = "1" ]; then
+					qsc_ps_dbg ps_status debug "判定已插电：battery/online=1"
+					return 0
+				fi
+				qsc_ps_dbg ps_status debug "忽略孤立 status（无端口 online/present）"
 				;;
 			"Not charging")
 				local cur cur_int
@@ -259,7 +264,8 @@ qsc_ps_plugged() {
 
 # 未插电且无停充维持时可跳过整轮；仍按 QSC_PS_FULL_MAX_GAP 定期跑满轮，
 # 保证曲线采样、简介刷新、配置纠正不会长期停摆。
-QSC_PS_FULL_MAX_GAP=300
+# 日用待机优先：默认 15 分钟才强制满轮（有 qscd 插拔仍即时唤醒）。
+QSC_PS_FULL_MAX_GAP=900
 
 qsc_ps_can_skip_round() {
 	local now last
@@ -286,7 +292,8 @@ QSC_PS_DESC_SIG=""
 QSC_PS_DESC_TS=0
 # 简介是用户可见的运行状态，最长允许按省电策略等待；真正没有变化时
 # qsc_ps_refresh_desc 仍会被指纹短路，不会产生重复 module.prop 写入。
-QSC_PS_DESC_MIN_GAP=30
+# 未插电待机：2 分钟内同一指纹不写盘（原先 30s 过密）。
+QSC_PS_DESC_MIN_GAP=120
 
 # 参数: 当前单调秒（service.sh 已经读过 /proc/uptime，不再重复读）
 qsc_ps_refresh_desc() {
@@ -370,6 +377,7 @@ qsc_ps_refresh_desc() {
 	# 该函数也由 service.sh 在满轮前调用，不能假定一定是未插电。
 	battery_level="$lv"
 	temperature="$temp"
+	battery_status="${QSC_BATTERY_STATUS:-}"
 	battery_powered=""
 	[ "$plugged" = "1" ] && battery_powered="powered: true"
 	# region agent log
@@ -470,43 +478,47 @@ qsc_ps_watch_supported() {
 }
 
 qsc_ps_native_exec() {
-	local secs="$1" limit marker i rc
+	local secs="$1" limit marker rc pid killer
 	shift
 	case "$secs" in ""|*[!0-9]*) secs=30 ;; esac
 	limit=$((secs + 5))
 	marker="$DATADIR/.qsc_exec_done.$$"
 	rm -f "$marker" 2>/dev/null
-	# 不依赖 Android 各版本 timeout 的信号/等待语义：用完成标记判断子进程
-	# 是否真的返回，超时后直接 SIGKILL，避免 qscd 永远占住 service。
+	# 子进程跑 qscd（可阻塞数十～数百秒）。禁止用 sleep 1 轮询：那会把
+	# 「事件等待省电」打回成约 1Hz 的 shell 唤醒，待机比纯 sleep 还费电。
+	# 主路径 wait 子进程；旁路 sleep+kill 仅作挂死兜底，平时不醒来。
 	(
 		"$@"
 		rc="$?"
 		printf '%s\n' "$rc" >"$marker" 2>/dev/null
 		exit "$rc"
 	) &
-	local pid=$!
-	i=0
-	while [ ! -f "$marker" ] && [ "$i" -lt "$limit" ]; do
-		sleep 1
-		i=$((i + 1))
-	done
+	pid=$!
+	(
+		sleep "$limit"
+		if [ ! -f "$marker" ]; then
+			kill -9 "$pid" 2>/dev/null
+		fi
+	) &
+	killer=$!
+	wait "$pid" 2>/dev/null
+	rc="$?"
+	kill "$killer" 2>/dev/null
+	wait "$killer" 2>/dev/null || true
 	if [ -f "$marker" ]; then
 		rc="$(cat "$marker" 2>/dev/null | tr -d ' \r\n')"
 		rm -f "$marker" 2>/dev/null
 		case "$rc" in ""|*[!0-9]*) rc=124 ;; esac
-		wait "$pid" 2>/dev/null || true
 		# region agent log
 		type qsc_runtime_trace >/dev/null 2>&1 &&
-			qsc_runtime_trace "H3" "native_launcher" "watchdog:$rc"
+			qsc_runtime_trace "H3" "native_launcher" "wait:$rc"
 		# endregion
 		return "$rc"
 	fi
-	kill -9 "$pid" 2>/dev/null
-	wait "$pid" 2>/dev/null || true
 	rm -f "$marker" 2>/dev/null
 	# region agent log
 	type qsc_runtime_trace >/dev/null 2>&1 &&
-		qsc_runtime_trace "H3" "native_launcher" "watchdog:124"
+		qsc_runtime_trace "H3" "native_launcher" "wait:124"
 	# endregion
 	return 124
 }

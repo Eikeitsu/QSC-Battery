@@ -239,7 +239,7 @@ qsc_refresh_module_description() {
 		return 0
 	fi
 
-	# 充电中 + 可选电流控制子状态
+	# 充电/供电中：按真实 status 区分，避免 MCA「插电 Not charging」也写「充电中」
 	cur_tag="$(cat "$DATADIR/current_mode_tag" 2>/dev/null)"
 	[ -z "$cur_tag" ] && cur_tag="${current_mode_tag:-}"
 	cur_mode="${cur_tag%%:*}"
@@ -251,6 +251,14 @@ qsc_refresh_module_description() {
 	else
 		inner="供电中"
 	fi
+
+	_st="$(printf '%s' "${battery_status:-${QSC_BATTERY_STATUS:-}}" | tr -d ' \r\n')"
+	_major="⚡充电中"
+	case "$_st" in
+		4|"Not charging"|not_charging|Not\ charging) _major="🔌供电中" ;;
+		5|Full|full) _major="🔋已充满" ;;
+		3|Discharging|discharging) _major="🔌已插电" ;;
+	esac
 
 	case "$cur_mode" in
 		模拟旁路)
@@ -286,7 +294,7 @@ qsc_refresh_module_description() {
 				"温度达到二限，已切至更小电流"
 			;;
 		默认限流)
-			qsc_write_module_description "⚡充电中" "$inner" \
+			qsc_write_module_description "$_major" "$inner" \
 				"电流控制已开启，按默认上限限流"
 			;;
 		*)
@@ -299,7 +307,7 @@ qsc_refresh_module_description() {
 			elif [ "${temperature_switch:-0}" = "1" ] && [ -n "$temperature_switch_stop" ]; then
 				outer="温度≥${temperature_switch_stop}°C 将停充"
 			fi
-			qsc_write_module_description "⚡充电中" "$inner" "$outer"
+			qsc_write_module_description "$_major" "$inner" "$outer"
 			;;
 	esac
 }

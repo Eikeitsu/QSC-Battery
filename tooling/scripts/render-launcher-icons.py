@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-Generate adaptive-icon foregrounds as VectorDrawable XML (tiny vs density PNGs).
+Generate adaptive-icon VectorDrawable XML from one logic template.
 
-Launcher icons still need discrete resources per activity-alias; runtime SVG variables
-cannot change the home-screen icon. Vectors keep the APK small.
-
-Also deletes legacy ic_launcher_fg*.png under drawable-*dpi.
+Launcher icons cannot tint at runtime on the home screen — Android only
+switches discrete activity-alias resources. We keep few buckets (20%) and
+encode charge state (yellow bolt) in the same generator logic.
 """
 from __future__ import annotations
 
@@ -18,24 +17,24 @@ mipmap = app_res / "mipmap-anydpi-v26"
 drawable.mkdir(parents=True, exist_ok=True)
 mipmap.mkdir(parents=True, exist_ok=True)
 
-LEVELS = list(range(0, 101, 10))
+# Fewer buckets → fewer vectors (6 levels × 2 styles × 2 charge = 24)
+LEVELS = [0, 20, 40, 60, 80, 100]
+BOLT_IDLE = "#095C42"
+BOLT_CHG = "#FFC107"  # yellow when charging
 
-# Shorter battery in 108 viewport (safe zone ~66–72)
-# tip: y 26–34; body: y 32–78 (h=46), x 38–70 (w=32)
 BAT_BX0, BAT_BY0, BAT_BX1, BAT_BY1 = 38.0, 32.0, 70.0, 78.0
 BAT_INSET = 3.5
 TIP = (46.0, 26.0, 62.0, 34.0)
 
 
 def bat_fill_top(ratio: float) -> float:
-    ratio = max(0.0, min(1.0, ratio))
+    ratio = max(0.0, min(1.0, float(ratio)))
     inner_top = BAT_BY0 + BAT_INSET
     inner_bot = BAT_BY1 - BAT_INSET
     h = inner_bot - inner_top
     if ratio <= 0.02:
         return inner_bot
-    fill_h = max(h * ratio, 2.0)
-    return inner_bot - fill_h
+    return inner_bot - max(h * ratio, 2.0)
 
 
 def vector_wrap(paths: str) -> str:
@@ -63,18 +62,11 @@ def path(d: str, color: str, fill_alpha: float | None = None) -> str:
 
 
 def round_rect_path(x0, y0, x1, y1, r) -> str:
-    """Simple rounded rect path (uniform radius)."""
     r = min(r, (x1 - x0) / 2, (y1 - y0) / 2)
     return (
-        f"M{x0 + r},{y0} "
-        f"H{x1 - r} "
-        f"Q{x1},{y0} {x1},{y0 + r} "
-        f"V{y1 - r} "
-        f"Q{x1},{y1} {x1 - r},{y1} "
-        f"H{x0 + r} "
-        f"Q{x0},{y1} {x0},{y1 - r} "
-        f"V{y0 + r} "
-        f"Q{x0},{y0} {x0 + r},{y0} Z"
+        f"M{x0 + r},{y0} H{x1 - r} Q{x1},{y0} {x1},{y0 + r} "
+        f"V{y1 - r} Q{x1},{y1} {x1 - r},{y1} H{x0 + r} "
+        f"Q{x0},{y1} {x0},{y1 - r} V{y0 + r} Q{x0},{y0} {x0 + r},{y0} Z"
     )
 
 
@@ -92,70 +84,24 @@ def bolt_path(cx, cy, s=1.0) -> str:
     return d + " Z"
 
 
-def make_battery_vector(fill_ratio: float) -> str:
-    parts = []
-    # soft disc behind battery
-    parts.append(path(
-        "M54,22 a32,36 0 1,1 0,72 a32,36 0 1,1 0,-72 Z",
-        "#FFFFFF",
-        0.08,
-    ))
-    tx0, ty0, tx1, ty1 = TIP
-    parts.append(path(round_rect_path(tx0, ty0, tx1, ty1, 3.5), "#FFFFFF"))
-    parts.append(path(round_rect_path(BAT_BX0, BAT_BY0, BAT_BX1, BAT_BY1, 8), "#FFFFFF"))
-    # left sheen (simple thin bar; avoid collapsed rounded rect)
-    parts.append(path(
-        f"M{BAT_BX0 + 3:.1f},{BAT_BY0 + 6:.1f} "
-        f"H{BAT_BX0 + 7:.1f} "
-        f"V{BAT_BY1 - 12:.1f} "
-        f"H{BAT_BX0 + 3:.1f} Z",
-        "#FFFFFF",
-        0.28,
-    ))
-    fill_top = bat_fill_top(fill_ratio)
-    inner_bot = BAT_BY1 - BAT_INSET
-    if fill_ratio > 0.02 and fill_top < inner_bot - 0.5:
-        parts.append(path(
-            round_rect_path(
-                BAT_BX0 + BAT_INSET,
-                fill_top,
-                BAT_BX1 - BAT_INSET,
-                inner_bot,
-                5.5,
-            ),
-            "#7EECBE",
-        ))
-        if fill_ratio >= 0.2:
-            cy = (fill_top + inner_bot) / 2
-            parts.append(path(bolt_path(54, cy, s=0.32), "#095C42"))
-    return vector_wrap("".join(parts))
-
-
-def arc_ring_path(cx, cy, r, start_deg, sweep_deg, stroke=5.0) -> str:
-    """Annular sector as filled path (outer arc + inner arc)."""
+def arc_ring_path(cx, cy, r, sweep_deg, stroke=5.0) -> str:
     if sweep_deg <= 0.5:
         return ""
     sweep_deg = min(359.9, sweep_deg)
     r_out = r + stroke / 2
     r_in = max(0.5, r - stroke / 2)
+    start = -90.0
+    end = start + sweep_deg
 
     def pt(rad, ang):
         a = math.radians(ang)
         return cx + rad * math.cos(a), cy + rad * math.sin(a)
 
-    # Android angles: 0° = east, clockwise in path? Use standard math (CCW from east)
-    # Progress from top (-90°) clockwise visually → increase angle in screen coords (Y down)
-    # With Y-down, clockwise from top: start=-90, sweep positive in CW = increasing angle in Y-down = ...
-    # Simpler: start at top, go clockwise for battery %
-    start = -90.0
-    end = start + sweep_deg  # CW in screen space if we flip: use start + sweep with sin/cos Y-down
-    # Y-down: angle increases clockwise. Top=-90 or 270. CW sweep: angle increases.
     large = 1 if sweep_deg > 180 else 0
     x0, y0 = pt(r_out, start)
     x1, y1 = pt(r_out, end)
     xi1, yi1 = pt(r_in, end)
     xi0, yi0 = pt(r_in, start)
-    # outer arc CW: sweep-flag=1 in SVG for CW when Y-down... SVG: sweep=1 is CW
     return (
         f"M{x0:.3f},{y0:.3f} "
         f"A{r_out:.3f},{r_out:.3f} 0 {large} 1 {x1:.3f},{y1:.3f} "
@@ -164,29 +110,64 @@ def arc_ring_path(cx, cy, r, start_deg, sweep_deg, stroke=5.0) -> str:
     )
 
 
-def make_alt_vector(fill_ratio: float) -> str:
+def make_battery(fill_ratio: float, charging: bool) -> str:
+    bolt = BOLT_CHG if charging else BOLT_IDLE
     parts = []
-    # outer soft glow
-    parts.append(path("M54,24 a30,30 0 1,1 0,60 a30,30 0 1,1 0,-60 Z", "#2EC896", 0.16))
-    # track ring
-    parts.append(path(arc_ring_path(54, 54, 28, 0, 359.9, stroke=4.5) or
-                      "M54,25.5 A28.5,28.5 0 1 1 53.99,25.5 Z", "#FFFFFF", 0.18))
-    # progress arc
-    sweep = 359.9 * max(0.0, min(1.0, fill_ratio))
-    arc = arc_ring_path(54, 54, 28, -90, sweep, stroke=4.5)
-    if arc:
-        parts.append(path(arc, "#7EECBE"))
-    # center disc
-    parts.append(path("M54,38 a16,16 0 1,1 0,32 a16,16 0 1,1 0,-32 Z", "#24AF82"))
-    parts.append(path(bolt_path(54, 54, s=0.48), "#FFFFFF"))
+    parts.append(path("M54,22 a32,36 0 1,1 0,72 a32,36 0 1,1 0,-72 Z", "#FFFFFF", 0.08))
+    tx0, ty0, tx1, ty1 = TIP
+    parts.append(path(round_rect_path(tx0, ty0, tx1, ty1, 3.5), "#FFFFFF"))
+    parts.append(path(round_rect_path(BAT_BX0, BAT_BY0, BAT_BX1, BAT_BY1, 8), "#FFFFFF"))
+    parts.append(
+        path(
+            f"M{BAT_BX0 + 3:.1f},{BAT_BY0 + 6:.1f} H{BAT_BX0 + 7:.1f} "
+            f"V{BAT_BY1 - 12:.1f} H{BAT_BX0 + 3:.1f} Z",
+            "#FFFFFF",
+            0.28,
+        )
+    )
+    fill_top = bat_fill_top(fill_ratio)
+    inner_bot = BAT_BY1 - BAT_INSET
+    if fill_ratio > 0.02 and fill_top < inner_bot - 0.5:
+        parts.append(
+            path(
+                round_rect_path(BAT_BX0 + BAT_INSET, fill_top, BAT_BX1 - BAT_INSET, inner_bot, 5.5),
+                "#7EECBE",
+            )
+        )
+        if fill_ratio >= 0.15 or charging:
+            cy = (fill_top + inner_bot) / 2
+            parts.append(path(bolt_path(54, cy, s=0.32), bolt))
+    elif charging:
+        parts.append(path(bolt_path(54, 58, s=0.32), bolt))
     return vector_wrap("".join(parts))
 
 
-def write_adaptive(name: str, fg: str, mono: str, bg_color: str):
+def make_alt(fill_ratio: float, charging: bool) -> str:
+    bolt = BOLT_CHG if charging else "#FFFFFF"
+    parts = []
+    parts.append(path("M54,24 a30,30 0 1,1 0,60 a30,30 0 1,1 0,-60 Z", "#2EC896", 0.16))
+    parts.append(
+        path(
+            arc_ring_path(54, 54, 28, 359.9, stroke=4.5)
+            or "M54,25.5 A28.5,28.5 0 1 1 53.99,25.5 Z",
+            "#FFFFFF",
+            0.18,
+        )
+    )
+    sweep = 359.9 * max(0.0, min(1.0, fill_ratio))
+    arc = arc_ring_path(54, 54, 28, sweep, stroke=4.5)
+    if arc:
+        parts.append(path(arc, "#7EECBE"))
+    parts.append(path("M54,38 a16,16 0 1,1 0,32 a16,16 0 1,1 0,-32 Z", "#24AF82"))
+    parts.append(path(bolt_path(54, 54, s=0.48), bolt))
+    return vector_wrap("".join(parts))
+
+
+def write_adaptive(name: str, fg: str, mono: str, bg: str):
     (mipmap / f"{name}.xml").write_text(
         '<?xml version="1.0" encoding="utf-8"?>\n'
         '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
-        f'    <background android:drawable="@color/{bg_color}" />\n'
+        f'    <background android:drawable="@color/{bg}" />\n'
         f'    <foreground android:drawable="@drawable/{fg}" />\n'
         f'    <monochrome android:drawable="@drawable/{mono}" />\n'
         "</adaptive-icon>\n",
@@ -195,42 +176,45 @@ def write_adaptive(name: str, fg: str, mono: str, bg_color: str):
 
 
 def main():
-    # battery static + levels
-    (drawable / "ic_launcher_fg.xml").write_text(make_battery_vector(0.6), encoding="utf-8")
-    for lv in LEVELS:
-        (drawable / f"ic_launcher_fg_bat_{lv:02d}.xml").write_text(
-            make_battery_vector(lv / 100.0), encoding="utf-8"
-        )
-        write_adaptive(
-            f"ic_launcher_bat_{lv:02d}",
-            f"ic_launcher_fg_bat_{lv:02d}",
-            "ic_launcher_monochrome",
-            "ic_launcher_bg",
-        )
+    # purge old 10%-step / non-chg launcher vectors
+    for p in drawable.glob("ic_launcher_fg_bat_*.xml"):
+        p.unlink()
+    for p in drawable.glob("ic_launcher_fg_alt_*.xml"):
+        p.unlink()
+    for p in mipmap.glob("ic_launcher_bat_*.xml"):
+        p.unlink()
+    for p in mipmap.glob("ic_launcher_alt_*.xml"):
+        p.unlink()
 
-    # alt static + levels
-    (drawable / "ic_launcher_fg_alt.xml").write_text(make_alt_vector(0.7), encoding="utf-8")
-    for lv in LEVELS:
-        (drawable / f"ic_launcher_fg_alt_{lv:02d}.xml").write_text(
-            make_alt_vector(lv / 100.0), encoding="utf-8"
-        )
-        write_adaptive(
-            f"ic_launcher_alt_{lv:02d}",
-            f"ic_launcher_fg_alt_{lv:02d}",
-            "ic_launcher_monochrome_alt",
-            "ic_launcher_bg_alt",
-        )
-
+    (drawable / "ic_launcher_fg.xml").write_text(make_battery(0.6, False), encoding="utf-8")
+    (drawable / "ic_launcher_fg_alt.xml").write_text(make_alt(0.7, False), encoding="utf-8")
     write_adaptive("ic_launcher", "ic_launcher_fg", "ic_launcher_monochrome", "ic_launcher_bg")
-    write_adaptive("ic_launcher_alt", "ic_launcher_fg_alt", "ic_launcher_monochrome_alt", "ic_launcher_bg_alt")
+    write_adaptive(
+        "ic_launcher_alt", "ic_launcher_fg_alt", "ic_launcher_monochrome_alt", "ic_launcher_bg_alt"
+    )
 
-    # remove density PNG foregrounds (keep folder if other assets)
-    removed = 0
-    for folder in app_res.glob("drawable-*dpi"):
-        for p in folder.glob("ic_launcher_fg*.png"):
-            p.unlink()
-            removed += 1
-    print(f"ok vectors levels={LEVELS} removed_pngs={removed}")
+    for lv in LEVELS:
+        ratio = lv / 100.0
+        for chg in (False, True):
+            suf = f"{lv:02d}" + ("_chg" if chg else "")
+            bat_fg = f"ic_launcher_fg_bat_{suf}"
+            alt_fg = f"ic_launcher_fg_alt_{suf}"
+            (drawable / f"{bat_fg}.xml").write_text(make_battery(ratio, chg), encoding="utf-8")
+            (drawable / f"{alt_fg}.xml").write_text(make_alt(ratio, chg), encoding="utf-8")
+            write_adaptive(
+                f"ic_launcher_bat_{suf}",
+                bat_fg,
+                "ic_launcher_monochrome",
+                "ic_launcher_bg",
+            )
+            write_adaptive(
+                f"ic_launcher_alt_{suf}",
+                alt_fg,
+                "ic_launcher_monochrome_alt",
+                "ic_launcher_bg_alt",
+            )
+
+    print("ok levels=", LEVELS, "chg_bolt=", BOLT_CHG)
 
 
 if __name__ == "__main__":

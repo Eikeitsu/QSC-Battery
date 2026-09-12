@@ -68,7 +68,7 @@ fun ColorPaletteScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
                 .padding(
-                    top = 4.dp,
+                    top = ChargeTheme.dimens.pageContentTop,
                     bottom = ChargeTheme.dimens.sectionGap,
                 ),
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),

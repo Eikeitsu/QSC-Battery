@@ -70,6 +70,7 @@ fun LogScreen(container: AppContainer) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
+                top = ChargeTheme.dimens.pageContentTop,
                 bottom = ChargeTheme.dimens.bottomBarContentGap,
             ),
             verticalArrangement = Arrangement.spacedBy(8.dp),

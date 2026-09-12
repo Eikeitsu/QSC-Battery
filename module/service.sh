@@ -38,6 +38,8 @@ trap qsc_service_exit 0 1 2 3 15
 
 qsc_start_heartbeat_loop() {
 	local parent="$1" file="$2"
+	# 心跳只给热更新/简介 worker 探活；写盘间隔不必到秒级。
+	# 过密会在待机时持续拉起 shell（原先 5s）。
 	_hb_loop='
 		parent="$1"
 		file="$2"
@@ -45,7 +47,7 @@ qsc_start_heartbeat_loop() {
 			now="$(date +%s 2>/dev/null)"
 			case "$now" in ""|*[!0-9]*) now=0 ;; esac
 			printf "%s\n" "$now" >"$file" 2>/dev/null
-			sleep 5
+			sleep 60
 		done
 	'
 	if command -v setsid >/dev/null 2>&1; then
