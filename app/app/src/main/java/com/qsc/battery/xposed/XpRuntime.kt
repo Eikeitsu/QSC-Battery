@@ -1,16 +1,19 @@
 package com.qsc.battery.xposed
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import com.qsc.battery.BuildConfig
 import com.qsc.battery.core.RootBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * XP / LSPosed 状态：
  * - 管理器 / 框架目录
- * - `modules_config.db`：是否启用、作用域是否含 `android`
- * - `/data/system/qsc_xp_alive`：system_server 存活标记（已进框架的强证据）
+ * - `modules_config.db`：Root 拷贝后用系统 [SQLiteDatabase] 读（不依赖手机是否有 sqlite3 命令）
+ * - 系统框架在库中常记为 `system`（LSPosed 会把 `android` 迁成 `system`）
+ * - `/data/system/qsc_xp_alive`：system_server 存活标记
  */
 object XpRuntime {
     private val MANAGER_PACKAGES = listOf(
@@ -29,12 +32,8 @@ object XpRuntime {
         "/data/adb/modules/lsposed",
     )
 
-    private val SQLITE_BINS = listOf(
-        "sqlite3",
-        "/system/bin/sqlite3",
-        "/system/xbin/sqlite3",
-        "/data/adb/magisk/busybox",
-    )
+    /** LSPosed 配置库中「系统框架」可能是 android 或 system */
+    private val SYSTEM_SCOPE_PKGS = setOf("android", "system")
 
     private const val DB = "/data/adb/lspd/config/modules_config.db"
     private const val ALIVE = "/data/system/qsc_xp_alive"
@@ -84,12 +83,11 @@ object XpRuntime {
         var scopeKnown = false
 
         if (hasRoot && root.exists(DB)) {
-            val cfg = readLsposedConfig(root, ourPkgs)
+            val cfg = readLsposedConfig(context, root, ourPkgs)
             enabled = cfg.enabled
             scopedAndroid = cfg.scopedAndroid
             scopeKnown = cfg.scopeKnown
             if (!enabled) {
-                // 无 sqlite 时的粗检：库里出现本包名
                 val rough = root.exec(
                     "strings '$DB' 2>/dev/null | tr '\\0' '\\n' | grep -F 'com.qsc.battery' | head -n 8",
                 )
@@ -128,10 +126,9 @@ object XpRuntime {
         val detail = when (level) {
             Level.Active -> "XP 已在系统框架运行"
             Level.Enabled -> when {
-                scopedAndroid -> "LSPosed 已启用本模块，作用域含系统框架；若功能异常请再重启一次"
-                scopeKnown -> "LSPosed 已启用本模块，但作用域未含系统框架(android)，插拔唤醒不会生效"
-                else -> "LSPosed 已启用本模块；未能从配置库确认作用域（设备可能无 sqlite3）。" +
-                    "若已勾选系统框架可忽略本提示，重启后出现存活标记即可确认"
+                scopedAndroid -> "LSPosed 已启用本模块，作用域含系统框架；未见存活标记，请确认已重启或查看 LSP 日志"
+                scopeKnown -> "LSPosed 已启用本模块，但作用域未含系统框架（库中为 system/android），插拔唤醒不会生效"
+                else -> "LSPosed 已启用本模块；配置库暂无法解析作用域。请在管理器确认勾选系统框架后重启"
             }
             Level.Framework -> "已检测到 LSPosed，请启用「充电控制」并勾选系统框架后重启"
             Level.ManagerOnly -> "已安装 LSPosed 管理器"
@@ -156,88 +153,148 @@ object XpRuntime {
         val scopeKnown: Boolean,
     )
 
-    private suspend fun readLsposedConfig(root: RootBridge, ourPkgs: List<String>): LsposedCfg {
-        val pkgList = ourPkgs.joinToString(",") { "'$it'" }
-        val sqlEnabled =
-            "SELECT enabled FROM modules WHERE module_pkg_name IN ($pkgList) LIMIT 1;"
-        // 兼容不同列名 / 是否 JOIN
-        val sqlScopeVariants = listOf(
-            "SELECT s.app_pkg_name FROM scope s JOIN modules m ON s.mid=m.mid " +
-                "WHERE m.module_pkg_name IN ($pkgList) AND s.app_pkg_name='android' LIMIT 1;",
-            "SELECT s.package_name FROM scope s JOIN modules m ON s.mid=m.mid " +
-                "WHERE m.module_pkg_name IN ($pkgList) AND s.package_name='android' LIMIT 1;",
-            "SELECT app_pkg_name FROM scope WHERE app_pkg_name='android' LIMIT 1;",
-            "SELECT package_name FROM scope WHERE package_name='android' LIMIT 1;",
+    /**
+     * 不依赖设备上的 sqlite3 CLI（多数 ROM 没有）。
+     * Root 把 DB（及 wal/shm）拷到 APP 缓存，再用系统 SQLite 只读打开。
+     */
+    private suspend fun readLsposedConfig(
+        context: Context,
+        root: RootBridge,
+        ourPkgs: List<String>,
+    ): LsposedCfg {
+        val dir = File(context.cacheDir, "lsp_probe").apply { mkdirs() }
+        val local = File(dir, "modules_config.db")
+        val localWal = File(dir, "modules_config.db-wal")
+        val localShm = File(dir, "modules_config.db-shm")
+        runCatching { local.delete() }
+        runCatching { localWal.delete() }
+        runCatching { localShm.delete() }
+
+        val copy = root.exec(
+            """
+            cp -f '$DB' '${local.absolutePath}' 2>/dev/null
+            [ -f '$DB-wal' ] && cp -f '$DB-wal' '${localWal.absolutePath}' 2>/dev/null
+            [ -f '$DB-shm' ] && cp -f '$DB-shm' '${localShm.absolutePath}' 2>/dev/null
+            chmod 666 '${local.absolutePath}' '${localWal.absolutePath}' '${localShm.absolutePath}' 2>/dev/null
+            [ -f '${local.absolutePath}' ] && echo OK || echo FAIL
+            """.trimIndent(),
         )
+        if (!copy.out.contains("OK") || !local.isFile) {
+            return readLsposedConfigViaCliFallback(root, ourPkgs)
+        }
 
+        return try {
+            SQLiteDatabase.openDatabase(
+                local.absolutePath,
+                null,
+                SQLiteDatabase.OPEN_READONLY or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
+            ).use { db ->
+                parseLsposedDb(db, ourPkgs)
+            }
+        } catch (_: Throwable) {
+            readLsposedConfigViaCliFallback(root, ourPkgs)
+        } finally {
+            runCatching { local.delete() }
+            runCatching { localWal.delete() }
+            runCatching { localShm.delete() }
+        }
+    }
+
+    private fun parseLsposedDb(db: SQLiteDatabase, ourPkgs: List<String>): LsposedCfg {
         var enabled: Boolean? = null
-        var scoped: Boolean? = null
+        var mid: Long? = null
 
-        for (bin in SQLITE_BINS) {
-            val prefix = when {
-                bin.endsWith("busybox") -> "$bin sqlite3"
-                else -> bin
-            }
-            // 探测是否可用
-            val probe = root.exec("$prefix -version 2>/dev/null | head -n 1")
-            if (!probe.ok && !probe.out.contains("SQLite", ignoreCase = true) &&
-                bin != "sqlite3"
-            ) {
-                // sqlite3 无 version 时仍可能能跑 SELECT
-                if (bin != "sqlite3") continue
-            }
-
-            if (enabled == null) {
-                val en = root.exec("$prefix '$DB' \"$sqlEnabled\" 2>/dev/null")
-                if (en.ok) {
-                    val v = en.out.trim().lineSequence().firstOrNull()?.trim().orEmpty()
-                    if (v.isNotEmpty()) {
-                        enabled = v == "1" || v.equals("true", true)
-                    }
+        val placeholders = ourPkgs.joinToString(",") { "?" }
+        runCatching {
+            db.rawQuery(
+                "SELECT mid, enabled FROM modules WHERE module_pkg_name IN ($placeholders) LIMIT 1",
+                ourPkgs.toTypedArray(),
+            ).use { c ->
+                if (c.moveToFirst()) {
+                    mid = c.getLong(0)
+                    enabled = c.getInt(1) == 1
                 }
             }
-            if (scoped == null) {
-                for (sql in sqlScopeVariants) {
-                    val sc = root.exec("$prefix '$DB' \"$sql\" 2>/dev/null")
-                    if (!sc.ok) continue
-                    val out = sc.out.trim()
-                    if (out == "android" || out.lines().any { it.trim() == "android" }) {
-                        scoped = true
-                        break
-                    }
-                    // 查询成功但无 android 行
-                    if (sc.err.isBlank() || sc.code == 0) {
-                        // 若是带模块 JOIN 的查询且空结果，记为「已知无」；全局 scope 空则继续试
-                        if (sql.contains("module_pkg_name")) {
-                            scoped = false
+        }
+
+        var scoped: Boolean? = null
+        if (mid != null) {
+            runCatching {
+                db.rawQuery(
+                    "SELECT app_pkg_name FROM scope WHERE mid=? LIMIT 32",
+                    arrayOf(mid.toString()),
+                ).use { c ->
+                    scoped = false
+                    while (c.moveToNext()) {
+                        val pkg = c.getString(0)?.trim().orEmpty()
+                        if (pkg in SYSTEM_SCOPE_PKGS) {
+                            scoped = true
                             break
                         }
                     }
                 }
             }
-            if (enabled != null && scoped != null) break
-        }
-
-        // 再退：从 dump 里找 android 与本模块 mid 的邻近关系太脆，只做「库中存在 android 作用域行」
-        if (scoped == null) {
-            val dump = root.exec(
-                "strings '$DB' 2>/dev/null | tr '\\0' '\\n' | grep -x 'android' | head -n 1",
-            )
-            if (dump.ok && dump.out.trim() == "android") {
-                // 只能说明库里有 android 字符串，不算确定勾选了本模块
-                return LsposedCfg(
-                    enabled = enabled == true,
-                    scopedAndroid = false,
-                    scopeKnown = enabled != null,
-                )
+            // 旧列名兼容
+            if (scoped == null) {
+                runCatching {
+                    db.rawQuery(
+                        "SELECT package_name FROM scope WHERE mid=? LIMIT 32",
+                        arrayOf(mid.toString()),
+                    ).use { c ->
+                        scoped = false
+                        while (c.moveToNext()) {
+                            val pkg = c.getString(0)?.trim().orEmpty()
+                            if (pkg in SYSTEM_SCOPE_PKGS) {
+                                scoped = true
+                                break
+                            }
+                        }
+                    }
+                }
             }
         }
 
         return LsposedCfg(
             enabled = enabled == true,
             scopedAndroid = scoped == true,
-            scopeKnown = scoped != null,
+            scopeKnown = mid != null && scoped != null,
         )
+    }
+
+    /** 仅作兜底：少数环境若拷贝失败，再试 PATH 里的 sqlite3（多数机没有） */
+    private suspend fun readLsposedConfigViaCliFallback(
+        root: RootBridge,
+        ourPkgs: List<String>,
+    ): LsposedCfg {
+        val pkgList = ourPkgs.joinToString(",") { "'$it'" }
+        val bins = listOf(
+            "sqlite3",
+            "/system/bin/sqlite3",
+            "/data/adb/magisk/busybox sqlite3",
+        )
+        for (bin in bins) {
+            val en = root.exec(
+                "$bin '$DB' \"SELECT enabled FROM modules WHERE module_pkg_name IN ($pkgList) LIMIT 1;\" 2>/dev/null",
+            )
+            if (!en.ok || en.out.isBlank()) continue
+            val enabled = en.out.trim().lineSequence().firstOrNull()?.trim().let {
+                it == "1" || it.equals("true", true)
+            }
+            val sc = root.exec(
+                "$bin '$DB' \"SELECT s.app_pkg_name FROM scope s JOIN modules m ON s.mid=m.mid " +
+                    "WHERE m.module_pkg_name IN ($pkgList) LIMIT 32;\" 2>/dev/null",
+            )
+            if (!sc.ok) {
+                return LsposedCfg(enabled = enabled, scopedAndroid = false, scopeKnown = false)
+            }
+            val pkgs = sc.out.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+            return LsposedCfg(
+                enabled = enabled,
+                scopedAndroid = pkgs.any { it in SYSTEM_SCOPE_PKGS },
+                scopeKnown = true,
+            )
+        }
+        return LsposedCfg(enabled = false, scopedAndroid = false, scopeKnown = false)
     }
 
     fun isAvailable(context: Context): Boolean = isManagerInstalled(context)

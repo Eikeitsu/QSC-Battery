@@ -260,7 +260,8 @@ qsc_xp_bootstrap_logs() {
 	if [ -f /data/system/qsc_xp_alive ]; then
 		qsc_xp_file_log INFO "ok magisk: xp alive present"
 	else
-		qsc_xp_file_log INFO "magisk: xp alive absent (enable LSPosed scope android + reboot)"
+		# 与「作用域检测」无关：仅表示 system_server 未写出存活文件（未注入或写失败）
+		qsc_xp_file_log WARN "magisk: xp alive missing (module not in system_server yet — enable in LSPosed, scope=系统框架, reboot)"
 	fi
 }
 
