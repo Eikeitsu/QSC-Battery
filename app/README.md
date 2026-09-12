@@ -3,7 +3,7 @@
 Kotlin + Jetpack Compose。配置 / 状态 / 更新 / 主题；**不挂后台保活**。停充由 Magisk 模块执行。
 
 - 用户文档：[伴侣 APP](https://eikeitsu.github.io/QSC-Battery/guide/app.html)
-- 包名 `com.qsc.battery` · `minSdk 26`（Android 8+）· `compileSdk/targetSdk 35`
+- 包名 `com.qsc.battery` · `minSdk 26`（Android 8+）· `compileSdk 37` / `targetSdk 35`
 
 ## 功能摘要
 

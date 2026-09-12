@@ -76,6 +76,7 @@
 | `loop_interval_near_window`        | 3    | 「接近阈值」窗口（%）        |
 | `native_daemon`                    | 1    | 启用事件守护                 |
 | `native_impl`                      | rust | `rust` / `c` / `off`         |
+| `native_version`                   | （运行时） | 当前守护版本元数据（只读/状态） |
 | `switch_verify_sec`                | 1    | 写开关后校验等待             |
 
 ### 历史与曲线

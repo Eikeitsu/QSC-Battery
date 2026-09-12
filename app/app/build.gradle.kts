@@ -9,11 +9,12 @@ plugins {
 
 android {
     namespace = "com.qsc.battery"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.qsc.battery"
         minSdk = 26
+        // 运行行为仍按 35；compileSdk 37 仅为满足 Compose BOM 依赖的 AAR metadata
         targetSdk = 35
         versionCode = 2026091201
         versionName = "0.3.1"
