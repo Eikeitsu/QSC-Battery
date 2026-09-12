@@ -2,86 +2,75 @@
 
 ## 环境要求
 
-- 已安装 **Magisk** 或 **KernelSU**
-- 建议使用支持 WebUI 的模块管理器（如 KernelSU 管理器）
+- 已安装 **Magisk** 或 **KernelSU**（或兼容方案）
+- 使用 WebUI 需支持模块 WebUI 的管理器（如 KernelSU / SukiSU / MMRL / WebUI-X）
+- 伴侣 APP 需 Android 13+（`minSdk 33`），读写模块需 Root
 
 ## 选哪个包
 
-每个版本会发 4 个 zip，模块功能完全一样，差别只在是否自带「事件唤醒守护」的二进制文件。守护的作用是未插电时让主循环由内核充电事件唤醒，而不是定时轮询，能进一步降低待机耗电；不装它停充功能一样正常，只是更费一点电。
+每个版本通常发 **4 个模块 zip**，功能相同，差别在是否自带「事件唤醒守护」qscd：
 
-| 包名                           | 自带守护      | 适合                                                                |
-| ------------------------------ | ------------- | ------------------------------------------------------------------- |
-| `QSC-Battery_v<版本>.zip`      | 不带          | **主包，推荐**。包最小，需要时在 WebUI 里一键下载；在线更新也用此版 |
-| `QSC-Battery_v<版本>-full.zip` | Rust + C 两套 | 想装完就能用、且由安装时自检自动挑一套                              |
-| `QSC-Battery_v<版本>-rust.zip` | 仅 Rust 版    | 明确只要 Rust 版                                                    |
-| `QSC-Battery_v<版本>-c.zip`    | 仅 C 版       | 明确只要 C 版                                                       |
+| 包名 | 自带守护 | 适合 |
+| ---- | -------- | ---- |
+| `QSC-Battery_v<版本>.zip` | 不带 | **主包，推荐**；可在 WebUI 一键下载；在线更新也用此版 |
+| `QSC-Battery_v<版本>-full.zip` | Rust + C | 装完即用，安装自检自动挑一套 |
+| `QSC-Battery_v<版本>-rust.zip` | 仅 Rust | 要阈值过滤 / 原生进程检测等 |
+| `QSC-Battery_v<版本>-c.zip` | 仅 C | 只要轻量事件唤醒 |
 
-两套实现都只负责只读事件等待，不写充电节点；但 Rust 版额外提供阈值事件过滤和原生进程检测，C 版保持基础事件唤醒兼容，**只能二选一**。装了主包之后，可以在 WebUI 的「事件唤醒（守护）」卡片里选择下载 Rust 版或 C 版，之后也能随时切换到另一套（会自动替换掉当前的）。下载的文件在落盘前会校验版本清单与 sha256，校验或本机自检不通过会自动回滚。
+守护只提供 **arm64 / armv7**；其它架构可跳过，停充不受影响。Rust / C **只能二选一**。主包安装时可选联网下载；之后可在 WebUI 切换并自动替换。
 
-守护只提供 arm64 与 armv7 两种；其它架构的机型开关会置灰，功能不受影响。
+Release 还可能附带 **伴侣 APK**（也可由模块 zip 内嵌，刷入时可选安装）。
 
 ## 安装步骤
 
-1. 从 [GitHub Releases](https://github.com/Eikeitsu/QSC-Battery/releases) 下载最新 zip（见上方选包说明）
+1. 从 [GitHub Releases](https://github.com/Eikeitsu/QSC-Battery/releases) 下载 zip
 2. 在模块管理器中刷入
-3. 按安装日志提示，在 20 秒内按音量上确认安装；音量下或确认超时会取消安装
-4. 按音量键选择是否安装 **WebUI**；20 秒未选择时默认安装
-5. 按音量键选择是否安装 **电流控制** 组件；20 秒未选择时默认安装（装入后总开关仍默认关闭）
-6. 若本包未自带守护文件（主包即如此），会问一次是否**现在联网下载**：音量上下载，音量下或超时跳过；选择下载后再按音量键选 Rust 版或 C 版。下载失败（无网、超时、校验不通过等）只会打印提示，**不会中断安装**，之后可在 WebUI 里重试
-7. 重启手机
-8. 若已安装 WebUI，可进入模块页按需调整阈值；详见 [WebUI 使用说明](/guide/webui)
-9. 模块管理器中的 **Action**：音量上（或 5 秒未按）刷新状态；音量下生成只读诊断报告 `/sdcard/qsc_diagnose.txt`。停充开关实测不在 Action 内，需插电后执行 `bin/test_switch.sh`
+3. **音量上**确认安装（约 20 秒；音量下或超时取消）
+4. 选择是否安装 **WebUI**（超时默认装）
+5. 选择是否安装 **电流控制**（超时默认装；总开关仍默认关）
+6. 选择是否安装 **伴侣 APK**（若包内有）
+7. 若本包无守护：可选联网下载并选 Rust / C；失败不中断安装
+8. **重启**
+9. 用 WebUI / APP / `config.conf` 调整；见 [WebUI](/guide/webui)、[APP](/guide/app)
 
-支持 Magisk / KernelSU 的模块在线更新：`module.prop` 已配置 `updateJson`，管理器会拉取 `update.json`，其中指向的是主包。已经下载过守护文件的话，升级时会自动保留，不需要重新下载。
+### Action 按钮
 
-WebUI 概览页示意：
+- **音量上**（或超时）：刷新状态
+- **音量下**：已插电 → 快速测开关；未插电 → 诊断报告 `/sdcard/qsc_diagnose.txt`
 
-![概览](/screenshots/webui-overview.png)
+完整测开关也可：`sh .../bin/qsc.sh test-switch` 或 `bin/test_switch.sh`（须插电）。
 
-## 更新当前版本
+## 在线更新
 
-检测到已安装的 `QSC_Battery` 时，安装脚本会询问如何处理配置：
+`module.prop` 配置了 `updateJson`，管理器拉主包。升级会尽量保留已下载的守护。APP、守护有独立通道，见 [伴侣 APP](/guide/app)。
 
-- **音量上**：保留原有 `config.conf`；若同时安装电流控制且存在旧 `current.json`，也会一并保留
-- **音量下**：使用安装包中的新版默认配置
-- **20 秒未选择**：默认保留原有配置，避免静默覆盖
+## 更新配置怎么处理
 
-WebUI、电流控制是否安装会在每次刷入时**分别询问**。
+检测到已装 `QSC_Battery` 时：
 
-- 选择不安装 WebUI：不保留 `webroot/`，可直接编辑配置文件
-- 选择不安装电流控制：删除 `bin/lib/current.sh` 与 `config/current.json`，不写入相关功能
+- **音量上**：保留 `config.conf`（及已有 `current.json`）
+- **音量下**：使用包内默认配置
+- **超时**：默认保留
 
-## 从旧版升级
+WebUI / 电流控制 / APK 是否安装每次都会再问。
 
-当前模块显示名为 **充电控制**，id 为 **`QSC_Battery`**（仓库名 **QSC-Battery**）。
+## 从旧版模块升级
 
-若设备上仍装有以下旧版，安装本版时会自动卸载（**不迁移配置**）：
+显示名 **充电控制**，id **`QSC_Battery`**。
 
-| 显示名                 | 模块 id                           |
-| ---------------------- | --------------------------------- |
-| QSC定量停充            | `QuantitativeStopCharging`        |
+若仍装有下列旧版，本版会**自动卸载**且**不迁移配置**：
+
+| 显示名 | 模块 id |
+| ------ | ------- |
+| QSC定量停充 | `QuantitativeStopCharging` |
 | QSC定量停充_独立开关版 | `QuantitativeStopCharging_switch` |
 
-流程：
+请安装后重新设阈值。
 
-1. 安装日志提示检测到旧版（输出上述显示名）
-2. **自动卸载旧版**（有 `uninstall.sh` 则执行；没有则只删除目录，不写充电节点）
-3. 请重启，并在 WebUI 重新设置阈值
+## 热更新说明
 
-## 模块目录（设备上）
-
-```text
-/data/adb/modules/QSC_Battery/
-├── module.prop
-├── service.sh
-├── bin/                      # 核心逻辑（含 bin/lib/）
-├── config/
-│   ├── config.conf           # 停充配置
-│   └── current.json          # 电流控制（可选）
-├── data/                     # 日志与运行状态
-└── webroot/                  # 可选 WebUI
-```
+支持免重启热更新（管理器 / APP 安装模块时）。失败会回退到需重启的标准更新。诊断与临时文件可能位于 `/data/adb/qsc/`（更新完成后清理）。细节见 WebUI 文档「热更新」小节。
 
 ## 卸载
 
-在模块管理器中卸载即可。卸载脚本会尝试恢复充电状态。
+在模块管理器卸载即可。软关闭不必卸载：WebUI / APP / `qsc.sh off` 写 `data/off_qsc`。

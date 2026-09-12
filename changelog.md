@@ -2,10 +2,38 @@
 
 ## Unreleased
 
-- 新增模块命令行 `bin/qsc.sh`：status / on|off / config / log|events / diagnose 等
-- **一加等假「充电中」**：简介不再仅凭 `status=Charging` / dumpsys powered 判定已插电，需端口 online/present 等证据；0901 及更早无此修复
-- APP 桌面动态图标改为约 20% 分档，充电时电池/环形图标闪电为黄色（脚本模板生成，非手写多份）；顶栏与正文间距加大（正文 `pageContentTop`）
-- **待机省电**：修复事件等待时父 shell 每秒轮询（抵消 qscd 省电）；心跳 5s→60s、简介/满轮间隔放宽；默认未插电间隔 idle 90s / native 300s
+> 相对 **2026.09.01** 的开发中变更（对照仓库 `v2026.09.01..HEAD`）。发版时本段会升为正式版本号。
+
+### 伴侣 APP（全新）
+
+- 新增 Compose 伴侣 APP（包名 `com.qsc.battery`）：首页 / 策略 / 动态 / 我的；Root 读写模块，不挂后台保活
+- Charge 设计系统：主题（浅/深/AMOLED/动态取色）、调色板、首启权限引导、更新安装、配置档
+- 快捷设置磁贴切换模块软开关；安装包可内嵌 APK，刷模块时可选安装
+- 可选 **LSPosed** 供电事件补强（现代 API 102，作用域系统框架；**不写**充电节点）
+- 桌面动态图标：电量约 20% 分档；充电时电池/环形图标闪电为黄色；插拔电或打开 APP 时稀疏刷新
+- 顶栏与正文间距统一（`pageContentTop`）
+
+### 模块核心
+
+- **命令行** `bin/qsc.sh`：`status` / `on|off|toggle` / `config` / `log` / `events` / `diagnose` / `test-switch` / `detect` / `daemon` 等
+- **充电事件日志** `data/charge_events.log`（插拔、停充、温控等）+ 习惯统计 `learn_stats.sh`；WebUI/APP「动态」双 Tab
+- **常显功耗通知** `notify_power_status`（默认关）
+- **设备档案库**：`device.profile` 压缩归档 / 一键还原 / WebUI 复用
+- 扩展硬件旁路节点与反极性探测；移除危险旁路自动探测
+- 修复停充与插线判定；**一加等假「充电中」**：简介/插电判定不再仅凭 `status=Charging` 或 dumpsys powered，需端口 online/present 等证据
+- 原生守护：Rust `plugged`/`diagnose`、精简 wake 日志；C 版 `cat`/`stat` 子命令
+- **待机省电**：修复事件等待时父 shell 每秒轮询（抵消 qscd）；心跳 5s→60s；简介/满轮间隔放宽；默认未插电 idle 90s / native 300s
+
+### WebUI
+
+- 充放电曲线：等距降采样、单调 Hermite 插值、范围切换、增量刷新、健康趋势；修复强制刷新与卡顿
+- 日志页：运行日志 / 充电事件 Tab；三套主题内联事件卡片；常显功耗开关入口
+- 我的页：设备档案库、配置档增强；守护卡片与安装流程同步
+
+### 工程 / 发版
+
+- APP 独立更新通道 `app-update.json`；发版可分项勾选模块 / 守护 / APK
+- CI、签名密钥固定、Vitest 单测迁至 `webui/test/unit`
 
 ## 2026.09.01
 

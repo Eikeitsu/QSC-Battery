@@ -5,7 +5,8 @@ const repoName =
 
 export default defineConfig({
   title: "充电控制",
-  description: "电量/温度停充与可选电流控制的 Magisk 模块（原 QSC 定量停充 WebUI 版）",
+  description:
+    "Magisk / KernelSU 充电管理：电量与温度停充、可选电流控制、事件驱动省电、WebUI 与伴侣 APP",
   base: `/${repoName}/`,
   lang: "zh-CN",
   head: [
@@ -23,22 +24,35 @@ export default defineConfig({
     siteTitle: "充电控制",
     nav: [
       { text: "首页", link: "/" },
-      { text: "功能介绍", link: "/guide/features" },
+      { text: "功能", link: "/guide/features" },
       { text: "安装", link: "/guide/install" },
-      { text: "配置说明", link: "/guide/config" },
+      { text: "配置", link: "/guide/config" },
       { text: "WebUI", link: "/guide/webui" },
+      { text: "APP", link: "/guide/app" },
       { text: "更新日志", link: "/guide/changelog" },
     ],
     sidebar: [
       {
-        text: "使用指南",
+        text: "开始使用",
         items: [
           { text: "功能介绍", link: "/guide/features" },
           { text: "安装与升级", link: "/guide/install" },
           { text: "配置说明", link: "/guide/config" },
-          { text: "WebUI 使用说明", link: "/guide/webui" },
-          { text: "更新日志", link: "/guide/changelog" },
           { text: "常见问题", link: "/guide/faq" },
+        ],
+      },
+      {
+        text: "界面与工具",
+        items: [
+          { text: "WebUI", link: "/guide/webui" },
+          { text: "伴侣 APP", link: "/guide/app" },
+          { text: "命令行 CLI", link: "/guide/cli" },
+        ],
+      },
+      {
+        text: "其它",
+        items: [
+          { text: "更新日志", link: "/guide/changelog" },
           { text: "致谢", link: "/guide/credits" },
         ],
       },
@@ -50,8 +64,11 @@ export default defineConfig({
       },
     ],
     footer: {
-      message: "基于 top大佬 的 QSC 定量停充 · 模块显示名：充电控制",
-      copyright: "WebUI 版由许小墨维护",
+      message: "充电控制 · QSC_Battery · Magisk / KernelSU",
+      copyright: "由许小墨维护",
+    },
+    search: {
+      provider: "local",
     },
   },
 });

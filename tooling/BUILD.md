@@ -1,31 +1,22 @@
 ﻿# 构建与发布说明
 
-面向维护者。用户文档请看 [`docs/`](../docs/)。
+面向维护者。用户文档请看 [`docs/`](../docs/)（VitePress → GitHub Pages）。
+
+当前产品为独立演进的 **充电控制**（模块 + WebUI + 伴侣 APP + qscd），构建产物面向本仓库发布通道。
 
 ## 仓库结构
 
 ```text
-webui/                  # WebUI 源码（Vue 3 + Vite + Vant + TypeScript，样式 Sass）
-  src/bridge/           # ksu 桥接、配置、应用列表
-  src/stores/           # 电池状态 / 主题（Pinia）
-  src/composables/      # useBatteryInfo / useConfigForm / useThemePackClass
-  src/shared/           # 路径、默认值、预设、类型
-  src/features/         # 应用选择器等功能模块
-  src/pages/            # 概览 / 策略 / 日志 / 我的
-  src/ui/               # 通用 UI 组件
-  src/styles/           # tokens / base / transitions
-
-module/                 # Magisk 模块本体（打包 zip 的根内容来源）
-  webroot/              # WebUI 构建产物（由 npm run build:web 同步）
-  bin/qscd-arm64|arm    # 原生事件等待器 Rust 版（build:native 交叉编译，不入库）
-  bin/qscdc-arm64|arm   # 原生事件等待器 C 版（build:native:c 交叉编译，不入库）
-native/qscd/            # 事件等待器源码（Rust + libc；阻塞在 power_supply uevent）
-native/qscd-c/          # 同一等待器的 C 实现（单文件，只依赖 NDK clang）
-archives/
-  webroot-vanilla-*/    # 旧版原生 HTML/JS WebUI 归档（不参与打包）
+webui/                  # WebUI 源码（Vue 3 + Vite + TypeScript）
+module/                 # Magisk 模块本体
+  webroot/              # WebUI 构建产物
+  apk/                  # 可选内嵌伴侣 APK
+native/qscd/            # 事件守护 Rust
+native/qscd-c/          # 事件守护 C
+app/                    # 伴侣 APP（Compose）
+archives/               # 旧版 WebUI 快照（不打包）
 tooling/scripts/        # 构建脚本
 docs/                   # VitePress 用户文档
-.release / .build/      # 本地产物（不入库）
 ```
 
 ## 本地命令

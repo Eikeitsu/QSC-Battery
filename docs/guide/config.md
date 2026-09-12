@@ -1,157 +1,138 @@
 ﻿# 配置说明
 
-推荐通过 **WebUI** 修改。停充与电流控制使用**两套配置文件**，互不混写。
+推荐用 **WebUI** 或 **伴侣 APP** 修改。也可用 `bin/qsc.sh config` 或直接编辑文件。
 
-| 文件                  | 内容                                          |
-| --------------------- | --------------------------------------------- |
-| `config/config.conf`  | 电量 / 温度停充、充满再停、自动拔插、兼容模式 |
-| `config/current.json` | 电流控制（安装时可选；未安装则无此文件）      |
+| 文件 | 内容 |
+| ---- | ---- |
+| `config/config.conf` | 停充、省电、守护、通知、无线、App 停充、历史等 |
+| `config/current.json` | 电流控制（仅安装该组件时存在） |
+| `data/device.profile` | 机型探测结果（MCA、preferred 等） |
 
-`current.json` 由 `bin/lib/jsonc.sh` 在机上用 **awk/sed** 解析（不依赖 `jq` / Python）。仓库源文件可带 `//` 注释方便开发；`npm run package:module` 打包时会剥注释写成严格 JSON。WebUI 保存亦为无注释 JSON。字段含义见下表。
+`current.json` 在机上用 awk/sed 解析（不依赖 jq）。仓库源可带 `//` 注释，打包时剥成严格 JSON。
 
-## 模块开关
+路径前缀：`/data/adb/modules/QSC_Battery/`。
 
-| 方式                | 说明                                               |
-| ------------------- | -------------------------------------------------- |
-| WebUI「模块总开关」 | 关闭后写入 `data/off_qsc`，逻辑暂停                |
-| 快捷脚本            | 模块目录下的 `打开充电控制.sh` / `关闭充电控制.sh` |
+## 模块软开关
 
-## 电量停充（`config.conf`）
+| 方式 | 说明 |
+| ---- | ---- |
+| WebUI / APP 总开关 | 关闭写入 `data/off_qsc`，逻辑暂停 |
+| `qsc.sh on\|off\|toggle` | 同上 |
+| 快捷脚本 | `打开充电控制.sh` / `关闭充电控制.sh` |
 
-| 配置项                  | 含义                                                                                       |
-| ----------------------- | ------------------------------------------------------------------------------------------ |
-| `power_stop`            | 停止充电电量；填 `110` 表示关闭电量停充                                                    |
-| `power_start`           | 恢复充电电量，须小于停止值                                                                 |
-| `power_stop_time`       | 触发停充前的延时（秒）                                                                     |
-| `charge_full`           | `1` = 充满再停                                                                             |
-| `power_reset`           | `1` = 自动拔插                                                                             |
-| `Compatibility_mode`    | `1` = 兼容模式：跳过本模块电流控制，仅保留电量/温度停充；与其它快充/限流模块同装时建议开启 |
-| `stop_hold_wakelock`    | `0` 关 / `1` 开 / `auto`（魅族/Flyme 或 MCA 机自动持锁）                                   |
-| `notify_charge_event`   | `1` = 开启系统通知（默认 `0`）                                                             |
-| `notify_charge_kinds`   | 逗号列表：`stop,resume,fail`；控制发哪些通知                                               |
-| `notify_quiet_schedule` | 可选多行勿扰时段；时段内不发停充/恢复（失败仍发）                                          |
-| `power_stop_schedule`   | 可选多行 `HH:MM-HH:MM`；留空=全天电量停充，填写后仅在时段内触发电量停充                    |
-| `power_switch`          | 可选，可多行。自定义供电开关，格式见下节；填写后优先于自动扫描                             |
+---
+
+## `config.conf` 常用项
+
+### 电量停充
+
+| 键 | 默认 | 含义 |
+| -- | ---- | ---- |
+| `power_stop` | 100 | 停充电量；`110` = 关闭电量停充 |
+| `power_start` | 95 | 恢复电量（须小于停止值） |
+| `power_stop_time` | 3 | 触发停充前延时（秒）；充满再停开启时无效 |
+| `charge_full` | 0 | `1` = 充满再停 |
+| `power_reset` | 0 | `1` = 自动拔插 |
+| `power_stop_schedule` | （注释） | 多行 `HH:MM-HH:MM`；留空=全天电量停充 |
+| `power_switch` | （注释） | 多行自定义供电开关，优先于自动扫描 |
 
 ::: tip
-澎湃 OS 3.0 建议停止与恢复电量间隔 **至少 10%**。
+澎湃等机型建议停止与恢复电量间隔 **≥ 10%**。
 :::
 
-### 自定义供电开关（`power_switch`）
+### 温度停充
 
-自动扫描无效或效果不佳时，可按如下格式自行填写，**每行一个**：
+| 键 | 默认 | 含义 |
+| -- | ---- | ---- |
+| `temperature_switch` | 1 | 温控总开关 |
+| `temperature_switch_stop` | 60 | 停充温度 ℃ |
+| `temperature_switch_start` | 50 | 恢复温度 ℃ |
+
+### 行为与通知
+
+| 键 | 默认 | 含义 |
+| -- | ---- | ---- |
+| `Compatibility_mode` | 0 | `1` = 跳过本模块电流控制 |
+| `stop_hold_wakelock` | auto | `0` / `1` / `auto` |
+| `wireless_policy` | same | `same` / `ignore` |
+| `app_stop` | 0 | 按 App 停充 |
+| `app_stop_list` | （注释） | 逗号分隔包名 |
+| `notify_charge_event` | 0 | 停充/恢复/失败通知 |
+| `notify_charge_kinds` | stop,resume,fail | 通知种类 |
+| `notify_quiet_schedule` | （注释） | 勿扰时段（失败仍通知） |
+| `notify_power_status` | 0 | 常显电量/温度/电流通知 |
+
+### 省电与守护
+
+| 键 | 默认 | 含义 |
+| -- | ---- | ---- |
+| `power_saver` | 1 | 省电模式（强烈建议保持开启） |
+| `loop_interval_sec` | 3 | 近阈值检查间隔（秒） |
+| `loop_interval_maintain_sec` | 8 | 停充维持间隔 |
+| `loop_interval_idle_sec` | 90 | 未插电、无 qscd 时间隔 |
+| `loop_interval_idle_native_sec` | 300 | 未插电、有 qscd 时超时兜底 |
+| `loop_interval_plugged_sec` | 15 | 插电、离阈值远 |
+| `loop_interval_plugged_native_sec` | 90 | 插电、有 watch 时 |
+| `loop_interval_near_window` | 3 | 「接近阈值」窗口（%） |
+| `native_daemon` | 1 | 启用事件守护 |
+| `native_impl` | rust | `rust` / `c` / `off` |
+| `switch_verify_sec` | 1 | 写开关后校验等待 |
+
+### 历史与曲线
+
+| 键 | 默认 | 含义 |
+| -- | ---- | ---- |
+| `history_enable` | 1 | 插电历史采样 |
+| `history_interval_sec` | 60 | 采样间隔 |
+| `chart_show` | 常由 WebUI 写入 | 首页曲线显示；关时可联动停采样 |
+
+### 自定义供电开关格式
+
+每行一条，常见形态：
 
 ```text
-power_switch=[/sys/class/power_supply/battery/batt_slate_mode start=0 stop=1]
-power_switch=[/proc/mtk_battery_cmd/current_cmd start=0::0 stop=0::1]
+/sys/.../path,start=1,stop=0
 ```
 
-| 字段    | 含义                          |
-| ------- | ----------------------------- |
-| 路径    | sysfs / proc 下的可写充电开关 |
-| `start` | 恢复充电时写入的值            |
-| `stop`  | 停止充电时写入的值            |
+勿把 `night_charging` / `cool_mode` 等**策略类**节点当供电开关。详见 FAQ。
 
-- 值中的空格可用 `::` 代替（写入时还原为空格）
-- WebUI「策略 → 自定义供电开关」可编辑；也可直接改 `config.conf`
-- 优先级：MCA → `preferred_switch`（`test_switch` 实测）→ **用户 `power_switch`** → 全量扫描/兜底
-- 候选示例见 `config.conf` 注释
+### 遗留键
 
-### 首选停充开关（`data/device.profile`）
+`Shut_down` 在部分脚本仍可读到，但**当前无实际关机逻辑**，请勿依赖。
 
-插电后用 adb 运行「停充开关实测」（`bin/test_switch.sh`）。测出可逆有效节点后会写入：
+---
 
-| 字段                                 | 含义              |
-| ------------------------------------ | ----------------- |
-| `preferred_switch`                   | 首选节点路径      |
-| `preferred_start` / `preferred_stop` | 恢复 / 停充写入值 |
-| `preferred_tested_at`                | 实测时间          |
+## `current.json`（电流控制）
 
-未实测时行为与原先一致（多节点兜底）。MCA 机型仍优先 `handle_state`。
+仅安装电流组件后存在。常用字段（默认总开关关）：
 
-## 温控停充（`config.conf`）
+| 字段 | 含义 |
+| ---- | ---- |
+| `current_control` | 总开关 |
+| `bypass_enable` | 旁路总开关 |
+| `battery_stop` / `bypass_temp` / `bypass_schedule` | 旁路触发条件（或） |
+| `bypass_mode` | `sim` 模拟写电流 / `auto` 优先硬件旁路节点 |
+| `safety_temp_max` | 旁路过热改小电流 |
+| `slow_charge` | 慢充阈值（110=关） |
+| `default_current_max` | 默认上限（µA） |
+| `temperature_current` 及一限/二限温度电流 | 阶梯限流 |
+| `app_limit` / `app_current_max` / `app_list` | 游戏/前台限流 |
+| `battery_current` / `restricted` | 节点列表与策略 |
 
-| 配置项                     | 含义                |
-| -------------------------- | ------------------- |
-| `temperature_switch`       | `1` 开启 / `0` 关闭 |
-| `temperature_switch_stop`  | 达到该温度停充      |
-| `temperature_switch_start` | 降到该温度恢复      |
+完整注释见模块内 `config/current.json` 模板。
 
-电量和温控可能在同一轮同时触发。模块会分别记录停充原因，只有电量不高于 `power_start` 且温度不高于 `temperature_switch_start` 后才恢复充电，避免高电量下反复启停。
+---
 
-### 低电量安全线（20%，不可配置）
+## 运行时数据（勿手改除非排查）
 
-温控停充与按 App 停充只看温度/进程，条件不消失就不会恢复，理论上能把手机一路锁到 0% 充不进电。因此电量低于 **20%** 时模块会忽略这两个条件、强制恢复充电，并在日志里记一条。这是安全底线，故意没有做成配置项。
+| 路径 | 说明 |
+| ---- | ---- |
+| `data/off_qsc` | 软关闭 |
+| `data/power_switch` | 当前处于停充写入态 |
+| `data/device.profile` | 机型档案 |
+| `data/log.log` | 运行日志 |
+| `data/charge_events.log` | 充电事件 |
+| `data/charge_history.csv` | 曲线采样 |
+| `data/list_switch` | 开关扫描缓存 |
 
-`power_stop` / `power_start` 这对电量阈值是用户显式设定的，安全线不会去推翻它：把 `power_start` 设成 10% 时，15% 电量仍按你的设定维持停充。
-
-另外，停充生效期间关掉总开关（或用 Magisk 的 `disable` 关闭模块）会先还原充电节点再停止工作，不会把手机留在充不进电的状态。若还原失败，模块简介会显示「恢复充电失败」并持续重试，此时拔插一次充电器通常即可恢复。
-
-## 电流控制（`current.json`，可选）
-
-安装时选择「电流控制」后才会写入脚本与配置。未安装时 WebUI 不显示相关入口。
-
-| 配置项                                                | 含义                                                                                        |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `current_control`                                     | 总开关：`0` 关 / `1` 开（**默认 0**）                                                       |
-| `bypass_enable`                                       | 旁路总开关：`0` 关 / `1` 开（**默认 0**）；关则不触发旁路与回补；旧配置无此字段时脚本视为开 |
-| `battery_stop`                                        | 旁路·电量：电量 ≥ 该值时进入旁路；`110` = 关                                                |
-| `bypass_temp`                                         | 旁路·温度：温度 ≥ 该值时进入旁路；`110` = 关                                                |
-| `bypass_schedule`                                     | 旁路·时段：`["22:00-08:00"]` 等（支持跨天）；空数组 = 关；与上两项为「或」                  |
-| `bypass_mode`                                         | `sim` 仅写电流（默认）；`auto` 本机有旁路节点才尝试，否则回退 `sim`                         |
-| `safety_temp_max`                                     | 旁路安全温度上限 (°C，默认 48)；过热改用二限小电流                                          |
-| `slow_charge`                                         | 慢充：电量 ≥ 该值时用二限小电流；`110` = 关                                                 |
-| `default_current_max`                                 | 默认充电电流上限（微安）                                                                    |
-| `temperature_current`                                 | 电流温控：`0` / `1`                                                                         |
-| `default_current_limit` / `default_current_max_limit` | 一限温度 (°C) / 一限电流（微安）                                                            |
-| `temperature_current_limit` / `constant_current_max`  | 二限温度 / 二限电流（建议 ≥ 50000）                                                         |
-| `app_limit` / `app_current_max` / `app_list`          | 游戏限流开关、电流、包名（**JSON 字符串数组**；WebUI 可勾选）                               |
-| `battery_current`                                     | 用户补充电流节点路径数组；主写不含 usb 输入口                                               |
-| `current_step_ua`                                     | 可选；台阶写入（微安）。`0` 或不写 = 直接写目标；旧机可设 `500000`                          |
-| `current_reaffirm_sec`                                | 可选；偏高时周期重申间隔（秒，默认 24）。电流已压住则跳过。`0` = 关周期重申                 |
-| `current_drift_ua`                                    | 可选；偏高裕量（微安，默认 300000）。仅实测偏高才强制；偏低不重申                           |
-| `restricted`                                          | 可选；`"路径 value=值"` 字符串数组。限流前写入；空数组则跳过                                |
-
-::: warning
-电流控制**不修改** `/data/vendor/thermal`，也**不做**内核 / MCA 补丁。默认旁路为写电流的「模拟旁路」；`auto` 仅在探测到只读值为 `0/1` 的已知节点时才写入，失败立即回退。效果因机而异，可能与其它快充 / 限流模块冲突。仅需停充时可不装此组件，或保持总开关关闭；若仍冲突，在 `config.conf` 开启 `Compatibility_mode=1`。
-
-**安全说明**：限流主写电池/`main` 的 `constant_charge_current_max`（微安），不写 usb 输入口电流节点；实测已压住时整轮不碰限流节点，偏低不强制；仅偏高时漂移/周期轻量重申。仍不写 `charge_control_limit`、`thermal_input_current` 等。WebUI 与脚本侧会对电量/温度/电流做范围钳位（电流约 100mA–10A，二限/游戏上限 3A，延时 1–120 秒），非法或天文数字会回落到安全默认。部分机型内核会忽略用户态限流；若插电重启请关闭电流控制或开兼容模式。诊断报告会列出探测节点与读回结果。
-:::
-
-WebUI 游戏列表：可「加载应用列表」后搜索应用名 / 包名并勾选（优先使用管理器自带的应用枚举接口，否则 `pm list packages -3`）。也可继续手动编辑包名。
-
-## 省电与曲线（`config.conf`）
-
-| 键                                 | 说明                                                                                                                                                                             |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `power_saver`                      | `1` 开（默认）：按场景切换轮询间隔；`0` = 全程用 `loop_interval_sec`，最费电                                                                                                     |
-| `loop_interval_idle_sec`           | 未插电轮询间隔（秒，3–300）。越大越省电；插上充电器最多延迟这么久才被识别                                                                                                        |
-| `loop_interval_idle_native_sec`    | 装了事件唤醒守护时改用的未插电间隔（秒，0–300，默认 120，0=不放大）。插电由 uevent 立刻叫醒，所以可以放得更大；代价是简介刷新与停充恢复判定最慢等这么久。比上一项小则无效        |
-| `loop_interval_plugged_sec`        | 插电但离阈值较远时的间隔（秒，2–120）                                                                                                                                            |
-| `loop_interval_plugged_native_sec` | 装了支持 `watch` 的守护（Rust 版）时改用的插电间隔（秒，0–300，默认 60，0=不放大）。这段的电池事件由守护按阈值过滤，跨阈值或插拔仍立即返回，所以它只是兜底上限。比上一项小则无效 |
-| `loop_interval_near_window`        | 「接近阈值」窗口（%，1–20）：进入窗口后切回 `loop_interval_sec`；温度距温控阈值 3°C 内同理                                                                                       |
-| `chart_show`                       | `1` 显示充放电曲线（默认）；`0` = 概览页隐藏曲线，并强制 `history_enable=0`                                                                                                      |
-| `history_enable`                   | `1` 开（默认）：仅充电时采样，为曲线提供充电电流线；关闭后曲线只用系统电池记录                                                                                                   |
-| `history_interval_sec`             | 采样间隔（秒，15–600）                                                                                                                                                           |
-
-## 事件唤醒守护（`config.conf`）
-
-| 键              | 说明                                                                       |
-| --------------- | -------------------------------------------------------------------------- |
-| `native_daemon` | `1` 开（默认）：未插电时由内核充电事件唤醒，替代定时轮询；`0` = 纯脚本轮询 |
-| `native_impl`   | `rust`（默认）/ `c` / `off`。安装时按此顺序自检选用；`off` = 不装守护      |
-
-守护实际状态在 `data/native_impl_used`（`rust` / `c`）、`data/native_src`（`bundled` / `download` / `inherited`）与 `data/native_version`。等待器失败时会把原因、实现、返回码和时间写入 `data/qscd_unusable`，并由服务按退避策略自动重试；缺少 `bin/qscd` 时 `native_daemon` 无效果，等同关闭。推荐直接在 WebUI 的「事件唤醒（守护）」卡片里下载与切换，详见 [WebUI 使用说明](/guide/webui#事件唤醒守护)。
-
-## WebUI 使用提示
-
-- 停充配置修改后一般 **即时生效**（主循环约 3 秒一轮）
-- 电流控制在 WebUI 中单独保存到 `current.json`
-- 「最近日志」可查看停充 / 恢复 / 限流记录；悬浮底栏开启时默认展示更多行
-- 「更多 → 显示」可切换主题包（默认 / MD3 / MIUIX）、深浅色、颜色主题或 MD3 色值；MIUIX 支持莫奈、悬浮底栏与液态玻璃
-- 显示相关选项保存在本机 WebUI 本地存储，**不会**写入配置文件
-- 顶栏 / 底栏按 WebUI-X insets 做沉浸，与状态栏、虚拟按键栏底色衔接
-
-策略页示意（更多交互见 [WebUI 使用说明](/guide/webui#策略)）：
-
-![策略页](/screenshots/webui-config.png)
+清除开关缓存：删 `list_switch` + `device.profile` 后重启，或 WebUI「测开关与缓存」。

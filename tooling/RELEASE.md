@@ -1,15 +1,15 @@
 # 发版与更新日志（给维护者 / AI）
 
 > 编码改功能或修 bug 时：**先写 `changelog.md` 的 `## Unreleased`**，再改代码。  
-> 用户可见的文档站日志在发版时自动生成，**不含 Unreleased**。
+> 用户可见的文档站日志在发版时由工作流从 `changelog.md` 同步；开发中也可手动同步以便预览文档站。
 
 ## 日志写哪里
 
-| 文件                       | 用途                                                                         |
-| -------------------------- | ---------------------------------------------------------------------------- |
-| 仓库根目录 `changelog.md`  | **唯一手写源**。开发中把条目写在 `## Unreleased` 下                          |
-| `docs/guide/changelog.md`  | 文档站「更新日志」页；**发版工作流生成**，勿手写 Unreleased                  |
-| `docs/public/changelog.md` | Pages / `updateJson` 指向的 changelog；**发版工作流生成**，勿手写 Unreleased |
+| 文件 | 用途 |
+| ---- | ---- |
+| 仓库根目录 `changelog.md` | **唯一手写源**。开发中把条目写在 `## Unreleased` 下 |
+| `docs/guide/changelog.md` | 文档站「更新日志」页（发版工作流同步；开发预览可手动复制） |
+| `docs/public/changelog.md` | Pages / `updateJson` 指向的 changelog（同上） |
 
 ### Unreleased 写法
 
@@ -17,12 +17,11 @@
 ## Unreleased
 
 - 用一两句说清用户能感知的变化（修了什么 / 新增什么）
-- 一条一个要点
+- 一条一个要点；重大版本可用小标题分组
 ```
 
 - 发版前保持 `## Unreleased` 在文件最上方（标题 `# 更新日志` 之后）。
-- 空的 stub 可以保留。
-- 版本号格式与本仓库一致：`## 2026.07.25` 或 `## 2026.07.25.2`（由发版工作流写入，开发中只维护 Unreleased）。
+- 版本号格式：`## 2026.07.25` 或 `## 2026.07.25.2`（由发版工作流写入）。
 
 ## 发版时工作流做什么
 
@@ -30,12 +29,12 @@ Actions → **Release Module**（或推送 `v*` tag）：
 
 发版对话框可勾选 4 项（默认全选）：
 
-| 勾选      | GitHub Release 资产                 | 会改哪条更新通道                                          |
-| --------- | ----------------------------------- | --------------------------------------------------------- |
-| 模块 zip  | 4 个变体 zip                        | `update.json` + `module.prop`（Magisk / APP「模块更新」） |
-| Rust 守护 | `qscd-rust-arm64` / `qscd-rust-arm` | `qscd/manifest.json`（WebUI 守护卡片）                    |
-| C 守护    | `qscd-c-arm64` / `qscd-c-arm`       | 同上                                                      |
-| 伴侣 APK  | `QSC-Battery_v*.apk`                | `app-update.json`（APP 自身更新）                         |
+| 勾选 | GitHub Release 资产 | 会改哪条更新通道 |
+| ---- | ------------------- | ---------------- |
+| 模块 zip | 4 个变体 zip | `update.json` + `module.prop`（Magisk / APP「模块更新」） |
+| Rust 守护 | `qscd-rust-arm64` / `qscd-rust-arm` | `qscd/manifest.json`（WebUI 守护卡片） |
+| C 守护 | `qscd-c-arm64` / `qscd-c-arm` | 同上 |
+| 伴侣 APK | `QSC-Battery_v*.apk` | `app-update.json`（APP 自身更新） |
 
 ### 单独发版时「模块检测更新」怎么处理
 
