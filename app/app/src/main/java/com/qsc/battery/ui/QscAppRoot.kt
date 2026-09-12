@@ -133,10 +133,12 @@ fun QscAppRoot(container: AppContainer) {
                     container = container,
                     onBack = { nav.popBackStack() },
                     onOpenLspLog = {
+                        container.requestLogTab("lsp")
                         nav.navigate(QscTab.Log.route) {
                             popUpTo(nav.graph.findStartDestination().id) { saveState = true }
                             launchSingleTop = true
-                            restoreState = true
+                            // 不恢复旧 Runtime tab 状态，确保能切到 LSP
+                            restoreState = false
                         }
                     },
                     snackbar = snackbar,

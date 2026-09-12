@@ -109,10 +109,14 @@ worker_sleep_secs() {
 	printf '%s\n' "$s"
 }
 
-# 热更新文案写入后立即刷新一次，之后按插电状态选周期。
-worker_refresh
+# 热更新/启动后：服务未就绪时短间隔重试，避免一次失败就睡到 2–5 分钟。
+# 就绪后按插电状态选长周期，省电。
 while worker_parent_alive; do
-	sleep "$(worker_sleep_secs)"
-	worker_parent_alive || break
 	worker_refresh
+	if worker_service_ready; then
+		sleep "$(worker_sleep_secs)"
+	else
+		sleep 2
+	fi
+	worker_parent_alive || break
 done

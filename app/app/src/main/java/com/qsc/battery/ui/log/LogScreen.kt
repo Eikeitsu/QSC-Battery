@@ -55,6 +55,18 @@ fun LogScreen(container: AppContainer) {
 
     LaunchedEffect(Unit) { vm.refresh() }
 
+    val pendingTab by container.pendingLogTab.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingTab) {
+        val key = container.consumePendingLogTab() ?: return@LaunchedEffect
+        vm.setTab(
+            when (key.lowercase()) {
+                "events" -> LogTab.Events
+                "lsp" -> LogTab.Lsp
+                else -> LogTab.Runtime
+            },
+        )
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         ChargeTopBar(
             title = "动态",

@@ -314,26 +314,22 @@ esac
 }
 _i=0
 _verified=0
-# 服务启动有 sleep 5 + 初始化；给足时间进入主循环并拉起简介 worker
-while [ "$_i" -lt 90 ]; do
+# 接管判定只看常驻 service：PID 存活 + 已进入主循环 + 心跳未过期。
+# 简介 worker 刷新周期 120–300s，且启动时可能仍处 starting；
+# 再要求 last_refresh≤90s 会导致几乎必失败 →「热更新未完成」。
+while [ "$_i" -lt 120 ]; do
 	_pid="$(cat "$OLD/data/service_pid" 2>/dev/null | tr -d ' \r\n')"
 	_hb="$(cat "$OLD/data/service_heartbeat" 2>/dev/null | tr -d ' \r\n')"
 	_loops="$(cat "$OLD/data/service_loop_count" 2>/dev/null | tr -d ' \r\n')"
-	_worker_pid="$(cat "$OLD/data/description_worker.pid" 2>/dev/null | tr -d ' \r\n')"
-	_worker_refresh="$(sed -n 's/^last_refresh=//p' "$OLD/data/description_worker.state" 2>/dev/null | head -n1 | tr -d ' \r\n')"
-	case "$_pid:$_hb:$_loops:$_worker_pid:$_worker_refresh" in
-		*[!0-9:]*) ;;
+	case "$_pid:$_hb:$_loops" in
+		""|*[!0-9:]*) ;;
 		*)
 			if kill -0 "$_pid" 2>/dev/null &&
-				[ "$_loops" -gt 0 ] 2>/dev/null &&
-				kill -0 "$_worker_pid" 2>/dev/null; then
-				# 心跳约 180s 写一次（省电）；窗口须与 description_worker（400s）一致。
-				# 旧逻辑要求 ≤10s，热更新几乎必走 fallback →「热更新未完成」。
+				[ "$_loops" -gt 0 ] 2>/dev/null; then
+				# 心跳约 180s 写一次（省电）；探活窗口与 description_worker 一致取 400s。
 				_now="$(date +%s 2>/dev/null)"
 				[ "$_now" -ge "$_hb" ] 2>/dev/null &&
 					[ "$((_now - _hb))" -le 400 ] 2>/dev/null &&
-					[ "$_now" -ge "$_worker_refresh" ] 2>/dev/null &&
-					[ "$((_now - _worker_refresh))" -le 90 ] 2>/dev/null &&
 					_verified=1
 			fi
 			;;
@@ -343,6 +339,11 @@ while [ "$_i" -lt 90 ]; do
 	_i=$((_i + 1))
 done
 if [ "$_verified" -ne 1 ]; then
+	_pid="$(cat "$OLD/data/service_pid" 2>/dev/null | tr -d ' \r\n')"
+	_hb="$(cat "$OLD/data/service_heartbeat" 2>/dev/null | tr -d ' \r\n')"
+	_loops="$(cat "$OLD/data/service_loop_count" 2>/dev/null | tr -d ' \r\n')"
+	_now="$(date +%s 2>/dev/null)"
+	hu_log "verify_fail: pid=${_pid:-?} alive=$(kill -0 "${_pid:-0}" 2>/dev/null && echo 1 || echo 0) loops=${_loops:-?} hb=${_hb:-?} now=${_now:-?}"
 	hu_fallback
 	exit 1
 fi
@@ -367,7 +368,7 @@ rm -f "$SELF" 2>/dev/null
 rm -rf "$(dirname "$TXN")" 2>/dev/null
 rmdir /data/adb/qsc/hot_update/transactions 2>/dev/null
 rmdir /data/adb/qsc/hot_update 2>/dev/null
-hu_log "commit: verifier 确认 service 心跳、主循环和简介 worker 均正常"
+hu_log "commit: verifier 确认 service PID、主循环与心跳正常"
 HOT_UPDATE_VERIFY
 	chmod 0700 "$_verify_path" 2>/dev/null || return 1
 	if command -v setsid >/dev/null 2>&1; then
