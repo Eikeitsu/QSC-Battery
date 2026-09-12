@@ -247,7 +247,8 @@ export const cases = [
     expect: {
       node: "0",
       files: { power_switch: false, battery_switch: false },
-      descIncludes: "充电中",
+      // 插电但 status=Not charging → 简介写「供电中」（非「充电中」）
+      descIncludes: "供电中",
     },
   },
 

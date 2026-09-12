@@ -24,12 +24,14 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const required = process.env.CI === "true" || process.env.REQUIRE_SERVICE_TESTS === "1";
 
 function findShell() {
-  if (process.env.QSC_TEST_SHELL)
-    return {
-      cmd: process.env.QSC_TEST_SHELL,
-      args: [],
-      label: process.env.QSC_TEST_SHELL,
-    };
+  if (process.env.QSC_TEST_SHELL) {
+    const explicit = process.env.QSC_TEST_SHELL;
+    const base = explicit.replace(/\\/g, "/").split("/").pop() || explicit;
+    if (base === "busybox" || base.startsWith("busybox")) {
+      return { cmd: explicit, args: ["sh"], label: "busybox sh" };
+    }
+    return { cmd: explicit, args: [], label: explicit };
+  }
   if (process.platform === "win32") return null;
   for (const bin of ["busybox", "dash", "sh"]) {
     const found = spawnSync("which", [bin], { encoding: "utf8" });

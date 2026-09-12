@@ -19,7 +19,7 @@ jobs:
     name: Web (lint / typecheck / unit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # PR commitlint 需要完整历史；push 浅克隆即可
           fetch-depth: ${{ github.event_name == 'pull_request' && 0 || 1 }}
@@ -46,19 +46,19 @@ jobs:
     name: Shell (lint / ash tests / contracts)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: ./.github/actions/setup-node-npm
 
-      - name: Install shellcheck / busybox
-        run: sudo apt-get update && sudo apt-get install -y shellcheck busybox
+      # runner 自带 busybox-static（/bin/busybox）；勿再装 busybox 包以免替换它
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends shellcheck
 
       - name: ShellCheck
         run: npm run lint:shell
         env:
           REQUIRE_SHELLCHECK: "1"
 
-      # 停充判定的行为用例：假 sysfs + 假开关节点跑真 qsc_switch.sh
       - name: Charge decision tests (busybox ash)
         run: npm run test:shell
         env:
@@ -76,7 +76,7 @@ jobs:
     name: Rust (fmt / clippy / test)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Rust
         run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
@@ -92,13 +92,13 @@ jobs:
     name: C (host selftest)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: C build / selftest (qscd-c)
         working-directory: native/qscd-c
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang
+          sudo apt-get install -y --no-install-recommends clang
           clang -std=gnu11 -Os -Wall -Wextra -Werror -o /tmp/qscd-host qscd.c
           /tmp/qscd-host selftest
 
@@ -106,5 +106,15 @@ jobs:
     name: Lint gate
     runs-on: ubuntu-latest
     needs: [web, shell, rust, c]
+    if: always()
     steps:
-      - run: echo "All lint jobs passed"
+      - name: Require all jobs success
+        run: |
+          echo "web=${{ needs.web.result }}"
+          echo "shell=${{ needs.shell.result }}"
+          echo "rust=${{ needs.rust.result }}"
+          echo "c=${{ needs.c.result }}"
+          test "${{ needs.web.result }}" = "success"
+          test "${{ needs.shell.result }}" = "success"
+          test "${{ needs.rust.result }}" = "success"
+          test "${{ needs.c.result }}" = "success"

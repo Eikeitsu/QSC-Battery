@@ -39,8 +39,15 @@ const posix = (p) => p.replace(/\\/g, "/");
 
 function findShell() {
   // 显式指定：可用来在 CI 里对同一套用例多跑几种 shell（ash / dash / mksh）
+  // 若指向 busybox 可执行文件，自动补上 `sh` 子命令
   const explicit = process.env.QSC_TEST_SHELL;
-  if (explicit) return { cmd: explicit, args: [], label: explicit };
+  if (explicit) {
+    const base = explicit.replace(/\\/g, "/").split("/").pop() || explicit;
+    if (base === "busybox" || base.startsWith("busybox")) {
+      return { cmd: explicit, args: ["sh"], label: "busybox sh" };
+    }
+    return { cmd: explicit, args: [], label: explicit };
+  }
   if (process.platform === "win32") return null;
   const which = (bin) => spawnSync("which", [bin], { encoding: "utf8" });
   // busybox ash 最接近 Magisk 环境；dash 是次选的严格 POSIX 实现

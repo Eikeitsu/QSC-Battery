@@ -28,13 +28,17 @@ on:
       - ".github/workflows/build-web.yml"
   workflow_dispatch:
 
+concurrency:
+  group: build-web-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-web:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: ./.github/actions/setup-node-npm
 
@@ -46,6 +50,7 @@ jobs:
           name: web-dist
           path: .build/webroot/
           if-no-files-found: error
+          retention-days: 7
 
   publish-web:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -54,14 +59,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/download-artifact@v4
         with:
           name: web-dist
           path: .build/webroot/
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
 

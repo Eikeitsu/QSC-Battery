@@ -33,31 +33,17 @@ jobs:
   package-module:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: ./.github/actions/setup-node-npm
 
       - uses: ./.github/actions/build-native
 
-      - name: Setup Java for companion APK
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/setup-android
 
       - name: Build companion release APK
         working-directory: app
         run: |
-          chmod +x gradlew
-          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            curl -sL https://services.gradle.org/distributions/gradle-9.3.1-bin.zip -o /tmp/gradle.zip
-            sudo unzip -q /tmp/gradle.zip -d /opt
-            /opt/gradle-9.3.1/bin/gradle wrapper --gradle-version 9.3.1
-            chmod +x gradlew
-          fi
           ./gradlew :app:assembleRelease --stacktrace
           mkdir -p ../release
           cp app/build/outputs/apk/release/app-release.apk ../release/QSC-Battery.apk
@@ -67,11 +53,8 @@ jobs:
           REQUIRE_COMPANION_APK: "1"
         run: npm run build:module:all
 
-      # 变体断言 + zip 完整性校验，并写一份 Step Summary
       - name: Verify module zips
         run: npm run verify:zips
-
-      # 热更新契约由 Lint 工作流的 shell job 覆盖，此处不再重复跑
 
       - uses: actions/upload-artifact@v4
         with:

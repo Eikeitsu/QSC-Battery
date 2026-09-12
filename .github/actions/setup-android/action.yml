@@ -1,0 +1,30 @@
+name: Setup Android build
+description: Temurin JDK + Gradle setup（伴侣 APK / 模块内嵌 APK 共用）
+
+inputs:
+  java-version:
+    description: JDK version
+    required: false
+    default: "17"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: ${{ inputs.java-version }}
+
+    - uses: gradle/actions/setup-gradle@v4
+
+    - name: Ensure Gradle Wrapper
+      shell: bash
+      working-directory: app
+      run: |
+        chmod +x gradlew
+        if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+          curl -fsSL https://services.gradle.org/distributions/gradle-9.3.1-bin.zip -o /tmp/gradle.zip
+          sudo unzip -q /tmp/gradle.zip -d /opt
+          /opt/gradle-9.3.1/bin/gradle wrapper --gradle-version 9.3.1
+          chmod +x gradlew
+        fi

@@ -22,6 +22,7 @@
 - 扩展硬件旁路节点与反极性探测；移除危险旁路自动探测
 - 修复停充与插线判定；**一加等假「充电中」**：简介/插电判定不再仅凭 `status=Charging` 或 dumpsys powered，需端口 online/present 等证据
 - 原生守护：Rust `plugged`/`diagnose`、精简 wake 日志；C 版 `cat`/`stat` 子命令
+- **CI**：停充用例适配 MCA「供电中」简介；Lint 不再错误安装 busybox 包；统一 `checkout@v5` / `setup-node@v5`；抽取 `setup-android` 复合动作
 - **保留更新改为「核心配置」**：音量上只迁移停充阈值/温控/通知/开关/时段等；`power_saver` 与 `loop_interval_*` 等省电运行参数一律用新版默认，避免旧间隔盖掉本版优化
 - **待机省电**：修复事件等待时父 shell 每秒轮询（抵消 qscd）；心跳 5s→**180s**；简介间隔 300s；满轮 30min；默认未插电 idle 90s / native **600s**（上限 900）；同 tick 缓存插电判定；简介 worker 未插电拉长周期
 - **修复 APP 桌面无图标**：动态图标切换改为「先启用目标 alias 再禁用其它」，失败回退默认入口；动态电量图标默认关闭（可在外观中开启）

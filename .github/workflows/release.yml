@@ -65,7 +65,7 @@ jobs:
       publish_binaries_c: ${{ steps.meta.outputs.publish_binaries_c }}
       publish_apk: ${{ steps.meta.outputs.publish_apk }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -145,25 +145,11 @@ jobs:
       # 守护二进制：两套实现都要有，四个变体包与 Pages 托管都依赖它们
       - uses: ./.github/actions/build-native
 
-      - name: Setup Java for companion APK
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/setup-android
 
       - name: Build companion release APK
         working-directory: app
         run: |
-          chmod +x gradlew
-          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            curl -sL https://services.gradle.org/distributions/gradle-9.3.1-bin.zip -o /tmp/gradle.zip
-            sudo unzip -q /tmp/gradle.zip -d /opt
-            /opt/gradle-9.3.1/bin/gradle wrapper --gradle-version 9.3.1
-            chmod +x gradlew
-          fi
           ./gradlew :app:assembleRelease --stacktrace
           mkdir -p ../release
           cp app/build/outputs/apk/release/app-release.apk ../release/QSC-Battery.apk
@@ -198,7 +184,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -301,7 +287,7 @@ jobs:
     if: ${{ needs.build.outputs.draft != 'true' && needs.build.outputs.prerelease != 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           # 回写主分支需要可推送
