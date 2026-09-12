@@ -32,6 +32,7 @@ class LogViewModel(
     fun setTab(tab: LogTab) {
         _ui.update { it.copy(tab = tab) }
         if (tab == LogTab.Lsp) refreshXp()
+        else refresh()
     }
 
     fun setLevel(level: String) {
@@ -46,19 +47,31 @@ class LogViewModel(
             }
             val lines = container.logRepository.loadLogTail()
             val events = container.logRepository.loadEvents()
-            val xp = if (cur.tab == LogTab.Lsp || cur.xpLines.isNotEmpty()) {
+            // 以写回前的最新 tab 为准，避免「先 refresh 再切 LSP」把已加载的 XP 覆盖成空
+            val tabNow = _ui.value.tab
+            val xp = if (tabNow == LogTab.Lsp) {
                 container.logRepository.loadXpLog()
             } else {
-                cur.xpLines
+                _ui.value.xpLines
             }
-            _ui.update {
-                it.copy(lines = lines, events = events, xpLines = xp, loading = false)
+            _ui.update { state ->
+                state.copy(
+                    lines = lines,
+                    events = events,
+                    xpLines = if (state.tab == LogTab.Lsp && xp.isEmpty() && state.xpLines.isNotEmpty()) {
+                        state.xpLines
+                    } else {
+                        xp
+                    },
+                    loading = false,
+                )
             }
         }
     }
 
     fun refreshXp() {
         viewModelScope.launch {
+            _ui.update { it.copy(loading = it.xpLines.isEmpty()) }
             val xp = container.logRepository.loadXpLog()
             _ui.update { it.copy(xpLines = xp, loading = false) }
         }

@@ -53,10 +53,23 @@ fun LogScreen(container: AppContainer) {
     val events = ui.events
     val loading = ui.loading
 
-    LaunchedEffect(Unit) { vm.refresh() }
-
+    LaunchedEffect(Unit) {
+        val key = container.consumePendingLogTab()
+        if (key != null) {
+            vm.setTab(
+                when (key.lowercase()) {
+                    "events" -> LogTab.Events
+                    "lsp" -> LogTab.Lsp
+                    else -> LogTab.Runtime
+                },
+            )
+        } else {
+            vm.refresh()
+        }
+    }
     val pendingTab by container.pendingLogTab.collectAsStateWithLifecycle()
     LaunchedEffect(pendingTab) {
+        // 已在动态页时再次从 XP 跳入
         val key = container.consumePendingLogTab() ?: return@LaunchedEffect
         vm.setTab(
             when (key.lowercase()) {

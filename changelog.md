@@ -1,48 +1,36 @@
-﻿# 更新日志
+# 更新日志
 
 ## Unreleased
 
-> 相对 **2026.09.01** 的开发中变更（对照仓库 `v2026.09.01..HEAD`）。发版时本段会升为正式版本号。
+### 伴侣 APP
 
-### 伴侣 APP（全新）
+- **新增** Compose 伴侣 APP（`com.qsc.battery`）：首页 / 策略 / 动态 / 我的；Root 读写模块配置与状态，不挂后台保活；`minSdk 26` / `targetSdk 35`
+- Charge 设计系统：浅/深/AMOLED/动态取色、调色板、首启引导、模块与 APP 分通道更新、配置档；快捷设置磁贴切换模块软开关
+- 模块 zip 可内嵌 APK，安装时可选写入；写入成功后删除模块目录内临时 APK
+- 桌面动态电量图标（约 10% 分档，充电闪电标黄）；默认关闭；切换 activity-alias 改为先启后禁，失败回退默认入口（避免「装完桌面无图标」）
+- 可选 **LSPosed**（libxposed API 102）：作用域勾选 **系统框架 (`system`)**；仅在 `qscd` 不可用时插拔边沿唤醒；`/data/system` 通道、存活探测与独立 XP 面板（服务连接 / 作用域 / 注入）
+- 「动态」增加 **LSP** 子页（合并多路径 XP 日志）；从 XP 详情进入时自动切到 LSP 并加载
 
-- 新增 Compose 伴侣 APP（包名 `com.qsc.battery`）：首页 / 策略 / 动态 / 我的；Root 读写模块，不挂后台保活
-- Charge 设计系统：主题（浅/深/AMOLED/动态取色）、调色板、首启权限引导、更新安装、配置档
-- 快捷设置磁贴切换模块软开关；安装包可内嵌 APK，刷模块时可选安装
-- 可选 **LSPosed**：系统框架插拔边沿唤醒（仅 `qscd` 不可用时）；`/data/system` 通道；APP 检测配置与存活标记
-- 桌面动态图标：电量约 **10%** 分档；充电时电池/环形图标闪电为黄色；插拔电或打开 APP 时稀疏刷新
-- APP 安装范围：`minSdk 26`（Android 8+），`targetSdk 35`
-- LSPosed 模块列简介改为功能说明（去掉 API 文案）
-- 顶栏与正文间距统一（`pageContentTop`）
-- Magisk：`qscd` 失败时武装 XP；回退睡眠可被 `/data/system/qsc_xp_wake` 提前打断
-- **省电**：服务心跳写盘与独立心跳对齐 **180s**；XP 未武装缓存；回退 sleep 仅武装时切片；满轮/简介保持 **30min / 5min**
-- APP「动态」增加 **LSP** 页（只读本模块 `/data/system/qsc_xp.log`）
-- WebUI 曲线打开时刷新 **60s**（原 30s）
+### 模块
 
-### 模块核心
-
-- **命令行** `bin/qsc.sh`：`status` / `on|off|toggle` / `config` / `log` / `events` / `diagnose` / `test-switch` / `detect` / `daemon` 等
-- **充电事件日志** `data/charge_events.log`（插拔、停充、温控等）+ 习惯统计 `learn_stats.sh`；WebUI/APP「动态」双 Tab
-- **常显功耗通知** `notify_power_status`（默认关）
-- **设备档案库**：`device.profile` 压缩归档 / 一键还原 / WebUI 复用
-- 扩展硬件旁路节点与反极性探测；移除危险旁路自动探测
-- 修复停充与插线判定；**一加等假「充电中」**：简介/插电判定不再仅凭 `status=Charging` 或 dumpsys powered，需端口 online/present 等证据
-- 原生守护：Rust `plugged`/`diagnose`、精简 wake 日志；C 版 `cat`/`stat` 子命令
-- **CI**：停充用例适配 MCA「供电中」简介；Lint 不再错误安装 busybox 包；统一 `checkout@v5` / `setup-node@v5`；抽取 `setup-android` 复合动作
-- **保留更新改为「核心配置」**：音量上只迁移停充阈值/温控/通知/开关/时段等；`power_saver` 与 `loop_interval_*` 等省电运行参数一律用新版默认，避免旧间隔盖掉本版优化
-- **待机省电**：修复事件等待时父 shell 每秒轮询（抵消 qscd）；心跳 5s→**180s**；简介间隔 300s；满轮 30min；默认未插电 idle 90s / native **600s**（上限 900）；同 tick 缓存插电判定；简介 worker 未插电拉长周期
-- **修复 APP 桌面无图标**：动态图标切换改为「先启用目标 alias 再禁用其它」，失败回退默认入口；动态电量图标默认关闭（可在外观中开启）
+- **新增** `bin/qsc.sh` CLI（status / on|off|toggle / config / log / events / diagnose / test-switch / detect / daemon 等）；C 包装安装到 `/data/adb/qsc/bin/qsc`（不挂载 `system/bin`）
+- **新增** 充电事件日志 `data/charge_events.log` 与 `learn_stats.sh`；可选常显功耗通知 `notify_power_status`（默认关）
+- **新增** 设备档案库：`device.profile` 压缩归档 / 一键还原；WebUI 可复用；扩展旁路节点列表，并移除危险旁路自动探测
+- **插电判定**：简介与供电标记不再单信 `status=Charging` 或 dumpsys `powered`（一加等假充电）；也不再把无端口证据的孤立 `Not charging` 当成已插电（小米 17 / K90U 等未插电却显示充电中）；弱 `present` 需结合 VBUS / 放电电流
+- **待机省电**：修复事件等待时父 shell 每秒轮询抵消 qscd；服务心跳写盘改为约 **180s**；未插电 idle / native 默认拉长；简介 worker 未就绪短重试、未插电拉长周期；同 tick 缓存插电判定；`qscd` 失败时可武装 XP，回退 sleep 可被 `qsc_xp_wake` 打断
+- **保留更新**：音量上只迁移停充阈值/温控/通知/开关/时段等核心项；`power_saver` 与 `loop_interval_*` 一律用新版默认，避免旧间隔盖掉省电优化
+- **热更新**：接管校验改为确认 service PID、主循环与心跳即可，不再强依赖简介 worker 的 `last_refresh` 窗口（修复近期「热更新未完成 / 接管检验失败」）
+- 原生守护补充：Rust `plugged` / `diagnose`、精简 wake；C 版 `cat` / `stat`
 
 ### WebUI
 
-- 充放电曲线：等距降采样、单调 Hermite 插值、范围切换、增量刷新、健康趋势；修复强制刷新与卡顿
-- 日志页：运行日志 / 充电事件 Tab；三套主题内联事件卡片；常显功耗开关入口
-- 我的页：设备档案库、配置档增强；守护卡片与安装流程同步
+- 充放电曲线：等距降采样、单调 Hermite、范围切换、增量刷新与健康趋势；打开时刷新间隔改为 **60s**；修复强制刷新仍走旧缓存的问题
+- 日志页拆成运行日志 / 充电事件 Tab；常显功耗开关入口；我的页接入档案库与配置档增强，守护卡片与安装流程对齐
 
-### 工程 / 发版
+### 工程
 
-- APP 独立更新通道 `app-update.json`；发版可分项勾选模块 / 守护 / APK
-- CI、签名密钥固定、Vitest 单测迁至 `webui/test/unit`
+- APP 独立更新清单 `app-update.json`；发版工作流可分项勾选模块 zip / 守护 / APK
+- CI：停充用例适配 MCA「供电中」简介文案；统一 `checkout@v5` / `setup-node@v5`；抽取 `setup-android`；Vitest 迁至 `webui/test/unit`
 
 ## 2026.09.01
 

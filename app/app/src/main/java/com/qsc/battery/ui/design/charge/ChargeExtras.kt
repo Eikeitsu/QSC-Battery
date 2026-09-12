@@ -404,8 +404,8 @@ fun isActivelyCharging(statusRaw: String, powered: Boolean, stopped: Boolean): B
         "3", "discharging" -> false
         "charging", "2" -> true
         "full", "5" -> true
-        // MCA 等：插电时常报 Not charging，仍给轻量动效提示「在充电路径上」
-        "not charging", "not_charging", "4" -> true
+        // MCA 插电常报 Not charging：文案走「供电中」，不要标成「充电中」动效
+        "not charging", "not_charging", "4" -> false
         "unknown", "1", "" -> true
         else -> true
     }
