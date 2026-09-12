@@ -11,8 +11,13 @@ object ModulePaths {
     const val LOG_FILE = "$DATADIR/log.log"
     const val CHARGE_EVENTS = "$DATADIR/charge_events.log"
     const val CHARGE_HISTORY = "$DATADIR/charge_history.csv"
-    /** LSPosed XP 稀疏日志（system_server 写入，Root 可读） */
+    /** LSPosed XP 稀疏日志（system_server 多路径写；Root 合并读） */
     const val XP_LOG = "/data/system/qsc_xp.log"
+    const val XP_LOG_TMP = "/data/local/tmp/qsc_xp.log"
+    const val XP_LOG_CACHE = "/cache/qsc_xp.log"
+    /** Magisk 侧镜像 / 边沿事件（模块 data，Root 必可读） */
+    const val XP_LOG_MODULE = "$DATADIR/xp.log"
+    val XP_LOG_CANDIDATES: List<String> = listOf(XP_LOG, XP_LOG_TMP, XP_LOG_CACHE, XP_LOG_MODULE)
     const val HEALTH_HISTORY = "$DATADIR/health_history.csv"
     const val POWER_SWITCH_FLAG = "$DATADIR/power_switch"
     const val MODULE_PROP = "$MODDIR/module.prop"

@@ -26,11 +26,11 @@
 
 ### LSPosed（可选）
 
-作用域只勾 **系统框架 `android`**（不要勾本 APP）。
+作用域只勾 **系统框架 `android`**。
 
 - **作用**：仅当 Magisk 事件守护 `qscd` 不可用时，在插拔**边沿**向 `/data/system/qsc_xp_wake` 写一次标记，缩短轮询；平时几乎零开销
 - **通道**：`/data/system/`（system_server 在 SELinux enforcing 下通常可写；Magisk root 读取）。写失败则本启动停写
-- **检测**：APP 用 Root 读 LSPosed `modules_config.db` + `/data/system/qsc_xp_alive`，**不**自 hook
+- **检测**：APP 用 Root 读 LSPosed 配置与 `/data/system/qsc_xp_alive` 存活标记
 - 停充始终由 Magisk 模块负责
 - 排查：`adb logcat -s QscXp`
 

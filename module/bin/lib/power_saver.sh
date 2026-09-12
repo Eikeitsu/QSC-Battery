@@ -607,6 +607,8 @@ qsc_ps_mark_native_failure() {
 		mv -f "$DATADIR/qscd_unusable.tmp" "$DATADIR/qscd_unusable" 2>/dev/null
 	# 武装 XP 边沿唤醒（system_server 写 /data/system/qsc_xp_wake）
 	touch /data/system/qsc_xp_arm 2>/dev/null || true
+	type qsc_xp_file_log >/dev/null 2>&1 &&
+		qsc_xp_file_log WARN "ok magisk: xp armed (qscd unusable reason=$reason)"
 }
 
 # XP 唤醒文件是否在近几秒内更新（root 可读 /data/system）
@@ -629,6 +631,8 @@ qsc_ps_fallback_sleep() {
 	fi
 	if qsc_ps_xp_wake_fresh; then
 		rm -f /data/system/qsc_xp_wake 2>/dev/null || true
+		type qsc_xp_file_log >/dev/null 2>&1 &&
+			qsc_xp_file_log INFO "ok magisk: xp wake consumed"
 		return 0
 	fi
 	left=$secs
@@ -639,6 +643,8 @@ qsc_ps_fallback_sleep() {
 		left=$((left - chunk))
 		if qsc_ps_xp_wake_fresh; then
 			rm -f /data/system/qsc_xp_wake 2>/dev/null || true
+			type qsc_xp_file_log >/dev/null 2>&1 &&
+				qsc_xp_file_log INFO "ok magisk: xp wake consumed"
 			return 0
 		fi
 	done

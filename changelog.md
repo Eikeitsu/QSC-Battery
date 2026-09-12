@@ -9,7 +9,7 @@
 - 新增 Compose 伴侣 APP（包名 `com.qsc.battery`）：首页 / 策略 / 动态 / 我的；Root 读写模块，不挂后台保活
 - Charge 设计系统：主题（浅/深/AMOLED/动态取色）、调色板、首启权限引导、更新安装、配置档
 - 快捷设置磁贴切换模块软开关；安装包可内嵌 APK，刷模块时可选安装
-- 可选 **LSPosed**：系统框架插拔边沿唤醒（仅 `qscd` 不可用时）；`/data/system` 通道；APP 检测配置/存活标记（不自 hook）
+- 可选 **LSPosed**：系统框架插拔边沿唤醒（仅 `qscd` 不可用时）；`/data/system` 通道；APP 检测配置与存活标记
 - 桌面动态图标：电量约 **10%** 分档；充电时电池/环形图标闪电为黄色；插拔电或打开 APP 时稀疏刷新
 - APP 安装范围：`minSdk 26`（Android 8+），`targetSdk 35`
 - LSPosed 模块列简介改为功能说明（去掉 API 文案）

@@ -226,6 +226,44 @@ qsc_log_once_clear() {
 	rm -f "$DATADIR/.log_once_$1"
 }
 
+# XP 稀疏日志（与 system_server 同格式 epoch_ms\tLEVEL\tmsg），供 APP/WebUI LSP 页读取
+qsc_xp_file_log() {
+	local lvl="${1:-INFO}" msg ms
+	shift
+	msg="$*"
+	case "$lvl" in
+		info|INFO) lvl=INFO ;;
+		warn|WARN) lvl=WARN ;;
+		error|ERROR) lvl=ERROR ;;
+		debug|DEBUG) lvl=DEBUG ;;
+		*) lvl=INFO ;;
+	esac
+	mkdir -p "$DATADIR" 2>/dev/null || true
+	ms="$(date +%s%3N 2>/dev/null || echo "$(date +%s)000")"
+	printf '%s\t%s\t%s\n' "$ms" "$lvl" "$msg" >>"$DATADIR/xp.log" 2>/dev/null || true
+	# 限制体积
+	if [ -f "$DATADIR/xp.log" ]; then
+		_xp_sz="$(wc -c <"$DATADIR/xp.log" 2>/dev/null || echo 0)"
+		case "$_xp_sz" in ""|*[!0-9]*) _xp_sz=0 ;; esac
+		if [ "$_xp_sz" -gt 48000 ] 2>/dev/null; then
+			tail -c 24000 "$DATADIR/xp.log" >"$DATADIR/xp.log.tmp" 2>/dev/null &&
+				mv -f "$DATADIR/xp.log.tmp" "$DATADIR/xp.log" 2>/dev/null
+		fi
+	fi
+}
+
+# 启动时：预置可写日志落点 + 记录探活（不 cat 全量，避免重启重复；APP 会合并多路径）
+qsc_xp_bootstrap_logs() {
+	mkdir -p "$DATADIR" 2>/dev/null || true
+	touch /data/system/qsc_xp.log /data/local/tmp/qsc_xp.log 2>/dev/null || true
+	chmod 666 /data/system/qsc_xp.log /data/local/tmp/qsc_xp.log 2>/dev/null || true
+	if [ -f /data/system/qsc_xp_alive ]; then
+		qsc_xp_file_log INFO "ok magisk: xp alive present"
+	else
+		qsc_xp_file_log INFO "magisk: xp alive absent (enable LSPosed scope android + reboot)"
+	fi
+}
+
 _qsc_log_write() {
 	local lvl="${1:-info}"
 	shift

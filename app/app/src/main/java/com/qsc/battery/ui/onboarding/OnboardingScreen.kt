@@ -229,9 +229,8 @@ fun OnboardingScreen(
                         color = ChargeTheme.colors.ink,
                     )
                     ChargeBanner(
-                        text = "为什么可选：qscd 事件等待不可用时，由系统框架在插拔边沿写唤醒标记，缩短 Magisk 轮询。\n" +
-                            "不写充电节点。请启用本模块，作用域勾选「系统框架(android)」后重启。\n" +
-                            "状态来自 LSPosed 配置与 /data/system 存活标记，不自 hook APP。",
+                        text = "为什么可选：事件守护不可用时，由系统框架在插拔边沿写唤醒标记，缩短 Magisk 轮询。\n" +
+                            "不写充电节点。请启用本模块，作用域勾选「系统框架(android)」后重启。",
                     )
                     val status = xp
                     StatusBlock(

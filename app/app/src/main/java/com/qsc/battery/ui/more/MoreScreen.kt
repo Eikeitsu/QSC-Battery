@@ -1,5 +1,6 @@
 package com.qsc.battery.ui.more
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -116,15 +118,29 @@ fun MoreScreen(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
         ) {
             chips.forEach { chip ->
+                val ok = chip.contains("✓") || chip.contains("已运行") || chip.contains("已启用")
+                val warn = chip.contains("仅管理器") || chip.contains("未启用")
+                val tone = when {
+                    ok -> ChargeTheme.colors.accent
+                    warn -> ChargeTheme.colors.accent
+                    else -> ChargeTheme.colors.danger
+                }
+                val fill = when {
+                    ok -> ChargeTheme.colors.accent.copy(alpha = 0.16f)
+                    warn -> ChargeTheme.colors.accent.copy(alpha = 0.10f)
+                    else -> ChargeTheme.colors.danger.copy(alpha = 0.12f)
+                }
                 Surface(
                     shape = RoundedCornerShape(999.dp),
-                    color = ChargeTheme.colors.surfaceStrong,
+                    color = fill,
+                    border = BorderStroke(1.dp, tone.copy(alpha = if (ok) 0.55f else 0.40f)),
                 ) {
                     Text(
                         text = chip,
                         style = ChargeTheme.typography.caption,
-                        color = ChargeTheme.colors.ink,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        color = if (ok || warn) tone else ChargeTheme.colors.danger,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                     )
                 }
             }

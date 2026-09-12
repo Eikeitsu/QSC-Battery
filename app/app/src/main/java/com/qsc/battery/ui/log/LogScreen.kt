@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.qsc.battery.data.AppContainer
@@ -82,84 +83,97 @@ fun LogScreen(container: AppContainer) {
             },
         )
 
+        // 固定在顶栏下：不盖白底 sticky，氛围绿可接到分段控件
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
+                .padding(bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            ChargeSegmented(
+                options = listOf("运行", "事件", "LSP"),
+                selectedIndex = when (tab) {
+                    LogTab.Runtime -> 0
+                    LogTab.Events -> 1
+                    LogTab.Lsp -> 2
+                },
+                onSelect = {
+                    tab = when (it) {
+                        1 -> LogTab.Events
+                        2 -> LogTab.Lsp
+                        else -> LogTab.Runtime
+                    }
+                },
+            )
+            if (tab == LogTab.Runtime || tab == LogTab.Lsp) {
+                ChargeChipGroup(
+                    chips = ChargePresets.logLevels,
+                    selectedId = level,
+                    onSelect = { level = it },
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                ChargeSecondaryButton(
+                    text = "刷新",
+                    equalHeight = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        scope.launch {
+                            when (tab) {
+                                LogTab.Lsp -> refreshXp()
+                                else -> refresh()
+                            }
+                        }
+                    },
+                )
+                ChargeSecondaryButton(
+                    text = "清空",
+                    equalHeight = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        scope.launch {
+                            when (tab) {
+                                LogTab.Runtime -> container.logRepository.clearLog()
+                                LogTab.Events -> container.logRepository.clearEvents()
+                                LogTab.Lsp -> container.logRepository.clearXpLog()
+                            }
+                            when (tab) {
+                                LogTab.Lsp -> refreshXp()
+                                else -> refresh()
+                            }
+                        }
+                    },
+                )
+            }
+        }
+
+        // 轻量收口：列表上沿淡入，避免控件与内容硬切
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            ChargeTheme.colors.background.copy(alpha = 0.35f),
+                            ChargeTheme.colors.background.copy(alpha = 0f),
+                        ),
+                    ),
+                ),
+        )
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = ChargeTheme.dimens.pageContentTop,
+                top = 4.dp,
                 bottom = ChargeTheme.dimens.bottomBarContentGap,
             ),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            stickyHeader {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(ChargeTheme.colors.background)
-                        .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                        .padding(bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    ChargeSegmented(
-                        options = listOf("运行", "事件", "LSP"),
-                        selectedIndex = when (tab) {
-                            LogTab.Runtime -> 0
-                            LogTab.Events -> 1
-                            LogTab.Lsp -> 2
-                        },
-                        onSelect = {
-                            tab = when (it) {
-                                1 -> LogTab.Events
-                                2 -> LogTab.Lsp
-                                else -> LogTab.Runtime
-                            }
-                        },
-                    )
-                    if (tab == LogTab.Runtime || tab == LogTab.Lsp) {
-                        ChargeChipGroup(
-                            chips = ChargePresets.logLevels,
-                            selectedId = level,
-                            onSelect = { level = it },
-                        )
-                    }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        ChargeSecondaryButton(
-                            text = "刷新",
-                            equalHeight = true,
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                scope.launch {
-                                    when (tab) {
-                                        LogTab.Lsp -> refreshXp()
-                                        else -> refresh()
-                                    }
-                                }
-                            },
-                        )
-                        ChargeSecondaryButton(
-                            text = "清空",
-                            equalHeight = true,
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                scope.launch {
-                                    when (tab) {
-                                        LogTab.Runtime -> container.logRepository.clearLog()
-                                        LogTab.Events -> container.logRepository.clearEvents()
-                                        LogTab.Lsp -> container.logRepository.clearXpLog()
-                                    }
-                                    when (tab) {
-                                        LogTab.Lsp -> refreshXp()
-                                        else -> refresh()
-                                    }
-                                }
-                            },
-                        )
-                    }
-                }
-            }
-
             if (loading && tab != LogTab.Lsp) {
                 item {
                     Column(
@@ -205,7 +219,7 @@ fun LogScreen(container: AppContainer) {
                         item {
                             Text(
                                 text = "暂无本模块 XP 日志。启用 LSPosed 并勾选系统框架后重启；" +
-                                    "仅记录加载/hook/存活/唤醒等关键事件（/data/system/qsc_xp.log）。",
+                                    "成功加载会出现 loaded / hooked / alive 等行。",
                                 style = ChargeTheme.typography.body,
                                 color = ChargeTheme.colors.muted,
                                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),

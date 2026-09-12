@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicLong
 /**
  * LSPosed：仅系统框架；qscd 不可用（arm）时插拔边沿写唤醒文件。
  * 未武装时缓存 arm 检查，避免每次电池回调读 sysfs。
- * 关键日志写入 [LOG_PATH]，供伴侣 APP 动态页「LSP」读取。
+ * 关键日志多路径写入，供伴侣 APP / WebUI「LSP」读取。
  */
 class QscXposedModule : XposedModule() {
     private val hookedBattery = AtomicBoolean(false)
@@ -26,7 +26,7 @@ class QscXposedModule : XposedModule() {
 
     override fun onModuleLoaded(param: ModuleLoadedParam) {
         if (!param.isSystemServer) return
-        xpLog(Log.INFO, "loaded in system_server api=$apiVersion")
+        xpLog(Log.INFO, "ok loaded in system_server api=$apiVersion")
     }
 
     override fun onSystemServerStarting(param: SystemServerStartingParam) {
@@ -53,7 +53,7 @@ class QscXposedModule : XposedModule() {
                         result
                     }
             }
-            xpLog(Log.INFO, "BatteryService hooked x${methods.size}")
+            xpLog(Log.INFO, "ok BatteryService hooked x${methods.size}")
         }.onFailure {
             hookedBattery.set(false)
             xpLog(Log.ERROR, "hook failed: ${it.message}", it)
@@ -102,9 +102,10 @@ class QscXposedModule : XposedModule() {
         val ok = writeText(ALIVE_PATH, "${System.currentTimeMillis()}\talive\n", append = false)
         if (ok) {
             failStreak.set(0)
-            xpLog(Log.INFO, "alive → $ALIVE_PATH")
+            xpLog(Log.INFO, "ok alive → $ALIVE_PATH")
         } else {
             onWriteFailed("alive")
+            xpLog(Log.WARN, "alive write failed → $ALIVE_PATH")
         }
     }
 
@@ -113,9 +114,10 @@ class QscXposedModule : XposedModule() {
         val ok = writeText(WAKE_PATH, "${System.currentTimeMillis()}\t$reason\n", append = false)
         if (ok) {
             failStreak.set(0)
-            xpLog(Log.INFO, "wake $reason → $WAKE_PATH")
+            xpLog(Log.INFO, "ok wake $reason → $WAKE_PATH")
         } else {
             onWriteFailed("wake:$reason")
+            xpLog(Log.WARN, "wake write failed ($reason)")
         }
     }
 
@@ -147,17 +149,25 @@ class QscXposedModule : XposedModule() {
             else -> "INFO"
         }
         val line = "${System.currentTimeMillis()}\t$level\t$msg\n"
-        runCatching {
-            val f = File(LOG_PATH)
-            f.parentFile?.mkdirs()
-            FileOutputStream(f, true).use { it.write(line.toByteArray()) }
-            if (f.length() > LOG_MAX_BYTES) {
-                val keep = f.readBytes().let { bytes ->
-                    val start = (bytes.size - LOG_KEEP_BYTES).coerceAtLeast(0)
-                    bytes.copyOfRange(start, bytes.size)
+        val bytes = line.toByteArray()
+        var wrote = false
+        for (path in LOG_PATHS) {
+            runCatching {
+                val f = File(path)
+                f.parentFile?.mkdirs()
+                FileOutputStream(f, true).use { it.write(bytes) }
+                if (f.length() > LOG_MAX_BYTES) {
+                    val keep = f.readBytes().let { body ->
+                        val start = (body.size - LOG_KEEP_BYTES).coerceAtLeast(0)
+                        body.copyOfRange(start, body.size)
+                    }
+                    FileOutputStream(f, false).use { it.write(keep) }
                 }
-                FileOutputStream(f, false).use { it.write(keep) }
+                wrote = true
             }
+        }
+        if (!wrote) {
+            Log.w(TAG, "xp file log write failed all paths: $msg")
         }
     }
 
@@ -177,6 +187,13 @@ class QscXposedModule : XposedModule() {
         const val ALIVE_PATH = "/data/system/qsc_xp_alive"
         const val OFF_PATH = "/data/system/qsc_xp_off"
         const val LOG_PATH = "/data/system/qsc_xp.log"
+
+        /** system_server 可写候选；Magisk 另镜像到模块 data/xp.log */
+        private val LOG_PATHS = listOf(
+            LOG_PATH,
+            "/data/local/tmp/qsc_xp.log",
+            "/cache/qsc_xp.log",
+        )
 
         private val PLUG_ONLINE_PATHS = listOf(
             "/sys/class/power_supply/usb/online",

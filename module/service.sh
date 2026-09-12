@@ -190,6 +190,8 @@ rm -f "$DATADIR/qscd_unusable" "$DATADIR/qscd_features" \
 rm -f /data/system/qsc_xp_arm 2>/dev/null || true
 rm -f "$DATADIR/power_off"
 echo "$(date +%F_%T) service.sh 启动，开始循环" > "$DATADIR/service_start.log"
+# XP 日志落点与镜像（供 APP/WebUI LSP 页）
+type qsc_xp_bootstrap_logs >/dev/null 2>&1 && qsc_xp_bootstrap_logs
 QSC_SERVICE_HEARTBEAT_LAST=0
 QSC_SERVICE_LOOP_COUNT=0
 QSC_SERVICE_FULL_ROUNDS=0

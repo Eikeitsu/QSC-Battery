@@ -63,10 +63,10 @@ fun ChargeTopBar(
      * 顶栏节奏：状态栏 → 标题区 → 与正文的明确空隙。
      * 空隙与页面同色，不是分割线；用来建立层级，避免标题贴内容。
      */
+    // 透明顶栏：让 ChargeScaffold 左上角氛围渐变连贯穿过标题区，避免白条切断
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(ChargeTheme.colors.background)
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
         Row(
