@@ -10,11 +10,11 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.qsc.battery.MainActivity
 import com.qsc.battery.ui.theme.ColorMode
 import com.qsc.battery.ui.theme.PaletteStyleName
 import com.qsc.battery.ui.theme.ThemeSettings
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.settingsStore: DataStore<Preferences> by preferencesDataStore("qsc_settings")
@@ -29,6 +29,10 @@ class SettingsRepository(private val context: Context) {
         val onboardingDone = booleanPreferencesKey("onboarding_done")
         val xpPowerEvents = booleanPreferencesKey("xp_power_events")
     }
+
+    // 使用 namespace，避免 debug 的 applicationIdSuffix 拼错 alias
+    private val defaultLauncher = ComponentName(context, "com.qsc.battery.MainActivityDefault")
+    private val altLauncher = ComponentName(context, "com.qsc.battery.MainActivityAlt")
 
     val settings: Flow<ThemeSettings> = context.settingsStore.data.map { prefs ->
         ThemeSettings(
@@ -77,24 +81,36 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setAlternativeIcon(enabled: Boolean) {
         context.settingsStore.edit { it[Keys.alternativeIcon] = enabled }
-        toggleLauncherIcon(enabled)
+        applyLauncherIcon(enabled)
     }
 
-    private fun toggleLauncherIcon(alternative: Boolean) {
+    /** 启动时按偏好同步 alias，避免升级后图标状态丢失。 */
+    suspend fun syncLauncherIcon() {
+        val enabled = context.settingsStore.data.first()[Keys.alternativeIcon] ?: false
+        applyLauncherIcon(enabled)
+    }
+
+    private fun applyLauncherIcon(alternative: Boolean) {
         val pm = context.packageManager
-        val main = ComponentName(context, MainActivity::class.java)
-        val alt = ComponentName(context, "${context.packageName}.MainActivityAlt")
-        pm.setComponentEnabledSetting(
-            main,
-            if (alternative) PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-            else PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-            PackageManager.DONT_KILL_APP,
-        )
-        pm.setComponentEnabledSetting(
-            alt,
-            if (alternative) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-            else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-            PackageManager.DONT_KILL_APP,
-        )
+        runCatching {
+            pm.setComponentEnabledSetting(
+                defaultLauncher,
+                if (alternative) {
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                } else {
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                },
+                PackageManager.DONT_KILL_APP,
+            )
+            pm.setComponentEnabledSetting(
+                altLauncher,
+                if (alternative) {
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                } else {
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                },
+                PackageManager.DONT_KILL_APP,
+            )
+        }
     }
 }

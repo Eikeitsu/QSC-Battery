@@ -18,6 +18,8 @@ Kotlin + Jetpack Compose（**Charge** 设计系统 · 沉浸式状态产品）�
 
 推送 `app/` 或手动触发 **App** 工作流产出 APK。模块 zip **内嵌** `apk/QSC-Battery.apk`（约 3MB）；刷模块时可选安装。打包前需先有 `release/QSC-Battery.apk` 或本地 `assembleRelease`。
 
+Release 使用仓库内固定密钥 `app/keystore/qsc-release.jks`（见 `keystore.properties`），保证每次 CI 签名一致、可覆盖安装。从旧的 debug 签名包升级时需**先卸载一次**。
+
 ```bash
 npm run package:app -- --skip-build   # 只刷新 app-update.json
 ```

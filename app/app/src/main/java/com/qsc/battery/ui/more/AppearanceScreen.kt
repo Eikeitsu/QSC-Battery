@@ -54,7 +54,10 @@ fun AppearanceScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                .padding(bottom = ChargeTheme.dimens.sectionGap),
+                .padding(
+                    top = ChargeTheme.dimens.topBarContentGap,
+                    bottom = ChargeTheme.dimens.sectionGap,
+                ),
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
         ) {
             Text(
@@ -128,7 +131,7 @@ fun AppearanceScreen(
                 ChargeToggleRow(
                     title = "备用桌面图标",
                     checked = settings.alternativeIcon,
-                    summary = "切换启动器图标",
+                    summary = "切换为环形充电风格图标（部分桌面需稍等刷新）",
                     onCheckedChange = { scope.launch { container.settingsRepository.setAlternativeIcon(it) } },
                 )
             }

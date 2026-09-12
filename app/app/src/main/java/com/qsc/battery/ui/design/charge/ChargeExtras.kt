@@ -39,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -58,16 +59,18 @@ fun ChargeTopBar(
     subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
+    val bg = ChargeTheme.colors.background
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(ChargeTheme.colors.background.copy(alpha = 0.96f))
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-            .padding(top = 8.dp, bottom = 12.dp),
+            .background(bg.copy(alpha = 0.98f))
+            .windowInsetsPadding(WindowInsets.statusBars),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
+                .padding(top = 10.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) {
@@ -102,6 +105,26 @@ fun ChargeTopBar(
                 content = actions,
             )
         }
+        // Hairline + soft fade so sticky bar doesn't collide with content
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(ChargeTheme.colors.stroke),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(ChargeTheme.dimens.topBarContentGap)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            bg.copy(alpha = 0.55f),
+                            bg.copy(alpha = 0f),
+                        ),
+                    ),
+                ),
+        )
     }
 }
 
@@ -278,7 +301,10 @@ fun ChargeScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                .padding(bottom = ChargeTheme.dimens.sectionGap),
+                .padding(
+                    top = ChargeTheme.dimens.topBarContentGap,
+                    bottom = ChargeTheme.dimens.sectionGap,
+                ),
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
             content = content,
         )

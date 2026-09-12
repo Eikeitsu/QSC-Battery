@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -23,12 +25,47 @@ android {
         buildConfigField("String", "MODULE_ID", "\"QSC_Battery\"")
     }
 
+    val keystorePropsFile = rootProject.file("keystore.properties")
+    val keystoreProps = Properties().apply {
+        if (keystorePropsFile.exists()) {
+            keystorePropsFile.inputStream().use { load(it) }
+        }
+    }
+    val releaseStoreFile = (System.getenv("QSC_STORE_FILE") ?: keystoreProps.getProperty("storeFile"))
+        ?.let { rootProject.file(it) }
+        ?.takeIf { it.isFile }
+    val releaseStorePassword = System.getenv("QSC_STORE_PASSWORD")
+        ?: keystoreProps.getProperty("storePassword")
+    val releaseKeyAlias = System.getenv("QSC_KEY_ALIAS")
+        ?: keystoreProps.getProperty("keyAlias")
+    val releaseKeyPassword = System.getenv("QSC_KEY_PASSWORD")
+        ?: keystoreProps.getProperty("keyPassword")
+    val hasReleaseSigning = releaseStoreFile != null &&
+        !releaseStorePassword.isNullOrBlank() &&
+        !releaseKeyAlias.isNullOrBlank() &&
+        !releaseKeyPassword.isNullOrBlank()
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            // CI 暂用 debug 签名产出可安装 APK；正式发布可换成 secrets 密钥
-            signingConfig = signingConfigs.getByName("debug")
+            // 稳定签名：keystore.properties / 环境变量；缺省回退 debug（仅本地临时）
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

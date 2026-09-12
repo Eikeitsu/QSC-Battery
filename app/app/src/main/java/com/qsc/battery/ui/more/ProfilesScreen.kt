@@ -55,7 +55,10 @@ fun ProfilesScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                .padding(bottom = ChargeTheme.dimens.sectionGap),
+                .padding(
+                    top = ChargeTheme.dimens.topBarContentGap,
+                    bottom = ChargeTheme.dimens.sectionGap,
+                ),
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
         ) {
             ChargeSection(title = "档位") {

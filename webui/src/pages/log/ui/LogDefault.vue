@@ -218,7 +218,6 @@ const store = useAppStore();
   background: transparent;
   border: none;
   box-shadow: none;
-  /* 与上方 meta 卡左右对齐：去掉会话容器额外水平内边距 */
   padding-left: 0;
   padding-right: 0;
 }

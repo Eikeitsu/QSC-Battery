@@ -4,16 +4,32 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Outer ring (donut) — alt identity from original circle motif -->
+    <path
+        android:fillColor="#2AD4A0"
+        android:fillType="evenOdd"
+        android:pathData="M54,54m-31,0a31,31 0 1,1 62,0a31,31 0 1,1 -62,0 M54,54m-26.5,0a26.5,26.5 0 1,1 53,0a26.5,26.5 0 1,1 -53,0" />
+    <!-- Progress accent wedge hint -->
+    <path
+        android:fillColor="#9AF5D0"
+        android:pathData="M54,23 A31,31 0 0,1 82.5,40 L76.8,43.8 A26.5,26.5 0 0,0 54,27.5z" />
+    <!-- Inner disc -->
+    <path
+        android:fillColor="#145C45"
+        android:pathData="M54,54 m-22,0 a22,22 0 1,1 44,0 a22,22 0 1,1 -44,0" />
+    <!-- Battery body -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M42,38h24c2,0 3.5,1.5 3.5,3.5v30c0,2 -1.5,3.5 -3.5,3.5H42c-2,0 -3.5,-1.5 -3.5,-3.5v-30c0,-2 1.5,-3.5 3.5,-3.5z" />
+        android:pathData="M44,41h20c1.8,0 3,1.2 3,3v22c0,1.8 -1.2,3 -3,3H44c-1.8,0 -3,-1.2 -3,-3V44c0,-1.8 1.2,-3 3,-3z" />
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M50,32h8c1,0 1.8,0.8 1.8,1.8V36H48.2v-2.2c0,-1 0.8,-1.8 1.8,-1.8z" />
+        android:pathData="M50.5,35.5h7c0.9,0 1.5,0.6 1.5,1.5V39H49v-2c0,-0.9 0.6,-1.5 1.5,-1.5z" />
+    <!-- Nucleus circle (original alt) -->
     <path
         android:fillColor="#12B886"
-        android:pathData="M54,46 m-8,0 a8,8 0 1,1 16,0 a8,8 0 1,1 -16,0" />
+        android:pathData="M54,53 m-7.2,0 a7.2,7.2 0 1,1 14.4,0 a7.2,7.2 0 1,1 -14.4,0" />
+    <!-- Bolt -->
     <path
-        android:fillColor="#0B6E4F"
-        android:pathData="M57,44 L50,58h5l-1.5,12 10,-15h-5z" />
+        android:fillColor="#063D2C"
+        android:pathData="M56.6,47.2 L51.4,56.8h3.6l-1,8.6 7.8,-10.6h-3.6z" />
 </vector>

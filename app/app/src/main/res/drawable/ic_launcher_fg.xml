@@ -4,14 +4,31 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Safe zone ~66%: battery inset toward center -->
+    <!-- Soft side glow discs -->
+    <path
+        android:fillColor="#28FFFFFF"
+        android:pathData="M22,54 m-7,0 a7,7 0 1,1 14,0 a7,7 0 1,1 -14,0" />
+    <path
+        android:fillColor="#28FFFFFF"
+        android:pathData="M86,54 m-7,0 a7,7 0 1,1 14,0 a7,7 0 1,1 -14,0" />
+    <!-- Battery body -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M42,38h24c2,0 3.5,1.5 3.5,3.5v30c0,2 -1.5,3.5 -3.5,3.5H42c-2,0 -3.5,-1.5 -3.5,-3.5v-30c0,-2 1.5,-3.5 3.5,-3.5z" />
+        android:pathData="M41,37h26c2.6,0 4.5,1.9 4.5,4.5v29c0,2.6 -1.9,4.5 -4.5,4.5H41c-2.6,0 -4.5,-1.9 -4.5,-4.5v-29c0,-2.6 1.9,-4.5 4.5,-4.5z" />
+    <!-- Battery tip -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M50,32h8c1,0 1.8,0.8 1.8,1.8V36H48.2v-2.2c0,-1 0.8,-1.8 1.8,-1.8z" />
+        android:pathData="M49.5,31.2h9c1.2,0 2.1,0.9 2.1,2.1V36H47.4v-2.7c0,-1.2 0.9,-2.1 2.1,-2.1z" />
+    <!-- Charge level -->
+    <path
+        android:fillColor="#7FE3B5"
+        android:pathData="M40,55.5h28v15c0,2.1 -1.5,3.5 -3.5,3.5H43.5c-2,0 -3.5,-1.4 -3.5,-3.5v-15z" />
+    <!-- Left sheen -->
+    <path
+        android:fillColor="#40FFFFFF"
+        android:pathData="M43,40.5h4.5c0.7,0 1.2,0.5 1.2,1.2v16c0,0.7 -0.5,1.2 -1.2,1.2H43c-0.7,0 -1.2,-0.5 -1.2,-1.2v-16c0,-0.7 0.5,-1.2 1.2,-1.2z" />
+    <!-- Lightning -->
     <path
         android:fillColor="#0B6E4F"
-        android:pathData="M57,44 L50,58h5l-1.5,12 10,-15h-5z" />
+        android:pathData="M58.8,43.2 L49,58.5h5.6l-1.8,14.2 13.6,-18h-6z" />
 </vector>
