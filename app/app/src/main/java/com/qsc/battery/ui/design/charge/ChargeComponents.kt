@@ -125,7 +125,7 @@ fun ImmersiveBottomBar(
 }
 
 /**
- * 策略/进阶页底部固定操作条：上方短渐变 + 不透明底，避免按钮「浮」在选项上透出内容。
+ * 策略/进阶页底部操作条：参与布局占位（勿叠在列表上）。
  * @param clearSystemNav 无底部 Tab 时（进阶页）需避开系统手势条
  */
 @Composable
@@ -134,33 +134,18 @@ fun ChargeStickyActionBar(
     clearSystemNav: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val bg = ChargeTheme.colors.background
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .background(ChargeTheme.colors.background)
+            .then(
+                if (clearSystemNav) Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+                else Modifier,
+            )
+            .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
+            .padding(top = 10.dp, bottom = 12.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(28.dp)
-                .background(
-                    Brush.verticalGradient(
-                        listOf(bg.copy(alpha = 0f), bg.copy(alpha = 0.88f), bg),
-                    ),
-                ),
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(bg)
-                .then(
-                    if (clearSystemNav) Modifier.windowInsetsPadding(WindowInsets.navigationBars)
-                    else Modifier,
-                )
-                .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                .padding(bottom = 12.dp),
-        ) {
-            content()
-        }
+        content()
     }
 }
 
@@ -506,7 +491,7 @@ fun ChargeSection(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (!title.isNullOrBlank()) {
             Text(
                 text = title,
@@ -522,7 +507,7 @@ fun ChargeSection(
                 .clip(RoundedCornerShape(ChargeTheme.dimens.radiusLg))
                 .background(ChargeTheme.colors.surface)
                 .border(1.dp, ChargeTheme.colors.stroke, RoundedCornerShape(ChargeTheme.dimens.radiusLg))
-                .padding(vertical = 4.dp),
+                .padding(vertical = 6.dp),
             content = content,
         )
     }

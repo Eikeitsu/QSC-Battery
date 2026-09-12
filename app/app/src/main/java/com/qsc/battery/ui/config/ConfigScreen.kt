@@ -1,7 +1,6 @@
 package com.qsc.battery.ui.config
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,7 +16,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.qsc.battery.data.AppContainer
@@ -97,43 +95,32 @@ fun ConfigScreen(
         .toSet()
         .ifEmpty { setOf("stop", "resume", "fail") }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            ChargeTopBar(
-                title = if (advancedOnly) "进阶策略" else "策略",
-                subtitle = if (advancedOnly) null else "常用项一屏搞定，细节放进阶",
-                onBack = onBack,
-            )
-            val showSave = ready && rootOk && moduleOk
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                    .padding(
-                        bottom = if (showSave) {
-                            ChargeTheme.dimens.stickyActionReserve
-                        } else {
-                            ChargeTheme.dimens.bottomBarContentGap
-                        },
-                    ),
-                verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
-            ) {
-                if (!ready) {
+    val showSave = ready && rootOk && moduleOk
+
+    // 顶栏 + 可滚动正文 + 底部保存条占位（不叠在列表上）
+    Column(modifier = Modifier.fillMaxSize()) {
+        ChargeTopBar(
+            title = if (advancedOnly) "进阶策略" else "策略",
+            subtitle = if (advancedOnly) null else "常用项一屏搞定，细节放进阶",
+            onBack = onBack,
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
+                .padding(bottom = ChargeTheme.dimens.bottomBarContentGap),
+            verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
+        ) {
+            when {
+                !ready -> {
                     ChargeSkeletonBox(height = 120.dp)
                     ChargeSkeletonBox(height = 80.dp)
-                    return@Column
                 }
-                if (!rootOk) {
-                    ChargeBanner("需要 Root 才能修改配置", BannerTone.Warn)
-                    return@Column
-                }
-                if (!moduleOk) {
-                    ChargeBanner("模块未安装", BannerTone.Warn)
-                    return@Column
-                }
-
-                if (!advancedOnly) {
+                !rootOk -> ChargeBanner("需要 Root 才能修改配置", BannerTone.Warn)
+                !moduleOk -> ChargeBanner("模块未安装", BannerTone.Warn)
+                !advancedOnly -> {
                     ChargeSection(title = "电量停充") {
                         ChargeChoiceRow(
                             title = "停止充电",
@@ -215,7 +202,8 @@ fun ConfigScreen(
                             onClick = { onOpenAdvanced?.invoke() },
                         )
                     }
-                } else {
+                }
+                else -> {
                     ChargeSection(title = "停充行为") {
                         ChargeChoiceRow(
                             title = "停充后保持唤醒锁",
@@ -405,7 +393,9 @@ fun ConfigScreen(
                                 equalHeight = true,
                                 onClick = {
                                     scope.launch {
-                                        val msg = container.daemonRepository.install(v("native_impl").ifBlank { "rust" })
+                                        val msg = container.daemonRepository.install(
+                                            v("native_impl").ifBlank { "rust" },
+                                        )
                                         daemonStatus = container.daemonRepository.status()
                                         snackbar.showSnackbar(msg)
                                     }
@@ -417,11 +407,8 @@ fun ConfigScreen(
             }
         }
 
-        if (ready && rootOk && moduleOk) {
-            ChargeStickyActionBar(
-                modifier = Modifier.align(Alignment.BottomCenter),
-                clearSystemNav = advancedOnly,
-            ) {
+        if (showSave) {
+            ChargeStickyActionBar(clearSystemNav = advancedOnly) {
                 ChargePrimaryButton(
                     text = if (advancedOnly) "保存进阶项" else "保存",
                     onClick = {
