@@ -3,6 +3,7 @@
 ## Unreleased
 
 - 新增模块命令行 `bin/qsc.sh`：status / on|off / config / log|events / diagnose 等
+- APP 桌面图标支持按电量约 10% 分档动态切换（电池/环形均为矢量资源；仅打开应用或插拔电时刷新）；顶栏与底栏留白统一
 
 ## 2026.09.01
 

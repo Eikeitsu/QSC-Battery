@@ -42,9 +42,9 @@ data class ChargeDimens(
     val pageHorizontal: Dp = 20.dp,
     val sectionGap: Dp = 18.dp,
     /** 顶栏标题区到底部内容的额外呼吸（顶栏自身也有底距） */
-    val topBarContentGap: Dp = 16.dp,
-    /** 内容区相对底栏的留白 */
-    val bottomBarContentGap: Dp = 10.dp,
+    val topBarContentGap: Dp = 22.dp,
+    /** 主 Tab 内容相对底栏的留白（避开圆角底栏，各页统一） */
+    val bottomBarContentGap: Dp = 88.dp,
     val radiusLg: Dp = 22.dp,
     val radiusMd: Dp = 16.dp,
     val primaryButton: Dp = 52.dp,

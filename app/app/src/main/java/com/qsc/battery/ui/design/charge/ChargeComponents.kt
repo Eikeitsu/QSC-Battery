@@ -98,10 +98,21 @@ fun ImmersiveBottomBar(
     content: @Composable RowScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
+    val bg = ChargeTheme.colors.background
     Column(
         modifier = modifier.fillMaxWidth(),
     ) {
-        // 与内容区分：圆角表面托住导航，不用硬分割线
+        // 各主 Tab 统一：底栏上方淡入，避免有的页有「蒙层」有的没有
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(36.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(bg.copy(alpha = 0f), bg.copy(alpha = 0.72f), bg.copy(alpha = 0.96f)),
+                    ),
+                ),
+        )
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -527,16 +538,18 @@ fun ChargeToggleRow(
     title: String,
     checked: Boolean,
     summary: String? = null,
+    enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     ChargeListRow(
         title = title,
         summary = summary,
-        onClick = { onCheckedChange(!checked) },
+        onClick = if (enabled) ({ onCheckedChange(!checked) }) else null,
         trailing = {
             Switch(
                 checked = checked,
-                onCheckedChange = onCheckedChange,
+                onCheckedChange = if (enabled) onCheckedChange else null,
+                enabled = enabled,
                 colors = SwitchDefaults.colors(
                     checkedTrackColor = ChargeTheme.colors.accent,
                     checkedThumbColor = ChargeTheme.colors.onAccent,

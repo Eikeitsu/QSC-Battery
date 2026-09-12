@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -109,7 +108,7 @@ fun ConfigScreen(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                    .padding(top = 4.dp, bottom = 96.dp),
+                    .padding(top = 0.dp, bottom = ChargeTheme.dimens.bottomBarContentGap),
                 verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
             ) {
                 if (!ready) {
@@ -416,7 +415,7 @@ fun ConfigScreen(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
-                    .navigationBarsPadding()
+                    // 内容区已在底栏之上，勿再 navigationBarsPadding，否则会像多出一层蒙层
                     .padding(bottom = 12.dp),
             ) {
                 ChargePrimaryButton(

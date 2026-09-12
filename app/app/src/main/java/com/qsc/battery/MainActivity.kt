@@ -19,8 +19,23 @@ import com.qsc.battery.ui.theme.ColorMode
 import com.qsc.battery.ui.theme.QscTheme
 import com.qsc.battery.ui.theme.ThemeBootGuard
 import com.qsc.battery.ui.theme.ThemeSettings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private val iconScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    override fun onStart() {
+        super.onStart()
+        val app = application as? QscApp ?: return
+        // 打开应用时低频刷新电量档位（档未变则 no-op）
+        iconScope.launch {
+            app.container.settingsRepository.syncLauncherIcon(force = false)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ThemeBootGuard.onProcessStart(this)

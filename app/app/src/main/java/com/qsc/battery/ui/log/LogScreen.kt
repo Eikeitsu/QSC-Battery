@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -70,7 +69,7 @@ fun LogScreen(container: AppContainer) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .navigationBarsPadding(),
+                .padding(bottom = ChargeTheme.dimens.bottomBarContentGap),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             stickyHeader {
@@ -80,7 +79,7 @@ fun LogScreen(container: AppContainer) {
                         .background(ChargeTheme.colors.background)
                         .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
                         .padding(
-                            top = 4.dp,
+                            top = 0.dp,
                             bottom = 14.dp,
                         ),
                     verticalArrangement = Arrangement.spacedBy(12.dp),

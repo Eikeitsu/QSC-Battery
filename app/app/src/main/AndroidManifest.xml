@@ -16,13 +16,14 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.QscBattery">
 
-        <!-- 本体始终启用；桌面图标只在两个 alias 间切换，避免禁用 target 导致切换失效 -->
+        <!-- 本体始终启用；桌面图标只在 alias 间切换，避免禁用 target 导致切换失效 -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.QscBattery"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- 静态默认（动态电量关闭时） -->
         <activity-alias
             android:name=".MainActivityDefault"
             android:enabled="true"
@@ -37,6 +38,7 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- 备用环形静态图标 -->
         <activity-alias
             android:name=".MainActivityAlt"
             android:enabled="false"
@@ -50,6 +52,307 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
+
+        <!-- 动态电量：每 10% 一档 -->
+        <activity-alias
+            android:name=".MainActivityBat00"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_bat_00"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_bat_00"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityBat10"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_bat_10"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_bat_10"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityBat20"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_bat_20"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_bat_20"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityBat30"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_bat_30"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_bat_30"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityBat40"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_bat_40"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_bat_40"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityBat50"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_bat_50"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_bat_50"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityBat60"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_bat_60"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_bat_60"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityBat70"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_bat_70"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_bat_70"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityBat80"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_bat_80"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_bat_80"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityBat90"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_bat_90"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_bat_90"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityBat100"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_bat_100"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_bat_100"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- 环形风格动态电量：每 10% 一档 -->
+        <activity-alias
+            android:name=".MainActivityAlt00"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_alt_00"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_alt_00"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityAlt10"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_alt_10"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_alt_10"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityAlt20"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_alt_20"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_alt_20"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityAlt30"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_alt_30"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_alt_30"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityAlt40"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_alt_40"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_alt_40"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityAlt50"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_alt_50"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_alt_50"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityAlt60"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_alt_60"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_alt_60"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityAlt70"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_alt_70"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_alt_70"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityAlt80"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_alt_80"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_alt_80"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityAlt90"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_alt_90"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_alt_90"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityAlt100"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_alt_100"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_alt_100"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <receiver
+            android:name=".icon.LauncherIconRefreshReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.ACTION_POWER_CONNECTED" />
+                <action android:name="android.intent.action.ACTION_POWER_DISCONNECTED" />
+                <action android:name="android.intent.action.BATTERY_LOW" />
+                <action android:name="android.intent.action.BATTERY_OKAY" />
+            </intent-filter>
+        </receiver>
 
         <service
             android:name=".tile.ChargeControlTileService"

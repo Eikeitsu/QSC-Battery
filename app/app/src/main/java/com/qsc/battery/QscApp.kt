@@ -24,7 +24,7 @@ class QscApp : Application() {
         )
         container = AppContainer(this)
         appScope.launch {
-            container.settingsRepository.syncLauncherIcon()
+            container.settingsRepository.syncLauncherIcon(force = true)
         }
     }
 }

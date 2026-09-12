@@ -4,15 +4,15 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Themed icon silhouette: vertical battery + bolt -->
+    <!-- Shorter battery silhouette for themed icons -->
     <path
         android:fillColor="#000000"
-        android:pathData="M47,19h14c2.8,0 4.5,1.7 4.5,4.5V28H42.5v-4.5C42.5,20.7 44.2,19 47,19z" />
+        android:pathData="M47,26h14c2.5,0 4,1.5 4,4V33H43v-3c0,-2.5 1.5,-4 4,-4z" />
     <path
         android:fillColor="#000000"
-        android:pathData="M39,25h30c7,0 11,4 11,11v46c0,7 -4,11 -11,11H39c-7,0 -11,-4 -11,-11V36c0,-7 4,-11 11,-11z" />
+        android:pathData="M40,31h28c6,0 10,4 10,10v32c0,6 -4,10 -10,10H40c-6,0 -10,-4 -10,-10V41c0,-6 4,-10 10,-10z" />
     <path
         android:fillAlpha="0.55"
         android:fillColor="#000000"
-        android:pathData="M58,52 L48,64h6l-2,14 14,-16h-6z" />
+        android:pathData="M58,48 L49,58h5l-1.5,12 12,-14h-5z" />
 </vector>

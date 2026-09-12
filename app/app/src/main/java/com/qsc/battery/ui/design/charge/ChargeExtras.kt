@@ -73,7 +73,7 @@ fun ChargeTopBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                .padding(top = 10.dp, bottom = 6.dp),
+                .padding(top = 10.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) {

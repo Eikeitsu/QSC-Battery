@@ -55,7 +55,7 @@ fun AppearanceScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
                 .padding(
-                    top = 4.dp,
+                    top = 0.dp,
                     bottom = ChargeTheme.dimens.sectionGap,
                 ),
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
@@ -131,8 +131,15 @@ fun AppearanceScreen(
                 ChargeToggleRow(
                     title = "备用桌面图标",
                     checked = settings.alternativeIcon,
-                    summary = "切换为环形充电风格图标（部分桌面需稍等刷新）",
+                    summary = "环形充电风格（可与动态电量同时使用）",
                     onCheckedChange = { scope.launch { container.settingsRepository.setAlternativeIcon(it) } },
+                )
+                ChargeDivider()
+                ChargeToggleRow(
+                    title = "动态电量图标",
+                    checked = settings.dynamicBatteryIcon,
+                    summary = "电池与环形均按约 10% 分档；打开应用或插拔电时刷新，矢量资源不占体积",
+                    onCheckedChange = { scope.launch { container.settingsRepository.setDynamicBatteryIcon(it) } },
                 )
             }
         }
