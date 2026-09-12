@@ -26,16 +26,16 @@ object XpPrefs {
     )
 
     /**
-     * LSPosed 推荐勾选 **Android系统**，包名为 `android`（注入 system_server）。
-     * 部分机型另有「系统框架」包名 `system`，一般不是 BatteryService 所在进程；
-     * 检测时仍兼容，但一键请求与文案以 `android` 为准。
+     * 现代 libxposed：system_server 用虚拟包名 **`system`**（官方 API 文档）。
+     * `android` 仍可勾，但其组件多跑在 `:ui` 等进程，**不能单独代替** system_server。
+     * 参考同为 API 102 的模块 scope.list：先写 system，再写 android。
      */
-    const val PRIMARY_SCOPE = "android"
-    val SYSTEM_SCOPE_PKGS = setOf(PRIMARY_SCOPE, "system")
+    const val PRIMARY_SCOPE = "system"
+    val SYSTEM_SCOPE_PKGS = setOf(PRIMARY_SCOPE, "android")
 
     fun scopeLabel(pkg: String): String = when (pkg.trim().lowercase()) {
-        "android" -> "Android系统 (android)"
-        "system" -> "系统框架 (system)"
+        "system" -> "系统框架 (system) · system_server"
+        "android" -> "Android系统 (android) · 非 system_server"
         else -> pkg
     }
 

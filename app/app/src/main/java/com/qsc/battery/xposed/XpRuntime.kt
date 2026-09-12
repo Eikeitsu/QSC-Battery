@@ -11,7 +11,7 @@ import java.io.File
 /**
  * XP / LSPosed 三层状态：
  * 1. 服务已连接（XposedService binder）— 打开 APP 即可，不必重启
- * 2. 作用域已含 android（Android系统）— getScope / 一键 requestScope
+ * 2. 作用域已含 system（虚拟包 · system_server）— getScope / 一键 requestScope
  * 3. 框架已注入 — qsc_xp_alive 或 runningTargets 含 system_server
  */
 object XpRuntime {
@@ -52,9 +52,9 @@ object XpRuntime {
         val frameworkAlive: Boolean,
         val serviceBound: Boolean,
         val scopeList: List<String>,
-        /** 已勾选推荐的 android（Android系统） */
+        /** 已勾选推荐的 system（system_server） */
         val hasPrimaryScope: Boolean,
-        /** 仅有 system、没有 android 时的误勾提示 */
+        /** 仅有 android、没有 system 时的误勾提示 */
         val scopeHintWrong: Boolean,
         val runningTargets: List<String>,
         val frameworkName: String?,
@@ -152,7 +152,7 @@ object XpRuntime {
         val xpOff = hasRoot && root.exists(XpPrefs.OFF_PATH)
         val hasPrimary = XpPrefs.hasPrimaryScope(scopeList) || alive || targetInjected
         val wrongScope = scopeKnown &&
-            XpPrefs.hasAnyFrameworkScope(scopeList) &&
+            scopeList.any { it.trim().equals("android", ignoreCase = true) } &&
             !XpPrefs.hasPrimaryScope(scopeList) &&
             !alive &&
             !targetInjected
@@ -171,22 +171,22 @@ object XpRuntime {
             Level.Active -> "③ 框架已注入$fwHint"
             Level.Enabled -> when {
                 wrongScope ->
-                    "② 当前勾了 system（系统框架），请改勾 Android系统 (android) 后重启"
+                    "② 仅勾了 android；注入 system_server 需勾「系统框架」包名 system 后重启"
                 hasPrimary && viaService ->
-                    "② 服务已连接且作用域含 android$fwHint；重启后出现存活标记即③完成"
+                    "② 服务已连接且作用域含 system$fwHint；重启后出现存活标记即③完成"
                 hasPrimary ->
-                    "作用域已含 android；打开 APP 建立服务连接，重启后完成注入"
+                    "作用域已含 system；打开 APP 建立服务连接，重启后完成注入"
                 scopedAndroid && viaService ->
-                    "① 服务已连接$fwHint；作用域需含 Android系统 (android)"
+                    "① 服务已连接$fwHint；作用域需含系统框架 (system)"
                 scopeKnown && viaService ->
-                    "① 服务已连接$fwHint，请勾选/请求 Android系统 (android)"
+                    "① 服务已连接$fwHint，请勾选/请求系统框架 (system)"
                 viaService ->
                     "① 服务已连接$fwHint"
                 else ->
                     "模块已启用；打开本 APP 以连接 LSPosed 服务"
             }
             Level.Framework ->
-                "已检测到 LSPosed，请启用本模块并勾选 Android系统 (android)；读作用域不必重启，注入需重启"
+                "已检测到 LSPosed，请启用本模块并勾选系统框架 (system)；读作用域不必重启，注入需重启"
             Level.ManagerOnly -> "已安装 LSPosed 管理器"
             Level.None -> if (hasRoot) "未检测到 LSPosed" else "检测 XP 需 Root；或先安装 LSPosed"
         }

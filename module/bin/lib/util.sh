@@ -276,7 +276,7 @@ qsc_xp_bootstrap_logs() {
 		qsc_xp_file_log INFO "ok magisk: xp log shows injection (alive file may be blocked)"
 	else
 		# 与「作用域检测」无关：仅表示 system_server 未写出存活证据
-		qsc_xp_file_log WARN "magisk: xp alive missing (③ not injected — enable module, scope=android, reboot)"
+		qsc_xp_file_log WARN "magisk: xp alive missing (③ not injected — enable module, scope=system, reboot)"
 	fi
 }
 

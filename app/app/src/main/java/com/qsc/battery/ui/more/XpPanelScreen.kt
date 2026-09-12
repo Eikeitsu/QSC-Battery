@@ -58,11 +58,11 @@ fun XpPanelScreen(
         status.frameworkAlive ->
             "③ 已注入 system_server。qscd 正常时「未武装」是预期；守护不可用时才会武装边沿唤醒。" to BannerTone.Ok
         status.scopeHintWrong ->
-            "作用域请勾选 Android系统 (android)，不要勾「系统框架」(system)。改完后重启。" to BannerTone.Warn
+            "仅勾了 android 不够。请勾选「系统框架」包名 system（注入 system_server），再重启。" to BannerTone.Warn
         status.hasPrimaryScope && status.serviceBound ->
-            "② 已含 android。请重启一次以完成③注入（出现存活标记）。" to BannerTone.Info
+            "② 已含 system。请重启一次以完成③注入（出现存活标记）。" to BannerTone.Info
         status.serviceBound ->
-            "① 服务已连接。请请求或勾选 Android系统 (android)，再重启。" to BannerTone.Warn
+            "① 服务已连接。请请求或勾选系统框架 (system)，再重启。" to BannerTone.Warn
         else ->
             "请先在 LSPosed 启用本模块，再打开本页连接服务。" to BannerTone.Warn
     }
@@ -107,9 +107,9 @@ fun XpPanelScreen(
                         status?.hasPrimaryScope == true ->
                             "已含 ${XpPrefs.scopeLabel(XpPrefs.PRIMARY_SCOPE)}"
                         status?.scopeHintWrong == true ->
-                            "仅有 system；应改为 android"
+                            "仅有 android；应改为 system"
                         status?.scopeKnown == true ->
-                            "未含 android"
+                            "未含 system"
                         else -> "未知"
                     },
                     value = when {
@@ -124,7 +124,7 @@ fun XpPanelScreen(
                     summary = if (status?.frameworkAlive == true) {
                         "存活标记或运行目标已确认"
                     } else {
-                        "勾选 android 后重启；看动态页 LSP 日志"
+                        "勾选 system 后重启；看动态页 LSP 日志"
                     },
                     value = if (status?.frameworkAlive == true) "OK" else "待重启",
                 )
@@ -133,8 +133,8 @@ fun XpPanelScreen(
             ChargeSection(title = "作用域") {
                 ChargeListRow(
                     title = "推荐",
-                    summary = "LSPosed 里勾选「Android系统」，包名 android（注入 system_server）。" +
-                        "「系统框架」包名 system 通常不是同一进程。",
+                    summary = "现代 libxposed：勾选「系统框架」包名 system 才能注入 system_server。" +
+                        "「Android系统」包名 android 是另一进程，不能单独代替。",
                 )
                 ChargeDivider()
                 val scopes = status?.scopeList.orEmpty()
@@ -146,14 +146,14 @@ fun XpPanelScreen(
                         val primary = pkg.trim().equals(XpPrefs.PRIMARY_SCOPE, ignoreCase = true)
                         ChargeListRow(
                             title = XpPrefs.scopeLabel(pkg),
-                            summary = if (primary) "推荐 · 对应 system_server" else "一般不必勾选",
+                            summary = if (primary) "推荐 · 对应 system_server" else "可选，不能代替 system",
                             value = if (primary) "推荐" else null,
                         )
                     }
                 }
                 ChargeDivider()
                 ChargeSecondaryButton(
-                    text = if (busy) "请求中…" else "一键请求 Android系统 (android)",
+                    text = if (busy) "请求中…" else "一键请求系统框架 (system)",
                     enabled = !busy && status?.serviceBound == true,
                     modifier = Modifier
                         .fillMaxWidth()

@@ -83,7 +83,7 @@ class LogRepository(private val root: RootBridge) {
             """.trimIndent(),
         ).out.trim()
         val tip = if (probe.isBlank()) {
-            "暂无 XP 写入。启用 LSPosed、勾选系统框架(android) 后重启；成功会出现 ok loaded / hooked / alive。"
+            "暂无 XP 写入。启用 LSPosed、勾选系统框架(system) 后重启；成功会出现 ok loaded / hooked / alive。"
         } else {
             "暂无 XP 文本行（$probe）。若 alive=1 仍无行，请再重启一次；武装边沿会写 ok wake。"
         }

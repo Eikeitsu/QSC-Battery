@@ -94,7 +94,7 @@ object XpServiceHolder : XposedServiceHelper.OnServiceListener {
         runCatching { svc?.getRemotePreferences(XpPrefs.REMOTE_GROUP) }.getOrNull()
 
     /**
-     * 请求 Android系统作用域（包名 `android` → system_server）。
+     * 请求系统框架作用域（虚拟包名 `system` → system_server）。
      * @return 结果说明；null 表示服务不可用
      */
     suspend fun requestSystemScope(): String? {
@@ -111,7 +111,7 @@ object XpServiceHolder : XposedServiceHelper.OnServiceListener {
                             "已批准 ${XpPrefs.scopeLabel(XpPrefs.PRIMARY_SCOPE)}；请重启完成注入"
                         } else {
                             "请求完成，返回：${approved.joinToString().ifBlank { "(空)" }}。" +
-                                "请确认勾选 Android系统 (android)"
+                                "请确认勾选系统框架 (system)"
                         },
                     )
                 }
