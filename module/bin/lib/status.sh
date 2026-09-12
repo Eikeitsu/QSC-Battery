@@ -252,12 +252,14 @@ qsc_refresh_module_description() {
 		inner="供电中"
 	fi
 
+	# tr 已去掉空白：用 Notcharging 等形式匹配，勿再写 "Not charging"（SC2221/2222）
 	_st="$(printf '%s' "${battery_status:-${QSC_BATTERY_STATUS:-}}" | tr -d ' \r\n')"
 	_major="⚡充电中"
 	case "$_st" in
-		4|"Not charging"|not_charging|Not\ charging) _major="🔌供电中" ;;
+		4|Notcharging|not_charging|NotCharging) _major="🔌供电中" ;;
 		5|Full|full) _major="🔋已充满" ;;
 		3|Discharging|discharging) _major="🔌已插电" ;;
+		2|Charging|charging) _major="⚡充电中" ;;
 	esac
 
 	case "$cur_mode" in
