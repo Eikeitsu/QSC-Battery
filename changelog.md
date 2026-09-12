@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2026.09.13
+
 ### 伴侣 APP
 
 - **新增** Compose 伴侣 APP（`com.qsc.battery`）：首页 / 策略 / 动态 / 我的；Root 读写模块配置与状态，不挂后台保活；`minSdk 26` / `targetSdk 35`

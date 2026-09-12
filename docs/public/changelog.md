@@ -1,5 +1,37 @@
 ﻿# 更新日志
 
+## 2026.09.13
+
+### 伴侣 APP
+
+- **新增** Compose 伴侣 APP（`com.qsc.battery`）：首页 / 策略 / 动态 / 我的；Root 读写模块配置与状态，不挂后台保活；`minSdk 26` / `targetSdk 35`
+- Charge 设计系统：浅/深/AMOLED/动态取色、调色板、首启引导、模块与 APP 分通道更新、配置档；快捷设置磁贴切换模块软开关
+- 模块 zip 可内嵌 APK，安装时可选写入；写入成功后删除模块目录内临时 APK
+- 桌面动态电量图标（约 10% 分档，充电闪电标黄）；默认关闭；切换 activity-alias 改为先启后禁，失败回退默认入口（避免「装完桌面无图标」）
+- 可选 **LSPosed**（libxposed API 102）：作用域勾选 **系统框架 (`system`)**；仅在 `qscd` 不可用时插拔边沿唤醒；`/data/system` 通道、存活探测与独立 XP 面板（服务连接 / 作用域 / 注入）
+- 「动态」增加 **LSP** 子页（合并多路径 XP 日志）；从 XP 详情进入时自动切到 LSP 并加载
+
+### 模块
+
+- **新增** `bin/qsc.sh` CLI（status / on|off|toggle / config / log / events / diagnose / test-switch / detect / daemon 等）；C 包装安装到 `/data/adb/qsc/bin/qsc`（不挂载 `system/bin`）
+- **新增** 充电事件日志 `data/charge_events.log` 与 `learn_stats.sh`；可选常显功耗通知 `notify_power_status`（默认关）
+- **新增** 设备档案库：`device.profile` 压缩归档 / 一键还原；WebUI 可复用；扩展旁路节点列表，并移除危险旁路自动探测
+- **插电判定**：简介与供电标记不再单信 `status=Charging` 或 dumpsys `powered`（一加等假充电）；也不再把无端口证据的孤立 `Not charging` 当成已插电（小米 17 / K90U 等未插电却显示充电中）；MCA 无 `online` 时仍认 `present` / VBUS，明显放电时忽略粘住的 `present`
+- **待机省电**：修复事件等待时父 shell 每秒轮询抵消 qscd；服务心跳写盘改为约 **180s**；未插电 idle / native 默认拉长；简介 worker 未就绪短重试、未插电拉长周期；同 tick 缓存插电判定；`qscd` 失败时可武装 XP，回退 sleep 可被 `qsc_xp_wake` 打断
+- **保留更新**：音量上只迁移停充阈值/温控/通知/开关/时段等核心项；`power_saver` 与 `loop_interval_*` 一律用新版默认，避免旧间隔盖掉省电优化
+- **热更新**：接管校验改为确认 service PID、主循环与心跳即可，不再强依赖简介 worker 的 `last_refresh` 窗口（修复近期「热更新未完成 / 接管检验失败」）
+- 原生守护补充：Rust `plugged` / `diagnose`、精简 wake；C 版 `cat` / `stat`
+
+### WebUI
+
+- 充放电曲线：等距降采样、单调 Hermite、范围切换、增量刷新与健康趋势；打开时刷新间隔改为 **60s**；修复强制刷新仍走旧缓存的问题
+- 日志页拆成运行日志 / 充电事件 Tab；常显功耗开关入口；我的页接入档案库与配置档增强，守护卡片与安装流程对齐
+
+### 构建与发版
+
+- APP 独立更新清单 `app-update.json`；发版工作流可分项勾选模块 zip / 守护 / APK
+- CI：停充用例适配 MCA「供电中」简介文案；统一 `checkout@v5` / `setup-node@v5`；抽取 `setup-android`；Vitest 迁至 `webui/test/unit`
+
 ## 2026.09.01
 
 - 修复因充放电曲线导致的webui卡顿，优化页面加载性能
