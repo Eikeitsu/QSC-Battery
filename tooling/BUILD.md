@@ -29,9 +29,9 @@ npm run build:web         # Vite 构建 → .build/webroot，并同步到 module
 npm run build:native      # 交叉编译 native/qscd → module/bin/qscd-arm64|arm（缺 cargo/NDK 则跳过）
 npm run build:native:c    # 交叉编译 native/qscd-c → module/bin/qscdc-arm64|arm（缺 NDK 则跳过）
 npm run package:module    # 打 Magisk zip（webroot 缺失或过期会先 build:web）
-npm run package:module:all # 打 4 个变体包：full / rust / c / sh
+npm run package:module:all # 打 5 个变体包：full / rust / c / sh / lite
 npm run build:module      # 强制 build:web + package:module
-npm run build:module:all  # 强制 build:web + 4 个变体包
+npm run build:module:all  # 强制 build:web + 5 个变体包
 npm run check             # typecheck + 全量 lint + prettier check
 npm run lint              # eslint + stylelint + markdownlint + shellcheck
 npm run format            # prettier 写回
@@ -100,16 +100,17 @@ sh 主包没有这个二进制也必须行为一致，阈值判定的唯一真�
 
 ### 发布变体
 
-`package-module.mjs --native=<full|rust|c|sh>` 决定包里带哪套二进制，脚本内容四者完全相同：
+`package-module.mjs --native=<full|rust|c|sh|lite>`；**均带后缀**，`update.json` 默认指向 `-full`：
 
-| 变体   | 带的二进制           | zip 名                 | 说明                                   |
-| ------ | -------------------- | ---------------------- | -------------------------------------- |
-| `sh`   | 无                   | `..._v<版本>.zip`      | 主包，不带后缀；`update.json` 指向此版 |
-| `full` | `qscd-*` + `qscdc-*` | `..._v<版本>-full.zip` | 安装时按 `native_impl` 逐个自检选用    |
-| `rust` | `qscd-*`             | `..._v<版本>-rust.zip` | 只带 Rust 版                           |
-| `c`    | `qscdc-*`            | `..._v<版本>-c.zip`    | 只带 C 版                              |
+| 变体   | 守护二进制           | WebUI | 内嵌 APK | zip 名                 | 说明                                         |
+| ------ | -------------------- | ----- | -------- | ---------------------- | -------------------------------------------- |
+| `full` | `qscd-*` + `qscdc-*` | 有    | 有       | `..._v<版本>-full.zip` | **在线更新默认**；按 `native_impl` 自检选用  |
+| `rust` | 仅 `qscd-*`          | 有    | 有       | `..._v<版本>-rust.zip` | 只带 Rust 守护                               |
+| `c`    | 仅 `qscdc-*`         | 有    | 有       | `..._v<版本>-c.zip`    | 只带 C 守护                                  |
+| `sh`   | 无                   | 有    | 有       | `..._v<版本>-sh.zip`   | 无守护，可在 WebUI 按需下载                  |
+| `lite` | 无                   | 无    | 无       | `..._v<版本>-lite.zip` | 体积最小；仅脚本，无界面与伴侣 APK           |
 
-`CI=true` 或 `REQUIRE_NATIVE=1` 时，变体要求的二进制缺失即打包失败；本地缺编译器则只告警。
+`CI=true` 或 `REQUIRE_NATIVE=1` 时，变体要求的二进制缺失即打包失败；本地缺编译器则只告警。`lite` 不构建 WebUI、不要求伴侣 APK。
 
 ### WebUI 下载守护
 

@@ -13,7 +13,7 @@ on:
         type: string
         default: ""
       publish_zips:
-        description: "发布模块 zip（4 个变体：sh / full / rust / c）→ 驱动 update.json"
+        description: "发布模块 zip（5 个变体：full / rust / c / sh / lite）→ update.json 指向 full"
         required: false
         type: boolean
         default: true
@@ -114,8 +114,8 @@ jobs:
           else
             NAME="$TAG"
           fi
-          # update.json 指向主包（sh 版，无后缀；守护由 WebUI 按需下载）
-          ZIP="QSC-Battery_v${version}.zip"
+          # update.json 指向 full 变体（双守护 + WebUI）
+          ZIP="QSC-Battery_v${version}-full.zip"
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "raw=$version" >> "$GITHUB_OUTPUT"
@@ -154,7 +154,7 @@ jobs:
           mkdir -p ../release
           cp app/build/outputs/apk/release/app-release.apk ../release/QSC-Battery.apk
 
-      - name: Build all module zips (full / rust / c / sh)
+      - name: Build all module zips (full / rust / c / sh / lite)
         env:
           REQUIRE_COMPANION_APK: "1"
         run: npm run build:module:all

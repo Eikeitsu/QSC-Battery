@@ -49,31 +49,37 @@ const BIN_DEBUG_EXTRA = ["testing.sh", "diag2.sh"];
 const includeDebug = process.argv.includes("--debug");
 
 /**
- * 发布变体：决定包里带哪套守护二进制。
- *  full = 两套都带（安装时按 native_impl 逐个自检）
- *  rust / c = 只带一套
- *  sh = 一套都不带，用户可在 WebUI 里现下（主包，文件名无后缀）
- * 四种包的脚本内容完全相同，差别只在 bin/qscd*-* 这几个文件。
+ * 发布变体（均带后缀；Magisk 在线更新指向 -full）：
+ *  full = 两套守护 + WebUI + 可选内嵌 APK（update.json 默认）
+ *  rust / c = 只带一套守护 + WebUI + APK
+ *  sh = 不带守护（可 WebUI 现下）+ WebUI + APK
+ *  lite = 不带守护、不带 WebUI、不内嵌 APK（体积最小）
  */
-const NATIVE_VARIANTS = {
-  full: ["qscd-arm64", "qscd-arm", "qscdc-arm64", "qscdc-arm"],
-  rust: ["qscd-arm64", "qscd-arm"],
-  c: ["qscdc-arm64", "qscdc-arm"],
-  sh: [],
+const PACKAGE_VARIANTS = {
+  full: {
+    bins: ["qscd-arm64", "qscd-arm", "qscdc-arm64", "qscdc-arm"],
+    webui: true,
+    apk: true,
+  },
+  rust: { bins: ["qscd-arm64", "qscd-arm"], webui: true, apk: true },
+  c: { bins: ["qscdc-arm64", "qscdc-arm"], webui: true, apk: true },
+  sh: { bins: [], webui: true, apk: true },
+  lite: { bins: [], webui: false, apk: false },
 };
 
 function readVariant() {
   const arg = process.argv.find((a) => a.startsWith("--native="));
   const name = arg ? arg.slice("--native=".length) : "full";
-  if (!(name in NATIVE_VARIANTS)) {
+  if (!(name in PACKAGE_VARIANTS)) {
     throw new Error(
-      `unknown --native=${name} (expected: ${Object.keys(NATIVE_VARIANTS).join(" | ")})`,
+      `unknown --native=${name} (expected: ${Object.keys(PACKAGE_VARIANTS).join(" | ")})`,
     );
   }
   return name;
 }
 
 const variant = readVariant();
+const variantOpts = PACKAGE_VARIANTS[variant];
 
 function log(message) {
   console.log(`[package-module] ${message}`);
@@ -163,9 +169,9 @@ function ensureNative() {
     execSync(`node ${JSON.stringify(cliScript)}`, { cwd: repoRoot, stdio: "inherit" });
   }
 
-  const wanted = new Set(NATIVE_VARIANTS[variant]);
+  const wanted = new Set(variantOpts.bins);
   if (!wanted.size) {
-    log("native qscd: sh 变体，跳过守护构建");
+    log(`native qscd: ${variant} 变体不带守护，跳过构建`);
     return;
   }
   for (const impl of NATIVE_IMPLS) {
@@ -232,15 +238,16 @@ function copyBuiltWebroot() {
 }
 
 const version = readVersion();
-// sh 是主包，不带变体后缀；其余变体加 -full / -rust / -c
-const variantSuffix = variant === "sh" ? "" : `-${variant}`;
+// 所有变体均带后缀：-full（在线更新默认）/ -rust / -c / -sh / -lite
+const variantSuffix = `-${variant}`;
 const zipName = includeDebug
   ? `QSC-Battery_v${version}${variantSuffix}-debug.zip`
   : `QSC-Battery_v${version}${variantSuffix}.zip`;
 const zipPath = join(releaseDir, zipName);
 const libFiles = listLibScripts();
 
-ensureBuiltWeb();
+if (variantOpts.webui) ensureBuiltWeb();
+else log("lite: skip WebUI build");
 ensureNative();
 validateSources(libFiles);
 
@@ -259,12 +266,12 @@ for (const file of BIN_RELEASE) copyFromModule(join("bin", file));
 for (const file of libFiles) copyFromModule(join("bin", "lib", file));
 log(`bin/lib: ${libFiles.join(", ")}`);
 {
-  const wanted = NATIVE_VARIANTS[variant];
+  const wanted = variantOpts.bins;
   const shipped = wanted.filter((name) => existsSync(join(moduleRoot, "bin", name)));
   for (const name of shipped) copyFromModule(join("bin", name));
   const missing = wanted.filter((name) => !shipped.includes(name));
   if (missing.length) {
-    // CI 必须四个都在；本地缺编译器时允许少带，安装后可在 WebUI 里下载
+    // CI 必须变体要求的二进制都在；本地缺编译器时允许少带
     const message = `native: 变体 ${variant} 缺少 ${missing.join(", ")}`;
     if (process.env.CI === "true" || process.env.REQUIRE_NATIVE === "1") {
       throw new Error(message);
@@ -274,7 +281,7 @@ log(`bin/lib: ${libFiles.join(", ")}`);
   log(
     shipped.length
       ? `native (${variant}): ${shipped.join(", ")}`
-      : `native (${variant}): none — 由 WebUI 按需下载`,
+      : `native (${variant}): none${variantOpts.webui ? " — 可由 WebUI 按需下载" : ""}`,
   );
 
   const cliBins = ["qsc-arm64", "qsc-arm"].filter((name) =>
@@ -298,9 +305,17 @@ if (includeDebug) {
 } else {
   log("release package: diagnose only (no testing/diag2)");
 }
-copyBuiltWebroot();
+if (variantOpts.webui) {
+  copyBuiltWebroot();
+} else {
+  log("lite: omit webroot");
+}
 
 function embedCompanionApk() {
+  if (!variantOpts.apk) {
+    log("lite: omit companion apk");
+    return;
+  }
   const candidates = [
     join(releaseDir, "QSC-Battery.apk"),
     join(repoRoot, "app", "app", "build", "outputs", "apk", "release", "app-release.apk"),
@@ -328,13 +343,20 @@ embedCompanionApk();
 if (existsSync(zipPath)) rmSync(zipPath);
 log(`packaging ${zipName}...`);
 writeUnixZip(staging, zipPath);
-const entries = verifyUnixZip(zipPath, [
+const requiredZipEntries = [
   "META-INF/com/google/android/update-binary",
   "module.prop",
   "hotinstall.sh",
   "bin/lib/hot_update.sh",
-  "webroot/index.html",
-]);
+];
+if (variantOpts.webui) requiredZipEntries.push("webroot/index.html");
+const entries = verifyUnixZip(zipPath, requiredZipEntries);
+if (!variantOpts.webui && entries.includes("webroot/index.html")) {
+  throw new Error(`${zipName}: lite 包不应包含 webroot`);
+}
+if (!variantOpts.apk && entries.some((n) => n.startsWith("apk/"))) {
+  throw new Error(`${zipName}: lite 包不应内嵌 apk/`);
+}
 log(
   `created ${zipPath} (${(statSync(zipPath).size / 1024).toFixed(1)} KB, ${entries.length} files)`,
 );

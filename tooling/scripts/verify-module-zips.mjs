@@ -36,23 +36,32 @@ const REQUIRED_ENTRIES = [
   "bin/qsc.sh",
 ];
 
-/** 变体 → 必须存在的原生二进制；未列出的一律不允许出现 */
-const VARIANT_BINARIES = {
-  full: ["bin/qscd-arm64", "bin/qscd-arm", "bin/qscdc-arm64", "bin/qscdc-arm"],
-  rust: ["bin/qscd-arm64", "bin/qscd-arm"],
-  c: ["bin/qscdc-arm64", "bin/qscdc-arm"],
-  sh: [],
+/**
+ * 变体 → 守护二进制 + 是否应含 WebUI / 内嵌 APK。
+ * 未列出的守护二进制一律不允许出现。
+ */
+const VARIANT_SPEC = {
+  full: {
+    bins: ["bin/qscd-arm64", "bin/qscd-arm", "bin/qscdc-arm64", "bin/qscdc-arm"],
+    webui: true,
+    apk: true,
+  },
+  rust: { bins: ["bin/qscd-arm64", "bin/qscd-arm"], webui: true, apk: true },
+  c: { bins: ["bin/qscdc-arm64", "bin/qscdc-arm"], webui: true, apk: true },
+  sh: { bins: [], webui: true, apk: true },
+  lite: { bins: [], webui: false, apk: false },
 };
 
-const ALL_BINARIES = VARIANT_BINARIES.full;
+const ALL_BINARIES = VARIANT_SPEC.full.bins;
 
-/** 由包名后缀判定变体；主包（sh）无后缀，故放在最后兜底 */
+/** 由包名后缀判定变体（均带后缀；不再识别无后缀主包） */
 function variantOf(name) {
   const base = name.replace(/-debug\.zip$/, ".zip");
   if (base.endsWith("-full.zip")) return "full";
   if (base.endsWith("-rust.zip")) return "rust";
   if (base.endsWith("-c.zip")) return "c";
-  if (/^QSC-Battery_v[^-]+\.zip$/.test(base)) return "sh";
+  if (base.endsWith("-sh.zip")) return "sh";
+  if (base.endsWith("-lite.zip")) return "lite";
   return null;
 }
 
@@ -88,27 +97,27 @@ for (const zip of zips) {
     fail(`unexpected zip name: ${zip}`);
     continue;
   }
+  const spec = VARIANT_SPEC[variant];
 
   let names;
   try {
-    // 顺带校验 CRC 与本地头，坏包不会一路混到发布
-    names = verifyUnixZip(zipPath, REQUIRED_ENTRIES);
+    const required = [...REQUIRED_ENTRIES];
+    if (spec.webui) required.push("webroot/index.html");
+    names = verifyUnixZip(zipPath, required);
   } catch (err) {
     fail(`${zip}: ${err.message}`);
     continue;
   }
 
-  const want = new Set(VARIANT_BINARIES[variant]);
+  const want = new Set(spec.bins);
   const cliBins = ["bin/qsc-arm64", "bin/qsc-arm"];
   for (const bin of ALL_BINARIES) {
     const present = names.includes(bin);
-    // 多出来的守护二进制一律算错：变体之间只应差在带哪套守护
     if (!want.has(bin) && present) {
       fail(`${zip}: unexpected ${bin} (variant ${variant})`);
       continue;
     }
     if (!want.has(bin) || present) continue;
-    // 本机压根没编出来的，本地跑就只提示；CI 里必须失败
     const built = existsSync(join(moduleRoot, bin));
     if (nativeRequired || built) {
       fail(`${zip}: missing ${bin}`);
@@ -125,6 +134,13 @@ for (const zip of zips) {
       console.warn(`[verify-zips] ${zip}: missing ${bin} — 本地未编译 qsc CLI，已跳过`);
     }
   }
+
+  const hasWeb = names.includes("webroot/index.html");
+  if (spec.webui && !hasWeb) fail(`${zip}: missing webroot/index.html`);
+  if (!spec.webui && hasWeb) fail(`${zip}: lite 不应包含 webroot`);
+
+  const hasApk = names.some((n) => n.startsWith("apk/"));
+  if (!spec.apk && hasApk) fail(`${zip}: lite 不应内嵌 apk/`);
 
   const sizeKb = (statSync(zipPath).size / 1024).toFixed(1);
   console.log(

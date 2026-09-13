@@ -40,8 +40,8 @@
 
 ## 快速开始
 
-1. 从 [Releases](https://github.com/Eikeitsu/QSC-Battery/releases) 下载 zip（推荐主包，需要时再在 WebUI 下守护）
-2. 刷入模块，按音量键确认；选择是否安装 WebUI、电流控制、伴侣 APK、联网下守护
+1. 打开 [Releases](https://github.com/Eikeitsu/QSC-Battery/releases)：多数人下 **`…-full.zip`**；只要脚本可用 **`…-lite.zip`**。各文件含义见 [安装与升级 · Release 说明](docs/guide/install.md#该下哪个先看这三句)
+2. 刷入模块，按音量键确认；按提示选择 WebUI / 电流控制 / 伴侣 APK / 联网下守护（lite 无 WebUI 与内嵌 APK）
 3. 更新时可选保留配置；重启后用 WebUI / APP / `config.conf` 调整
 4. Action：音量上刷新状态；音量下插电测开关 / 未插电写诊断
 

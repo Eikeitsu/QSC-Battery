@@ -271,17 +271,23 @@ if [ -f "$CONFIG_BACKUP" ]; then
 fi
 
 INSTALL_WEBUI=1
-ui_print "--------------------------------"
-ui_print " 是否安装 WebUI？"
-ui_print " 音量上：安装 WebUI"
-ui_print " 音量下：不安装 WebUI"
-ui_print " 20 秒未选择时默认安装 WebUI"
-qsc_volume_choice
-case "$?" in
-	0) ui_print "- 将安装 WebUI" ;;
-	1) INSTALL_WEBUI=0; ui_print "- 将不安装 WebUI" ;;
-	*) ui_print "- 选择超时，默认安装 WebUI" ;;
-esac
+if [ ! -f "$MODPATH/webroot/index.html" ]; then
+	INSTALL_WEBUI=0
+	ui_print "--------------------------------"
+	ui_print "- 本包为 lite（无 WebUI），跳过界面安装选项"
+else
+	ui_print "--------------------------------"
+	ui_print " 是否安装 WebUI？"
+	ui_print " 音量上：安装 WebUI"
+	ui_print " 音量下：不安装 WebUI"
+	ui_print " 20 秒未选择时默认安装 WebUI"
+	qsc_volume_choice
+	case "$?" in
+		0) ui_print "- 将安装 WebUI" ;;
+		1) INSTALL_WEBUI=0; ui_print "- 将不安装 WebUI" ;;
+		*) ui_print "- 选择超时，默认安装 WebUI" ;;
+	esac
+fi
 
 INSTALL_CURRENT=1
 ui_print "--------------------------------"

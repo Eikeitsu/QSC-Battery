@@ -57,10 +57,26 @@ def extract_section(changelog: str, version: str) -> str | None:
     return unreleased_body
 
 
+ASSETS_GUIDE = """## 下载哪个？
+
+- **多数人**：`QSC-Battery_v*-full.zip`（双守护 + WebUI，可内嵌伴侣 APP；在线更新也指向它）
+- **只要脚本、包要小**：`…-lite.zip`（无 WebUI / 无内嵌 APK / 无守护）
+- **其它模块包**：`-rust` / `-c` 只带对应守护；`-sh` 有 WebUI、守护可后装
+- **`QSC-Battery_v*.apk`**：伴侣 APP；非 lite 模块刷入时也可选装，不必单独下
+- **`qscd-rust-*` / `qscd-c-*`**：事件守护单文件；一般由 full 自带或 WebUI 下载，**不要当模块刷**
+
+完整说明：[安装与升级](https://eikeitsu.github.io/QSC-Battery/guide/install.html)
+"""
+
+
 def build_body(section: str | None) -> str:
-    if not section:
-        return ""
-    return f"## 更新说明\n\n{section}\n"
+    parts = [ASSETS_GUIDE.rstrip()]
+    if section:
+        parts.append("")
+        parts.append("## 更新说明")
+        parts.append("")
+        parts.append(section.rstrip())
+    return "\n".join(parts) + "\n"
 
 
 def main() -> int:

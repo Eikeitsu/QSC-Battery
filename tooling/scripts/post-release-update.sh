@@ -18,14 +18,15 @@ if [ -n "${PUBLISH_BINS:-}" ]; then
   PUBLISH_BINS_RUST="${PUBLISH_BINS}"
   PUBLISH_BINS_C="${PUBLISH_BINS}"
 fi
-# update.json 指向主包（sh 版，无后缀）：包最小，守护由 WebUI 按需下载
-ZIP="${ZIP:-QSC-Battery_v${RAW}.zip}"
+# update.json 指向 full 变体（双守护 + WebUI；体积更大但开箱即用）
+ZIP="${ZIP:-QSC-Battery_v${RAW}-full.zip}"
 # 发布哪些变体的 zip 到 Pages（第一个即 update.json 指向的那个）
 VARIANT_ZIPS=(
-  "QSC-Battery_v${RAW}.zip"
   "QSC-Battery_v${RAW}-full.zip"
   "QSC-Battery_v${RAW}-rust.zip"
   "QSC-Battery_v${RAW}-c.zip"
+  "QSC-Battery_v${RAW}-sh.zip"
+  "QSC-Battery_v${RAW}-lite.zip"
 )
 
 git config user.name "github-actions[bot]"

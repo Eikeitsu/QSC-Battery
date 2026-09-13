@@ -48,7 +48,7 @@ jobs:
           mkdir -p ../release
           cp app/build/outputs/apk/release/app-release.apk ../release/QSC-Battery.apk
 
-      - name: Build all module zips (full / rust / c / sh)
+      - name: Build all module zips (full / rust / c / sh / lite)
         env:
           REQUIRE_COMPANION_APK: "1"
         run: npm run build:module:all

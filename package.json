@@ -31,7 +31,7 @@
     "package:module": "node tooling/scripts/package-module.mjs",
     "package:app": "node tooling/scripts/package-app.mjs",
     "package:module:debug": "node tooling/scripts/package-module.mjs --debug",
-    "package:module:all": "node tooling/scripts/package-module.mjs --native=full && node tooling/scripts/package-module.mjs --native=rust && node tooling/scripts/package-module.mjs --native=c && node tooling/scripts/package-module.mjs --native=sh",
+    "package:module:all": "node tooling/scripts/package-module.mjs --native=full && node tooling/scripts/package-module.mjs --native=rust && node tooling/scripts/package-module.mjs --native=c && node tooling/scripts/package-module.mjs --native=sh && node tooling/scripts/package-module.mjs --native=lite",
     "build:module": "npm run build:web && npm run package:module",
     "build:module:all": "npm run build:web && npm run package:module:all",
     "verify:zips": "node tooling/scripts/verify-module-zips.mjs",

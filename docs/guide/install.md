@@ -6,27 +6,62 @@
 - 使用 WebUI 需支持模块 WebUI 的管理器（如 KernelSU / SukiSU / MMRL / WebUI-X）
 - 伴侣 APP 需 Android 8+（`minSdk 26`），读写模块需 Root
 
-## 选哪个包
+## 该下哪个？先看这三句
 
-每个版本通常发 **4 个模块 zip**，功能相同，差别在是否自带「事件唤醒守护」qscd：
+1. **多数人**：只下 `QSC-Battery_v<版本>-full.zip` 刷入即可（双守护 + WebUI，也可选装内嵌伴侣 APP）。管理器「检查更新」也是拉这个。
+2. **只要核心停充、包越小越好**：下 `-lite.zip`（无 WebUI、无内嵌 APK、无守护）。
+3. **Release 里的 `QSC-Battery_v*.apk`、`qscd-*`**：一般**不用单独下**——APK 可在刷非 lite 模块时选装，守护可由 full 自带或之后在 WebUI / APP 里装。
 
-| 包名                           | 自带守护 | 适合                                                         |
-| ------------------------------ | -------- | ------------------------------------------------------------ |
-| `QSC-Battery_v<版本>.zip`      | 不带     | **主包，推荐**；可在 WebUI 一键下载；在线更新也用此版        |
-| `QSC-Battery_v<版本>-full.zip` | Rust + C | 装完即用，安装自检自动挑一套                                 |
-| `QSC-Battery_v<版本>-rust.zip` | 仅 Rust  | 要阈值过滤 / 原生进程检测等；**Rust 版额外提供阈值事件过滤** |
-| `QSC-Battery_v<版本>-c.zip`    | 仅 C     | 只要轻量事件唤醒                                             |
+下面按文件类型说明；不确定时选 **full**。
 
-守护只提供 **arm64 / armv7**；其它架构可跳过，停充不受影响。Rust / C **只能二选一**（行为不完全相同：Rust 版额外提供阈值事件过滤与原生进程检测，C 版更轻量）。主包安装时可选联网下载；之后可在 WebUI 切换并自动替换。
+## Release 文件一览
 
-Release 还可能附带 **伴侣 APK**（也可由模块 zip 内嵌，刷入时可选安装）。
+每个正式版在 [GitHub Releases](https://github.com/Eikeitsu/QSC-Battery/releases) 里大致包含三类资产。
+
+### 1. 模块 zip（刷进 Magisk / KernelSU）
+
+| 文件名 | 自带守护 | WebUI | 内嵌 APK | 适合谁 |
+| ------ | -------- | ----- | -------- | ------ |
+| `…-full.zip` | Rust + C | 有 | 有（可选装） | **推荐默认**；装完即用，安装时自检挑一套守护 |
+| `…-rust.zip` | 仅 Rust | 有 | 有 | 明确只要 Rust 守护（阈值过滤 / 原生进程检测等） |
+| `…-c.zip` | 仅 C | 有 | 有 | 明确只要更轻量的 C 守护 |
+| `…-sh.zip` | 无 | 有 | 有 | 想先装界面，守护以后在 WebUI 再下 |
+| `…-lite.zip` | 无 | **无** | **无** | 只要脚本停充；用 APP / `qsc.sh` / 改配置文件 |
+
+说明：
+
+- 守护仅 **arm64 / armv7**；其它 CPU 可跳过守护，停充仍可用。
+- Rust 与 C **不要两套一起长期并用**；full 安装时按配置自检选用其一。
+- `-sh` / `-lite` 刷入时可询问联网下载守护；失败不中断安装。lite 无 WebUI，之后可用伴侣 APP 或 CLI 管理守护。
+- 带 `-debug` 后缀的是调试包（多测试脚本），日常不要用。
+
+### 2. 伴侣 APP
+
+| 文件名 | 作用 |
+| ------ | ---- |
+| `QSC-Battery_v<版本>.apk` | 独立安装的 Compose 客户端（状态 / 策略 / 动态 / 主题等） |
+
+- 非 lite 的模块 zip **可能已内嵌**同款 APK，刷模块时音量键可选「是否安装伴侣 APP」。
+- 已装过 APP、或不想用 APP：可忽略这个文件。
+- APP 自身更新走独立通道（`app-update.json`），与模块 zip 更新分开。
+
+### 3. 事件守护二进制（qscd）
+
+| 文件名 | 作用 |
+| ------ | ---- |
+| `qscd-rust-arm64` / `qscd-rust-arm` | Rust 版守护（64 / 32 位） |
+| `qscd-c-arm64` / `qscd-c-arm` | C 版守护（64 / 32 位） |
+
+- **普通用户不必手动下载**。`-full` 已带齐；`-sh` 可在 WebUI「事件唤醒」里下载；也可由发版托管到文档站供模块内拉取。
+- 只有在手工替换、离线拷贝、或排查安装问题时，才需要从 Release 取这些单文件。
+- 它们**不是** Magisk 模块：不能当 zip 刷；需放到模块的 `bin/qscd` 并由配置启用。
 
 ## 安装步骤
 
-1. 从 [GitHub Releases](https://github.com/Eikeitsu/QSC-Battery/releases) 下载 zip
+1. 从 [GitHub Releases](https://github.com/Eikeitsu/QSC-Battery/releases) 按上表选一个 **模块 zip**（推荐 `-full`）
 2. 在模块管理器中刷入
 3. **音量上**确认安装（约 20 秒；音量下或超时取消）
-4. 选择是否安装 **WebUI**（超时默认装）
+4. 选择是否安装 **WebUI**（lite 包会跳过；其它包超时默认装）
 5. 选择是否安装 **电流控制**（超时默认装；总开关仍默认关）
 6. 选择是否安装 **伴侣 APK**（若包内有）
 7. 若本包无守护：可选联网下载并选 Rust / C；失败不中断安装
@@ -42,7 +77,7 @@ Release 还可能附带 **伴侣 APK**（也可由模块 zip 内嵌，刷入时�
 
 ## 在线更新
 
-`module.prop` 配置了 `updateJson`，管理器拉主包。升级会尽量保留已下载的守护。APP、守护有独立通道，见 [伴侣 APP](/guide/app)。
+`module.prop` 配置了 `updateJson`，管理器默认拉 **`-full`** 包。升级会尽量保留已下载的守护。APP、守护有独立通道，见 [伴侣 APP](/guide/app)。
 
 ## 更新配置怎么处理
 
