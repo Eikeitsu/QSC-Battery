@@ -29,12 +29,12 @@ Actions → **Release Module**（或推送 `v*` tag）：
 
 发版对话框可勾选 4 项（默认全选）：
 
-| 勾选      | GitHub Release 资产                 | 会改哪条更新通道                                          |
-| --------- | ----------------------------------- | --------------------------------------------------------- |
+| 勾选      | GitHub Release 资产                     | 会改哪条更新通道                                          |
+| --------- | --------------------------------------- | --------------------------------------------------------- |
 | 模块 zip  | 5 个变体 zip（`update.json` → `-full`） | `update.json` + `module.prop`（Magisk / APP「模块更新」） |
-| Rust 守护 | `qscd-rust-arm64` / `qscd-rust-arm` | `qscd/manifest.json`（WebUI 守护卡片）                    |
-| C 守护    | `qscd-c-arm64` / `qscd-c-arm`       | 同上                                                      |
-| 伴侣 APK  | `QSC-Battery_v*.apk`                | `app-update.json`（APP 自身更新）                         |
+| Rust 守护 | `qscd-rust-arm64` / `qscd-rust-arm`     | `qscd/manifest.json`（WebUI 守护卡片）                    |
+| C 守护    | `qscd-c-arm64` / `qscd-c-arm`           | 同上                                                      |
+| 伴侣 APK  | `QSC-Battery_v*.apk`                    | `app-update.json`（APP 自身更新）                         |
 
 ### 单独发版时「模块检测更新」怎么处理
 
