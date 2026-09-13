@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2026.09.13.2
+
 - 模块在线更新改为指向 `-full`；原无后缀主包改为 `-sh`；新增无 WebUI / 无内嵌 APK 的 `-lite`
 - 安装文档补充 Release 各文件说明（模块 zip / APK / qscd），方便按需选择下载
 

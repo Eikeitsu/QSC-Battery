@@ -1,5 +1,5 @@
 {
-  "version": "2026.09.13",
+  "version": "2026.09.13.2",
   "qscd-c-arm": "ddb68bd5280990d5ed0e19bb61baabac7c09d79061a07f15ea142cacf606ce09",
   "qscd-c-arm64": "16a5794968118476421cbe91ca63dfc85f05f1e28736cbd9c72c3b08be6259c2",
   "qscd-rust-arm": "9563515e0c49ad2c78dad71138be432ef22fb12032759e7f89707614a0bb66c0",
