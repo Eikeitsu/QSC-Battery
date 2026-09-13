@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { LogLevel } from "@/shared/config/enums";
-import { groupLogSessions, parseLogText } from "@/shared/lib/log";
+import {
+  filterLogSessions,
+  groupLogSessions,
+  parseLogText,
+} from "@/shared/lib/log";
 
 describe("parseLogText", () => {
   it("parses leveled lines", () => {
@@ -60,5 +64,44 @@ describe("groupLogSessions", () => {
     const sessions = groupLogSessions(entries);
     expect(sessions).toHaveLength(1);
     expect(sessions[0].id).toBe("orphan");
+  });
+});
+
+describe("filterLogSessions", () => {
+  it("keeps stop/resume boundaries when filtering to Info", () => {
+    const entries = parseLogText(
+      [
+        "2026-08-26_10:01:00 [INFO] 电量80 停止充电 [/sys/x]",
+        "2026-08-26_10:01:03 [WARN] drift",
+        "2026-08-26_10:01:04 [DEBUG] tick",
+        "2026-08-26_10:05:00 [INFO] 电量75 恢复充电 [/sys/x]",
+      ].join("\n"),
+    );
+    const sessions = filterLogSessions(groupLogSessions(entries), LogLevel.Info);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].open).toBe(false);
+    expect(sessions[0].entries).toHaveLength(2);
+    expect(sessions[0].entries.every((e) => e.level === LogLevel.Info)).toBe(true);
+    expect(sessions[0].hasWarn).toBe(false);
+    expect(sessions[0].title).toMatch(/停止充电.*已恢复/);
+  });
+
+  it("does not break session when only mid lines are Warn", () => {
+    const entries = parseLogText(
+      [
+        "2026-08-26_10:01:00 [INFO] 电量80 停止充电 [/sys/x]",
+        "2026-08-26_10:01:03 [WARN] drift",
+        "2026-08-26_10:05:00 [INFO] 电量75 恢复充电 [/sys/x]",
+      ].join("\n"),
+    );
+    const infoOnly = filterLogSessions(groupLogSessions(entries), LogLevel.Info);
+    expect(infoOnly).toHaveLength(1);
+    expect(infoOnly[0].entries).toHaveLength(2);
+
+    const warnOnly = filterLogSessions(groupLogSessions(entries), LogLevel.Warn);
+    expect(warnOnly).toHaveLength(1);
+    // WARN 中行 + 两条边界（始终保留）
+    expect(warnOnly[0].entries).toHaveLength(3);
+    expect(warnOnly[0].hasWarn).toBe(true);
   });
 });

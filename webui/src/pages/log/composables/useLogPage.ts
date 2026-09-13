@@ -4,6 +4,7 @@ import { useThemePackClass } from "@/composables";
 import {
   STORAGE_KEYS,
   filterLogEntries,
+  filterLogSessions,
   groupLogSessions,
   isLogLevel,
   LogLevel,
@@ -43,10 +44,13 @@ export function useLogPage() {
     useChargeEvents(80);
 
   const logEntries = computed(() => parseLogText(store.logText));
+  // 平铺：按等级滤行。会话：先全量分组，再组内滤行（边界行始终保留）。
   const visibleLogLines = computed(() =>
     filterLogEntries(logEntries.value, levelFilter.value),
   );
-  const logSessions = computed(() => groupLogSessions(visibleLogLines.value));
+  const logSessions = computed(() =>
+    filterLogSessions(groupLogSessions(logEntries.value), levelFilter.value),
+  );
   const filterActive = computed(
     () => Boolean(levelFilter.value) && logEntries.value.length > 0,
   );

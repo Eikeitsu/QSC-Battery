@@ -44,6 +44,36 @@ export function filterLogEntries(entries: LogEntry[], level: string): LogEntry[]
   return entries.filter((e) => e.level === level);
 }
 
+/** 停充/恢复边界行：会话分组时始终保留，不受等级筛选影响 */
+export function isSessionBoundaryLine(raw: string): boolean {
+  return STOP_RE.test(raw) || RESUME_RE.test(raw);
+}
+
+/**
+ * 会话模式用：先全量 groupLogSessions，再按等级滤行。
+ * 边界行（停充/恢复）始终保留，避免 Info 筛选把会话拆碎。
+ */
+export function filterLogSessions(
+  sessions: LogSession[],
+  level: string,
+): LogSession[] {
+  if (!level) return sessions;
+  return sessions
+    .map((session) => {
+      const entries = session.entries.filter(
+        (e) => e.level === level || isSessionBoundaryLine(e.raw),
+      );
+      if (!entries.length) return null;
+      return {
+        ...session,
+        entries,
+        hasError: entries.some((e) => e.level === LogLevel.Error),
+        hasWarn: entries.some((e) => e.level === LogLevel.Warn),
+      };
+    })
+    .filter((s): s is LogSession => s !== null);
+}
+
 function shortTitle(raw: string): string {
   return raw
     .replace(/^\d{4}-\d{2}-\d{2}_\d{2}:\d{2}:\d{2}\s*/, "")
