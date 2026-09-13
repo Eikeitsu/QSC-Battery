@@ -388,16 +388,51 @@ impl Thresholds {
     }
 }
 
-/// 与 shell 侧 qsc_ps_plugged 对齐的最小电源状态。
+/// 与 shell 侧 `qsc_ps_plugged` 对齐的最小电源状态。
 ///
-/// MCA 设备在模块接管停充后可能把 usb/online 置为 0，因此 online 不能
-/// 作为唯一依据。这里仅判断「是否仍像插着线」，不决定停充或恢复。
+/// MCA 停充后 `usb/online` 常为 0；`present` 需 VBUS/类型旁证。
+/// 孤立 `Not charging` / 孤立 `present` 不判插电（K90U 未插电待机常见）。
 #[derive(Debug, Default, PartialEq, Eq)]
 struct PowerState {
     plugged: bool,
 }
 
 impl PowerState {
+    fn vbus_live(base: &str) -> bool {
+        match read_int(&format!("{base}/usb/voltage_now")) {
+            Some(v) if v > 3_000_000 => true,
+            Some(v) if v > 3_000 && v < 100_000 => true,
+            _ => false,
+        }
+    }
+
+    fn type_live(base: &str) -> bool {
+        for path in [format!("{base}/usb/real_type"), format!("{base}/usb/type")] {
+            if let Some(value) = read_text(&path) {
+                if !matches!(value.as_str(), "" | "Unknown" | "UNKNOWN" | "None" | "NONE") {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn looks_discharging(base: &str) -> bool {
+        let st = read_text(&format!("{base}/battery/status")).unwrap_or_default();
+        if !matches!(
+            st.as_str(),
+            "Discharging" | "discharging" | "Not charging" | "Notcharging" | "not_charging"
+        ) {
+            return false;
+        }
+        for name in ["battery", "bms", "soc"] {
+            if let Some(cur) = read_int(&format!("{base}/{name}/current_now")) {
+                return cur.unsigned_abs() > 10_000;
+            }
+        }
+        false
+    }
+
     fn read(root: &str) -> Self {
         let base = format!("{root}/sys/class/power_supply");
 
@@ -407,33 +442,30 @@ impl PowerState {
             }
         }
 
-        // K90U / MCA 停充时 online 可能被驱动压成 0。
         for name in ["usb", "qc_usb", "wireless", "ac"] {
             if read_int(&format!("{base}/{name}/present")) == Some(1) {
-                return Self { plugged: true };
-            }
-        }
-
-        for path in [format!("{base}/usb/real_type"), format!("{base}/usb/type")] {
-            if let Some(value) = read_text(&path) {
-                if !matches!(value.as_str(), "" | "Unknown" | "UNKNOWN" | "None" | "NONE") {
+                if Self::looks_discharging(&base) {
+                    continue;
+                }
+                if Self::vbus_live(&base) || Self::type_live(&base) {
                     return Self { plugged: true };
                 }
             }
         }
 
-        if let Some(value) = read_int(&format!("{base}/usb/voltage_now")) {
-            // 节点单位可能是 µV 或 mV，与 shell 侧使用 3V 门槛一致。
-            if value > 3_000_000 || (value > 3_000 && value < 100_000) {
-                return Self { plugged: true };
-            }
+        if Self::type_live(&base) && !Self::looks_discharging(&base) {
+            return Self { plugged: true };
         }
 
-        // MCA 的 battery/status 可能为 Not charging，但此时仍是插线状态。
+        if Self::vbus_live(&base) && !Self::looks_discharging(&base) {
+            return Self { plugged: true };
+        }
+
         if matches!(
             read_text(&format!("{base}/battery/status")).as_deref(),
-            Some("Charging" | "Full" | "Not charging")
-        ) {
+            Some("Charging" | "Full")
+        ) && read_int(&format!("{base}/battery/online")) == Some(1)
+        {
             return Self { plugged: true };
         }
 
@@ -1004,18 +1036,32 @@ mod tests {
     }
 
     #[test]
-    fn power_state_accepts_mca_not_charging_without_online() {
+    fn power_state_rejects_isolated_not_charging() {
         let root = fake_sysfs(&[("battery/status", "Not charging")]);
+        assert!(!PowerState::read(root.to_str().unwrap()).plugged);
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn power_state_accepts_present_with_vbus() {
+        let root = fake_sysfs(&[
+            ("battery/status", "Not charging"),
+            ("usb/present", "1"),
+            ("usb/voltage_now", "5000000"),
+        ]);
         assert!(PowerState::read(root.to_str().unwrap()).plugged);
         std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]
-    fn power_state_accepts_present_and_type_signals() {
-        let present = fake_sysfs(&[("usb/present", "1")]);
-        assert!(PowerState::read(present.to_str().unwrap()).plugged);
+    fn power_state_rejects_isolated_present() {
+        let present = fake_sysfs(&[("usb/present", "1"), ("usb/voltage_now", "0")]);
+        assert!(!PowerState::read(present.to_str().unwrap()).plugged);
         std::fs::remove_dir_all(&present).ok();
+    }
 
+    #[test]
+    fn power_state_accepts_type_and_vbus_signals() {
         let type_root = fake_sysfs(&[("usb/type", "USB_PD")]);
         assert!(PowerState::read(type_root.to_str().unwrap()).plugged);
         std::fs::remove_dir_all(&type_root).ok();

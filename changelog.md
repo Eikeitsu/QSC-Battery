@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- 修复 K90U 等 MCA 机型：未插电粘住 `present=1` 时误报已插电、停充/拔线清理异常；`present` 需 VBUS/类型旁证（停充冷却期内除外），不再单信孤立 `Not charging`；放电判定忽略电流符号；Rust `plugged` 与 shell 对齐
 - Package Module 打包前自动戳 CI `version`/`versionCode`（仅 Artifact，不改 `update.json`/文档站）；当天首发正式版仍为 `…01` 且可热更新盖过 CI
 
 ## 2026.09.13.2

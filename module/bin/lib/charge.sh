@@ -593,20 +593,46 @@ QSC_UNPLUG_COOLDOWN=90
 # （电量到 100% 停充，下一轮误判成拔线又还原，于是立刻重新充电）。
 #
 # 所以这里只认「线还插着」的正面证据，任何一条成立就判定没拔：
-#   1) present / type / VBUS 电压等物理存在信号
-#   2) status = Not charging，其字面含义就是「有充电器但没在充」，
-#      真拔线时内核约定报 Discharging
-#   3) 距上次停充不足 QSC_UNPLUG_COOLDOWN 秒（停充瞬间信号会抖）
+#   1) present 且有 VBUS/类型旁证（孤立 present 在 K90U 未插电也会粘住）
+#   2) type / VBUS 电压等物理存在信号
+#   3) 距上次停充不足 QSC_UNPLUG_COOLDOWN 秒（停充瞬间信号会抖；
+#      冷却期内也允许单信 present 顶住）
+# 不再单信 status=Not charging（K90U 未插电待机也报这个）。
 # 全都不成立才认为拔了。
 qsc_charger_really_gone() {
-	local p v st now last
+	local p v now last _has_side
 	for p in "$PSDIR/usb/present" "$PSDIR/qc_usb/present" \
 		"$PSDIR/wireless/present" "$PSDIR/ac/present"; do
 		[ -f "$p" ] || continue
 		v="$(cat "$p" 2>/dev/null | tr -d ' \r\n')"
 		if [ "$v" = "1" ]; then
-			qsc_log_once unplug_sig debug "$p=1，判定充电器仍在"
-			return 1
+			# 与插电扫描一致：孤立 present 不够；VBUS/类型旁证才长期保留。
+			# 停充维持中仅在冷却期内允许单信 present，避免 K90U 粘 present 永不拔线。
+			if type qsc_ps_looks_discharging >/dev/null 2>&1 && qsc_ps_looks_discharging; then
+				qsc_log_once unplug_sig debug "$p=1 但明显放电，不据此保留停充"
+				continue
+			fi
+			_has_side=0
+			if type qsc_ps_vbus_live >/dev/null 2>&1 && qsc_ps_vbus_live; then
+				_has_side=1
+			elif type qsc_ps_type_live >/dev/null 2>&1 && qsc_ps_type_live; then
+				_has_side=1
+			fi
+			if [ "$_has_side" = "1" ]; then
+				qsc_log_once unplug_sig debug "$p=1 且有 VBUS/类型旁证，判定充电器仍在"
+				return 1
+			fi
+			if [ -f "$DATADIR/power_switch" ]; then
+				now="$(date +%s 2>/dev/null)"
+				last="$(cat "$DATADIR/power_stop_ts" 2>/dev/null | tr -d ' \r\n')"
+				case "$last" in ""|*[!0-9]*) last=0 ;; esac
+				if [ -n "$now" ] && [ "$last" -gt 0 ] 2>/dev/null \
+					&& [ "$((now - last))" -lt "$QSC_UNPLUG_COOLDOWN" ] 2>/dev/null; then
+					qsc_log_once unplug_sig debug "$p=1 停充冷却期内，暂不判定拔线"
+					return 1
+				fi
+			fi
+			qsc_log_once unplug_sig debug "忽略孤立 $p=1（无旁证/已过冷却）"
 		fi
 	done
 	# 充电口类型：插着线时报 USB_PD / USB_SDP 等，拔了报 Unknown
@@ -616,6 +642,10 @@ qsc_charger_really_gone() {
 		case "$v" in
 			""|Unknown|UNKNOWN|None|NONE) ;;
 			*)
+				if type qsc_ps_looks_discharging >/dev/null 2>&1 && qsc_ps_looks_discharging; then
+					qsc_log_once unplug_sig debug "$p=$v 但明显放电，不据此保留停充"
+					continue
+				fi
 				qsc_log_once unplug_sig debug "$p=$v，判定充电器仍在"
 				return 1
 				;;
@@ -629,16 +659,15 @@ qsc_charger_really_gone() {
 			# 单位可能是 µV 或 mV，取 3V 作门槛
 			if [ "$v" -gt 3000000 ] 2>/dev/null || \
 				{ [ "$v" -gt 3000 ] 2>/dev/null && [ "$v" -lt 100000 ] 2>/dev/null; }; then
-				qsc_log_once unplug_sig debug "usb/voltage_now=$v，判定充电器仍在"
-				return 1
+				if type qsc_ps_looks_discharging >/dev/null 2>&1 && qsc_ps_looks_discharging; then
+					qsc_log_once unplug_sig debug "usb/voltage_now=$v 但明显放电，不据此保留停充"
+				else
+					qsc_log_once unplug_sig debug "usb/voltage_now=$v，判定充电器仍在"
+					return 1
+				fi
 			fi
 			;;
 	esac
-	st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
-	if [ "$st" = "Not charging" ]; then
-		qsc_log_once unplug_sig debug "status=Not charging（有充电器但没在充），判定充电器仍在"
-		return 1
-	fi
 	now="$(date +%s 2>/dev/null)"
 	last="$(cat "$DATADIR/power_stop_ts" 2>/dev/null | tr -d ' \r\n')"
 	case "$last" in ""|*[!0-9]*) last=0 ;; esac

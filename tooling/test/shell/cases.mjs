@@ -101,6 +101,28 @@ export const cases = [
   },
 
   {
+    // 仅 sticky present、无 VBUS/类型 → 未插电；不得因电量高误停充
+    name: "孤立 present=1 无旁证 → 不判插电也不停充",
+    sysfs: {
+      "battery/capacity": "95",
+      "battery/status": "Not charging",
+      "battery/temp": COOL,
+      "battery/current_now": "0",
+      "usb/online": "0",
+      "usb/present": "1",
+      "usb/voltage_now": "0",
+      "usb/type": "Unknown",
+    },
+    config: { ...FAST, power_stop: "80", power_start: "75", temperature_switch: "0" },
+    node: { initial: "0", stop: "1", start: "0" },
+    expect: {
+      node: "0",
+      files: { power_switch: false },
+      descIncludes: "未充电",
+    },
+  },
+
+  {
     name: "电量低于阈值 → 不停充",
     sysfs: {
       "battery/capacity": "70",
@@ -191,8 +213,8 @@ export const cases = [
   },
 
   {
-    // status=Not charging 的字面含义是「有充电器但没在充」，正是停充后的样子，
-    // 不能据此还原，否则停充永远维持不住
+    // status=Not charging 不再单信「线还在」；冷却期内或 present+VBUS 才维持。
+    // 真实 MCA 停充常见：Not charging + present + VBUS，online=0
     name: "停充后 status=Not charging 且 online=0 → 不判定拔线",
     sysfs: {
       "battery/capacity": "100",
@@ -200,6 +222,8 @@ export const cases = [
       "battery/temp": COOL,
       "battery/current_now": "0",
       "usb/online": "0",
+      "usb/present": "1",
+      "usb/voltage_now": "5000000",
     },
     config: { ...FAST, power_stop: "100", power_start: "95", temperature_switch: "0" },
     node: { initial: "1", stop: "1", start: "0" },
@@ -212,7 +236,7 @@ export const cases = [
   },
 
   {
-    // 线还插着时 present 通常仍为 1，即使输入被 suspend
+    // 线还插着时 present 通常仍为 1；需 VBUS/类型旁证（孤立 present 在 K90U 会粘住）
     name: "停充后 usb/present=1 → 不判定拔线",
     sysfs: {
       "battery/capacity": "100",
@@ -221,6 +245,7 @@ export const cases = [
       "battery/current_now": "0",
       "usb/online": "0",
       "usb/present": "1",
+      "usb/voltage_now": "5000000",
     },
     config: { ...FAST, power_stop: "100", power_start: "95", temperature_switch: "0" },
     node: { initial: "1", stop: "1", start: "0" },
@@ -229,6 +254,31 @@ export const cases = [
     expect: {
       node: "1",
       files: { power_switch: true, unplug_streak: false },
+    },
+  },
+
+  {
+    // K90U：未插电也常 sticky present=1 + Not charging + 无 VBUS → 不得假插电，
+    // 也不该挡住拔线清理（若此前误停充留下 power_switch）
+    name: "K90U 孤立 present=1 无 VBUS → 视为未插电并清理停充",
+    sysfs: {
+      "battery/capacity": "90",
+      "battery/status": "Not charging",
+      "battery/temp": COOL,
+      "battery/current_now": "0",
+      "usb/online": "0",
+      "usb/present": "1",
+      "usb/voltage_now": "0",
+      "usb/type": "Unknown",
+    },
+    config: { ...FAST, power_stop: "80", power_start: "75", temperature_switch: "0" },
+    node: { initial: "1", stop: "1", start: "0" },
+    data: { power_switch: "", battery_switch: "", unplug_streak: "1" },
+    activeSwitch: true,
+    expect: {
+      node: "0",
+      files: { power_switch: false },
+      descIncludes: "未充电",
     },
   },
 

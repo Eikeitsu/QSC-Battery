@@ -192,20 +192,15 @@ qsc_ps_plugged() {
 	return 1
 }
 
-# 明显在放电：用于戳破「present/Not charging 假插电」（小米 17 / K90U 待机常见）
+# 明显在放电 / 靠电池：戳破 present 假插电（小米 / K90U 电流符号常不统一）
 qsc_ps_looks_discharging() {
 	local p cur cur_int st
 	if qsc_ps_read "$PSDIR/battery/status"; then
 		st="$QSC_PS_VAL"
 		case "$st" in
 			Discharging|discharging) ;;
-			*)
-				# Not charging 也可能是未插电待机，仍看电流
-				case "$st" in
-					"Not charging"|Notcharging|not_charging) ;;
-					*) return 1 ;;
-				esac
-				;;
+			"Not charging"|Notcharging|not_charging) ;;
+			*) return 1 ;;
 		esac
 	fi
 	for p in "$PSDIR/battery/current_now" \
@@ -220,13 +215,52 @@ qsc_ps_looks_discharging() {
 			case "$cur_int" in
 				""|*[!0-9]*) continue ;;
 			esac
-			# 负电流约定为放电（µA）；>10mA 视为明显放电
-			if [ "${cur%"$cur_int"}" = "-" ] && [ "$cur_int" -gt 10000 ] 2>/dev/null; then
+			# |I|>10mA 即视为在耗电（忽略符号；小米放电电流经常为正）
+			if [ "$cur_int" -gt 10000 ] 2>/dev/null; then
 				return 0
 			fi
 			return 1
 		fi
 	done
+	return 1
+}
+
+# USB VBUS 约 >3V（µV 或 mV）
+qsc_ps_vbus_live() {
+	local v
+	qsc_ps_read "$PSDIR/usb/voltage_now" || return 1
+	v="$QSC_PS_VAL"
+	case "$v" in
+		""|*[!0-9]*) return 1 ;;
+	esac
+	if [ "$v" -gt 3000000 ] 2>/dev/null || \
+		{ [ "$v" -gt 3000 ] 2>/dev/null && [ "$v" -lt 100000 ] 2>/dev/null; }; then
+		return 0
+	fi
+	return 1
+}
+
+# 充电口类型非 Unknown/None
+qsc_ps_type_live() {
+	local p v
+	for p in "$PSDIR/usb/real_type" "$PSDIR/usb/type"; do
+		if qsc_ps_read "$p"; then
+			v="$QSC_PS_VAL"
+			case "$v" in
+				""|Unknown|UNKNOWN|None|NONE) ;;
+				*) return 0 ;;
+			esac
+		fi
+	done
+	return 1
+}
+
+# present=1 旁证：停充维持中可单信 present（MCA 停充常压掉 VBUS）；
+# 否则必须有 VBUS 或 type，避免 K90U 未插电粘住 present 假报已插电。
+qsc_ps_present_corroborated() {
+	[ -f "$DATADIR/power_switch" ] && return 0
+	qsc_ps_vbus_live && return 0
+	qsc_ps_type_live && return 0
 	return 1
 }
 
@@ -242,13 +276,16 @@ qsc_ps_plugged_scan() {
 			return 0
 		fi
 	done
-	# K90U / MCA 停充时 online 常被压成 0，但仍靠 present 识别插线。
-	# 未插电却粘住 present=1 时，若伴随明显放电则忽略。
+	# K90U / MCA：online 常为 0；present 需旁证（见 qsc_ps_present_corroborated）
 	for p in "$PSDIR/usb/present" "$PSDIR/qc_usb/present" \
 		"$PSDIR/wireless/present" "$PSDIR/ac/present"; do
 		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
 			if qsc_ps_looks_discharging; then
 				qsc_ps_dbg ps_present debug "忽略 ${p##*/}=1：伴随明显放电"
+				continue
+			fi
+			if ! qsc_ps_present_corroborated; then
+				qsc_ps_dbg ps_present debug "忽略孤立 ${p##*/}=1（无 VBUS/类型且未在停充维持）"
 				continue
 			fi
 			qsc_ps_dbg ps_present debug "判定已插电：${p##*/}=1（online 可能为 0）"
@@ -271,29 +308,17 @@ qsc_ps_plugged_scan() {
 			esac
 		fi
 	done
-	if qsc_ps_read "$PSDIR/usb/voltage_now"; then
+	if qsc_ps_vbus_live; then
 		v="$QSC_PS_VAL"
-		case "$v" in
-			""|*[!0-9]*) ;;
-			*)
-				# 单位可能是 µV 或 mV，取 3V 作门槛。
-				if [ "$v" -gt 3000000 ] 2>/dev/null || \
-					{ [ "$v" -gt 3000 ] 2>/dev/null && [ "$v" -lt 100000 ] 2>/dev/null; }; then
-					if qsc_ps_looks_discharging; then
-						qsc_ps_dbg ps_voltage debug "忽略 USB 电压 $v：伴随明显放电"
-					else
-						qsc_ps_dbg ps_voltage debug "判定已插电：USB 电压有效（$v）"
-						return 0
-					fi
-				fi
-				;;
-		esac
+		if qsc_ps_looks_discharging; then
+			qsc_ps_dbg ps_voltage debug "忽略 USB 电压 $v：伴随明显放电"
+		else
+			qsc_ps_dbg ps_voltage debug "判定已插电：USB 电压有效（$v）"
+			return 0
+		fi
 	fi
-	# Charging/Full：一加等机型未插电仍可能报 Charging——无端口 online/present
-	# 证据时不得仅凭 status 判已插电（否则简介会显示「充电中」）。
-	# Not charging：MCA 插电停充时常如此，但前面 online/present/type/vbus
-	# 已能覆盖「真插电」；若落到这里说明毫无端口证据——未插电待机也会报
-	# Not charging，再 return 0 会把小米 17/K90U 未插电显示成充电中。
+	# Charging/Full：一加等机型未插电仍可能报 Charging——无端口证据时不得单信。
+	# Not charging：无端口证据时忽略（K90U 未插电待机也报）。
 	if qsc_ps_read "$PSDIR/battery/status"; then
 		case "$QSC_PS_VAL" in
 			Charging|Full)
