@@ -48,6 +48,17 @@ jobs:
           mkdir -p ../release
           cp app/build/outputs/apk/release/app-release.apk ../release/QSC-Battery.apk
 
+      # 仅改工作区 module.prop，不写 update.json / 不 commit，避免 Pages 误报更新
+      - name: Stamp CI module.prop version
+        id: stamp
+        run: |
+          eval "$(python3 tooling/scripts/stamp-ci-module-version.py)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
+          echo "CI stamp: $version (versionCode=$version_code)"
+          echo "---- module.prop ----"
+          cat module/module.prop
+
       - name: Build all module zips (full / rust / c / sh / lite)
         env:
           REQUIRE_COMPANION_APK: "1"
@@ -58,7 +69,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: magisk-module-${{ github.sha }}
+          name: magisk-module-${{ steps.stamp.outputs.version }}-${{ github.sha }}
           path: release/*.zip
           if-no-files-found: error
           retention-days: 14

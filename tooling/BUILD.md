@@ -142,10 +142,33 @@ sh 主包没有这个二进制也必须行为一致，阈值判定的唯一真�
 | `Lint`           | push / PR                         | ESLint、Stylelint、Markdown、Shellcheck、typecheck、Prettier、Commitlint（PR） |
 | `Build Web`      | `webui/**`、web 构建脚本、package | Vite 构建 Web，上传 Artifact，推送 `dist-web`                                  |
 | `Build Docs`     | `docs/**`                         | 构建并部署 GitHub Pages                                                        |
-| `Package Module` | `webui/**`、`module/**`、打包脚本 | 构建 Magisk zip 并上传 Artifact（不发 Release）                                |
+| `Package Module` | `webui/**`、`module/**`、打包脚本 | 构建 Magisk zip 并上传 Artifact（不发 Release）；打包前 **CI 戳版本**（见下）  |
 | `Release Module` | **手动触发** / 推送 `v*` 标签     | 构建 zip + 创建 GitHub Release                                                 |
 
 各工作流互不串联，只按路径变更自行触发。
+
+### Package Module 的 CI 戳版本
+
+`Package Module` 在打包前会跑 `tooling/scripts/stamp-ci-module-version.py`，**只改工作区** `module/module.prop` 的 `version` / `versionCode`，随后打进 Artifact：
+
+- **不**改 `update.json` / `docs/public/**`，**不** commit，因此文档站与 Magisk 在线更新不会误报
+- 展示名形如 `2026.09.13.ci.42`（带 `.ci.`，不会被发版解析当成正式修订号）
+- `versionCode` 落在「上一正式版」与「下一档正式下限 − 1」之间，保证：
+  - 不同 CI 包之间通常可热更新（`run_number` 映射进号段）
+  - **当天第一次正式发版 `…01` 一定能热更新盖过发版前的 CI**
+  - 发版脚本 `resolve-release-version.py` 与正式公式 `yyyyMMdd*100+rev` **不变**
+
+本地默认 `npm run package:module` **不**戳号。若要模拟 CI：
+
+```bash
+# 需提供 run 号；会改写工作区 module.prop，用完请还原
+set GITHUB_RUN_NUMBER=1   # PowerShell: $env:GITHUB_RUN_NUMBER=1
+npm run package:module:ci
+# 或：node tooling/scripts/run-python.mjs tooling/scripts/stamp-ci-module-version.py --run 1 --dry-run
+npm run test:stamp-ci     # 号段边界自检
+```
+
+注意：当天已发正式版后再装 CI，号段可能顶到「次日 `…00`」；若同日还要发 `.2` 且需盖过该 CI，请用更高修订号。
 
 ### 手动发版
 

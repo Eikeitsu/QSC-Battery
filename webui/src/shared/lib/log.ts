@@ -53,10 +53,7 @@ export function isSessionBoundaryLine(raw: string): boolean {
  * 会话模式用：先全量 groupLogSessions，再按等级滤行。
  * 边界行（停充/恢复）始终保留，避免 Info 筛选把会话拆碎。
  */
-export function filterLogSessions(
-  sessions: LogSession[],
-  level: string,
-): LogSession[] {
+export function filterLogSessions(sessions: LogSession[], level: string): LogSession[] {
   if (!level) return sessions;
   return sessions
     .map((session) => {

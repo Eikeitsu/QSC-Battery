@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Package Module 打包前自动戳 CI `version`/`versionCode`（仅 Artifact，不改 `update.json`/文档站）；当天首发正式版仍为 `…01` 且可热更新盖过 CI
+
 ## 2026.09.13.2
 
 - 模块在线更新改为指向 `-full`；原无后缀主包改为 `-sh`；新增无 WebUI / 无内嵌 APK 的 `-lite`
