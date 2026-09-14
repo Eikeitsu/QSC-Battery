@@ -8,6 +8,7 @@ ui_print "********************************"
 
 qsc_abort() {
 	ui_print "! $1"
+	rm -f /data/adb/qsc/install_auto 2>/dev/null
 	if command -v abort >/dev/null 2>&1; then
 		abort "$1"
 	fi
@@ -27,6 +28,13 @@ if [ -f "$LIBDIR/keys.sh" ]; then
 	. "$LIBDIR/keys.sh"
 else
 	qsc_abort "缺少 bin/lib/keys.sh，安装包不完整"
+fi
+
+# APP CLI / 脚本刷入：/data/adb/qsc/install_auto 或环境变量 → 跳过音量键，用安全默认
+QSC_INSTALL_AUTO=0
+if [ -f /data/adb/qsc/install_auto ] || [ "${QSC_NONINTERACTIVE:-}" = "1" ]; then
+	QSC_INSTALL_AUTO=1
+	ui_print "- 无人值守安装：跳过音量键，使用安全默认选项"
 fi
 
 # 纯数字配置项
@@ -225,16 +233,20 @@ EOF
 }
 
 ui_print "--------------------------------"
-ui_print " 是否确认安装 充电控制？"
-ui_print " 音量上：确认安装"
-ui_print " 音量下：取消安装"
-ui_print " 请在 20 秒内选择"
-qsc_volume_choice
-case "$?" in
-	0) ui_print "- 已确认安装" ;;
-	1) qsc_abort "用户取消安装" ;;
-	*) qsc_abort "等待安装确认超时，已安全取消" ;;
-esac
+if [ "$QSC_INSTALL_AUTO" = "1" ]; then
+	ui_print " 无人值守：已确认安装"
+else
+	ui_print " 是否确认安装 充电控制？"
+	ui_print " 音量上：确认安装"
+	ui_print " 音量下：取消安装"
+	ui_print " 请在 20 秒内选择"
+	qsc_volume_choice
+	case "$?" in
+		0) ui_print "- 已确认安装" ;;
+		1) qsc_abort "用户取消安装" ;;
+		*) qsc_abort "等待安装确认超时，已安全取消" ;;
+	esac
+fi
 
 KEEP_CONFIG=0
 CURRENT_MODULE="/data/adb/modules/QSC_Battery"
@@ -256,18 +268,23 @@ if [ -f "$CURRENT_JSON" ] && [ ! -L "$CURRENT_JSON" ]; then
 	cp -f "$CURRENT_JSON" "$CURRENT_JSON_BACKUP" 2>/dev/null || true
 fi
 if [ -f "$CONFIG_BACKUP" ]; then
-	ui_print "--------------------------------"
-	ui_print " 检测到已安装的 QSC-Battery"
-	ui_print " 音量上：保留核心配置（停充阈值/开关/时段等）"
-	ui_print "         省电间隔等运行参数用新版默认"
-	ui_print " 音量下：全部使用新版默认配置"
-	ui_print " 20 秒未选择时按「保留核心配置」处理"
-	qsc_volume_choice
-	case "$?" in
-		0) KEEP_CONFIG=1; ui_print "- 将保留核心配置，并应用新版省电默认" ;;
-		1) ui_print "- 将使用新版默认配置" ;;
-		*) KEEP_CONFIG=1; ui_print "- 选择超时，按安全默认保留核心配置" ;;
-	esac
+	if [ "$QSC_INSTALL_AUTO" = "1" ]; then
+		KEEP_CONFIG=1
+		ui_print "- 无人值守：保留核心配置"
+	else
+		ui_print "--------------------------------"
+		ui_print " 检测到已安装的 QSC-Battery"
+		ui_print " 音量上：保留核心配置（停充阈值/开关/时段等）"
+		ui_print "         省电间隔等运行参数用新版默认"
+		ui_print " 音量下：全部使用新版默认配置"
+		ui_print " 20 秒未选择时按「保留核心配置」处理"
+		qsc_volume_choice
+		case "$?" in
+			0) KEEP_CONFIG=1; ui_print "- 将保留核心配置，并应用新版省电默认" ;;
+			1) ui_print "- 将使用新版默认配置" ;;
+			*) KEEP_CONFIG=1; ui_print "- 选择超时，按安全默认保留核心配置" ;;
+		esac
+	fi
 fi
 
 INSTALL_WEBUI=1
@@ -275,6 +292,8 @@ if [ ! -f "$MODPATH/webroot/index.html" ]; then
 	INSTALL_WEBUI=0
 	ui_print "--------------------------------"
 	ui_print "- 本包为 lite（无 WebUI），跳过界面安装选项"
+elif [ "$QSC_INSTALL_AUTO" = "1" ]; then
+	ui_print "- 无人值守：安装 WebUI"
 else
 	ui_print "--------------------------------"
 	ui_print " 是否安装 WebUI？"
@@ -290,19 +309,23 @@ else
 fi
 
 INSTALL_CURRENT=1
-ui_print "--------------------------------"
-ui_print " 是否安装「电流控制」组件？"
-ui_print " （模拟旁路 / 慢充 / 限流 / 游戏限流）"
-ui_print " 配置文件：config/current.json"
-ui_print " 音量上：安装（默认关闭，需手动开启）"
-ui_print " 音量下：不安装（不写入相关文件）"
-ui_print " 20 秒未选择时默认安装"
-qsc_volume_choice
-case "$?" in
-	0) ui_print "- 将安装电流控制组件" ;;
-	1) INSTALL_CURRENT=0; ui_print "- 将不安装电流控制组件" ;;
-	*) ui_print "- 选择超时，默认安装电流控制组件" ;;
-esac
+if [ "$QSC_INSTALL_AUTO" = "1" ]; then
+	ui_print "- 无人值守：安装电流控制组件（默认关闭）"
+else
+	ui_print "--------------------------------"
+	ui_print " 是否安装「电流控制」组件？"
+	ui_print " （模拟旁路 / 慢充 / 限流 / 游戏限流）"
+	ui_print " 配置文件：config/current.json"
+	ui_print " 音量上：安装（默认关闭，需手动开启）"
+	ui_print " 音量下：不安装（不写入相关文件）"
+	ui_print " 20 秒未选择时默认安装"
+	qsc_volume_choice
+	case "$?" in
+		0) ui_print "- 将安装电流控制组件" ;;
+		1) INSTALL_CURRENT=0; ui_print "- 将不安装电流控制组件" ;;
+		*) ui_print "- 选择超时，默认安装电流控制组件" ;;
+	esac
+fi
 
 # 旧版模块 id；检测到则自动卸载，不再做文件迁移
 # 完整版 QuantitativeStopCharging（QSC定量停充）
@@ -534,6 +557,10 @@ install_qscd() {
 # 模块不装守护也能正常停充，用户随时可以在 WebUI 里再试。
 qscd_offer_download() {
 	_pref="$1"
+	if [ "$QSC_INSTALL_AUTO" = "1" ]; then
+		ui_print "- 无人值守：跳过联网下载守护（可在更新页 / WebUI 安装）"
+		return 0
+	fi
 	ui_print "--------------------------------"
 	ui_print " 本安装包未自带「事件唤醒」守护文件"
 	ui_print " 它能让未插电时由充电事件唤醒，替代定时轮询，更省电"
@@ -622,6 +649,10 @@ install_qscd
 # }
 
 install_companion_app() {
+	if [ "$QSC_INSTALL_AUTO" = "1" ]; then
+		ui_print "- 无人值守：跳过伴侣 APP 安装（可在 APP「更新」页安装）"
+		return 0
+	fi
 	ui_print "--------------------------------"
 	ui_print " 伴侣 APP（可选）"
 	ui_print " APP 可不装模块单独使用；装上后才方便控制停充"
@@ -783,4 +814,5 @@ if [ -f "$LIBDIR/hot_update.sh" ]; then
 else
 	ui_print " 安装完成，请重启设备 "
 fi
+rm -f /data/adb/qsc/install_auto 2>/dev/null
 ui_print "********************************"

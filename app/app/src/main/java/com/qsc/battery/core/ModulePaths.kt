@@ -27,5 +27,7 @@ object ModulePaths {
     const val QSCD = "$MODDIR/bin/qscd"
     const val PROFILES_DIR = "$DATADIR/profiles"
     const val HOT_UPDATE_LOCK = "/data/adb/qsc/hot_update/lock"
+    /** APP CLI 刷模块前 touch；customize.sh 读到则跳过音量键 */
+    const val INSTALL_AUTO = "/data/adb/qsc/install_auto"
     const val STATUS_HELPER = "$MODDIR/bin/qsc_status.sh"
 }

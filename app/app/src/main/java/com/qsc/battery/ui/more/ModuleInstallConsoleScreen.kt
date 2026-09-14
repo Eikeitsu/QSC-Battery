@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.qsc.battery.core.ModulePaths
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.ui.design.charge.ChargePrimaryButton
 import com.qsc.battery.ui.design.charge.ChargeSecondaryButton
@@ -106,6 +107,8 @@ fun ModuleInstallConsoleScreen(
             }
             progress = 1f
             log("# saved ${file.absolutePath} (${file.length()} bytes)")
+            log("# enabling unattended defaults (${ModulePaths.INSTALL_AUTO})")
+            root.exec("mkdir -p /data/adb/qsc && touch '${ModulePaths.INSTALL_AUTO}'")
             val path = file.absolutePath.replace("'", "'\\''")
             val attempts = listOf(
                 "magisk --install-module '$path'",
@@ -117,27 +120,32 @@ fun ModuleInstallConsoleScreen(
                 "nsenter --mount=/proc/1/ns/mnt -- /data/adb/ap/bin/apd module install '$path'",
             )
             var installed = false
-            for (cmd in attempts) {
-                log("$ $cmd")
-                val r = root.exec(cmd)
-                if (r.out.isNotBlank()) r.out.lineSequence().forEach { log(it) }
-                if (r.err.isNotBlank()) r.err.lineSequence().forEach { log("! $it") }
-                log("# exit=${r.code}")
-                if (r.ok) {
-                    installed = true
-                    log("# ok: installer accepted module")
-                    break
+            try {
+                for (cmd in attempts) {
+                    log("$ $cmd")
+                    val r = root.exec(cmd)
+                    if (r.out.isNotBlank()) r.out.lineSequence().forEach { log(it) }
+                    if (r.err.isNotBlank()) r.err.lineSequence().forEach { log("! $it") }
+                    log("# exit=${r.code}")
+                    if (r.ok) {
+                        installed = true
+                        log("# ok: installer accepted module")
+                        break
+                    }
                 }
-            }
-            if (!installed) {
-                log("# cli failed — opening zip for manager UI")
-                withContext(Dispatchers.Main) {
-                    container.moduleInstallRepository.promptOpenModuleZip(file)
+                if (!installed) {
+                    log("# cli failed — opening zip for manager UI")
+                    withContext(Dispatchers.Main) {
+                        container.moduleInstallRepository.promptOpenModuleZip(file)
+                    }
+                    log("# opened system chooser / manager")
+                    success = true
+                } else {
+                    success = true
                 }
-                log("# opened system chooser / manager")
-                success = true
-            } else {
-                success = true
+            } finally {
+                root.exec("rm -f '${ModulePaths.INSTALL_AUTO}'")
+                log("# cleared install_auto flag")
             }
         } catch (e: Exception) {
             log("! ${e.message ?: e::class.java.simpleName}")
@@ -191,7 +199,7 @@ fun ModuleInstallConsoleScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "在本页执行下载与刷入命令，输出如下（非后台静默）。",
+                text = "下载后以命令行刷入；已启用无人值守默认（跳过音量键）。失败则打开管理器。",
                 style = ChargeTheme.typography.caption,
                 color = ChargeTheme.colors.muted,
             )
