@@ -93,44 +93,47 @@ const store = useAppStore();
 }
 
 .app-main-loading {
-  position: sticky;
+  position: fixed;
   top: calc(var(--qsc-topbar-h, 56px) + var(--qsc-inset-top, 0));
-  z-index: 5;
+  left: 0;
+  right: 0;
+  z-index: 2;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
-  padding: 10px 16px 12px;
+  height: 28px;
+  padding: 0 16px;
   font-size: 12px;
   color: var(--qsc-text-2);
   background: color-mix(in srgb, var(--qsc-bg) 92%, transparent);
-  backdrop-filter: blur(8px);
+  pointer-events: none;
 }
 
 .app-main-loading__bar {
-  display: block;
+  width: 36px;
   height: 3px;
-  border-radius: 999px;
   overflow: hidden;
+  border-radius: 999px;
   background: color-mix(in srgb, var(--qsc-primary) 20%, transparent);
 }
 
 .app-main-loading__bar::after {
   content: "";
   display: block;
-  width: 40%;
+  width: 45%;
   height: 100%;
   border-radius: inherit;
   background: var(--qsc-primary);
-  animation: qsc-load 1.1s ease-in-out infinite;
+  animation: app-main-loading-progress 1s ease-in-out infinite;
 }
 
-@keyframes qsc-load {
-  0% {
+@keyframes app-main-loading-progress {
+  from {
     transform: translateX(-120%);
   }
 
-  100% {
-    transform: translateX(320%);
+  to {
+    transform: translateX(240%);
   }
 }
 </style>

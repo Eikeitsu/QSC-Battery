@@ -181,8 +181,8 @@ npm run test:version-code
 1. 开发中把用户可见改动写在根目录 `changelog.md` → `## Unreleased`（详见 [`RELEASE.md`](./RELEASE.md)）
 2. GitHub → Actions → **Release Module** → Run workflow
 3. 填写**展示用**日期：当天第一版 `20260717`；同一天第二版 `20260717.2`（只影响 `version` 字符串）
-4. 可选：预发布 / 草稿（二者都**不会**跑 `post`、不写 Pages 正式镜像）
-5. 工作流会：分配单调 `versionCode`；提升 Unreleased；非预发布/非草稿时回写 Pages
+4. 选择发布形态：**正式版** / **预发布** / **草稿**（后两者不写 Pages；仅预发布写 `updates/prerelease`）
+5. 工作流会：分配单调 `versionCode`；提升 Unreleased；仅正式版回写 Pages / `updates/stable`
 
 | 输入（展示） | `version`      | `versionCode`         |
 | ------------ | -------------- | --------------------- |
@@ -200,7 +200,7 @@ Magisk / KernelSU 要求 **`versionCode` 为 ≤ 2147483647 的 int**。
 
 比较与热更新**只认 versionCode**。展示名后缀仅方便辨认通道，不参与大小比较。
 
-- 预发布：模块 `version` 与 APP `versionName` 为 `….pre`（勾选预发布时自动加）
+- 预发布：模块 `version` 与 APP `versionName` 为 `….pre`（发布形态选「预发布」时自动加）
 - CI：模块 / APP / 守护各自为 `yyyy.MM.dd.ci.<该工作流 run>`；只升本产品 `versionCode`
 - 正式 APP 默认仍用 `build.gradle.kts` 的 `versionName`（如 `0.3.1`），与模块日期版可并存
 

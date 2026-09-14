@@ -101,5 +101,5 @@ python3 tooling/scripts/promote-changelog.py --export-docs changelog.md \
 
 - Magisk `module.prop` 的 `updateJson` **始终** `https://eikeitsu.github.io/QSC-Battery/update.json`。
 - 模块 / APP / 守护三项 **独立工作流 + 独立 `versionCode`**；守护内 Rust / C **分别编译**，未改侧继承，共用通道 `versionCode`（更新检测仍是一个「守护」产品，哈希各自独立）。
-- 发版可用「发布范围」下拉（替代四个勾选）与「重新构建 / 晋升 CI」。
-- 勾选**预发布**或**草稿**：不写 Pages；非草稿预发布写 `updates/prerelease`。正式 `post` 写 Pages 后同步 `updates/stable`。
+- 发版可用多项勾选「发布模块 / APK / Rust 守护 / C 守护」（GitHub 无多选 select）、构建方式 choice（重新构建 / 晋升 CI）、发布形态 choice（正式版 / 预发布 / 草稿）。
+- **正式版**：`post` 写 Pages 后同步 `updates/stable`。**预发布**：不写 Pages，写 `updates/prerelease`。**草稿**：都不写。

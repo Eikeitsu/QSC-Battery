@@ -243,7 +243,9 @@ watch(channel, async () => {
 
         <div class="item">
           <div class="item-top">
-            <span class="name">守护 · {{ result.daemonImpl === "c" ? "C" : "Rust" }}</span>
+            <span class="name"
+              >守护 · {{ result.daemonImpl === "c" ? "C" : "Rust" }}</span
+            >
             <span
               class="chip"
               :data-tone="

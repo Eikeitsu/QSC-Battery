@@ -24,7 +24,7 @@
 - 模块打包依赖带溯源：本提交改了 APP/守护/WebUI 时，必须对齐该 commit 的成功产物（否则打包失败，禁止吃过期 tip）
 - `Build qscd`：Rust / C **分别**按路径编译，未改一侧从 `ci-dist` 继承；任一侧新编才升守护 `versionCode`
 - Package Module：输入摘要未变则跳过升码；Web / qscd / App 成功后可串联重打包；可复用版本分配 workflow
-- 发版：发布范围合并为 choice（主标题 — 副说明）；可选「重新构建 / 晋升 CI」
+- 发版：发布范围用 **多个 boolean 勾选**（GitHub choice 无法多选）；构建方式 / 发布形态为 choice（重新构建·晋升 CI；正式版·预发布·草稿）
 - 仅对应产品有实际变更时升该产品 `versionCode`；`updates` 分支同理按产品增量提交
 - APP / WebUI 更新页样式收紧：版本相同不再画箭头、提示条内嵌动作、错误文案民用化并挂到对应行
 - 修复守护安装：`qscd_fetch.sh` 版本校验支持 `.pre` / `.ci.N`（此前误报 `manifest_invalid_version`，CI/预发布无法装守护）

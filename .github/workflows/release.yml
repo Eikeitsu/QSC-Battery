@@ -12,21 +12,27 @@ on:
         required: false
         type: string
         default: ""
-      # GitHub choice 无原生主/副标题：选项写成「主标题 — 副说明」
-      publish_scope:
-        description: "发布范围（主标题 — 保留原勾选项说明）"
-        required: true
-        type: choice
-        default: "全部 — 模块 zip（5 变体 full/rust/c/sh/lite，update.json→full）+ Rust/C 守护 + 伴侣 APK"
-        options:
-          - "全部 — 模块 zip（5 变体 full/rust/c/sh/lite，update.json→full）+ Rust/C 守护 + 伴侣 APK"
-          - "仅模块 — 发布模块 zip（5 变体：full / rust / c / sh / lite）→ update.json 指向 full"
-          - "模块+APK — 模块 zip（5 变体）+ 伴侣 APK → app-update.json"
-          - "仅守护 — Rust + C 守护二进制 → 驱动 qscd/manifest"
-          - "仅 Rust 守护 — 发布 Rust 守护（qscd-rust-arm64 / qscd-rust-arm）→ 驱动 qscd/manifest"
-          - "仅 C 守护 — 发布 C 守护（qscd-c-arm64 / qscd-c-arm）→ 驱动 qscd/manifest"
-          - "仅 APK — 发布伴侣 APK → 驱动 app-update.json"
-          - "模块+守护 — zip（5 变体）+ Rust/C 守护（不含 APK）"
+      # GitHub Actions 的 choice 只能单选；发布范围用多个 boolean 实现多选
+      publish_module:
+        description: "发布模块 zip（5 变体 full/rust/c/sh/lite，update.json→full）"
+        required: false
+        type: boolean
+        default: true
+      publish_apk:
+        description: "发布伴侣 APK → app-update.json"
+        required: false
+        type: boolean
+        default: true
+      publish_daemon_rust:
+        description: "发布 Rust 守护（qscd-rust-arm64 / qscd-rust-arm）"
+        required: false
+        type: boolean
+        default: true
+      publish_daemon_c:
+        description: "发布 C 守护（qscd-c-arm64 / qscd-c-arm）"
+        required: false
+        type: boolean
+        default: true
       build_mode:
         description: "构建方式（主标题 — 说明）"
         required: true
@@ -40,16 +46,15 @@ on:
         required: false
         type: string
         default: ""
-      prerelease:
-        description: "标记为预发布"
-        required: false
-        type: boolean
-        default: false
-      draft:
-        description: "保存为草稿（不正式发布）"
-        required: false
-        type: boolean
-        default: false
+      release_kind:
+        description: "发布形态（单选）"
+        required: true
+        type: choice
+        default: "正式版 — 公开正式 Release，写 Pages / updates/stable"
+        options:
+          - "正式版 — 公开正式 Release，写 Pages / updates/stable"
+          - "预发布 — 公开预发布，写 updates/prerelease（不写 Pages）"
+          - "草稿 — 仅保存草稿，不写 Pages / updates"
   push:
     tags: ["v*"]
 
@@ -87,28 +92,21 @@ jobs:
             RAW="${{ inputs.version }}"
             RAW="${RAW#v}"
             CUSTOM_NAME="${{ inputs.release_name }}"
-            SCOPE="${{ inputs.publish_scope }}"
             MODE="${{ inputs.build_mode }}"
-            echo "prerelease=${{ inputs.prerelease }}" >> "$GITHUB_OUTPUT"
-            echo "draft=${{ inputs.draft }}" >> "$GITHUB_OUTPUT"
-
-            # parse「主标题 — …」
-            title="${SCOPE%% — *}"
-            zips=false; rust=false; cbin=false; apk=false
-            case "$title" in
-              全部) zips=true; rust=true; cbin=true; apk=true ;;
-              仅模块) zips=true ;;
-              模块+APK) zips=true; apk=true ;;
-              仅守护) rust=true; cbin=true ;;
-              "仅 Rust 守护") rust=true ;;
-              "仅 C 守护") cbin=true ;;
-              仅 APK) apk=true ;;
-              模块+守护) zips=true; rust=true; cbin=true ;;
-              *)
-                echo "未知 publish_scope: $SCOPE" >&2
-                exit 1
-                ;;
+            KIND="${{ inputs.release_kind }}"
+            PRE=false
+            DRAFT=false
+            case "$KIND" in
+              预发布*) PRE=true ;;
+              草稿*) DRAFT=true ;;
             esac
+            echo "prerelease=$PRE" >> "$GITHUB_OUTPUT"
+            echo "draft=$DRAFT" >> "$GITHUB_OUTPUT"
+
+            zips="${{ inputs.publish_module }}"
+            rust="${{ inputs.publish_daemon_rust }}"
+            cbin="${{ inputs.publish_daemon_c }}"
+            apk="${{ inputs.publish_apk }}"
             echo "publish_zips=$zips" >> "$GITHUB_OUTPUT"
             echo "publish_binaries_rust=$rust" >> "$GITHUB_OUTPUT"
             echo "publish_binaries_c=$cbin" >> "$GITHUB_OUTPUT"
@@ -128,6 +126,8 @@ jobs:
             TAG_NAME="${GITHUB_REF_NAME}"
             RAW="${TAG_NAME#v}"
             CUSTOM_NAME=""
+            PRE=false
+            DRAFT=false
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
             echo "draft=false" >> "$GITHUB_OUTPUT"
             echo "publish_zips=true" >> "$GITHUB_OUTPUT"
@@ -148,7 +148,7 @@ jobs:
           fi
 
           eval "$(RAW="$RAW" QSC_FETCH_REMOTE_CODES=1 python3 tooling/scripts/resolve-release-version.py)"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.prerelease }}" = "true" ]; then
+          if [ "$PRE" = "true" ]; then
             case "$version" in
               *.pre) ;;
               *) version="${version}.pre" ;;
