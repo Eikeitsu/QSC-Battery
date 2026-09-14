@@ -186,7 +186,7 @@ jobs:
 
       # 二进制 / APK 随构件带到 publish / post
       - name: Upload zips, native binaries, and APK
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: magisk-module-${{ steps.meta.outputs.tag }}
           path: |
@@ -207,7 +207,7 @@ jobs:
           fetch-depth: 0
 
       # 解到仓库根：构件同时含 release/ 与 module/bin/
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         with:
           name: magisk-module-${{ needs.build.outputs.tag }}
           path: .
@@ -317,7 +317,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       # 同 publish：解到仓库根，让 release/*.zip 与 module/bin/qscd-* 各回原位
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         with:
           name: magisk-module-${{ needs.build.outputs.tag }}
           path: .

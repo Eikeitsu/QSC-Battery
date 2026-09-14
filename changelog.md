@@ -4,7 +4,7 @@
 
 ### 构建
 
-- APP 迁到 AGP 内置 Kotlin（去掉 `builtInKotlin` / `newDsl` 兼容开关）；CI Actions 升到 `upload-artifact@v5` / `setup-gradle@v5`，消除 Node 20 弃用警告
+- APP 迁到 AGP 内置 Kotlin（去掉 `builtInKotlin` / `newDsl` 兼容开关）；CI Actions 升到 `upload-artifact@v6` / `download-artifact@v6` / `setup-gradle@v5` / Pages `upload-pages-artifact@v4` + `deploy-pages@v5`，消除 Node 20 弃用警告
 
 ### 更新通道与版本
 

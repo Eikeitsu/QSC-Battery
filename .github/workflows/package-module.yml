@@ -70,7 +70,7 @@ jobs:
       - name: Verify module zips
         run: npm run verify:zips
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: magisk-module-${{ steps.stamp.outputs.version }}-${{ github.sha }}
           path: |
