@@ -51,23 +51,60 @@ qscd_arch_suffix() {
 }
 
 # 下载到标准输出以外的文件；curl 优先，其次 busybox wget
+# 对 raw.githubusercontent.com 自动再试 jsDelivr（设备侧 curl 在国内常被墙）
 qscd_download() {
 	_url="$1"
 	_dest="$2"
 	rm -f "$_dest" 2>/dev/null
-	if command -v curl >/dev/null 2>&1; then
-		curl -fsSL --connect-timeout 15 --max-time 120 -o "$_dest" "$_url" 2>/dev/null \
-			&& [ -s "$_dest" ] && return 0
-	fi
-	if command -v wget >/dev/null 2>&1; then
-		wget -q -O "$_dest" "$_url" 2>/dev/null && [ -s "$_dest" ] && return 0
-	fi
-	if command -v busybox >/dev/null 2>&1; then
-		busybox wget -q -O "$_dest" "$_url" 2>/dev/null && [ -s "$_dest" ] && return 0
+	_try_one() {
+		_u="$1"
+		if command -v curl >/dev/null 2>&1; then
+			curl -fsSL --connect-timeout 15 --max-time 120 \
+				-A "QSC-Battery-qscd_fetch" \
+				-o "$_dest" "$_u" 2>/dev/null \
+				&& [ -s "$_dest" ] && return 0
+		fi
+		if command -v wget >/dev/null 2>&1; then
+			wget -q -U "QSC-Battery-qscd_fetch" -O "$_dest" "$_u" 2>/dev/null \
+				&& [ -s "$_dest" ] && return 0
+		fi
+		if command -v busybox >/dev/null 2>&1; then
+			busybox wget -q -O "$_dest" "$_u" 2>/dev/null \
+				&& [ -s "$_dest" ] && return 0
+		fi
+		rm -f "$_dest" 2>/dev/null
+		return 1
+	}
+	_try_one "$_url" && return 0
+	_cdn="$(qscd_jsdelivr_url "$_url")"
+	if [ -n "$_cdn" ] && [ "$_cdn" != "$_url" ]; then
+		_try_one "$_cdn" && return 0
 	fi
 	rm -f "$_dest" 2>/dev/null
 	return 1
 }
+
+# raw.githubusercontent.com/OWNER/REPO/BRANCH/path → cdn.jsdelivr.net/gh/OWNER/REPO@BRANCH/path
+qscd_jsdelivr_url() {
+	_u="$1"
+	case "$_u" in
+		https://raw.githubusercontent.com/*) ;;
+		*) echo ""; return 0 ;;
+	esac
+	_rest="${_u#https://raw.githubusercontent.com/}"
+	_owner="${_rest%%/*}"
+	_rest="${_rest#*/}"
+	_repo="${_rest%%/*}"
+	_rest="${_rest#*/}"
+	_branch="${_rest%%/*}"
+	_path="${_rest#*/}"
+	[ -n "$_owner" ] && [ -n "$_repo" ] && [ -n "$_branch" ] && [ -n "$_path" ] || {
+		echo ""
+		return 0
+	}
+	echo "https://cdn.jsdelivr.net/gh/${_owner}/${_repo}@${_branch}/${_path}"
+}
+
 
 qscd_sha256() {
 	if command -v sha256sum >/dev/null 2>&1; then
@@ -175,6 +212,17 @@ qscd_activate() {
 	echo "$_version" >"$DATADIR/native_version" 2>/dev/null
 	_code="${QSCD_REMOTE_VERSION_CODE:-}"
 	[ -n "$_code" ] && echo "$_code" >"$DATADIR/native_version_code" 2>/dev/null
+	# 分侧版本：Rust / C 各自一份，便于单独判断可更新
+	case "$_impl" in
+		c)
+			echo "$_version" >"$DATADIR/native_version_c" 2>/dev/null
+			[ -n "$_code" ] && echo "$_code" >"$DATADIR/native_version_code_c" 2>/dev/null
+			;;
+		*)
+			echo "$_version" >"$DATADIR/native_version_rust" 2>/dev/null
+			[ -n "$_code" ] && echo "$_code" >"$DATADIR/native_version_code_rust" 2>/dev/null
+			;;
+	esac
 	qscd_conf_set native_impl "$_impl"
 	qscd_conf_set native_daemon 1
 	case "$_impl" in
@@ -184,6 +232,60 @@ qscd_activate() {
 	qsc_log info "事件等待器已切换为 ${_impl_label} 版（来源：${_from:-unknown}）"
 	qscd_restart_service
 	return 0
+}
+
+# 清单里按实现取 version / versionCode；旧清单回退顶栏字段
+qscd_remote_version_for() {
+	_impl="$1"
+	_v=""
+	case "$_impl" in
+		c) _v="$(qscd_manifest_get cVersion)" ;;
+		*) _v="$(qscd_manifest_get rustVersion)" ;;
+	esac
+	[ -n "$_v" ] || _v="$(qscd_manifest_get version)"
+	printf '%s' "$_v"
+}
+
+qscd_remote_code_for() {
+	_impl="$1"
+	_c=""
+	case "$_impl" in
+		c) _c="$(qscd_manifest_get cVersionCode)" ;;
+		*) _c="$(qscd_manifest_get rustVersionCode)" ;;
+	esac
+	[ -n "$_c" ] || _c="$(qscd_manifest_get versionCode)"
+	printf '%s' "$_c" | tr -cd '0-9'
+}
+
+qscd_local_code_for() {
+	_impl="$1"
+	_c=""
+	case "$_impl" in
+		c) _c="$(cat "$DATADIR/native_version_code_c" 2>/dev/null | tr -cd '0-9')" ;;
+		*) _c="$(cat "$DATADIR/native_version_code_rust" 2>/dev/null | tr -cd '0-9')" ;;
+	esac
+	# 旧安装只有总码：仅当当前正在用该实现时才回退
+	if [ -z "$_c" ]; then
+		_used="$(cat "$DATADIR/native_impl_used" 2>/dev/null | tr -d ' \r\n' | tr 'A-Z' 'a-z')"
+		[ "$_used" = "$_impl" ] &&
+			_c="$(cat "$DATADIR/native_version_code" 2>/dev/null | tr -cd '0-9')"
+	fi
+	printf '%s' "$_c"
+}
+
+qscd_local_version_for() {
+	_impl="$1"
+	_v=""
+	case "$_impl" in
+		c) _v="$(cat "$DATADIR/native_version_c" 2>/dev/null | tr -d ' \r\n')" ;;
+		*) _v="$(cat "$DATADIR/native_version_rust" 2>/dev/null | tr -d ' \r\n')" ;;
+	esac
+	if [ -z "$_v" ]; then
+		_used="$(cat "$DATADIR/native_impl_used" 2>/dev/null | tr -d ' \r\n' | tr 'A-Z' 'a-z')"
+		[ "$_used" = "$_impl" ] &&
+			_v="$(cat "$DATADIR/native_version" 2>/dev/null | tr -d ' \r\n')"
+	fi
+	printf '%s' "$_v"
 }
 
 cmd_status() {
@@ -205,6 +307,10 @@ cmd_status() {
 	out impl "$_impl"
 	out local_version "$(cat "$DATADIR/native_version" 2>/dev/null | tr -d ' \r\n')"
 	out local_version_code "$(cat "$DATADIR/native_version_code" 2>/dev/null | tr -d ' \r\n')"
+	out local_version_rust "$(cat "$DATADIR/native_version_rust" 2>/dev/null | tr -d ' \r\n')"
+	out local_version_code_rust "$(cat "$DATADIR/native_version_code_rust" 2>/dev/null | tr -d ' \r\n')"
+	out local_version_c "$(cat "$DATADIR/native_version_c" 2>/dev/null | tr -d ' \r\n')"
+	out local_version_code_c "$(cat "$DATADIR/native_version_code_c" 2>/dev/null | tr -d ' \r\n')"
 	out src "$(cat "$DATADIR/native_src" 2>/dev/null | tr -d ' \r\n')"
 	# 模块自带的候选（sh 版一个都没有）
 	_bundled=""
@@ -260,14 +366,20 @@ cmd_install() {
 	rm -f "$TMPDIR/manifest.json" "$TMPDIR/qscd" 2>/dev/null
 
 	qscd_progress 15 manifest
-	qscd_download "$MANIFEST_URL" "$TMPDIR/manifest.json" || fail "manifest_download_failed"
+	if [ -f "$MANIFEST_URL" ]; then
+		cp -f "$MANIFEST_URL" "$TMPDIR/manifest.json" 2>/dev/null \
+			|| fail "manifest_download_failed"
+		[ -s "$TMPDIR/manifest.json" ] || fail "manifest_download_failed"
+	else
+		qscd_download "$MANIFEST_URL" "$TMPDIR/manifest.json" || fail "manifest_download_failed"
+	fi
 
 	_name="qscd-${_impl}-${_suffix}"
 	_want="$(qscd_manifest_get "$_name" | tr 'A-F' 'a-f')"
 	[ -n "$_want" ] || fail "manifest_no_entry"
-	_remote_version="$(qscd_manifest_get version)"
+	_remote_version="$(qscd_remote_version_for "$_impl")"
 	qscd_valid_version "$_remote_version" || fail "manifest_invalid_version"
-	_remote_code="$(qscd_manifest_get versionCode | tr -cd '0-9')"
+	_remote_code="$(qscd_remote_code_for "$_impl")"
 	export QSCD_REMOTE_VERSION_CODE="$_remote_code"
 	_sha_len="$(printf '%s' "$_want" | wc -c | tr -d ' ')"
 	case "$_want" in *[!0-9a-fA-F]*) fail "manifest_invalid_sha256" ;; esac
@@ -304,6 +416,7 @@ cmd_install() {
 	out impl "$_impl"
 	out src download
 	out version "$_remote_version"
+	out version_code "$_remote_code"
 }
 
 cmd_use() {
@@ -328,7 +441,9 @@ cmd_use() {
 
 cmd_remove() {
 	rm -f "$BINDIR/qscd" "$DATADIR/native_impl_used" "$DATADIR/native_src" \
-		"$DATADIR/native_version" 2>/dev/null
+		"$DATADIR/native_version" "$DATADIR/native_version_code" \
+		"$DATADIR/native_version_rust" "$DATADIR/native_version_code_rust" \
+		"$DATADIR/native_version_c" "$DATADIR/native_version_code_c" 2>/dev/null
 	rm -f "$PROGRESS_FILE" 2>/dev/null
 	qscd_conf_set native_daemon 0
 	qscd_restart_service
@@ -346,20 +461,30 @@ cmd_check() {
 	qscd_progress 10 manifest
 	mkdir -p "$TMPDIR" 2>/dev/null
 	rm -f "$TMPDIR/manifest.json" 2>/dev/null
-	qscd_download "$MANIFEST_URL" "$TMPDIR/manifest.json" || fail "manifest_download_failed"
-	_remote_version="$(qscd_manifest_get version)"
+	if [ -f "$MANIFEST_URL" ]; then
+		cp -f "$MANIFEST_URL" "$TMPDIR/manifest.json" 2>/dev/null \
+			|| fail "manifest_download_failed"
+		[ -s "$TMPDIR/manifest.json" ] || fail "manifest_download_failed"
+	else
+		qscd_download "$MANIFEST_URL" "$TMPDIR/manifest.json" || fail "manifest_download_failed"
+	fi
+	_remote_version="$(qscd_remote_version_for "$_impl")"
 	qscd_valid_version "$_remote_version" || fail "manifest_invalid_version"
-	_remote_code="$(qscd_manifest_get versionCode | tr -cd '0-9')"
+	_remote_code="$(qscd_remote_code_for "$_impl")"
 	_name="qscd-${_impl}-${_suffix}"
 	_remote_hash="$(qscd_manifest_get "$_name" | tr 'A-F' 'a-f')"
 	[ -n "$_remote_hash" ] || fail "manifest_no_entry"
 	_hash_len="$(printf '%s' "$_remote_hash" | wc -c | tr -d ' ')"
 	case "$_remote_hash" in *[!0-9a-f]*) fail "manifest_invalid_sha256" ;; esac
 	[ "$_hash_len" = "64" ] || fail "manifest_invalid_sha256"
-	_local_version="$(cat "$DATADIR/native_version" 2>/dev/null | tr -d ' \r\n')"
-	_local_code="$(cat "$DATADIR/native_version_code" 2>/dev/null | tr -cd '0-9')"
+	_local_version="$(qscd_local_version_for "$_impl")"
+	_local_code="$(qscd_local_code_for "$_impl")"
 	_local_hash=""
-	[ -f "$BINDIR/qscd" ] && _local_hash="$(qscd_sha256 "$BINDIR/qscd")"
+	_used="$(cat "$DATADIR/native_impl_used" 2>/dev/null | tr -d ' \r\n' | tr 'A-Z' 'a-z')"
+	# 仅当前正在运行的实现才有可比对的 bin/qscd 哈希
+	if [ "$_used" = "$_impl" ] && [ -f "$BINDIR/qscd" ]; then
+		_local_hash="$(qscd_sha256 "$BINDIR/qscd")"
+	fi
 	_hash_match=0
 	[ -n "$_local_hash" ] && [ "$_local_hash" = "$_remote_hash" ] && _hash_match=1
 	_state=unknown
@@ -380,9 +505,8 @@ cmd_check() {
 			-1) _state=local_newer ;;
 		esac
 	fi
-	# 版本号相同但文件被替换/损坏时也必须允许重新下载修复，不能只显示
-	# 「版本相同」却把用户锁在当前二进制上。
-	if [ -f "$BINDIR/qscd" ] && [ "$_hash_match" != "1" ]; then
+	# 版本号相同但文件被替换/损坏时也必须允许重新下载修复
+	if [ "$_used" = "$_impl" ] && [ -f "$BINDIR/qscd" ] && [ "$_hash_match" != "1" ]; then
 		_update=1
 	fi
 	rm -rf "$TMPDIR" 2>/dev/null

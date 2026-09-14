@@ -27,47 +27,47 @@ android {
         buildConfigField(
             "String",
             "MODULE_UPDATE_URL",
-            "\"https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/updates/stable/update.json\"",
+            "\"https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@updates/stable/update.json\"",
         )
         buildConfigField(
             "String",
             "APP_UPDATE_URL",
-            "\"https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/updates/stable/app-update.json\"",
+            "\"https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@updates/stable/app-update.json\"",
         )
         buildConfigField(
             "String",
             "DAEMON_UPDATE_URL",
-            "\"https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/updates/stable/qscd/manifest.json\"",
+            "\"https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@updates/stable/qscd/manifest.json\"",
         )
         buildConfigField(
             "String",
             "CI_MODULE_UPDATE_URL",
-            "\"https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/updates/ci/update.json\"",
+            "\"https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@updates/ci/update.json\"",
         )
         buildConfigField(
             "String",
             "CI_APP_UPDATE_URL",
-            "\"https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/updates/ci/app-update.json\"",
+            "\"https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@updates/ci/app-update.json\"",
         )
         buildConfigField(
             "String",
             "CI_DAEMON_UPDATE_URL",
-            "\"https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/updates/ci/qscd/manifest.json\"",
+            "\"https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@updates/ci/qscd/manifest.json\"",
         )
         buildConfigField(
             "String",
             "PRE_MODULE_UPDATE_URL",
-            "\"https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/updates/prerelease/update.json\"",
+            "\"https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@updates/prerelease/update.json\"",
         )
         buildConfigField(
             "String",
             "PRE_APP_UPDATE_URL",
-            "\"https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/updates/prerelease/app-update.json\"",
+            "\"https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@updates/prerelease/app-update.json\"",
         )
         buildConfigField(
             "String",
             "PRE_DAEMON_UPDATE_URL",
-            "\"https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/updates/prerelease/qscd/manifest.json\"",
+            "\"https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@updates/prerelease/qscd/manifest.json\"",
         )
         buildConfigField("String", "MODULE_ID", "\"QSC_Battery\"")
     }

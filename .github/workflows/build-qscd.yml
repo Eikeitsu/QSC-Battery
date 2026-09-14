@@ -1,7 +1,7 @@
 name: Build qscd
 
 # Rust / C 按路径分别编译；未变更的一侧从 ci-dist 继承。
-# 任一侧新编成功才升守护 versionCode 并推送。
+# 任一侧新编成功才升该侧 versionCode（rustVersionCode / cVersionCode）并推送。
 
 on:
   push:

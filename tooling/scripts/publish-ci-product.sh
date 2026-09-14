@@ -16,7 +16,8 @@ cd "$ROOT"
 
 PRODUCT="${1:?module|app|daemon}"
 OWNER_REPO="${GITHUB_REPOSITORY:-Eikeitsu/QSC-Battery}"
-CI_RAW="https://raw.githubusercontent.com/${OWNER_REPO}/ci-dist"
+# 设备侧 curl 常打不开 raw.githubusercontent.com；CI 元数据 URL 统一走 jsDelivr
+CI_CDN="https://cdn.jsdelivr.net/gh/${OWNER_REPO}@ci-dist"
 SHA="${GITHUB_SHA:-unknown}"
 
 chmod +x tooling/scripts/publish-ci-dist.sh tooling/scripts/publish-updates.sh
@@ -30,7 +31,7 @@ case "$PRODUCT" in
       --source-sha "$SHA" \
       --module-version "$MODULE_VERSION" \
       --module-code "$MODULE_CODE" \
-      --module-zip-url "${CI_RAW}/module/QSC-Battery-full.zip" \
+      --module-zip-url "${CI_CDN}/module/QSC-Battery-full.zip" \
       --module-changelog "https://github.com/${OWNER_REPO}/commit/${SHA}"
     ;;
   app)
@@ -41,7 +42,7 @@ case "$PRODUCT" in
       --source-sha "$SHA" \
       --app-version "$APP_VERSION" \
       --app-code "$APP_CODE" \
-      --app-apk-url "${CI_RAW}/app/QSC-Battery.apk" \
+      --app-apk-url "${CI_CDN}/app/QSC-Battery.apk" \
       --app-changelog "https://github.com/${OWNER_REPO}/commit/${SHA}"
     ;;
   daemon)
@@ -57,8 +58,10 @@ case "$PRODUCT" in
       --source-sha "$SHA" \
       --daemon-version "$DAEMON_VERSION" \
       --daemon-code "$DAEMON_CODE" \
-      --daemon-base-url "${CI_RAW}/qscd" \
-      --daemon-dir "$DDIR"
+      --daemon-base-url "${CI_CDN}/qscd" \
+      --daemon-dir "$DDIR" \
+      --daemon-rust-built "${RUST_BUILT:-1}" \
+      --daemon-c-built "${C_BUILT:-1}"
     rm -rf "$DDIR"
     ;;
   *)

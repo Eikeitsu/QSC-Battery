@@ -122,33 +122,25 @@ fun UpdatesScreen(
                 )
             },
         )
-        if (checking || work is UpdateWork.Downloading || work is UpdateWork.Installing) {
-            val fraction = (work as? UpdateWork.Downloading)?.fraction
-            if (fraction != null) {
-                LinearProgressIndicator(
-                    progress = { fraction },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp),
-                    color = ChargeTheme.colors.accent,
-                    trackColor = ChargeTheme.colors.stroke,
-                )
-            } else {
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp),
-                    color = ChargeTheme.colors.accent,
-                    trackColor = ChargeTheme.colors.stroke,
-                )
-            }
+        // 仅「检查更新」用顶栏细条；下载/安装进度只在对应组件行内展示，避免双进度
+        if (checking) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp),
+                color = ChargeTheme.colors.accent,
+                trackColor = ChargeTheme.colors.stroke,
+            )
         }
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                .padding(bottom = ChargeTheme.dimens.sectionGap),
+                .padding(
+                    top = ChargeTheme.dimens.pageContentTop,
+                    bottom = ChargeTheme.dimens.sectionGap,
+                ),
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
         ) {
             ChargeSection(title = "更新通道") {
@@ -204,7 +196,7 @@ fun UpdatesScreen(
                                 UpdateChannel.Prerelease ->
                                     "预发布：updates/prerelease → GitHub Release。"
                                 UpdateChannel.Ci ->
-                                    "CI：updates/ci → ci-dist 产物。"
+                                    "CI：updates/ci → ci-dist（jsDelivr）产物。"
                             },
                             style = ChargeTheme.typography.caption,
                             color = ChargeTheme.colors.muted,
@@ -222,8 +214,14 @@ fun UpdatesScreen(
 
             if (result == null && checking) {
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(ChargeTheme.dimens.radiusMd))
+                        .background(ChargeTheme.colors.surface)
+                        .border(1.dp, ChargeTheme.colors.stroke, RoundedCornerShape(ChargeTheme.dimens.radiusMd))
+                        .padding(horizontal = 16.dp, vertical = 18.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.Center,
                 ) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(18.dp),
@@ -234,6 +232,7 @@ fun UpdatesScreen(
                         text = "正在检查更新…",
                         style = ChargeTheme.typography.caption,
                         color = ChargeTheme.colors.muted,
+                        modifier = Modifier.padding(start = 10.dp),
                     )
                 }
             }
@@ -298,7 +297,7 @@ fun UpdatesScreen(
                     )
                     ChargeDivider()
                     ProductRow(
-                        title = "守护",
+                        title = "守护 · ${if (r.daemonImpl == "c") "C" else "Rust"}",
                         localText = r.daemonLocalVersion ?: "--",
                         remoteText = r.daemonRemote?.version ?: "--",
                         chip = daemonChip(r),

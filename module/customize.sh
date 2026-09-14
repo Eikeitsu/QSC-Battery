@@ -478,6 +478,10 @@ qscd_try_candidate() {
 		_version="$4"
 		[ -n "$_version" ] || _version="$(sed -n 's/^version=//p' "$MODPATH/module.prop" 2>/dev/null | head -n1 | tr -d ' \r\n')"
 		[ -n "$_version" ] && echo "$_version" >"$MODPATH/data/native_version" 2>/dev/null
+		case "$_used_impl" in
+			c) [ -n "$_version" ] && echo "$_version" >"$MODPATH/data/native_version_c" 2>/dev/null ;;
+			*) [ -n "$_version" ] && echo "$_version" >"$MODPATH/data/native_version_rust" 2>/dev/null ;;
+		esac
 		return 0
 	fi
 	ui_print "- 守护自检未通过（$2 版）"

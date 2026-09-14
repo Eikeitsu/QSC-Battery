@@ -197,11 +197,24 @@ class UpdatesSession(
                 _work.value = UpdateWork.Installing(UpdateTarget.Daemon, "正在安装守护…")
                 notifier.start("安装守护", "正在下载并安装…")
                 val (manifest, pages) = updates.channelDaemonUrls(_channel.value)
-                val msg = daemon.install(
-                    impl = "rust",
-                    manifestUrl = r.daemonRemote?.manifestUrl ?: manifest,
+                val impl = daemon.preferredImpl()
+                val remoteManifest = r.daemonRemote?.manifestUrl ?: manifest
+                val localManifest = runCatching {
+                    updates.materializeDaemonManifest(remoteManifest)
+                }.getOrNull()
+                var msg = daemon.install(
+                    impl = impl,
+                    manifestUrl = localManifest ?: remoteManifest,
                     pagesBase = r.daemonRemote?.baseUrl ?: pages,
                 )
+                // 旧版 qscd_fetch 不认本地清单路径时，回退到 CDN HTTP
+                if (!msg.contains("ok=1") && localManifest != null) {
+                    msg = daemon.install(
+                        impl = impl,
+                        manifestUrl = remoteManifest,
+                        pagesBase = r.daemonRemote?.baseUrl ?: pages,
+                    )
+                }
                 if (msg.contains("ok=1")) {
                     notifier.success("守护已更新", "安装完成")
                     _snackbar.value = "守护已更新"

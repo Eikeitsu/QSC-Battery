@@ -55,8 +55,22 @@ class UpdateRepository(
             .onFailure { if (err == null) err = it.message }
             .getOrNull()
 
-        val daemonLocalVersion = readDataFile("native_version")
-        val daemonLocalCode = readDataFile("native_version_code")?.toLongOrNull() ?: 0L
+        val daemonImpl = preferredDaemonImpl()
+        val daemonLocalVersion = readDataFile(
+            if (daemonImpl == "c") "native_version_c" else "native_version_rust",
+        ) ?: readDataFile("native_version")
+        val daemonLocalCode = (
+            readDataFile(
+                if (daemonImpl == "c") "native_version_code_c" else "native_version_code_rust",
+            ) ?: readDataFile("native_version_code")
+            )?.toLongOrNull() ?: 0L
+        val daemonRemoteCode = daemonRemote?.versionCodeForImpl(daemonImpl) ?: 0L
+        val daemonRemoteDisplay = daemonRemote?.let {
+            it.copy(
+                version = it.versionForImpl(daemonImpl),
+                versionCode = daemonRemoteCode,
+            )
+        }
 
         var stableModuleNewer: RemoteUpdateInfo? = null
         var stableAppNewer: RemoteUpdateInfo? = null
@@ -72,8 +86,12 @@ class UpdateRepository(
             if (stableApp != null && stableApp.versionCode > appCode) {
                 stableAppNewer = stableApp
             }
-            if (stableDaemon != null && stableDaemon.versionCode > daemonLocalCode) {
-                stableDaemonNewer = stableDaemon
+            val stableDaemonCode = stableDaemon?.versionCodeForImpl(daemonImpl) ?: 0L
+            if (stableDaemon != null && stableDaemonCode > daemonLocalCode) {
+                stableDaemonNewer = stableDaemon.copy(
+                    version = stableDaemon.versionForImpl(daemonImpl),
+                    versionCode = stableDaemonCode,
+                )
             }
         }
 
@@ -90,10 +108,11 @@ class UpdateRepository(
             appHasUpdate = appRemote != null && appRemote.versionCode > appCode,
             daemonLocalVersion = daemonLocalVersion,
             daemonLocalCode = daemonLocalCode,
-            daemonRemote = daemonRemote,
-            daemonHasUpdate = daemonRemote != null &&
-                daemonRemote.versionCode > 0L &&
-                daemonRemote.versionCode > daemonLocalCode,
+            daemonRemote = daemonRemoteDisplay,
+            daemonHasUpdate = daemonRemoteDisplay != null &&
+                daemonRemoteCode > 0L &&
+                daemonRemoteCode > daemonLocalCode,
+            daemonImpl = daemonImpl,
             stableModuleNewer = stableModuleNewer,
             stableAppNewer = stableAppNewer,
             stableDaemonNewer = stableDaemonNewer,
@@ -155,10 +174,55 @@ class UpdateRepository(
         }
         val pagesFallback = when (channel) {
             UpdateChannel.Stable -> "https://eikeitsu.github.io/QSC-Battery"
-            UpdateChannel.Ci -> "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist/qscd"
+            // Site root（不含 /qscd）；fetch 会拼 /qscd/<name>。二进制优先走 manifest *Url（jsDelivr）
+            UpdateChannel.Ci -> "https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@ci-dist"
             UpdateChannel.Prerelease -> "https://eikeitsu.github.io/QSC-Battery"
         }
         return manifest to pagesFallback
+    }
+
+    /**
+     * APP 侧拉取清单并把 raw.githubusercontent.com 改成 jsDelivr，写入模块 data 目录，
+     * 供 qscd_fetch 以本地文件读取（避开设备 curl 访问 GitHub raw）。
+     */
+    suspend fun materializeDaemonManifest(url: String): String =
+        withContext(Dispatchers.IO) {
+            val reachable = com.qsc.battery.core.GithubCdn.preferReachable(url)
+            val req = Request.Builder()
+                .url(reachable)
+                .header("User-Agent", "QSC-Battery-App")
+                .get()
+                .build()
+            val body = client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) error("daemon manifest HTTP ${resp.code}")
+                resp.body.string()
+            }
+            val rewritten = Regex("""https://raw\.githubusercontent\.com/[^"\s]+""").replace(body) {
+                com.qsc.battery.core.GithubCdn.preferReachable(it.value)
+            }
+            val dest = "${ModulePaths.DATADIR}/update_manifest.json"
+            val b64 = android.util.Base64.encodeToString(
+                rewritten.toByteArray(Charsets.UTF_8),
+                android.util.Base64.NO_WRAP,
+            )
+            val r = root.exec(
+                "mkdir -p '${ModulePaths.DATADIR}' && " +
+                    "echo '$b64' | base64 -d > '$dest' && " +
+                    "chmod 0644 '$dest' && echo ok",
+            )
+            if (!r.ok || !r.out.contains("ok")) {
+                error("write daemon manifest failed: ${r.err.ifBlank { r.out }}")
+            }
+            dest
+        }
+
+    private suspend fun preferredDaemonImpl(): String {
+        val used = readDataFile("native_impl_used")?.lowercase()
+        if (used == "rust" || used == "c") return used
+        val conf = root.exec(
+            "sed -n 's/^native_impl=//p' '${ModulePaths.CONF}' 2>/dev/null | head -1",
+        ).out.trim().lowercase()
+        return if (conf == "c") "c" else "rust"
     }
 
     private suspend fun readDataFile(name: String): String? {
@@ -216,6 +280,10 @@ class UpdateRepository(
                 baseUrl = str("baseUrl"),
                 changelog = str("changelog"),
                 manifestUrl = url,
+                rustVersion = str("rustVersion"),
+                rustVersionCode = long("rustVersionCode"),
+                cVersion = str("cVersion"),
+                cVersionCode = long("cVersionCode"),
             )
         }
     }

@@ -33,6 +33,10 @@ def daemon_manifest(channel: str, version: str, code: int) -> dict:
     man = {
         "version": version,
         "versionCode": code,
+        "rustVersion": version,
+        "rustVersionCode": code,
+        "cVersion": version,
+        "cVersionCode": code,
         "channel": channel,
         "baseUrl": base,
     }

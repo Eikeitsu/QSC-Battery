@@ -17,3 +17,4 @@ export * from "./lib/device";
 export * from "./lib/highlightPowerSwitch";
 export * from "./lib/policySwitch";
 export * from "./lib/updateChannel";
+export * from "./lib/githubCdn";

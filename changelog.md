@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### 更新页与守护下载
+
+- APP 更新页：检查中底部提示改为居中卡片；顶栏进度条与「更新通道」拉开间距；下载/安装时不再叠顶栏进度（只保留行内进度）
+- 守护安装：清单/二进制优先走 **jsDelivr**（设备 curl 常打不开 `raw.githubusercontent.com`）；`qscd_fetch` 对 raw 自动回退 CDN；`QSCD_PAGES_BASE` 不再误带 `/qscd` 后缀
+- APP/WebUI 安装前会把清单落到本地并把 raw URL 改写为 CDN，兼容尚未刷入新 `qscd_fetch` 前的下载路径问题（完整回退仍需新脚本）
+- 更新通道安装守护时按当前 `native_impl`（Rust/C）下载，不再写死 Rust
+- 守护 **Rust / C 分侧 versionCode**（`rustVersionCode` / `cVersionCode`）：只升变更一侧；检测/安装只看当前实现；UI 显示「守护 · Rust/C」
+- Pages `qscd/manifest.json` 补齐 `versionCode` / `baseUrl` / `*Url` / 分侧版本字段，与 updates/stable 对齐
+
 ### 构建
 
 - APP 迁到 AGP 内置 Kotlin（去掉 `builtInKotlin` / `newDsl` 兼容开关）；CI Actions 升到 `upload-artifact@v6` / `download-artifact@v6` / `setup-gradle@v5` / Pages `upload-pages-artifact@v4` + `deploy-pages@v5`，消除 Node 20 弃用警告

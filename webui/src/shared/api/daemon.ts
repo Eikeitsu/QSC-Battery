@@ -1,4 +1,5 @@
 import { PATHS } from "@/shared/config/paths";
+import { pagesRootForDaemon, preferGithubCdn } from "@/shared/lib/githubCdn";
 import { exec } from "./ksu";
 
 /** 守护实现：Rust 为主力，C 保持基础事件唤醒兼容 */
@@ -179,17 +180,45 @@ export async function checkDaemonUpdate(impl: DaemonImpl): Promise<{
 /** 下载耗时可能较长（含 manifest + 二进制两次请求），给足超时 */
 const INSTALL_TIMEOUT_MS = 180_000;
 
+/** WebView 拉清单并改写为 jsDelivr，落到模块 data，供 fetch 读本地文件 */
+async function materializeDaemonManifest(url: string): Promise<string> {
+  const reachable = preferGithubCdn(url);
+  const resp = await fetch(reachable, { headers: { "User-Agent": "QSC-Battery-WebUI" } });
+  if (!resp.ok) throw new Error(`daemon manifest HTTP ${resp.status}`);
+  const rewritten = (await resp.text()).replace(
+    /https:\/\/raw\.githubusercontent\.com\/[^"\s]+/g,
+    (u) => preferGithubCdn(u),
+  );
+  const dest = `${PATHS.DATADIR}/update_manifest.json`;
+  const b64 = btoa(unescape(encodeURIComponent(rewritten)));
+  const r = await exec(
+    `mkdir -p '${PATHS.DATADIR}' && echo '${b64}' | base64 -d > '${dest}' && chmod 0644 '${dest}' && echo ok`,
+    15_000,
+  );
+  if (!(r.stdout || "").includes("ok")) {
+    throw new Error("write daemon manifest failed");
+  }
+  return dest;
+}
+
 /** 从 Pages / updates 通道下载指定实现；成功后自动替换并重启服务 */
 export async function installDaemon(
   impl: DaemonImpl,
   opts?: { manifestUrl?: string; pagesBase?: string },
 ): Promise<DaemonActionResult> {
   const env: string[] = [];
-  if (opts?.manifestUrl) {
-    env.push(`QSCD_MANIFEST_URL='${opts.manifestUrl.replace(/'/g, "")}'`);
+  let manifest = opts?.manifestUrl?.trim() || "";
+  if (manifest) {
+    try {
+      manifest = await materializeDaemonManifest(manifest);
+    } catch {
+      manifest = preferGithubCdn(manifest);
+    }
+    env.push(`QSCD_MANIFEST_URL='${manifest.replace(/'/g, "")}'`);
   }
   if (opts?.pagesBase) {
-    env.push(`QSCD_PAGES_BASE='${opts.pagesBase.replace(/'/g, "")}'`);
+    const root = pagesRootForDaemon(opts.pagesBase);
+    if (root) env.push(`QSCD_PAGES_BASE='${root.replace(/'/g, "")}'`);
   }
   const prefix = env.length ? `${env.join(" ")} ` : "";
   const r = await exec(

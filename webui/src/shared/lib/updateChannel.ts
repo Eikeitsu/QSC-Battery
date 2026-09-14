@@ -20,10 +20,10 @@ export const UPDATE_CHANNEL_HINT: Record<UpdateChannel, string> = {
 export const UPDATE_CHANNEL_TECH: Record<UpdateChannel, string> = {
   stable: "正式：updates/stable；包地址通常指向 Pages。Magisk 仍只认 Pages update.json。",
   prerelease: "预发布：updates/prerelease → GitHub Release 资产",
-  ci: "CI：updates/ci → ci-dist 完整产物",
+  ci: "CI：updates/ci → ci-dist（jsDelivr）完整产物",
 };
 
-const UPDATES = "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/updates";
+const UPDATES = "https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@updates";
 
 export const UPDATE_URLS = {
   stableModule: `${UPDATES}/stable/update.json`,
@@ -42,6 +42,10 @@ export interface RemoteUpdateInfo {
   changelog?: string;
   baseUrl?: string;
   manifestUrl?: string;
+  rustVersion?: string;
+  rustVersionCode?: number;
+  cVersion?: string;
+  cVersionCode?: number;
 }
 
 export interface ChannelCheckResult {
@@ -54,6 +58,7 @@ export interface ChannelCheckResult {
   daemonLocalCode: number;
   daemon: RemoteUpdateInfo | null;
   daemonHasUpdate: boolean;
+  daemonImpl: "rust" | "c";
   stableModuleNewer: RemoteUpdateInfo | null;
   stableDaemonNewer: RemoteUpdateInfo | null;
   error: string | null;
@@ -73,6 +78,35 @@ function parseJsonUpdate(text: string): RemoteUpdateInfo {
     apkUrl: obj.apkUrl ? String(obj.apkUrl) : undefined,
     changelog: obj.changelog ? String(obj.changelog) : undefined,
     baseUrl: obj.baseUrl ? String(obj.baseUrl) : undefined,
+    rustVersion: obj.rustVersion ? String(obj.rustVersion) : undefined,
+    rustVersionCode:
+      obj.rustVersionCode != null ? Number(obj.rustVersionCode) : undefined,
+    cVersion: obj.cVersion ? String(obj.cVersion) : undefined,
+    cVersionCode: obj.cVersionCode != null ? Number(obj.cVersionCode) : undefined,
+  };
+}
+
+function versionForImpl(info: RemoteUpdateInfo, impl: "rust" | "c"): string {
+  if (impl === "c") return info.cVersion || info.version;
+  return info.rustVersion || info.version;
+}
+
+function versionCodeForImpl(info: RemoteUpdateInfo, impl: "rust" | "c"): number {
+  if (impl === "c") {
+    return info.cVersionCode && info.cVersionCode > 0
+      ? info.cVersionCode
+      : info.versionCode;
+  }
+  return info.rustVersionCode && info.rustVersionCode > 0
+    ? info.rustVersionCode
+    : info.versionCode;
+}
+
+function forImpl(info: RemoteUpdateInfo, impl: "rust" | "c"): RemoteUpdateInfo {
+  return {
+    ...info,
+    version: versionForImpl(info, impl),
+    versionCode: versionCodeForImpl(info, impl),
   };
 }
 
@@ -99,17 +133,47 @@ function urlsFor(channel: UpdateChannel) {
   return { module: UPDATE_URLS.stableModule, daemon: UPDATE_URLS.stableDaemon };
 }
 
-async function readDaemonLocal(): Promise<{ version: string; code: number }> {
+async function readDaemonLocal(
+  impl: "rust" | "c",
+): Promise<{ version: string; code: number }> {
+  const { exec } = await import("@/shared/api/ksu");
+  const { PATHS } = await import("@/shared/config/paths");
+  const side = impl === "c" ? "c" : "rust";
+  const r = await exec(
+    `cat '${PATHS.DATADIR}/native_version_${side}' 2>/dev/null; echo ---; ` +
+      `cat '${PATHS.DATADIR}/native_version_code_${side}' 2>/dev/null; echo ---; ` +
+      `cat '${PATHS.DATADIR}/native_version' 2>/dev/null; echo ---; ` +
+      `cat '${PATHS.DATADIR}/native_version_code' 2>/dev/null; echo ---; ` +
+      `cat '${PATHS.DATADIR}/native_impl_used' 2>/dev/null`,
+    5_000,
+  );
+  const parts = (r.stdout || "").split("---").map((s) => s.trim());
+  const sideVer = parts[0] || "";
+  const sideCode = Number(parts[1] || "") || 0;
+  const tipVer = parts[2] || "";
+  const tipCode = Number(parts[3] || "") || 0;
+  const used = (parts[4] || "").toLowerCase();
+  if (sideVer || sideCode) {
+    return { version: sideVer, code: sideCode };
+  }
+  if (used === impl || !used) {
+    return { version: tipVer, code: tipCode };
+  }
+  return { version: "", code: 0 };
+}
+
+async function preferredDaemonImpl(): Promise<"rust" | "c"> {
   const { exec } = await import("@/shared/api/ksu");
   const { PATHS } = await import("@/shared/config/paths");
   const r = await exec(
-    `cat '${PATHS.DATADIR}/native_version' 2>/dev/null; echo ---; cat '${PATHS.DATADIR}/native_version_code' 2>/dev/null`,
+    `cat '${PATHS.DATADIR}/native_impl_used' 2>/dev/null; echo ---; ` +
+      `sed -n 's/^native_impl=//p' '${PATHS.CONF}' 2>/dev/null | head -1`,
     5_000,
   );
-  const parts = (r.stdout || "").split("---");
-  const version = (parts[0] || "").trim();
-  const code = Number((parts[1] || "").trim()) || 0;
-  return { version, code };
+  const parts = (r.stdout || "").split("---").map((s) => s.trim().toLowerCase());
+  if (parts[0] === "c" || parts[0] === "rust") return parts[0];
+  if (parts[1] === "c") return "c";
+  return "rust";
 }
 
 export async function checkUpdateChannel(
@@ -117,23 +181,28 @@ export async function checkUpdateChannel(
 ): Promise<ChannelCheckResult> {
   let error: string | null = null;
   let module: RemoteUpdateInfo | null = null;
-  let daemon: RemoteUpdateInfo | null = null;
+  let daemonRaw: RemoteUpdateInfo | null = null;
   const u = urlsFor(channel);
   try {
     module = await fetchJsonUpdate(u.module);
-    daemon = await fetchDaemon(u.daemon).catch(() => null);
+    daemonRaw = await fetchDaemon(u.daemon).catch(() => null);
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
 
+  const daemonImpl = await preferredDaemonImpl().catch(() => "rust" as const);
   const localMod = await readLocalModule().catch(() => null);
-  const localDaemon = await readDaemonLocal().catch(() => ({ version: "", code: 0 }));
+  const localDaemon = await readDaemonLocal(daemonImpl).catch(() => ({
+    version: "",
+    code: 0,
+  }));
   const moduleLocalCode = localMod?.versionCode ?? 0;
   const moduleHasUpdate = !!(
     module &&
     module.versionCode > 0 &&
     module.versionCode > moduleLocalCode
   );
+  const daemon = daemonRaw ? forImpl(daemonRaw, daemonImpl) : null;
   const daemonHasUpdate = !!(
     daemon &&
     daemon.versionCode > 0 &&
@@ -146,7 +215,10 @@ export async function checkUpdateChannel(
     const sm = await fetchJsonUpdate(UPDATE_URLS.stableModule).catch(() => null);
     const sd = await fetchDaemon(UPDATE_URLS.stableDaemon).catch(() => null);
     if (sm && sm.versionCode > moduleLocalCode) stableModuleNewer = sm;
-    if (sd && sd.versionCode > localDaemon.code) stableDaemonNewer = sd;
+    if (sd) {
+      const sdi = forImpl(sd, daemonImpl);
+      if (sdi.versionCode > localDaemon.code) stableDaemonNewer = sdi;
+    }
   }
 
   return {
@@ -159,6 +231,7 @@ export async function checkUpdateChannel(
     daemonLocalCode: localDaemon.code,
     daemon,
     daemonHasUpdate,
+    daemonImpl,
     stableModuleNewer,
     stableDaemonNewer,
     error,

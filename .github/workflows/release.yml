@@ -450,6 +450,8 @@ jobs:
               --daemon-code "$CODE"
               --daemon-base-url "$REL"
               --daemon-dir "$DDIR"
+              --daemon-rust-built "$([ "$PUBLISH_RUST" = "true" ] && echo 1 || echo 0)"
+              --daemon-c-built "$([ "$PUBLISH_C" = "true" ] && echo 1 || echo 0)"
             )
           fi
           tooling/scripts/publish-updates.sh "${ARGS[@]}"
@@ -547,6 +549,8 @@ jobs:
               --daemon-code "$CODE"
               --daemon-base-url "${PAGES_BASE}/qscd"
               --daemon-dir "$DDIR"
+              --daemon-rust-built "$([ "$PUBLISH_RUST" = "true" ] && echo 1 || echo 0)"
+              --daemon-c-built "$([ "$PUBLISH_C" = "true" ] && echo 1 || echo 0)"
             )
           fi
           tooling/scripts/publish-updates.sh "${ARGS[@]}"

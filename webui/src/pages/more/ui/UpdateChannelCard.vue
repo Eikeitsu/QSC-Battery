@@ -103,7 +103,9 @@ async function updateDaemon() {
   actionBusy.value = "daemon";
   actionError.value = "";
   try {
-    const r = await api.installDaemon("rust", {
+    const st = await api.loadDaemonStatus().catch(() => null);
+    const impl = st?.impl === "c" ? "c" : "rust";
+    const r = await api.installDaemon(impl, {
       manifestUrl: d.manifestUrl,
       pagesBase: d.baseUrl,
     });
@@ -198,7 +200,10 @@ watch(channel, async () => {
         </button>
       </div>
 
-      <div v-if="busy && !result" class="loading">正在检查更新…</div>
+      <div v-if="busy && !result" class="loading" role="status">
+        <span class="loading-spin" aria-hidden="true" />
+        <span>正在检查更新…</span>
+      </div>
 
       <div v-if="result" class="result">
         <div class="item">
@@ -238,7 +243,9 @@ watch(channel, async () => {
 
         <div class="item">
           <div class="item-top">
-            <span class="name">守护</span>
+            <span class="name"
+              >守护 · {{ result.daemonImpl === "c" ? "C" : "Rust" }}</span
+            >
             <span
               class="chip"
               :data-tone="
@@ -400,8 +407,31 @@ watch(channel, async () => {
 
 .loading {
   margin-top: 14px;
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--qsc-border, rgba(0, 0, 0, 0.06));
+  background: color-mix(in srgb, var(--qsc-fill-2, rgba(0, 0, 0, 0.04)) 80%, transparent);
+  font-size: 13px;
   color: var(--qsc-text-2);
+}
+
+.loading-spin {
+  width: 16px;
+  height: 16px;
+  border: 2px solid color-mix(in srgb, var(--qsc-accent, #3b82f6) 25%, transparent);
+  border-top-color: var(--qsc-accent, #3b82f6);
+  border-radius: 50%;
+  animation: qsc-spin 0.8s linear infinite;
+}
+
+@keyframes qsc-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .result {

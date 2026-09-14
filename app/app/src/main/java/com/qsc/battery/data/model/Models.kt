@@ -143,7 +143,22 @@ data class RemoteUpdateInfo(
     /** 守护：下载基址（配合 qscd_fetch QSCD_PAGES_BASE / manifest） */
     val baseUrl: String? = null,
     val manifestUrl: String? = null,
-)
+    /** 守护分侧版本（缺省时回退 version / versionCode） */
+    val rustVersion: String? = null,
+    val rustVersionCode: Long = 0L,
+    val cVersion: String? = null,
+    val cVersionCode: Long = 0L,
+) {
+    fun versionForImpl(impl: String): String = when (impl) {
+        "c" -> cVersion?.takeIf { it.isNotBlank() } ?: version
+        else -> rustVersion?.takeIf { it.isNotBlank() } ?: version
+    }
+
+    fun versionCodeForImpl(impl: String): Long = when (impl) {
+        "c" -> cVersionCode.takeIf { it > 0L } ?: versionCode
+        else -> rustVersionCode.takeIf { it > 0L } ?: versionCode
+    }
+}
 
 data class UpdateCheckResult(
     val channel: UpdateChannel = UpdateChannel.Stable,
@@ -158,6 +173,8 @@ data class UpdateCheckResult(
     val daemonLocalCode: Long = 0L,
     val daemonRemote: RemoteUpdateInfo? = null,
     val daemonHasUpdate: Boolean = false,
+    /** 当前检测所用的守护实现 rust|c */
+    val daemonImpl: String = "rust",
     /** 当前非正式通道时，正式通道高于本地则提示 */
     val stableModuleNewer: RemoteUpdateInfo? = null,
     val stableAppNewer: RemoteUpdateInfo? = null,
