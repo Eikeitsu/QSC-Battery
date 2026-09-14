@@ -12,4 +12,4 @@ CI **artifact-only** channel (no update JSON — see `updates` branch).
 
 Each product workflow updates **only its folder** and pushes a normal commit (history kept).
 
-Last touch: qscd @ 2026.09.14.ci.1 / 129041cc3ecd9fd8e7232ec965e99ecdc7197937
+Last touch: app @ 2026.09.14.ci.46 / 129041cc3ecd9fd8e7232ec965e99ecdc7197937
