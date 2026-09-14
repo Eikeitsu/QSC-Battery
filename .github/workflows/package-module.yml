@@ -2,7 +2,7 @@ name: Package Module
 
 # 只打模块 zip。依赖经 resolve-packaging-deps（同 commit 溯源）。
 # Build Web / Build qscd / App 成功后可串联重打包。
-# 输入摘要未变则跳过升码与推送。
+# push 且同提交还改了依赖产品时：整 job skip（勿 cancel），避免提交总状态变红叉。
 
 on:
   push:
@@ -15,6 +15,7 @@ on:
       - "tooling/scripts/lib/**"
       - "tooling/scripts/stamp-ci-module-version.py"
       - "tooling/scripts/resolve-packaging-deps.sh"
+      - "tooling/scripts/plan-packaging-deps.sh"
       - "tooling/scripts/module-input-digest.sh"
       - "tooling/scripts/publish-ci-dist.sh"
       - "tooling/scripts/publish-ci-product.sh"
@@ -48,15 +49,49 @@ permissions:
   actions: read
 
 concurrency:
-  group: package-module-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: package-module-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: false
 
 jobs:
-  package-module:
+  plan:
     if: >
       github.event_name != 'workflow_run' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    outputs:
+      run_package: ${{ steps.gate.outputs.run_package }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Decide whether to package now
+        id: gate
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          BEFORE_SHA: ${{ github.event_name == 'push' && github.event.before || '' }}
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          chmod +x tooling/scripts/plan-packaging-deps.sh
+          eval "$(tooling/scripts/plan-packaging-deps.sh)"
+          echo "plan: app=$need_app qscd=$need_qscd web=$need_web ready=$siblings_ready → run=$run_package"
+          echo "run_package=$run_package" >> "$GITHUB_OUTPUT"
+          if [ "$run_package" != "1" ]; then
+            if [ "$EVENT_NAME" = "push" ]; then
+              echo "skip push packaging：同提交改了依赖产品，等 App/qscd/Web 全部成功后再打"
+            else
+              echo "skip workflow_run packaging：仍有依赖未就绪（app=$need_app/$siblings_ready），等最后一个兄弟成功再打"
+            fi
+          fi
+
+  package-module:
+    needs: plan
+    if: needs.plan.outputs.run_package == '1'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -76,14 +111,13 @@ jobs:
           WEB_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Build Web' && github.event.workflow_run.id || '' }}
           QSCD_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Build qscd' && github.event.workflow_run.id || '' }}
           APP_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'App' && github.event.workflow_run.id || '' }}
-          QSC_DEP_WAIT_SECONDS: "480"
+          QSC_DEP_WAIT_SECONDS: "600"
         run: |
           chmod +x tooling/scripts/resolve-packaging-deps.sh tooling/scripts/module-input-digest.sh
           tooling/scripts/resolve-packaging-deps.sh
           DIGEST="$(tooling/scripts/module-input-digest.sh | tail -1)"
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "input digest=$DIGEST"
-          # compare to tip
           tip="$(curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/ci-dist/module/INPUT_DIGEST" 2>/dev/null || true)"
           if [ -n "$tip" ] && [ "$tip" = "$DIGEST" ]; then
             echo "unchanged=1" >> "$GITHUB_OUTPUT"
