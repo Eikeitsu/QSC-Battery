@@ -16,13 +16,31 @@ android {
         minSdk = 26
         // 运行行为仍按 35；compileSdk 37 仅为满足 Compose BOM 依赖的 AAR metadata
         targetSdk = 35
-        versionCode = 2026091201
-        versionName = "0.3.1"
+        // CI / 预发布可通过 -PqscVersionName / -PqscVersionCode 覆盖展示名与检测码
+        val qscVersionName = providers.gradleProperty("qscVersionName")
+        val qscVersionCode = providers.gradleProperty("qscVersionCode")
+        versionName = qscVersionName.orNull ?: "0.3.1"
+        versionCode = qscVersionCode.orNull?.toIntOrNull() ?: 2026091201
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
         buildConfigField("String", "MODULE_UPDATE_URL", "\"https://eikeitsu.github.io/QSC-Battery/update.json\"")
         buildConfigField("String", "APP_UPDATE_URL", "\"https://eikeitsu.github.io/QSC-Battery/app-update.json\"")
+        buildConfigField(
+            "String",
+            "CI_MODULE_UPDATE_URL",
+            "\"https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist/update.json\"",
+        )
+        buildConfigField(
+            "String",
+            "CI_APP_UPDATE_URL",
+            "\"https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist/app-update.json\"",
+        )
+        buildConfigField(
+            "String",
+            "GITHUB_RELEASES_URL",
+            "\"https://api.github.com/repos/Eikeitsu/QSC-Battery/releases\"",
+        )
         buildConfigField("String", "MODULE_ID", "\"QSC_Battery\"")
     }
 

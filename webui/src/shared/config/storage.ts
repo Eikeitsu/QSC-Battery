@@ -26,6 +26,8 @@ export const STORAGE_KEYS = {
   /** 从仓库拉取后的本地缓存 */
   devicePresetsRepo: "qsc_device_presets_repo",
   devicePresetsRepoMeta: "qsc_device_presets_repo_meta",
+  /** 更新通道：stable | prerelease | ci */
+  updateChannel: "qsc_update_channel",
 } as const;
 
 /** @deprecated 使用 STORAGE_KEYS.fontScale */

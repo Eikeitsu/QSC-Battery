@@ -107,7 +107,14 @@ jobs:
             fi
           fi
 
-          eval "$(RAW="$RAW" python3 tooling/scripts/resolve-release-version.py)"
+          eval "$(RAW="$RAW" QSC_FETCH_REMOTE_CODES=1 python3 tooling/scripts/resolve-release-version.py)"
+          # 预发布：用户可见 version 加 .pre（versionCode 仍为单调检测码）
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.prerelease }}" = "true" ]; then
+            case "$version" in
+              *.pre) ;;
+              *) version="${version}.pre" ;;
+            esac
+          fi
           TAG="v${version}"
           if [ -n "$CUSTOM_NAME" ]; then
             NAME="$CUSTOM_NAME"
@@ -149,8 +156,19 @@ jobs:
 
       - name: Build companion release APK
         working-directory: app
+        env:
+          RAW: ${{ steps.meta.outputs.raw }}
+          CODE: ${{ steps.meta.outputs.version_code }}
+          IS_PRE: ${{ steps.meta.outputs.prerelease }}
         run: |
-          ./gradlew :app:assembleRelease --stacktrace
+          # 预发布：APP versionName 与模块一致（含 .pre）；正式版保持 gradle 默认展示名
+          if [ "$IS_PRE" = "true" ] || [[ "$RAW" == *.pre ]]; then
+            ./gradlew :app:assembleRelease --stacktrace \
+              -PqscVersionName="$RAW" \
+              -PqscVersionCode="$CODE"
+          else
+            ./gradlew :app:assembleRelease --stacktrace
+          fi
           mkdir -p ../release
           cp app/build/outputs/apk/release/app-release.apk ../release/QSC-Battery.apk
 
@@ -201,6 +219,11 @@ jobs:
             "${{ needs.build.outputs.raw }}" \
             changelog.md \
             .release-body.md
+          {
+            echo ""
+            echo "<!-- qsc:versionCode=${{ needs.build.outputs.version_code }} -->"
+            echo "versionCode=${{ needs.build.outputs.version_code }}"
+          } >> .release-body.md
           echo "---- release body preview ----"
           cat .release-body.md || true
 

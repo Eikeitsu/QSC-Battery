@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Parse release version input → version + versionCode (stdout: KEY=value).
+"""Parse release display version + allocate monotonic versionCode.
+
+Display version stays date-based (yyyy.MM.dd[.N]). versionCode is max(known)+1
+across stable/prerelease/CI (see version_code.py).
 
 Usage:
   RAW=20260717.2 python3 resolve-release-version.py
@@ -11,13 +14,20 @@ from __future__ import annotations
 import os
 import re
 import sys
+from pathlib import Path
+
+_SCRIPTS = Path(__file__).resolve().parent
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+
+from version_code import next_version_code  # noqa: E402
 
 
 def only_digits(s: str) -> str:
     return re.sub(r"\D", "", s)
 
 
-def resolve(raw: str) -> tuple[str, int]:
+def resolve_display(raw: str) -> str:
     raw = raw.strip().lstrip("vV")
     if not raw:
         raise SystemExit("empty version")
@@ -25,9 +35,15 @@ def resolve(raw: str) -> tuple[str, int]:
     parts = [p for p in re.split(r"[.\-_/]", raw) if p != ""]
     rev = 1
     ymd = None
+    pre_suffix = False
+
+    if any(p.lower() == "ci" for p in parts):
+        raise SystemExit("release version must not use .ci suffix")
+    if parts and parts[-1].lower() == "pre":
+        pre_suffix = True
+        parts = parts[:-1]
 
     if len(parts) >= 3 and len(only_digits(parts[0])) == 4:
-        # 2026.07.17 或 2026.07.17.2
         y = only_digits(parts[0]).zfill(4)[-4:]
         mo = only_digits(parts[1]).zfill(2)[-2:]
         d = only_digits(parts[2]).zfill(2)[-2:]
@@ -35,7 +51,7 @@ def resolve(raw: str) -> tuple[str, int]:
         if len(parts) >= 4 and only_digits(parts[3]):
             rev = int(only_digits(parts[3]))
     else:
-        digits = only_digits(raw)
+        digits = only_digits(raw.replace(".pre", "").replace("-pre", ""))
         if len(digits) < 6:
             raise SystemExit(f"unsupported version input: {raw}")
         if digits.startswith("20") and len(digits) >= 8:
@@ -44,10 +60,8 @@ def resolve(raw: str) -> tuple[str, int]:
         else:
             ymd = "20" + digits[:6]
             rest = digits[6:]
-        # 20260717.2 → parts ['20260717','2']
         if len(parts) >= 2 and only_digits(parts[1]):
             cand = int(only_digits(parts[1]))
-            # >99 多半是旧的小时/分钟写法，忽略
             if 1 <= cand <= 99:
                 rev = cand
         elif rest and len(rest) <= 2:
@@ -60,19 +74,24 @@ def resolve(raw: str) -> tuple[str, int]:
     if not (1 <= rev <= 99):
         raise SystemExit(f"revision must be 1..99, got: {rev}")
 
-    code = int(ymd) * 100 + rev  # 2026071701
-    if code > 2147483647:
-        raise SystemExit(f"versionCode {code} exceeds int32 max 2147483647")
-
     version = f"{ymd[0:4]}.{ymd[4:6]}.{ymd[6:8]}"
     if rev > 1:
         version = f"{version}.{rev}"
+    if pre_suffix:
+        version = f"{version}.pre"
+    return version
+
+
+def resolve(raw: str, fetch_remote: bool = True) -> tuple[str, int]:
+    version = resolve_display(raw)
+    code = next_version_code(fetch_remote=fetch_remote)
     return version, code
 
 
 def main() -> int:
     raw = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("RAW", "")
-    version, code = resolve(raw)
+    fetch = os.environ.get("QSC_FETCH_REMOTE_CODES", "1") != "0"
+    version, code = resolve(raw, fetch_remote=fetch)
     print(f"version={version}")
     print(f"version_code={code}")
     return 0

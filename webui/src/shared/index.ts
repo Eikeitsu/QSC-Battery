@@ -16,3 +16,4 @@ export * from "./lib/log";
 export * from "./lib/device";
 export * from "./lib/highlightPowerSwitch";
 export * from "./lib/policySwitch";
+export * from "./lib/updateChannel";

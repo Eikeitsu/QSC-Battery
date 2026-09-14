@@ -143,6 +143,7 @@ data class RemoteUpdateInfo(
 )
 
 data class UpdateCheckResult(
+    val channel: UpdateChannel = UpdateChannel.Stable,
     val moduleLocal: ModuleProp?,
     val moduleRemote: RemoteUpdateInfo?,
     val moduleHasUpdate: Boolean,
@@ -150,5 +151,8 @@ data class UpdateCheckResult(
     val appLocalCode: Long,
     val appRemote: RemoteUpdateInfo?,
     val appHasUpdate: Boolean,
+    /** 当前非正式通道时，Pages 正式版高于本地则提示 */
+    val stableModuleNewer: RemoteUpdateInfo? = null,
+    val stableAppNewer: RemoteUpdateInfo? = null,
     val error: String? = null,
 )

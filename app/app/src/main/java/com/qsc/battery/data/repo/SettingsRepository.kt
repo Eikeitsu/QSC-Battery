@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.qsc.battery.data.model.UpdateChannel
 import com.qsc.battery.icon.LauncherIconController
 import com.qsc.battery.ui.theme.ColorMode
 import com.qsc.battery.ui.theme.PaletteStyleName
@@ -27,6 +28,7 @@ class SettingsRepository(private val context: Context) {
         val alternativeIcon = booleanPreferencesKey("alternative_icon")
         val dynamicBatteryIcon = booleanPreferencesKey("dynamic_battery_icon")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
+        val updateChannel = stringPreferencesKey("update_channel")
     }
 
     val settings: Flow<ThemeSettings> = context.settingsStore.data.map { prefs ->
@@ -43,6 +45,17 @@ class SettingsRepository(private val context: Context) {
 
     val onboardingDone: Flow<Boolean> = context.settingsStore.data.map {
         it[Keys.onboardingDone] ?: false
+    }
+
+    val updateChannel: Flow<UpdateChannel> = context.settingsStore.data.map {
+        UpdateChannel.fromWire(it[Keys.updateChannel])
+    }
+
+    suspend fun updateChannel(): UpdateChannel =
+        UpdateChannel.fromWire(context.settingsStore.data.first()[Keys.updateChannel])
+
+    suspend fun setUpdateChannel(channel: UpdateChannel) {
+        context.settingsStore.edit { it[Keys.updateChannel] = channel.wire }
     }
 
     suspend fun alternativeIconEnabled(): Boolean =

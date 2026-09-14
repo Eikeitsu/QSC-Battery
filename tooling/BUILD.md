@@ -147,55 +147,53 @@ sh 主包没有这个二进制也必须行为一致，阈值判定的唯一真�
 
 各工作流互不串联，只按路径变更自行触发。
 
-### Package Module 的 CI 戳版本
+### Package Module 的 CI 戳版本与 ci-dist
 
-`Package Module` 在打包前会跑 `tooling/scripts/stamp-ci-module-version.py`，**只改工作区** `module/module.prop` 的 `version` / `versionCode`，随后打进 Artifact：
+`Package Module` 在打包前跑 `stamp-ci-module-version.py`：
 
-- **不**改 `update.json` / `docs/public/**`，**不** commit，因此文档站与 Magisk 在线更新不会误报
-- 展示名形如 `2026.09.13.ci.42`（带 `.ci.`，不会被发版解析当成正式修订号）
-- `versionCode` 落在「上一正式版」与「下一档正式下限 − 1」之间，保证：
-  - 不同 CI 包之间通常可热更新（`run_number` 映射进号段）
-  - **当天第一次正式发版 `…01` 一定能热更新盖过发版前的 CI**
-  - 发版脚本 `resolve-release-version.py` 与正式公式 `yyyyMMdd*100+rev` **不变**
+- **只改工作区** `module/module.prop` 的 `version` / `versionCode`（展示名 `yyyy.MM.dd.ci.<run>`）
+- **`versionCode` 全局单调**（`next_version_code` = 已知源 max+1，含 Pages JSON、`module.prop`、远程 `ci-dist/update.json`）
+- 默认分支成功构建后 **force-push `ci-dist` 分支**（每次 orphan 单提交，**只保留最新一版** full zip / apk / `update.json`，避免历史膨胀）；**不**改 Pages 根 `update.json`
+- Artifact 仍上传，便于在 Actions 页人工下载
 
-本地默认 `npm run package:module` **不**戳号。若要模拟 CI：
+本地默认 `npm run package:module` **不**戳号。模拟：
 
 ```bash
-# 需提供 run 号；会改写工作区 module.prop，用完请还原
 set GITHUB_RUN_NUMBER=1   # PowerShell: $env:GITHUB_RUN_NUMBER=1
 npm run package:module:ci
-# 或：node tooling/scripts/run-python.mjs tooling/scripts/stamp-ci-module-version.py --run 1 --dry-run
-npm run test:stamp-ci     # 号段边界自检
+npm run test:stamp-ci
+npm run test:version-code
 ```
-
-注意：当天已发正式版后再装 CI，号段可能顶到「次日 `…00`」；若同日还要发 `.2` 且需盖过该 CI，请用更高修订号。
 
 ### 手动发版
 
 1. 开发中把用户可见改动写在根目录 `changelog.md` → `## Unreleased`（详见 [`RELEASE.md`](./RELEASE.md)）
 2. GitHub → Actions → **Release Module** → Run workflow
-3. 填写日期：当天第一版 `20260717`；同一天第二版 `20260717.2`
-4. 可选：预发布 / 草稿
-5. 工作流会：提升 Unreleased → 日期版本号；文档站两份 changelog **不含 Unreleased**；Release 正文优先取版本节（否则回退 Unreleased）+ GitHub Full Changelog
+3. 填写**展示用**日期：当天第一版 `20260717`；同一天第二版 `20260717.2`（只影响 `version` 字符串）
+4. 可选：预发布 / 草稿（二者都**不会**跑 `post`、不写 Pages 正式镜像）
+5. 工作流会：分配单调 `versionCode`；提升 Unreleased；非预发布/非草稿时回写 Pages
 
-| 输入           | `version`      | `versionCode` |
-| -------------- | -------------- | ------------- |
-| `20260717`     | `2026.07.17`   | `2026071701`  |
-| `20260717.2`   | `2026.07.17.2` | `2026071702`  |
-| `2026.07.17.3` | `2026.07.17.3` | `2026071703`  |
+| 输入（展示）   | `version`      | `versionCode`        |
+| -------------- | -------------- | -------------------- |
+| `20260717`     | `2026.07.17`   | `max(已知)+1`（单调） |
+| `20260717.2`   | `2026.07.17.2` | 同上再 +1             |
 
 ### version / versionCode 约定
 
 Magisk / KernelSU 要求 **`versionCode` 为 ≤ 2147483647 的 int**。
 
-| 字段          | 格式                               | 示例                          |
-| ------------- | ---------------------------------- | ----------------------------- |
-| `version`     | `yyyy.MM.dd`（同日第 N 版加 `.N`） | `2026.07.17` / `2026.07.17.2` |
-| `versionCode` | `yyyyMMdd * 100 + 修订号`（1–99）  | `2026071701` / `2026071702`   |
+| 字段          | 格式                                         | 示例                            |
+| ------------- | -------------------------------------------- | ------------------------------- |
+| `version`     | `yyyy.MM.dd`（同日 `.N`；预发布 `.pre`；CI `.ci.N`） | `2026.07.17.pre` / `2026.09.14.ci.3` |
+| `versionCode` | **跨正式/预发布/CI 全局单调递增**            | `2026091302` → `2026091303` …   |
 
-修订号默认 `1`（展示不加后缀）；同日再发填 `.2`、`.3`… 即可被管理器识别为更新。
+比较与热更新**只认 versionCode**。展示名后缀仅方便辨认通道，不参与大小比较。
 
-不要再使用 12 位 `yyyyMMddHHmm` 作为 `versionCode`（会超 int 上限，检查更新失效）。
+- 预发布：模块 `version` 与 APP `versionName` 为 `….pre`（勾选预发布时自动加）
+- CI：模块与 APP 均为 `yyyy.MM.dd.ci.<run>`（Package Module stamp + `-PqscVersionName`）
+- 正式 APP 默认仍用 `build.gradle.kts` 的 `versionName`（如 `0.3.1`），与模块日期版可并存
+
+不要再使用 12 位 `yyyyMMddHHmm` 作为 `versionCode`（会超 int 上限）。
 
 也可本地打标签推送：
 

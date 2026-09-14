@@ -70,7 +70,7 @@ jobs:
           REQUIRE_SERVICE_TESTS: "1"
 
       - name: Hot update and release contracts
-        run: npm run test:hot-update && npm run test:stamp-ci
+        run: npm run test:hot-update && npm run test:stamp-ci && npm run test:version-code
 
   rust:
     name: Rust (fmt / clippy / test)

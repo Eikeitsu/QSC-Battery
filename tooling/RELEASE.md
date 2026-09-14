@@ -80,5 +80,17 @@ python3 tooling/scripts/promote-changelog.py --export-docs changelog.md \
 4. 发版用工作流，勿漏同步文档站两份日志
 5. 只发 APK 时 bump APP `versionCode`；只发守护时不必 bump 模块 `update.json`
 
-相关脚本：`promote-changelog.py`、`prepare-release-notes.py`、`resolve-release-version.py`、`post-release-update.sh`。  
+相关脚本：`promote-changelog.py`、`prepare-release-notes.py`、`resolve-release-version.py`、`version_code.py` / `next-version-code.py`、`stamp-ci-module-version.py`、`publish-ci-dist.sh`、`post-release-update.sh`。  
 构建细节见 [`BUILD.md`](./BUILD.md)。
+
+## 更新通道（APP / WebUI）
+
+| 通道   | 元数据来源                              | 写 Pages 根 `update.json`？ | 说明 |
+| ------ | --------------------------------------- | --------------------------- | ---- |
+| 正式   | Pages `update.json` / `app-update.json` | 仅正式 Release 的 `post`    | Magisk 始终只看这里 |
+| 预发布 | GitHub Releases（prerelease）           | 否（`post` 跳过）           | Release body 含 `versionCode=` |
+| CI     | `ci-dist` 分支公开文件                  | 否                          | Package Module 推送；**仅保留最新一版**；用户无需 Token |
+
+- 勾选**预发布**或**草稿**：只发 GitHub Release，不更新镜像站。
+- APP「更新」与 WebUI「我的 → 更新通道」：三选一；主查当前通道；非正式时旁路提示正式版更新。
+- `versionCode` 跨通道全局单调；展示名仍可用日期。

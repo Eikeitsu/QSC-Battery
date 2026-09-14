@@ -2,8 +2,15 @@
 
 ## Unreleased
 
-- 修复 K90U 等 MCA 机型：未插电粘住 `present=1` 时误报已插电、停充/拔线清理异常；`present` 需 VBUS/类型旁证（停充冷却期内除外），不再单信孤立 `Not charging`；放电判定忽略电流符号；Rust `plugged` 与 shell 对齐
-- Package Module 打包前自动戳 CI `version`/`versionCode`（仅 Artifact，不改 `update.json`/文档站）；当天首发正式版仍为 `…01` 且可热更新盖过 CI
+### 更新通道与版本
+
+- APP「更新」与 WebUI「我的」可切换 **正式 / 预发布 / CI**；正式仍走 Pages（Magisk 同源），预发布直连 GitHub Release，CI 走 `ci-dist`（无 Token，只保留最新构建）
+- 停在预发布 / CI 时检查更新会旁路提示正式版；预发布与草稿不写正式镜像
+- `versionCode` 跨通道全局单调递增；用户可见版本：CI 为 `….ci.N`，预发布为 `….pre`（模块与 APP 一致）
+
+### 停充兼容
+
+- 修复 K90U 等 MCA：未插电粘住 `present=1` 时误报已插电、停充 / 拔线清理异常；`present` 需 VBUS 或类型旁证（停充冷却期内除外），不再单信孤立 `Not charging`；放电判定忽略电流符号；Rust `plugged` 与 shell 对齐
 
 ## 2026.09.13.2
 

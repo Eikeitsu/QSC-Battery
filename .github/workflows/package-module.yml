@@ -23,7 +23,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  actions: read
 
 concurrency:
   group: package-module-${{ github.workflow }}-${{ github.ref }}
@@ -41,23 +42,25 @@ jobs:
 
       - uses: ./.github/actions/setup-android
 
-      - name: Build companion release APK
-        working-directory: app
-        run: |
-          ./gradlew :app:assembleRelease --stacktrace
-          mkdir -p ../release
-          cp app/build/outputs/apk/release/app-release.apk ../release/QSC-Battery.apk
-
-      # 仅改工作区 module.prop，不写 update.json / 不 commit，避免 Pages 误报更新
+      # 先 stamp：模块 version=….ci.N；再编 APK，使 versionName 与检测用 versionCode 一致
       - name: Stamp CI module.prop version
         id: stamp
         run: |
-          eval "$(python3 tooling/scripts/stamp-ci-module-version.py)"
+          eval "$(python3 tooling/scripts/stamp-ci-module-version.py --fetch-remote)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
           echo "CI stamp: $version (versionCode=$version_code)"
           echo "---- module.prop ----"
           cat module/module.prop
+
+      - name: Build companion release APK
+        working-directory: app
+        run: |
+          ./gradlew :app:assembleRelease --stacktrace \
+            -PqscVersionName="${{ steps.stamp.outputs.version }}" \
+            -PqscVersionCode="${{ steps.stamp.outputs.version_code }}"
+          mkdir -p ../release
+          cp app/build/outputs/apk/release/app-release.apk ../release/QSC-Battery.apk
 
       - name: Build all module zips (full / rust / c / sh / lite)
         env:
@@ -70,6 +73,19 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: magisk-module-${{ steps.stamp.outputs.version }}-${{ github.sha }}
-          path: release/*.zip
+          path: |
+            release/*.zip
+            release/QSC-Battery.apk
           if-no-files-found: error
           retention-days: 14
+
+      # 默认分支 CI 推送到 ci-dist（公开 JSON+包，无 Token）；PR 不推
+      - name: Publish ci-dist branch
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x tooling/scripts/publish-ci-dist.sh
+          tooling/scripts/publish-ci-dist.sh \
+            "${{ steps.stamp.outputs.version }}" \
+            "${{ steps.stamp.outputs.version_code }}"
