@@ -1,3 +1,3 @@
 # Built WebUI
 
-CI 自动发布：混淆压缩后的 webroot，勿直接修改。
+CI 自动发布：构建后的 webroot。历史提交保留（非 force-push）。
