@@ -1,4 +1,6 @@
-/** 更新通道：与 APP UpdateChannel 对齐；元数据统一读 updates 分支 */
+/** 更新通道：WebUI 只检模块 + 守护（不检伴侣 APP） */
+
+import { readLocalModule } from "@/shared/api/moduleUpdate";
 
 export const UPDATE_CHANNELS = ["stable", "prerelease", "ci"] as const;
 export type UpdateChannel = (typeof UPDATE_CHANNELS)[number];
@@ -10,22 +12,25 @@ export const UPDATE_CHANNEL_LABEL: Record<UpdateChannel, string> = {
 };
 
 export const UPDATE_CHANNEL_HINT: Record<UpdateChannel, string> = {
-  stable: "updates/stable（包 URL 指向 Pages；Magisk 仍只认 Pages）",
-  prerelease: "updates/prerelease → GitHub Release 资产",
-  ci: "updates/ci → ci-dist 完整产物",
+  stable: "推荐大多数用户",
+  prerelease: "尝鲜功能，可能不稳定",
+  ci: "开发构建，风险较高",
+};
+
+export const UPDATE_CHANNEL_TECH: Record<UpdateChannel, string> = {
+  stable: "正式：updates/stable；包地址通常指向 Pages。Magisk 仍只认 Pages update.json。",
+  prerelease: "预发布：updates/prerelease → GitHub Release 资产",
+  ci: "CI：updates/ci → ci-dist 完整产物",
 };
 
 const UPDATES = "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/updates";
 
 export const UPDATE_URLS = {
   stableModule: `${UPDATES}/stable/update.json`,
-  stableApp: `${UPDATES}/stable/app-update.json`,
   stableDaemon: `${UPDATES}/stable/qscd/manifest.json`,
   preModule: `${UPDATES}/prerelease/update.json`,
-  preApp: `${UPDATES}/prerelease/app-update.json`,
   preDaemon: `${UPDATES}/prerelease/qscd/manifest.json`,
   ciModule: `${UPDATES}/ci/update.json`,
-  ciApp: `${UPDATES}/ci/app-update.json`,
   ciDaemon: `${UPDATES}/ci/qscd/manifest.json`,
 } as const;
 
@@ -41,11 +46,15 @@ export interface RemoteUpdateInfo {
 
 export interface ChannelCheckResult {
   channel: UpdateChannel;
+  moduleLocalVersion: string;
+  moduleLocalCode: number;
   module: RemoteUpdateInfo | null;
-  app: RemoteUpdateInfo | null;
+  moduleHasUpdate: boolean;
+  daemonLocalVersion: string;
+  daemonLocalCode: number;
   daemon: RemoteUpdateInfo | null;
+  daemonHasUpdate: boolean;
   stableModuleNewer: RemoteUpdateInfo | null;
-  stableAppNewer: RemoteUpdateInfo | null;
   stableDaemonNewer: RemoteUpdateInfo | null;
   error: string | null;
 }
@@ -82,24 +91,25 @@ async function fetchDaemon(url: string): Promise<RemoteUpdateInfo> {
 
 function urlsFor(channel: UpdateChannel) {
   if (channel === "ci") {
-    return {
-      module: UPDATE_URLS.ciModule,
-      app: UPDATE_URLS.ciApp,
-      daemon: UPDATE_URLS.ciDaemon,
-    };
+    return { module: UPDATE_URLS.ciModule, daemon: UPDATE_URLS.ciDaemon };
   }
   if (channel === "prerelease") {
-    return {
-      module: UPDATE_URLS.preModule,
-      app: UPDATE_URLS.preApp,
-      daemon: UPDATE_URLS.preDaemon,
-    };
+    return { module: UPDATE_URLS.preModule, daemon: UPDATE_URLS.preDaemon };
   }
-  return {
-    module: UPDATE_URLS.stableModule,
-    app: UPDATE_URLS.stableApp,
-    daemon: UPDATE_URLS.stableDaemon,
-  };
+  return { module: UPDATE_URLS.stableModule, daemon: UPDATE_URLS.stableDaemon };
+}
+
+async function readDaemonLocal(): Promise<{ version: string; code: number }> {
+  const { exec } = await import("@/shared/api/ksu");
+  const { PATHS } = await import("@/shared/config/paths");
+  const r = await exec(
+    `cat '${PATHS.DATADIR}/native_version' 2>/dev/null; echo ---; cat '${PATHS.DATADIR}/native_version_code' 2>/dev/null`,
+    5_000,
+  );
+  const parts = (r.stdout || "").split("---");
+  const version = (parts[0] || "").trim();
+  const code = Number((parts[1] || "").trim()) || 0;
+  return { version, code };
 }
 
 export async function checkUpdateChannel(
@@ -107,51 +117,49 @@ export async function checkUpdateChannel(
 ): Promise<ChannelCheckResult> {
   let error: string | null = null;
   let module: RemoteUpdateInfo | null = null;
-  let app: RemoteUpdateInfo | null = null;
   let daemon: RemoteUpdateInfo | null = null;
   const u = urlsFor(channel);
   try {
     module = await fetchJsonUpdate(u.module);
-    app = await fetchJsonUpdate(u.app).catch(() => null);
     daemon = await fetchDaemon(u.daemon).catch(() => null);
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
 
+  const localMod = await readLocalModule().catch(() => null);
+  const localDaemon = await readDaemonLocal().catch(() => ({ version: "", code: 0 }));
+  const moduleLocalCode = localMod?.versionCode ?? 0;
+  const moduleHasUpdate = !!(
+    module &&
+    module.versionCode > 0 &&
+    module.versionCode > moduleLocalCode
+  );
+  const daemonHasUpdate = !!(
+    daemon &&
+    daemon.versionCode > 0 &&
+    daemon.versionCode > localDaemon.code
+  );
+
   let stableModuleNewer: RemoteUpdateInfo | null = null;
-  let stableAppNewer: RemoteUpdateInfo | null = null;
   let stableDaemonNewer: RemoteUpdateInfo | null = null;
   if (channel !== "stable") {
     const sm = await fetchJsonUpdate(UPDATE_URLS.stableModule).catch(() => null);
-    const sa = await fetchJsonUpdate(UPDATE_URLS.stableApp).catch(() => null);
     const sd = await fetchDaemon(UPDATE_URLS.stableDaemon).catch(() => null);
-    if (sm && (!module || sm.versionCode > module.versionCode)) {
-      stableModuleNewer = sm;
-    }
-    if (sa && (!app || sa.versionCode > app.versionCode)) {
-      stableAppNewer = sa;
-    }
-    if (sd && (!daemon || sd.versionCode > daemon.versionCode)) {
-      stableDaemonNewer = sd;
-    }
-    if (sm && module && sm.versionCode <= module.versionCode) {
-      stableModuleNewer = null;
-    }
-    if (sa && app && sa.versionCode <= app.versionCode) {
-      stableAppNewer = null;
-    }
-    if (sd && daemon && sd.versionCode <= daemon.versionCode) {
-      stableDaemonNewer = null;
-    }
+    if (sm && sm.versionCode > moduleLocalCode) stableModuleNewer = sm;
+    if (sd && sd.versionCode > localDaemon.code) stableDaemonNewer = sd;
   }
 
   return {
     channel,
+    moduleLocalVersion: localMod?.version || "",
+    moduleLocalCode,
     module,
-    app,
+    moduleHasUpdate,
+    daemonLocalVersion: localDaemon.version,
+    daemonLocalCode: localDaemon.code,
     daemon,
+    daemonHasUpdate,
     stableModuleNewer,
-    stableAppNewer,
     stableDaemonNewer,
     error,
   };

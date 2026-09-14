@@ -43,6 +43,8 @@ class ModuleInstallRepository(
             "ksud module install '$path'",
             "nsenter --mount=/proc/1/ns/mnt -- /data/adb/ksud module install '$path'",
             "nsenter --mount=/proc/1/ns/mnt -- /data/adb/magisk/magisk --install-module '$path'",
+            "nsenter --mount=/proc/1/ns/mnt -- /data/adb/ap/bin/apd module install '$path'",
+            "/data/adb/ap/bin/apd module install '$path'",
         )
         var last = ""
         for (cmd in attempts) {
@@ -51,6 +53,38 @@ class ModuleInstallRepository(
             if (r.ok) return@withContext Result.success(last.ifBlank { "ok" })
         }
         Result.failure(IllegalStateException(last.ifBlank { "install failed" }))
+    }
+
+    /**
+     * Root 直装失败时：用系统「打开」把 zip 交给 KSU / Magisk / APatch 等关联应用。
+     */
+    fun promptOpenModuleZip(zip: File) {
+        val uri: Uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            zip,
+        )
+        val view = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/zip")
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_ACTIVITY_NEW_TASK,
+            )
+        }
+        val chooser = Intent.createChooser(view, "用模块管理器安装").apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(chooser)
+    }
+
+    /** 先 root 直装；失败则打开 zip 交给管理器。 */
+    suspend fun installModuleZipOrOpen(zip: File): Result<String> {
+        val direct = installModuleZip(zip)
+        if (direct.isSuccess) return direct
+        return runCatching {
+            withContext(Dispatchers.Main) { promptOpenModuleZip(zip) }
+            "opened-manager:${direct.exceptionOrNull()?.message.orEmpty()}"
+        }
     }
 
     /** Install companion APK via package installer UI (no silent install without priv). */

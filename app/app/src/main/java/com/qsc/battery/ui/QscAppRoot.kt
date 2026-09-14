@@ -1,5 +1,6 @@
 package com.qsc.battery.ui
 
+import android.net.Uri
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -15,10 +16,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.ui.config.ConfigScreen
 import com.qsc.battery.ui.design.charge.ChargeNavItem
@@ -28,6 +31,7 @@ import com.qsc.battery.ui.home.HomeScreen
 import com.qsc.battery.ui.log.LogScreen
 import com.qsc.battery.ui.more.AppearanceScreen
 import com.qsc.battery.ui.more.ColorPaletteScreen
+import com.qsc.battery.ui.more.ModuleInstallConsoleScreen
 import com.qsc.battery.ui.more.MoreScreen
 import com.qsc.battery.ui.more.ProfilesScreen
 import com.qsc.battery.ui.more.UpdatesScreen
@@ -149,6 +153,25 @@ fun QscAppRoot(container: AppContainer) {
                     container = container,
                     onBack = { nav.popBackStack() },
                     snackbar = snackbar,
+                    onInstallModule = { zipUrl ->
+                        val enc = Uri.encode(zipUrl)
+                        nav.navigate("module-install/$enc")
+                    },
+                )
+            }
+            composable(
+                route = "module-install/{url}",
+                arguments = listOf(navArgument("url") { type = NavType.StringType }),
+            ) { entry ->
+                val raw = entry.arguments?.getString("url").orEmpty()
+                val zipUrl = Uri.decode(raw)
+                ModuleInstallConsoleScreen(
+                    container = container,
+                    zipUrl = zipUrl,
+                    onBack = { nav.popBackStack() },
+                    onFinished = {
+                        nav.popBackStack()
+                    },
                 )
             }
             composable("profiles") {

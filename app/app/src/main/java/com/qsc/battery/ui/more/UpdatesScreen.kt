@@ -1,21 +1,38 @@
 package com.qsc.battery.ui.more
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.qsc.battery.data.AppContainer
@@ -23,34 +40,91 @@ import com.qsc.battery.data.model.UpdateChannel
 import com.qsc.battery.data.model.UpdateCheckResult
 import com.qsc.battery.ui.design.charge.BannerTone
 import com.qsc.battery.ui.design.charge.ChargeBanner
-import com.qsc.battery.ui.design.charge.ChargeDivider
-import com.qsc.battery.ui.design.charge.ChargeListRow
-import com.qsc.battery.ui.design.charge.ChargePrimaryButton
-import com.qsc.battery.ui.design.charge.ChargeSecondaryButton
+import com.qsc.battery.ui.design.charge.ChargeChipTone
 import com.qsc.battery.ui.design.charge.ChargeSection
 import com.qsc.battery.ui.design.charge.ChargeSegmented
+import com.qsc.battery.ui.design.charge.ChargeStatusChip
+import com.qsc.battery.ui.design.charge.ChargeTextAction
 import com.qsc.battery.ui.design.charge.ChargeTheme
+import com.qsc.battery.ui.design.charge.ChargeTonalButton
 import com.qsc.battery.ui.design.charge.ChargeTopBar
-import kotlinx.coroutines.launch
+import com.qsc.battery.update.UpdateTarget
+import com.qsc.battery.update.UpdateWork
+import com.qsc.battery.update.UpdatesSession
 
 @Composable
 fun UpdatesScreen(
     container: AppContainer,
     onBack: () -> Unit,
     snackbar: SnackbarHostState,
+    onInstallModule: (zipUrl: String) -> Unit = {},
 ) {
-    var channel by remember { mutableStateOf(UpdateChannel.Stable) }
-    var result by remember { mutableStateOf<UpdateCheckResult?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    val session = container.updatesSession
+    val channel by session.channel.collectAsState()
+    val result by session.result.collectAsState()
+    val work by session.work.collectAsState()
+    val actionError by session.actionError.collectAsState()
+    var showTech by remember { mutableStateOf(false) }
+    var pendingCi by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     val channelOptions = remember { UpdateChannel.entries.map { it.label } }
+    val busy = work !is UpdateWork.Idle
+    val checking = work is UpdateWork.Checking
 
     LaunchedEffect(Unit) {
-        channel = container.settingsRepository.updateChannel()
+        session.ensureBootstrapped()
+        session.snackbar.collect { msg ->
+            if (msg != null) {
+                snackbar.showSnackbar(msg)
+                session.consumeSnackbar()
+            }
+        }
+    }
+
+    if (pendingCi) {
+        AlertDialog(
+            onDismissRequest = { pendingCi = false },
+            title = { Text("切换到 CI？") },
+            text = {
+                Text("开发构建可能不稳定，仅建议排查问题或尝鲜时使用。确认切换？")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingCi = false
+                        session.setChannel(UpdateChannel.Ci)
+                    },
+                ) { Text("确认切换") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingCi = false }) { Text("取消") }
+            },
+        )
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
         ChargeTopBar(title = "更新", onBack = onBack)
+        if (checking || work is UpdateWork.Downloading || work is UpdateWork.Installing) {
+            val fraction = (work as? UpdateWork.Downloading)?.fraction
+            if (fraction != null) {
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp),
+                    color = ChargeTheme.colors.accent,
+                    trackColor = ChargeTheme.colors.stroke,
+                )
+            } else {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp),
+                    color = ChargeTheme.colors.accent,
+                    trackColor = ChargeTheme.colors.stroke,
+                )
+            }
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -63,217 +137,373 @@ fun UpdatesScreen(
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
         ) {
             Text(
-                text = "检查模块 / APP / 守护。管理器模块更新仍走 Pages；本页读 updates 分支元数据。",
+                text = "检查模块、伴侣 APP 与充电守护是否有新版本。",
                 style = ChargeTheme.typography.caption,
                 color = ChargeTheme.colors.muted,
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "更新通道",
-                    style = ChargeTheme.typography.label,
-                    color = ChargeTheme.colors.accent,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(start = 4.dp),
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "更新通道",
+                        style = ChargeTheme.typography.label,
+                        color = ChargeTheme.colors.accent,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 4.dp),
+                    )
+                    Icon(
+                        imageVector = Icons.Outlined.Refresh,
+                        contentDescription = "刷新",
+                        tint = if (busy) ChargeTheme.colors.muted else ChargeTheme.colors.accent,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clickable(enabled = !busy) { session.refresh() }
+                            .padding(6.dp),
+                    )
+                }
                 ChargeSegmented(
                     options = channelOptions,
                     selectedIndex = channel.ordinal,
                     onSelect = { index ->
+                        if (busy) return@ChargeSegmented
                         val next = UpdateChannel.entries.getOrElse(index) { UpdateChannel.Stable }
-                        channel = next
-                        result = null
-                        scope.launch {
-                            container.settingsRepository.setUpdateChannel(next)
+                        if (next == UpdateChannel.Ci && channel != UpdateChannel.Ci) {
+                            pendingCi = true
+                        } else {
+                            session.setChannel(next)
                         }
                     },
                 )
                 Text(
                     text = when (channel) {
-                        UpdateChannel.Stable -> "正式：updates/stable（包 URL 指向 Pages）"
-                        UpdateChannel.Prerelease -> "预发布：updates/prerelease → GitHub Release"
-                        UpdateChannel.Ci -> "CI：updates/ci → ci-dist 产物"
+                        UpdateChannel.Stable -> "推荐大多数用户"
+                        UpdateChannel.Prerelease -> "尝鲜功能，可能不稳定"
+                        UpdateChannel.Ci -> "开发构建，风险较高"
                     },
                     style = ChargeTheme.typography.caption,
                     color = ChargeTheme.colors.muted,
                     modifier = Modifier.padding(start = 4.dp),
                 )
+                Row(
+                    modifier = Modifier
+                        .padding(start = 4.dp)
+                        .clickable { showTech = !showTech },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null,
+                        tint = ChargeTheme.colors.muted,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Text(
+                        text = if (showTech) "收起通道说明" else "了解通道",
+                        style = ChargeTheme.typography.caption,
+                        color = ChargeTheme.colors.muted,
+                    )
+                }
+                if (showTech) {
+                    Text(
+                        text = when (channel) {
+                            UpdateChannel.Stable ->
+                                "正式：updates/stable；包地址通常指向 Pages。Magisk/KSU 模块列表仍只认 Pages update.json。"
+                            UpdateChannel.Prerelease ->
+                                "预发布：updates/prerelease，安装包多来自 GitHub Release。"
+                            UpdateChannel.Ci ->
+                                "CI：updates/ci → ci-dist 分支产物，随提交变化。"
+                        },
+                        style = ChargeTheme.typography.caption,
+                        color = ChargeTheme.colors.muted,
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
             }
 
-            ChargePrimaryButton(
-                text = if (busy) "检查中…" else "检查更新",
-                enabled = !busy,
-                onClick = {
-                    scope.launch {
-                        busy = true
-                        result = container.updateRepository.check(
-                            container.statusRepository,
-                            channel,
-                        )
-                        busy = false
-                        result?.error?.let { snackbar.showSnackbar(it) }
-                    }
-                },
-            )
+            if (channel == UpdateChannel.Prerelease) {
+                ChargeBanner(
+                    text = "当前为预发布通道：功能可能不完整，建议重要设备优先使用正式版。",
+                    tone = BannerTone.Info,
+                )
+            }
 
             val r = result
+            if (r == null && checking) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = ChargeTheme.colors.accent,
+                    )
+                    Text(
+                        text = "正在检查更新…",
+                        style = ChargeTheme.typography.caption,
+                        color = ChargeTheme.colors.muted,
+                    )
+                }
+            }
+
             if (r != null) {
                 val stableHint = buildString {
                     r.stableModuleNewer?.let {
-                        append("正式模块 ${it.version} (${it.versionCode})")
+                        append("正式模块 ${it.version}")
                     }
                     r.stableAppNewer?.let {
                         if (isNotEmpty()) append("；")
-                        append("正式 APP ${it.version} (${it.versionCode})")
+                        append("正式 APP ${it.version}")
                     }
                     r.stableDaemonNewer?.let {
                         if (isNotEmpty()) append("；")
-                        append("正式守护 ${it.version} (${it.versionCode})")
+                        append("正式守护 ${it.version}")
                     }
                 }
                 if (stableHint.isNotEmpty()) {
                     ChargeBanner(
-                        text = "正式通道有新版本：$stableHint。可切回「正式」后检查更新。",
+                        text = "正式通道有新版本：$stableHint。",
                         tone = BannerTone.Info,
                     )
-                    ChargeSecondaryButton(
-                        text = "切换到正式通道",
-                        enabled = !busy,
-                        onClick = {
-                            channel = UpdateChannel.Stable
-                            result = null
-                            scope.launch {
-                                container.settingsRepository.setUpdateChannel(UpdateChannel.Stable)
-                            }
-                        },
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        ChargeTextAction(
+                            text = "切换到正式",
+                            enabled = !busy,
+                            onClick = { session.setChannel(UpdateChannel.Stable) },
+                        )
+                    }
                 }
 
-                ChargeSection(title = "模块 · ${r.channel.label}") {
-                    ChargeListRow(
-                        title = "本地",
-                        value = "${r.moduleLocal?.version ?: "未安装"} (${r.moduleLocal?.versionCode ?: 0})",
-                    )
-                    ChargeDivider()
-                    ChargeListRow(
-                        title = "远端",
-                        value = "${r.moduleRemote?.version ?: "--"} (${r.moduleRemote?.versionCode ?: 0})",
-                    )
-                    ChargeDivider()
-                    ChargeListRow(
-                        title = "状态",
-                        summary = when {
-                            r.moduleLocal == null && r.moduleRemote != null -> "可下载安装模块"
-                            r.moduleHasUpdate -> "有新版本"
-                            else -> "已是最新或无法比较"
-                        },
-                    )
+                if (UpdatesSession.updatableCount(r) >= 2) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        ChargeTonalButton(
+                            text = "全部更新",
+                            enabled = !busy,
+                            onClick = {
+                                val moduleUrl = r.moduleRemote?.zipUrl
+                                if (UpdatesSession.canUpdateModule(r) && !moduleUrl.isNullOrBlank()) {
+                                    onInstallModule(moduleUrl)
+                                } else {
+                                    session.updateAll()
+                                }
+                            },
+                        )
+                    }
                 }
 
-                val moduleZipUrl = r.moduleRemote?.zipUrl
-                if ((r.moduleHasUpdate || r.moduleLocal == null) && !moduleZipUrl.isNullOrBlank()) {
-                    ChargePrimaryButton(
-                        text = if (r.moduleLocal == null) "下载并安装模块" else "下载并更新模块",
-                        enabled = !busy,
-                        onClick = {
-                            scope.launch {
-                                busy = true
-                                runCatching {
-                                    val file = container.updateRepository.downloadToCache(
-                                        moduleZipUrl,
-                                        "QSC-Battery-update.zip",
-                                    )
-                                    container.moduleInstallRepository.installModuleZip(file)
-                                        .onSuccess { snackbar.showSnackbar("模块安装成功：$it") }
-                                        .onFailure { snackbar.showSnackbar(it.message ?: "失败") }
-                                }.onFailure { snackbar.showSnackbar(it.message ?: "失败") }
-                                busy = false
-                            }
-                        },
-                    )
-                }
+                ProductCompactCard(
+                    title = "模块",
+                    localText = r.moduleLocal?.version ?: "未安装",
+                    remoteText = r.moduleRemote?.version ?: "--",
+                    chip = moduleChip(r),
+                    changelog = r.moduleRemote?.changelog,
+                    actionLabel = when {
+                        r.moduleLocal == null && UpdatesSession.canUpdateModule(r) -> "安装"
+                        UpdatesSession.canUpdateModule(r) -> "更新"
+                        else -> null
+                    },
+                    work = work,
+                    target = UpdateTarget.Module,
+                    actionsEnabled = !busy,
+                    onAction = {
+                        val url = r.moduleRemote?.zipUrl ?: return@ProductCompactCard
+                        onInstallModule(url)
+                    },
+                    onOpenChangelog = { url ->
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(url)),
+                            )
+                        }
+                    },
+                )
 
-                ChargeSection(title = "APP · ${r.channel.label}") {
-                    ChargeListRow(title = "本地", value = "${r.appLocalVersion} (${r.appLocalCode})")
-                    ChargeDivider()
-                    ChargeListRow(
-                        title = "远端",
-                        value = "${r.appRemote?.version ?: "--"} (${r.appRemote?.versionCode ?: 0})",
-                    )
-                    ChargeDivider()
-                    ChargeListRow(
-                        title = "状态",
-                        summary = if (r.appHasUpdate) "有新版本" else "已是最新或无法比较",
-                    )
-                }
+                ProductCompactCard(
+                    title = "APP",
+                    localText = r.appLocalVersion,
+                    remoteText = r.appRemote?.version ?: "--",
+                    chip = appChip(r),
+                    changelog = r.appRemote?.changelog,
+                    actionLabel = if (UpdatesSession.canUpdateApp(r)) "更新" else null,
+                    work = work,
+                    target = UpdateTarget.App,
+                    actionsEnabled = !busy,
+                    onAction = { session.updateTarget(UpdateTarget.App) },
+                    onOpenChangelog = { url ->
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(url)),
+                            )
+                        }
+                    },
+                )
 
-                val appApkUrl = r.appRemote?.apkUrl
-                if (r.appHasUpdate && !appApkUrl.isNullOrBlank()) {
-                    ChargePrimaryButton(
-                        text = "下载并安装 APP",
-                        enabled = !busy,
-                        onClick = {
-                            scope.launch {
-                                busy = true
-                                runCatching {
-                                    val file = container.updateRepository.downloadToCache(
-                                        appApkUrl,
-                                        "QSC-Battery.apk",
-                                    )
-                                    container.moduleInstallRepository.promptInstallApk(file)
-                                    snackbar.showSnackbar("已打开系统安装界面")
-                                }.onFailure { snackbar.showSnackbar(it.message ?: "失败") }
-                                busy = false
-                            }
-                        },
-                    )
-                }
+                ProductCompactCard(
+                    title = "守护",
+                    localText = r.daemonLocalVersion ?: "--",
+                    remoteText = r.daemonRemote?.version ?: "--",
+                    chip = daemonChip(r),
+                    changelog = r.daemonRemote?.changelog,
+                    actionLabel = if (UpdatesSession.canUpdateDaemon(r)) "更新" else null,
+                    work = work,
+                    target = UpdateTarget.Daemon,
+                    actionsEnabled = !busy,
+                    onAction = { session.updateTarget(UpdateTarget.Daemon) },
+                    onOpenChangelog = { url ->
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(url)),
+                            )
+                        }
+                    },
+                )
 
-                ChargeSection(title = "守护 · ${r.channel.label}") {
-                    ChargeListRow(
-                        title = "本地",
-                        value = "${r.daemonLocalVersion ?: "--"} (${r.daemonLocalCode})",
-                    )
-                    ChargeDivider()
-                    ChargeListRow(
-                        title = "远端",
-                        value = "${r.daemonRemote?.version ?: "--"} (${r.daemonRemote?.versionCode ?: 0})",
-                    )
-                    ChargeDivider()
-                    ChargeListRow(
-                        title = "状态",
-                        summary = when {
-                            r.daemonRemote == null -> "无远端清单"
-                            r.daemonHasUpdate -> "有新版本"
-                            else -> "已是最新或无法比较"
-                        },
-                    )
-                }
-
-                if (r.daemonHasUpdate && r.daemonRemote?.manifestUrl != null) {
-                    ChargePrimaryButton(
-                        text = "下载并更新守护",
-                        enabled = !busy,
-                        onClick = {
-                            scope.launch {
-                                busy = true
-                                val (manifest, pages) = container.updateRepository.channelDaemonUrls(channel)
-                                val msg = container.daemonRepository.install(
-                                    impl = "rust",
-                                    manifestUrl = r.daemonRemote?.manifestUrl ?: manifest,
-                                    pagesBase = r.daemonRemote?.baseUrl ?: pages,
-                                )
-                                snackbar.showSnackbar(
-                                    if (msg.contains("ok=1")) "守护已更新" else msg.take(160),
-                                )
-                                busy = false
-                            }
-                        },
-                    )
-                }
-
-                r.error?.let { err ->
+                val err = actionError ?: r.error
+                if (!err.isNullOrBlank()) {
                     ChargeBanner(text = err, tone = BannerTone.Warn)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        ChargeTextAction(
+                            text = "重试",
+                            enabled = !busy,
+                            onClick = {
+                                session.clearActionError()
+                                session.refresh()
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class ChipSpec(val text: String, val tone: ChargeChipTone)
+
+private fun moduleChip(r: UpdateCheckResult): ChipSpec = when {
+    r.moduleRemote == null -> ChipSpec("无数据", ChargeChipTone.Warn)
+    r.moduleLocal == null -> ChipSpec("未安装", ChargeChipTone.Update)
+    r.moduleHasUpdate -> ChipSpec("可更新", ChargeChipTone.Update)
+    else -> ChipSpec("最新", ChargeChipTone.Ok)
+}
+
+private fun appChip(r: UpdateCheckResult): ChipSpec = when {
+    r.appRemote == null -> ChipSpec("无数据", ChargeChipTone.Warn)
+    r.appHasUpdate -> ChipSpec("可更新", ChargeChipTone.Update)
+    else -> ChipSpec("最新", ChargeChipTone.Ok)
+}
+
+private fun daemonChip(r: UpdateCheckResult): ChipSpec = when {
+    r.daemonRemote == null -> ChipSpec("无数据", ChargeChipTone.Warn)
+    r.daemonHasUpdate -> ChipSpec("可更新", ChargeChipTone.Update)
+    else -> ChipSpec("最新", ChargeChipTone.Ok)
+}
+
+@Composable
+private fun ProductCompactCard(
+    title: String,
+    localText: String,
+    remoteText: String,
+    chip: ChipSpec,
+    changelog: String?,
+    actionLabel: String?,
+    work: UpdateWork,
+    target: UpdateTarget,
+    actionsEnabled: Boolean,
+    onAction: () -> Unit,
+    onOpenChangelog: (String) -> Unit,
+) {
+    val active = when (work) {
+        is UpdateWork.Downloading -> work.target == target
+        is UpdateWork.Installing -> work.target == target
+        else -> false
+    }
+    val progressLabel = when {
+        work is UpdateWork.Downloading && work.target == target -> work.label
+        work is UpdateWork.Installing && work.target == target -> work.label
+        else -> null
+    }
+    val fraction = (work as? UpdateWork.Downloading)?.takeIf { it.target == target }?.fraction
+
+    ChargeSection(title = title) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "$localText → $remoteText",
+                    style = ChargeTheme.typography.body,
+                    color = ChargeTheme.colors.ink,
+                    fontWeight = FontWeight.Medium,
+                )
+                if (!changelog.isNullOrBlank()) {
+                    Text(
+                        text = "更新说明",
+                        style = ChargeTheme.typography.caption,
+                        color = ChargeTheme.colors.accent,
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .clickable { onOpenChangelog(changelog) },
+                    )
+                }
+            }
+            ChargeStatusChip(text = chip.text, tone = chip.tone)
+            if (!actionLabel.isNullOrBlank() && progressLabel == null) {
+                ChargeTonalButton(
+                    text = actionLabel,
+                    enabled = actionsEnabled && !active,
+                    onClick = onAction,
+                )
+            }
+        }
+        if (progressLabel != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = progressLabel,
+                    style = ChargeTheme.typography.caption,
+                    color = ChargeTheme.colors.accent,
+                    fontWeight = FontWeight.Medium,
+                )
+                if (fraction != null) {
+                    LinearProgressIndicator(
+                        progress = { fraction },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp),
+                        color = ChargeTheme.colors.accent,
+                        trackColor = ChargeTheme.colors.stroke,
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp),
+                        color = ChargeTheme.colors.accent,
+                        trackColor = ChargeTheme.colors.stroke,
+                    )
                 }
             }
         }

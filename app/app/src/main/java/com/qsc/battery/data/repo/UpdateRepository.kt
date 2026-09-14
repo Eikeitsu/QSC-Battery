@@ -24,7 +24,7 @@ class UpdateRepository(
 ) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
@@ -101,7 +101,14 @@ class UpdateRepository(
         )
     }
 
-    suspend fun downloadToCache(url: String, fileName: String): java.io.File =
+    /**
+     * @param onProgress (bytesRead, contentLengthOrNull) — 在 IO 线程回调，UI 侧自行切主线程。
+     */
+    suspend fun downloadToCache(
+        url: String,
+        fileName: String,
+        onProgress: ((Long, Long?) -> Unit)? = null,
+    ): java.io.File =
         withContext(Dispatchers.IO) {
             val req = Request.Builder()
                 .url(url)
@@ -111,8 +118,31 @@ class UpdateRepository(
             client.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) error("download failed: HTTP ${resp.code}")
                 val body = resp.body
+                val total = body.contentLength().takeIf { it >= 0L }
                 val out = java.io.File(context.cacheDir, fileName)
-                out.outputStream().use { body.byteStream().copyTo(it) }
+                out.outputStream().use { sink ->
+                    body.byteStream().use { src ->
+                        val buf = ByteArray(DEFAULT_BUFFER_SIZE)
+                        var readTotal = 0L
+                        var lastEmit = -1L
+                        while (true) {
+                            val n = src.read(buf)
+                            if (n < 0) break
+                            sink.write(buf, 0, n)
+                            readTotal += n
+                            val pctStep = if (total != null && total > 0L) {
+                                (readTotal * 100 / total) != lastEmit
+                            } else {
+                                readTotal - lastEmit >= 64 * 1024
+                            }
+                            if (onProgress != null && (pctStep || lastEmit < 0L)) {
+                                lastEmit = if (total != null && total > 0L) readTotal * 100 / total else readTotal
+                                onProgress(readTotal, total)
+                            }
+                        }
+                        onProgress?.invoke(readTotal, total)
+                    }
+                }
                 out
             }
         }

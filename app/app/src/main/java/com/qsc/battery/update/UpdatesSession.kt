@@ -1,0 +1,267 @@
+package com.qsc.battery.update
+
+import com.qsc.battery.data.model.UpdateChannel
+import com.qsc.battery.data.model.UpdateCheckResult
+import com.qsc.battery.data.repo.DaemonRepository
+import com.qsc.battery.data.repo.ModuleInstallRepository
+import com.qsc.battery.data.repo.SettingsRepository
+import com.qsc.battery.data.repo.StatusRepository
+import com.qsc.battery.data.repo.UpdateRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+
+enum class UpdateTarget { Module, App, Daemon }
+
+sealed interface UpdateWork {
+    data object Idle : UpdateWork
+    data object Checking : UpdateWork
+    data class Downloading(
+        val target: UpdateTarget,
+        val fraction: Float?,
+        val label: String,
+    ) : UpdateWork
+
+    data class Installing(val target: UpdateTarget, val label: String) : UpdateWork
+}
+
+/**
+ * 更新页会话：检查/下载不绑定 Composable 生命周期，离开页面后仍可观察进度。
+ */
+class UpdatesSession(
+    private val updates: UpdateRepository,
+    private val modules: ModuleInstallRepository,
+    private val daemon: DaemonRepository,
+    private val status: StatusRepository,
+    private val settings: SettingsRepository,
+    private val notifier: UpdateDownloadNotifier,
+    private val scope: CoroutineScope,
+) {
+    private val _channel = MutableStateFlow(UpdateChannel.Stable)
+    val channel: StateFlow<UpdateChannel> = _channel.asStateFlow()
+
+    private val _result = MutableStateFlow<UpdateCheckResult?>(null)
+    val result: StateFlow<UpdateCheckResult?> = _result.asStateFlow()
+
+    private val _work = MutableStateFlow<UpdateWork>(UpdateWork.Idle)
+    val work: StateFlow<UpdateWork> = _work.asStateFlow()
+
+    private val _actionError = MutableStateFlow<String?>(null)
+    val actionError: StateFlow<String?> = _actionError.asStateFlow()
+
+    private val _snackbar = MutableStateFlow<String?>(null)
+    val snackbar: StateFlow<String?> = _snackbar.asStateFlow()
+
+    private val mutex = Mutex()
+    private var checkJob: Job? = null
+    private var actionJob: Job? = null
+    private var booted = false
+
+    fun consumeSnackbar(): String? {
+        val m = _snackbar.value
+        _snackbar.value = null
+        return m
+    }
+
+    fun clearActionError() {
+        _actionError.value = null
+    }
+
+    /** 首次进入：读设置并检查。 */
+    fun ensureBootstrapped() {
+        if (booted) return
+        booted = true
+        scope.launch {
+            _channel.value = settings.updateChannel()
+            scheduleCheck(debounceMs = 0L)
+        }
+    }
+
+    fun setChannel(next: UpdateChannel) {
+        if (next == _channel.value) return
+        _channel.value = next
+        scope.launch {
+            settings.setUpdateChannel(next)
+            scheduleCheck(debounceMs = 300L)
+        }
+    }
+
+    fun refresh() {
+        scheduleCheck(debounceMs = 0L)
+    }
+
+    fun updateTarget(target: UpdateTarget) {
+        if (_work.value !is UpdateWork.Idle) return
+        actionJob?.cancel()
+        actionJob = scope.launch {
+            mutex.withLock {
+                runCatching { performUpdate(target) }
+                    .onFailure { fail(it.message ?: "失败", target) }
+            }
+        }
+    }
+
+    /** 模块 → 守护 → APP；任一项失败即停止。模块请走控制台页，此处跳过。 */
+    fun updateAll() {
+        if (_work.value !is UpdateWork.Idle) return
+        val r = _result.value ?: return
+        val order = buildList {
+            if (canUpdateDaemon(r)) add(UpdateTarget.Daemon)
+            if (canUpdateApp(r)) add(UpdateTarget.App)
+        }
+        if (order.isEmpty()) return
+        actionJob?.cancel()
+        actionJob = scope.launch {
+            mutex.withLock {
+                for (t in order) {
+                    val ok = runCatching { performUpdate(t) }.getOrElse {
+                        fail(it.message ?: "失败", t)
+                        return@withLock
+                    }
+                    if (!ok) return@withLock
+                }
+            }
+        }
+    }
+
+    private fun scheduleCheck(debounceMs: Long) {
+        checkJob?.cancel()
+        checkJob = scope.launch {
+            if (debounceMs > 0) delay(debounceMs)
+            if (_work.value !is UpdateWork.Idle && _work.value !is UpdateWork.Checking) {
+                // 下载/安装中不打断；稍后由成功回调再 refresh
+                return@launch
+            }
+            mutex.withLock {
+                if (_work.value is UpdateWork.Downloading || _work.value is UpdateWork.Installing) {
+                    return@withLock
+                }
+                _work.value = UpdateWork.Checking
+                _actionError.value = null
+                val ch = _channel.value
+                val r = runCatching { updates.check(status, ch) }
+                    .onFailure {
+                        _actionError.value = it.message ?: "检查失败"
+                        _snackbar.value = it.message ?: "检查失败"
+                    }
+                    .getOrNull()
+                if (r != null) {
+                    _result.value = r
+                    if (!r.error.isNullOrBlank()) {
+                        _actionError.value = r.error
+                    }
+                }
+                _work.value = UpdateWork.Idle
+            }
+        }
+    }
+
+    private suspend fun performUpdate(target: UpdateTarget): Boolean {
+        val r = _result.value ?: return false
+        _actionError.value = null
+        return when (target) {
+            UpdateTarget.Module -> {
+                // 模块安装改由 ModuleInstallConsoleScreen 展示命令行过程
+                false
+            }
+            UpdateTarget.App -> {
+                val url = r.appRemote?.apkUrl ?: return false
+                if (!canUpdateApp(r)) return false
+                downloadAnd(
+                    target = UpdateTarget.App,
+                    url = url,
+                    fileName = "QSC-Battery.apk",
+                    downloadTitle = "下载 APP",
+                ) { file ->
+                    _work.value = UpdateWork.Installing(UpdateTarget.App, "打开安装界面…")
+                    notifier.progress("安装 APP", "请完成系统安装", null)
+                    modules.promptInstallApk(file)
+                    notifier.success("APP 安装", "已打开系统安装界面")
+                    _snackbar.value = "请完成系统安装后返回并刷新"
+                }
+                true
+            }
+            UpdateTarget.Daemon -> {
+                if (!canUpdateDaemon(r)) return false
+                _work.value = UpdateWork.Installing(UpdateTarget.Daemon, "正在安装守护…")
+                notifier.start("安装守护", "正在下载并安装…")
+                val (manifest, pages) = updates.channelDaemonUrls(_channel.value)
+                val msg = daemon.install(
+                    impl = "rust",
+                    manifestUrl = r.daemonRemote?.manifestUrl ?: manifest,
+                    pagesBase = r.daemonRemote?.baseUrl ?: pages,
+                )
+                if (msg.contains("ok=1")) {
+                    notifier.success("守护已更新", "安装完成")
+                    _snackbar.value = "守护已更新"
+                    _work.value = UpdateWork.Idle
+                    scheduleCheck(0L)
+                    true
+                } else {
+                    fail(msg.take(160).ifBlank { "守护安装失败" }, UpdateTarget.Daemon)
+                    false
+                }
+            }
+        }
+    }
+
+    private suspend fun downloadAnd(
+        target: UpdateTarget,
+        url: String,
+        fileName: String,
+        downloadTitle: String,
+        after: suspend (java.io.File) -> Unit,
+    ) {
+        _work.value = UpdateWork.Downloading(target, null, "$downloadTitle…")
+        notifier.start(downloadTitle, "准备中…")
+        val file = updates.downloadToCache(url, fileName) { read, total ->
+            val f = if (total != null && total > 0L) {
+                (read.toDouble() / total.toDouble()).toFloat().coerceIn(0f, 1f)
+            } else {
+                null
+            }
+            val label = if (f != null) "$downloadTitle ${(f * 100).toInt()}%" else "$downloadTitle…"
+            // download callback is on IO; hop to Main for Compose collectors
+            scope.launch(Dispatchers.Main.immediate) {
+                _work.value = UpdateWork.Downloading(target, f, label)
+            }
+            notifier.progress(downloadTitle, label, f)
+        }
+        after(file)
+        _work.value = UpdateWork.Idle
+    }
+
+    private fun fail(message: String, target: UpdateTarget) {
+        _actionError.value = message
+        _snackbar.value = message
+        _work.value = UpdateWork.Idle
+        notifier.failure("更新失败", message.take(80))
+    }
+
+    companion object {
+        fun canUpdateModule(r: UpdateCheckResult): Boolean =
+            !r.moduleRemote?.zipUrl.isNullOrBlank() &&
+                (r.moduleHasUpdate || r.moduleLocal == null)
+
+        fun canUpdateApp(r: UpdateCheckResult): Boolean =
+            r.appHasUpdate && !r.appRemote?.apkUrl.isNullOrBlank()
+
+        fun canUpdateDaemon(r: UpdateCheckResult): Boolean =
+            r.daemonHasUpdate && r.daemonRemote?.manifestUrl != null
+
+        fun updatableCount(r: UpdateCheckResult): Int {
+            var n = 0
+            if (canUpdateModule(r)) n++
+            if (canUpdateApp(r)) n++
+            if (canUpdateDaemon(r)) n++
+            return n
+        }
+    }
+}

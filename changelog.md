@@ -9,11 +9,14 @@
 ### 更新通道与版本
 
 - APP「更新」与 WebUI「我的」可切换 **正式 / 预发布 / CI**；元数据统一读 **`updates` 分支**（`stable` / `prerelease` / `ci`），检测 **模块 / APP / 守护** 三项并可单独更新
+- APP 更新页：进页/切通道自动检查；民用通道文案 +「了解通道」；紧凑行 + 状态 chip + 行尾更新；下载页内进度与通知；会话跨页保留；CI 切换确认；多项可更时「全部更新」；装后刷新
+- APP 模块更新：进入命令行风格安装页展示下载与 magisk/ksud/apd 输出；CLI 失败再打开 zip 交给管理器
+- WebUI 更新通道：只检测 **模块 + 守护**（不检伴侣 APP）；模块下载后拉起管理器刷写页；守护仍本页替换
+- WebUI 更新通道：自动检查、民用文案、紧凑结果行与 CI 确认，与 APP 心智对齐
 - Magisk / KSU / APatch 模块更新仍只认 **Pages** `update.json`（`module.prop` 不变）
 - **`ci-dist`** 仅存完整产物（与 Release 同清单），不再放检测 JSON；CI 按变更升对应 `versionCode`，未改项不误报
 - 停在预发布 / CI 时检查更新会旁路提示正式版；预发布与草稿不写正式镜像
 - `versionCode` 跨通道全局单调递增；用户可见版本：CI 为 `….ci.N`，预发布为 `….pre`（模块与 APP 一致）
-- APP 更新页通道选择去掉白卡片套分段控件；分段选中为 accent 实底 + 未选中描边/浅底，与页面背景区分更明显
 - WebUI 构建改为固定 `js/app.js`、`css/style.css` 等路径，并生成 `webroot/.qsc-files`；热更新覆盖前整目录替换 webroot、安装时按清单清理废弃 hash 资源，避免热更后 HTML/JS 不一致或双份静态文件
 
 ### 停充兼容

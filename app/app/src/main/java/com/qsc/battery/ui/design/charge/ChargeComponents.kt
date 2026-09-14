@@ -265,13 +265,14 @@ fun ChargePrimaryButton(
     text: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    compact: Boolean = false,
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(ChargeTheme.dimens.radiusMd)
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(ChargeTheme.dimens.primaryButton)
+            .height(if (compact) 42.dp else ChargeTheme.dimens.primaryButton)
             .clip(shape)
             .background(
                 if (enabled) ChargeTheme.colors.accent
@@ -282,8 +283,92 @@ fun ChargePrimaryButton(
     ) {
         Text(
             text = text,
-            style = ChargeTheme.typography.headline,
+            style = if (compact) ChargeTheme.typography.body else ChargeTheme.typography.headline,
             color = ChargeTheme.colors.onAccent,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+/** 行内文字操作，避免信息卡下再叠全宽主按钮。 */
+@Composable
+fun ChargeTextAction(
+    text: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = text,
+        style = ChargeTheme.typography.label,
+        color = if (enabled) ChargeTheme.colors.accent else ChargeTheme.colors.muted,
+        fontWeight = FontWeight.SemiBold,
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+    )
+}
+
+enum class ChargeChipTone { Neutral, Ok, Update, Warn }
+
+@Composable
+fun ChargeStatusChip(
+    text: String,
+    tone: ChargeChipTone,
+    modifier: Modifier = Modifier,
+) {
+    val bg = when (tone) {
+        ChargeChipTone.Neutral -> ChargeTheme.colors.surfaceStrong
+        ChargeChipTone.Ok -> ChargeTheme.colors.success.copy(alpha = 0.14f)
+        ChargeChipTone.Update -> ChargeTheme.colors.accent.copy(alpha = 0.14f)
+        ChargeChipTone.Warn -> ChargeTheme.colors.danger.copy(alpha = 0.12f)
+    }
+    val fg = when (tone) {
+        ChargeChipTone.Neutral -> ChargeTheme.colors.muted
+        ChargeChipTone.Ok -> ChargeTheme.colors.success
+        ChargeChipTone.Update -> ChargeTheme.colors.accent
+        ChargeChipTone.Warn -> ChargeTheme.colors.danger
+    }
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(bg)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    ) {
+        Text(
+            text = text,
+            style = ChargeTheme.typography.caption,
+            color = fg,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+/** 行尾紧凑更新按钮（tonal）。 */
+@Composable
+fun ChargeTonalButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(
+                if (enabled) ChargeTheme.colors.accent.copy(alpha = 0.16f)
+                else ChargeTheme.colors.stroke.copy(alpha = 0.4f),
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = ChargeTheme.typography.label,
+            color = if (enabled) ChargeTheme.colors.accent else ChargeTheme.colors.muted,
+            fontWeight = FontWeight.SemiBold,
         )
     }
 }
@@ -611,36 +696,30 @@ fun ChargeSegmented(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .border(1.dp, ChargeTheme.colors.stroke, RoundedCornerShape(14.dp))
-            .background(ChargeTheme.colors.surface)
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+            .clip(RoundedCornerShape(10.dp))
+            .background(ChargeTheme.colors.surfaceStrong.copy(alpha = 0.55f))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         options.forEachIndexed { index, label ->
             val selected = index == selectedIndex
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(11.dp))
-                    .then(
-                        if (selected) {
-                            Modifier.background(ChargeTheme.colors.accent)
-                        } else {
-                            Modifier
-                                .border(1.dp, ChargeTheme.colors.stroke, RoundedCornerShape(11.dp))
-                                .background(ChargeTheme.colors.surfaceStrong)
-                        },
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        if (selected) ChargeTheme.colors.surface
+                        else Color.Transparent,
                     )
                     .clickable { onSelect(index) }
-                    .padding(vertical = 10.dp),
+                    .padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = label,
                     style = ChargeTheme.typography.label,
-                    color = if (selected) ChargeTheme.colors.onAccent else ChargeTheme.colors.ink,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (selected) ChargeTheme.colors.accent else ChargeTheme.colors.muted,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 )
             }
         }

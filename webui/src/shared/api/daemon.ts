@@ -179,10 +179,21 @@ export async function checkDaemonUpdate(impl: DaemonImpl): Promise<{
 /** 下载耗时可能较长（含 manifest + 二进制两次请求），给足超时 */
 const INSTALL_TIMEOUT_MS = 180_000;
 
-/** 从 Pages 下载指定实现；成功后会自动替换掉原来的那套并重启服务 */
-export async function installDaemon(impl: DaemonImpl): Promise<DaemonActionResult> {
+/** 从 Pages / updates 通道下载指定实现；成功后自动替换并重启服务 */
+export async function installDaemon(
+  impl: DaemonImpl,
+  opts?: { manifestUrl?: string; pagesBase?: string },
+): Promise<DaemonActionResult> {
+  const env: string[] = [];
+  if (opts?.manifestUrl) {
+    env.push(`QSCD_MANIFEST_URL='${opts.manifestUrl.replace(/'/g, "")}'`);
+  }
+  if (opts?.pagesBase) {
+    env.push(`QSCD_PAGES_BASE='${opts.pagesBase.replace(/'/g, "")}'`);
+  }
+  const prefix = env.length ? `${env.join(" ")} ` : "";
   const r = await exec(
-    `sh '${PATHS.QSCD_FETCH}' install ${impl} 2>/dev/null`,
+    `${prefix}sh '${PATHS.QSCD_FETCH}' install ${impl} 2>/dev/null`,
     INSTALL_TIMEOUT_MS,
   );
   const kv = parseKv(r.stdout || "");
