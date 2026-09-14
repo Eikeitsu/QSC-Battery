@@ -1,7 +1,18 @@
 <script setup lang="ts">
+import { useRouter } from "vue-router";
 import SectionHead from "@/shared/ui/SectionHead.vue";
 import ThemedCard from "@/shared/ui/ThemedCard.vue";
-import { PATHS } from "@/shared";
+import { PATHS, SubRouteName } from "@/shared";
+
+const router = useRouter();
+
+function goSwitches() {
+  void router.push({ name: SubRouteName.ConfigSwitches });
+}
+
+function goDevice() {
+  void router.push({ name: SubRouteName.MoreDevice });
+}
 </script>
 
 <template>
@@ -17,7 +28,15 @@ import { PATHS } from "@/shared";
         <code>{{ PATHS.DATADIR }}</code>
       </p>
       <p>过夜建议停止 80–90%；与其它限流模块同装时开启兼容模式。</p>
-      <p>停充节点问题请到「策略 → 测开关与缓存」；机型分享见上方「机型节点分享」。</p>
+      <p>
+        停充节点问题请到
+        <button type="button" class="link" @click="goSwitches">
+          策略 → 供电开关与排障
+        </button>
+        ；机型分享见
+        <button type="button" class="link" @click="goDevice">机型与社区</button>
+        。
+      </p>
       <p>详细说明见在线文档。</p>
     </div>
   </ThemedCard>
@@ -43,5 +62,16 @@ import { PATHS } from "@/shared";
   font-size: 11px;
   word-break: break-all;
   color: var(--qsc-text);
+}
+
+.link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--qsc-primary, var(--qsc-accent, #3b82f6));
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 </style>

@@ -201,7 +201,7 @@ watch(channel, async () => {
       </div>
 
       <div v-if="busy && !result" class="loading" role="status">
-        <span class="loading-spin" aria-hidden="true" />
+        <span class="loading-spin" aria-hidden="true"></span>
         <span>正在检查更新…</span>
       </div>
 
@@ -243,9 +243,7 @@ watch(channel, async () => {
 
         <div class="item">
           <div class="item-top">
-            <span class="name"
-              >守护 · {{ result.daemonImpl === "c" ? "C" : "Rust" }}</span
-            >
+            <span class="name">守护 · {{ result.daemonImpl === "c" ? "C" : "Rust" }}</span>
             <span
               class="chip"
               :data-tone="

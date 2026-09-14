@@ -9,6 +9,7 @@
 - APP/WebUI 安装前会把清单落到本地并把 raw URL 改写为 CDN，兼容尚未刷入新 `qscd_fetch` 前的下载路径问题（完整回退仍需新脚本）
 - 更新通道安装守护时按当前 `native_impl`（Rust/C）下载，不再写死 Rust
 - 守护 **Rust / C 分侧 versionCode**（`rustVersionCode` / `cVersionCode`）：只升变更一侧；检测/安装只看当前实现；UI 显示「守护 · Rust/C」
+- WebUI「策略 / 我的」改为 Hub + 二级子路由：日常项留一级，开关排障 / 运行采样 / 守护、机型社区 / 工具说明 / 关于进子页；顶栏返回、底栏仍高亮所属 Tab
 - Pages `qscd/manifest.json` 补齐 `versionCode` / `baseUrl` / `*Url` / 分侧版本字段，与 updates/stable 对齐
 
 ### 构建

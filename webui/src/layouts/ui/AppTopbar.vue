@@ -2,36 +2,96 @@
 import { APP, ThemePack } from "@/shared";
 import { useAppStore, useTheme } from "@/stores";
 
+defineProps<{
+  subPage?: boolean;
+  pageTitle?: string;
+}>();
+
+defineEmits<{
+  back: [];
+}>();
+
 const store = useAppStore();
 const theme = useTheme();
 const base = import.meta.env.BASE_URL;
 </script>
 
 <template>
-  <header v-if="theme.themePack === ThemePack.Md3" class="app-topbar topbar-md3">
+  <header
+    v-if="theme.themePack === ThemePack.Md3"
+    class="app-topbar topbar-md3"
+    :class="{ 'is-sub': subPage }"
+  >
+    <button
+      v-if="subPage"
+      type="button"
+      class="back"
+      aria-label="返回"
+      @click="$emit('back')"
+    >
+      ←
+    </button>
     <div class="md3-top">
-      <p class="md3-eyebrow">{{ store.deviceName || "本机" }}</p>
-      <h1>{{ APP.name }}</h1>
+      <p v-if="!subPage" class="md3-eyebrow">{{ store.deviceName || "本机" }}</p>
+      <h1>{{ subPage ? pageTitle || APP.name : APP.name }}</h1>
     </div>
   </header>
 
-  <header v-else-if="theme.themePack === ThemePack.Miuix" class="app-topbar topbar-miuix">
+  <header
+    v-else-if="theme.themePack === ThemePack.Miuix"
+    class="app-topbar topbar-miuix"
+    :class="{ 'is-sub': subPage }"
+  >
+    <button
+      v-if="subPage"
+      type="button"
+      class="back"
+      aria-label="返回"
+      @click="$emit('back')"
+    >
+      ←
+    </button>
     <div class="titles">
-      <h1>{{ APP.name }}</h1>
-      <p>{{ store.deviceName }}</p>
+      <h1>{{ subPage ? pageTitle || APP.name : APP.name }}</h1>
+      <p v-if="!subPage">{{ store.deviceName }}</p>
     </div>
   </header>
 
-  <header v-else class="app-topbar topbar-default">
-    <img class="logo" :src="`${base}img/icon.png`" width="36" height="36" alt="" />
+  <header v-else class="app-topbar topbar-default" :class="{ 'is-sub': subPage }">
+    <button
+      v-if="subPage"
+      type="button"
+      class="back"
+      aria-label="返回"
+      @click="$emit('back')"
+    >
+      ←
+    </button>
+    <img v-else class="logo" :src="`${base}img/icon.png`" width="36" height="36" alt="" />
     <div class="titles">
-      <h1>{{ APP.name }}</h1>
-      <p>{{ store.deviceName }}</p>
+      <h1>{{ subPage ? pageTitle || APP.name : APP.name }}</h1>
+      <p v-if="!subPage">{{ store.deviceName }}</p>
     </div>
   </header>
 </template>
 
 <style scoped lang="scss">
+.back {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  margin-right: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--qsc-fill-2, rgba(0, 0, 0, 0.06)) 90%, transparent);
+  color: var(--qsc-text);
+  font-size: 18px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .logo {
   border-radius: 10px;
   flex-shrink: 0;
@@ -67,11 +127,18 @@ const base = import.meta.env.BASE_URL;
   padding-bottom: 12px;
 }
 
+.topbar-md3.is-sub {
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 8px;
+}
+
 .md3-top {
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 
 .md3-eyebrow {
@@ -92,9 +159,18 @@ const base = import.meta.env.BASE_URL;
   line-height: 1.2;
 }
 
+.topbar-md3.is-sub h1 {
+  font-size: 22px;
+}
+
 .topbar-miuix {
   min-height: calc(48px + var(--qsc-inset-top, 0px));
   padding-bottom: 6px;
+}
+
+.topbar-miuix.is-sub,
+.topbar-default.is-sub {
+  align-items: center;
 }
 
 .topbar-miuix .titles h1 {

@@ -1,8 +1,8 @@
-import { computed, nextTick, onMounted, provide, ref } from "vue";
+import { computed, nextTick, onMounted, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useThemePackClass } from "@/composables";
 import { useAppStore } from "@/stores";
-import { isTabName, TabName } from "@/shared";
+import { isTabName, parentTabOfRoute, TabName, type SubRouteName } from "@/shared";
 import { preloadTab } from "@/router/loaders";
 
 export function useAppShell() {
@@ -15,11 +15,21 @@ export function useAppShell() {
   const pendingTab = ref<TabName | null>(null);
   let navigationId = 0;
   const NAVIGATION_TIMEOUT_MS = 8_000;
-  const scrollPositions = new Map<TabName, number>();
+  const scrollPositions = new Map<string, number>();
 
-  const tab = computed<TabName>(
-    () => pendingTab.value ?? (isTabName(route.name) ? route.name : TabName.Home),
+  const activeTab = computed<TabName>(() =>
+    parentTabOfRoute(route.name, route.meta.parentTab),
   );
+
+  const tab = computed<TabName>(() => pendingTab.value ?? activeTab.value);
+
+  const isSubPage = computed(() => Boolean(route.meta.parentTab));
+  const pageTitle = computed(() => {
+    if (isSubPage.value && typeof route.meta.title === "string") {
+      return route.meta.title;
+    }
+    return "";
+  });
 
   function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
     return new Promise((resolve, reject) => {
@@ -41,20 +51,20 @@ export function useAppShell() {
 
   function setTab(name: string | number) {
     const next = String(name);
-    if (!isTabName(next) || next === tab.value) return;
+    if (!isTabName(next)) return;
+    // 已在该 Tab 的 Hub 上则忽略；在子页上点同一底栏则回 Hub
+    if (next === tab.value && !isSubPage.value && !pendingTab.value) return;
     const requestId = ++navigationId;
     saveScrollPosition();
     pendingTab.value = next;
     routeLoading.value = true;
     store.setInteractiveTab(next === TabName.Home);
-    // 预取只是 best-effort；它和 router.replace 共享 import 缓存，不能阻塞点击。
     void preloadTab(next).catch(() => undefined);
     void navigateTo(next, requestId);
   }
 
   async function navigateTo(target: TabName, requestId: number) {
     try {
-      // 路由切换必须在点击处理的同一轮开始，动态 chunk 由 RouterView 自己懒加载。
       await withTimeout(router.replace({ name: target }), NAVIGATION_TIMEOUT_MS);
       await nextTick();
       if (requestId !== navigationId || pendingTab.value !== target) return;
@@ -63,29 +73,49 @@ export function useAppShell() {
       routeLoading.value = false;
       requestAnimationFrame(() => theme.syncStatusBar());
     } catch {
-      // 旧导航被快速点击取消时，不得清掉新导航的 loading 或选中态。
       if (requestId === navigationId && pendingTab.value === target) {
         pendingTab.value = null;
         routeLoading.value = false;
-        store.setInteractiveTab(route.name === TabName.Home);
+        store.setInteractiveTab(activeTab.value === TabName.Home);
       }
     }
   }
 
+  function openSub(name: SubRouteName) {
+    saveScrollPosition();
+    void router.push({ name }).then(() => {
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>(".app-main")?.scrollTo(0, 0);
+        theme.syncStatusBar();
+      });
+    });
+  }
+
+  function goBack() {
+    const parent = route.meta.parentTab;
+    const hub = typeof parent === "string" && isTabName(parent) ? parent : TabName.Home;
+    saveScrollPosition();
+    void router.replace({ name: hub }).then(() => {
+      restoreScrollPosition(hub);
+      requestAnimationFrame(() => theme.syncStatusBar());
+    });
+  }
+
   provide("setTab", setTab);
+  provide("openSub", openSub);
 
   function saveScrollPosition() {
-    const current = route.name;
+    const key = String(route.name || "");
     const main = document.querySelector<HTMLElement>(".app-main");
-    if (isTabName(current) && main) {
-      scrollPositions.set(current, main.scrollTop);
+    if (key && main) {
+      scrollPositions.set(key, main.scrollTop);
     }
   }
 
-  function restoreScrollPosition(target: TabName) {
+  function restoreScrollPosition(target: string) {
     const top = scrollPositions.get(target) ?? 0;
     requestAnimationFrame(() => {
-      if (router.currentRoute.value.name === target) {
+      if (String(router.currentRoute.value.name) === target) {
         document.querySelector<HTMLElement>(".app-main")?.scrollTo(0, top);
       }
     });
@@ -104,17 +134,25 @@ export function useAppShell() {
     theme.load();
     theme.bindSystemListener();
     await store.init();
-    store.setInteractiveTab(route.name === TabName.Home);
+    store.setInteractiveTab(activeTab.value === TabName.Home);
     theme.syncStatusBar();
+  });
+
+  watch(activeTab, (t) => {
+    store.setInteractiveTab(t === TabName.Home);
   });
 
   return {
     theme,
     shellClass,
     tab,
+    isSubPage,
+    pageTitle,
     refreshing,
     routeLoading,
     setTab,
+    goBack,
+    openSub,
     onRefreshHome,
   };
 }

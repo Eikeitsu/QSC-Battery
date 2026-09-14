@@ -5,8 +5,18 @@ import AppTopbar from "./ui/AppTopbar.vue";
 import AppDock from "./ui/AppDock.vue";
 import { useAppStore } from "@/stores";
 
-const { shellClass, theme, tab, refreshing, routeLoading, setTab, onRefreshHome } =
-  useAppShell();
+const {
+  shellClass,
+  theme,
+  tab,
+  isSubPage,
+  pageTitle,
+  refreshing,
+  routeLoading,
+  setTab,
+  goBack,
+  onRefreshHome,
+} = useAppShell();
 const store = useAppStore();
 </script>
 
@@ -17,7 +27,7 @@ const store = useAppStore();
     :data-theme="theme.resolved"
     :data-pack="theme.themePack"
   >
-    <AppTopbar />
+    <AppTopbar :sub-page="isSubPage" :page-title="pageTitle" @back="goBack" />
 
     <main class="app-main" :aria-busy="store.initializing || routeLoading">
       <div
@@ -32,10 +42,10 @@ const store = useAppStore();
         <Suspense timeout="0">
           <template #default>
             <RouterView v-slot="{ Component, route: viewRoute }">
-              <KeepAlive :max="4">
+              <KeepAlive :max="8">
                 <component
                   :is="Component"
-                  :key="viewRoute.name"
+                  :key="String(viewRoute.name)"
                   :refreshing="viewRoute.name === 'home' ? refreshing : undefined"
                   @refresh="onRefreshHome()"
                 />
@@ -79,50 +89,48 @@ const store = useAppStore();
 }
 
 .route-fallback {
-  min-height: 1px;
+  min-height: 40vh;
 }
 
 .app-main-loading {
-  position: fixed;
+  position: sticky;
   top: calc(var(--qsc-topbar-h, 56px) + var(--qsc-inset-top, 0));
-  left: 0;
-  right: 0;
-  z-index: 2;
+  z-index: 5;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
-  height: 28px;
-  padding: 0 16px;
-  background: color-mix(in srgb, var(--qsc-bg) 92%, transparent);
-  color: var(--qsc-text);
+  padding: 10px 16px 12px;
   font-size: 12px;
-  pointer-events: none;
+  color: var(--qsc-text-2);
+  background: color-mix(in srgb, var(--qsc-bg) 92%, transparent);
+  backdrop-filter: blur(8px);
 }
 
 .app-main-loading__bar {
-  width: 36px;
+  display: block;
   height: 3px;
-  overflow: hidden;
   border-radius: 999px;
+  overflow: hidden;
   background: color-mix(in srgb, var(--qsc-primary) 20%, transparent);
 }
 
 .app-main-loading__bar::after {
-  display: block;
-  width: 45%;
-  height: 100%;
-  background: var(--qsc-primary);
   content: "";
-  animation: app-main-loading-progress 1s ease-in-out infinite;
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--qsc-primary);
+  animation: qsc-load 1.1s ease-in-out infinite;
 }
 
-@keyframes app-main-loading-progress {
-  from {
+@keyframes qsc-load {
+  0% {
     transform: translateX(-120%);
   }
 
-  to {
-    transform: translateX(240%);
+  100% {
+    transform: translateX(320%);
   }
 }
 </style>

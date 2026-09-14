@@ -1,21 +1,40 @@
 import type { RouteRecordRaw } from "vue-router";
-import { TabName, isTabName } from "@/shared/config/enums";
+import { TabName } from "@/shared/config/enums";
 import { TABS, TAB_ORDER } from "@/shared/config/navigation";
+import { SubRouteName, SUB_ROUTE_META } from "@/shared/config/subRoutes";
 import AppShell from "@/layouts/AppShell.vue";
-import { TAB_PAGES } from "./loaders";
+import { TAB_PAGES, SUB_PAGES } from "./loaders";
+
+const tabChildren: RouteRecordRaw[] = TABS.map((t) => ({
+  path: t.name,
+  name: t.name,
+  component: TAB_PAGES[t.name],
+  meta: { order: TAB_ORDER.indexOf(t.name), title: t.label },
+}));
+
+const subChildren: RouteRecordRaw[] = (Object.keys(SUB_ROUTE_META) as SubRouteName[]).map(
+  (name) => {
+    const meta = SUB_ROUTE_META[name];
+    const path = name.replace(/-/g, "/"); // config-switches → config/switches
+    return {
+      path,
+      name,
+      component: SUB_PAGES[name],
+      meta: {
+        parentTab: meta.parentTab,
+        title: meta.title,
+        order: TAB_ORDER.indexOf(meta.parentTab),
+      },
+    };
+  },
+);
 
 export const routes: RouteRecordRaw[] = [
   {
     path: "/",
-    // 壳层很小且必须立即出现；页面组件仍按 Tab 路由懒加载。
     component: AppShell,
     redirect: { name: TabName.Home },
-    children: TABS.map((t) => ({
-      path: t.name,
-      name: t.name,
-      component: TAB_PAGES[t.name],
-      meta: { order: TAB_ORDER.indexOf(t.name), title: t.label },
-    })),
+    children: [...tabChildren, ...subChildren],
   },
   {
     path: "/:pathMatch(.*)*",
@@ -23,4 +42,4 @@ export const routes: RouteRecordRaw[] = [
   },
 ];
 
-export { isTabName };
+export { isTabName } from "@/shared/config/enums";

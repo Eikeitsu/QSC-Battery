@@ -11,6 +11,7 @@ export * from "./config/defaults";
 export * from "./config/presets";
 export * from "./config/limits";
 export * from "./config/navigation";
+export * from "./config/subRoutes";
 export * from "./lib/color";
 export * from "./lib/log";
 export * from "./lib/device";
