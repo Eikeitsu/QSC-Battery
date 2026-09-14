@@ -42,10 +42,9 @@ jobs:
 
       - uses: ./.github/actions/setup-node-npm
 
-      # lint / typecheck 由 Lint 工作流覆盖，此处只构建
-      - run: npm run build:web
+      # lint / typecheck �?Lint 工作流覆盖，此处只构�?      - run: npm run build:web
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: web-dist
           path: .build/webroot/

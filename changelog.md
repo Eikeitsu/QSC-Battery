@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### 构建
+
+- APP 迁到 AGP 内置 Kotlin（去掉 `builtInKotlin` / `newDsl` 兼容开关）；CI Actions 升到 `upload-artifact@v5` / `setup-gradle@v5`，消除 Node 20 弃用警告
+
 ### 更新通道与版本
 
 - APP「更新」与 WebUI「我的」可切换 **正式 / 预发布 / CI**；正式仍走 Pages（Magisk 同源），预发布直连 GitHub Release，CI 走 `ci-dist`（无 Token，只保留最新构建）

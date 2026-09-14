@@ -4,16 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "日期（首发填 20260717；同日第2版填 20260717.2）"
+        description: "日期（首发填 20260717；同日第2版填 20260717.2�?
         required: true
         type: string
       release_name:
-        description: "Release 标题（可空，默认用 Tag）"
+        description: "Release 标题（可空，默认�?Tag�?
         required: false
         type: string
         default: ""
       publish_zips:
-        description: "发布模块 zip（5 个变体：full / rust / c / sh / lite）→ update.json 指向 full"
+        description: "发布模块 zip�? 个变体：full / rust / c / sh / lite）→ update.json 指向 full"
         required: false
         type: boolean
         default: true
@@ -28,7 +28,7 @@ on:
         type: boolean
         default: true
       publish_apk:
-        description: "发布伴侣 APK → 驱动 app-update.json"
+        description: "发布伴侣 APK �?驱动 app-update.json"
         required: false
         type: boolean
         default: true
@@ -102,14 +102,13 @@ jobs:
             APK="${{ inputs.publish_apk }}"
             if [ "$ZIPS" != "true" ] && [ "$RUST" != "true" ] && \
                [ "$CBIN" != "true" ] && [ "$APK" != "true" ]; then
-              echo "至少勾选一项发布内容（zip / Rust / C / APK）" >&2
+              echo "至少勾选一项发布内容（zip / Rust / C / APK�? >&2
               exit 1
             fi
           fi
 
           eval "$(RAW="$RAW" QSC_FETCH_REMOTE_CODES=1 python3 tooling/scripts/resolve-release-version.py)"
-          # 预发布：用户可见 version 加 .pre（versionCode 仍为单调检测码）
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.prerelease }}" = "true" ]; then
+          # 预发布：用户可见 version �?.pre（versionCode 仍为单调检测码�?          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.prerelease }}" = "true" ]; then
             case "$version" in
               *.pre) ;;
               *) version="${version}.pre" ;;
@@ -121,8 +120,7 @@ jobs:
           else
             NAME="$TAG"
           fi
-          # update.json 指向 full 变体（双守护 + WebUI）
-          ZIP="QSC-Battery_v${version}-full.zip"
+          # update.json 指向 full 变体（双守护 + WebUI�?          ZIP="QSC-Battery_v${version}-full.zip"
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "raw=$version" >> "$GITHUB_OUTPUT"
@@ -149,8 +147,7 @@ jobs:
 
       - uses: ./.github/actions/setup-node-npm
 
-      # 守护二进制：两套实现都要有，四个变体包与 Pages 托管都依赖它们
-      - uses: ./.github/actions/build-native
+      # 守护二进制：两套实现都要有，四个变体包与 Pages 托管都依赖它�?      - uses: ./.github/actions/build-native
 
       - uses: ./.github/actions/setup-android
 
@@ -161,8 +158,7 @@ jobs:
           CODE: ${{ steps.meta.outputs.version_code }}
           IS_PRE: ${{ steps.meta.outputs.prerelease }}
         run: |
-          # 预发布：APP versionName 与模块一致（含 .pre）；正式版保持 gradle 默认展示名
-          if [ "$IS_PRE" = "true" ] || [[ "$RAW" == *.pre ]]; then
+          # 预发布：APP versionName 与模块一致（�?.pre）；正式版保�?gradle 默认展示�?          if [ "$IS_PRE" = "true" ] || [[ "$RAW" == *.pre ]]; then
             ./gradlew :app:assembleRelease --stacktrace \
               -PqscVersionName="$RAW" \
               -PqscVersionCode="$CODE"
@@ -177,16 +173,16 @@ jobs:
           REQUIRE_COMPANION_APK: "1"
         run: npm run build:module:all
 
-      # 与 Package Module 同一套断言：发版包也必须变体正确、zip 完好
+      # �?Package Module 同一套断言：发版包也必须变体正确、zip 完好
       - name: Verify module zips
         run: npm run verify:zips
 
       - name: Verify hot update and release contracts
         run: npm run test:hot-update
 
-      # 二进制 / APK 随构件带到 publish / post
+      # 二进�?/ APK 随构件带�?publish / post
       - name: Upload zips, native binaries, and APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: magisk-module-${{ steps.meta.outputs.tag }}
           path: |
@@ -206,7 +202,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 解到仓库根：构件同时含 release/ 与 module/bin/
+      # 解到仓库根：构件同时�?release/ �?module/bin/
       - uses: actions/download-artifact@v4
         with:
           name: magisk-module-${{ needs.build.outputs.tag }}
@@ -313,17 +309,15 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          # 回写主分支需要可推送
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # 回写主分支需要可推�?          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # 同 publish：解到仓库根，让 release/*.zip 与 module/bin/qscd-* 各回原位
+      # �?publish：解到仓库根，让 release/*.zip �?module/bin/qscd-* 各回原位
       - uses: actions/download-artifact@v4
         with:
           name: magisk-module-${{ needs.build.outputs.tag }}
           path: .
 
-      # 构件不保留权限位。四个都必须在：少一个就意味着 Pages 上缺守护，
-      # WebUI 的下载入口会静默失效，所以这里硬失败而不是 `|| true`
+      # 构件不保留权限位。四个都必须在：少一个就意味着 Pages 上缺守护�?      # WebUI 的下载入口会静默失效，所以这里硬失败而不�?`|| true`
       - name: Restore executable bit on native binaries
         shell: bash
         run: |

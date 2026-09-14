@@ -157,9 +157,7 @@ fun UpdatesScreen(
                 }
 
                 val moduleZipUrl = r.moduleRemote?.zipUrl
-                val needModule = (r.moduleHasUpdate || r.moduleLocal == null) &&
-                    !moduleZipUrl.isNullOrBlank()
-                if (needModule && moduleZipUrl != null) {
+                if ((r.moduleHasUpdate || r.moduleLocal == null) && !moduleZipUrl.isNullOrBlank()) {
                     ChargePrimaryButton(
                         text = if (r.moduleLocal == null) "下载并安装模块" else "下载并更新模块",
                         enabled = !busy,
