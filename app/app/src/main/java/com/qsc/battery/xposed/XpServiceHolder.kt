@@ -67,14 +67,14 @@ object XpServiceHolder : XposedServiceHelper.OnServiceListener {
                 apiVersion = s.apiVersion,
                 name = s.frameworkName.orEmpty(),
                 version = s.frameworkVersion.orEmpty(),
-                versionCode = runCatching { s.frameworkVersionCode.toLong() }.getOrDefault(0L),
+                versionCode = runCatching { s.frameworkVersionCode }.getOrDefault(0L),
             )
         }.getOrNull()
     }
 
     fun scopeList(svc: XposedService? = service): List<String> {
         val s = svc ?: return emptyList()
-        return runCatching { s.scope?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty() }
+        return runCatching { s.scope.map { it.trim() }.filter { it.isNotEmpty() } }
             .getOrDefault(emptyList())
     }
 

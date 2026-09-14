@@ -156,9 +156,10 @@ fun UpdatesScreen(
                     )
                 }
 
+                val moduleZipUrl = r.moduleRemote?.zipUrl
                 val needModule = (r.moduleHasUpdate || r.moduleLocal == null) &&
-                    !r.moduleRemote?.zipUrl.isNullOrBlank()
-                if (needModule) {
+                    !moduleZipUrl.isNullOrBlank()
+                if (needModule && moduleZipUrl != null) {
                     ChargePrimaryButton(
                         text = if (r.moduleLocal == null) "下载并安装模块" else "下载并更新模块",
                         enabled = !busy,
@@ -167,7 +168,7 @@ fun UpdatesScreen(
                                 busy = true
                                 runCatching {
                                     val file = container.updateRepository.downloadToCache(
-                                        r.moduleRemote!!.zipUrl!!,
+                                        moduleZipUrl,
                                         "QSC-Battery-update.zip",
                                     )
                                     container.moduleInstallRepository.installModuleZip(file)
@@ -194,7 +195,8 @@ fun UpdatesScreen(
                     )
                 }
 
-                if (!r.appRemote?.apkUrl.isNullOrBlank()) {
+                val appApkUrl = r.appRemote?.apkUrl
+                if (!appApkUrl.isNullOrBlank()) {
                     ChargePrimaryButton(
                         text = if (r.appHasUpdate) "下载并安装 APP" else "重新下载安装 APP",
                         enabled = !busy,
@@ -203,7 +205,7 @@ fun UpdatesScreen(
                                 busy = true
                                 runCatching {
                                     val file = container.updateRepository.downloadToCache(
-                                        r.appRemote!!.apkUrl!!,
+                                        appApkUrl,
                                         "QSC-Battery.apk",
                                     )
                                     container.moduleInstallRepository.promptInstallApk(file)
@@ -213,8 +215,10 @@ fun UpdatesScreen(
                             }
                         },
                     )
-                } else if (r.error != null) {
-                    ChargeBanner(text = r.error!!, tone = BannerTone.Warn)
+                } else {
+                    r.error?.let { err ->
+                        ChargeBanner(text = err, tone = BannerTone.Warn)
+                    }
                 }
             }
         }

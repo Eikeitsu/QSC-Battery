@@ -110,7 +110,7 @@ class ModuleInstallRepository(
         val req = Request.Builder().url(BuildConfig.APP_UPDATE_URL).get().build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return null
-            val text = resp.body?.string().orEmpty()
+            val text = resp.body.string()
             val obj = json.parseToJsonElement(text) as? JsonObject ?: return null
             return obj["apkUrl"]?.jsonPrimitive?.contentOrNull
         }
@@ -120,7 +120,7 @@ class ModuleInstallRepository(
         val req = Request.Builder().url(url).get().build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) error("download failed: HTTP ${resp.code}")
-            val body = resp.body ?: error("empty body")
+            val body = resp.body
             val out = File(context.cacheDir, "QSC-Battery-online.apk")
             out.outputStream().use { body.byteStream().copyTo(it) }
             return out

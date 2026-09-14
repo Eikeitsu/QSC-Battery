@@ -90,7 +90,7 @@ class UpdateRepository(private val context: Context) {
                 .build()
             client.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) error("download failed: HTTP ${resp.code}")
-                val body = resp.body ?: error("empty body")
+                val body = resp.body
                 val out = java.io.File(context.cacheDir, fileName)
                 out.outputStream().use { body.byteStream().copyTo(it) }
                 out
@@ -117,7 +117,7 @@ class UpdateRepository(private val context: Context) {
             .build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) error("HTTP ${resp.code}")
-            val text = resp.body?.string().orEmpty()
+            val text = resp.body.string()
             return parseUpdateJson(text)
         }
     }
@@ -145,7 +145,7 @@ class UpdateRepository(private val context: Context) {
             .build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) error("GitHub Releases HTTP ${resp.code}")
-            val arr = json.parseToJsonElement(resp.body?.string().orEmpty()) as JsonArray
+            val arr = json.parseToJsonElement(resp.body.string()) as JsonArray
             for (el in arr) {
                 val obj = el.jsonObject
                 val draft = obj["draft"]?.jsonPrimitive?.booleanOrNull == true
