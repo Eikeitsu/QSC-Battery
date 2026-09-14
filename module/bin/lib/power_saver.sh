@@ -255,12 +255,22 @@ qsc_ps_type_live() {
 	return 1
 }
 
-# present=1 旁证：停充维持中可单信 present（MCA 停充常压掉 VBUS）；
-# 否则必须有 VBUS 或 type，避免 K90U 未插电粘住 present 假报已插电。
+# present=1 旁证：优先 VBUS / 类型。
+# 停充标记存在时仅在冷却期内允许单信 present（MCA 刚停常掉 VBUS）；
+# 过期后孤立 present 视为未插电，避免 K90U 粘 present + 残留 power_switch 永远清不掉。
 qsc_ps_present_corroborated() {
-	[ -f "$DATADIR/power_switch" ] && return 0
+	local now last
 	qsc_ps_vbus_live && return 0
 	qsc_ps_type_live && return 0
+	if [ -f "$DATADIR/power_switch" ]; then
+		now="$(date +%s 2>/dev/null)"
+		last="$(cat "$DATADIR/power_stop_ts" 2>/dev/null | tr -d ' \r\n')"
+		case "$last" in ""|*[!0-9]*) last=0 ;; esac
+		if [ -n "$now" ] && [ "$last" -gt 0 ] 2>/dev/null \
+			&& [ "$((now - last))" -lt "${QSC_UNPLUG_COOLDOWN:-90}" ] 2>/dev/null; then
+			return 0
+		fi
+	fi
 	return 1
 }
 
@@ -285,7 +295,7 @@ qsc_ps_plugged_scan() {
 				continue
 			fi
 			if ! qsc_ps_present_corroborated; then
-				qsc_ps_dbg ps_present debug "忽略孤立 ${p##*/}=1（无 VBUS/类型且未在停充维持）"
+				qsc_ps_dbg ps_present debug "忽略孤立 ${p##*/}=1（无 VBUS/类型/冷却期旁证）"
 				continue
 			fi
 			qsc_ps_dbg ps_present debug "判定已插电：${p##*/}=1（online 可能为 0）"

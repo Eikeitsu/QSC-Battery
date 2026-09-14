@@ -85,10 +85,10 @@ python3 tooling/scripts/promote-changelog.py --export-docs changelog.md \
 
 ## 更新通道（APP / WebUI）
 
-| 通道   | 元数据来源                              | 写 Pages 根 `update.json`？ | 说明 |
-| ------ | --------------------------------------- | --------------------------- | ---- |
-| 正式   | Pages `update.json` / `app-update.json` | 仅正式 Release 的 `post`    | Magisk 始终只看这里 |
-| 预发布 | GitHub Releases（prerelease）           | 否（`post` 跳过）           | Release body 含 `versionCode=` |
+| 通道   | 元数据来源                              | 写 Pages 根 `update.json`？ | 说明                                                    |
+| ------ | --------------------------------------- | --------------------------- | ------------------------------------------------------- |
+| 正式   | Pages `update.json` / `app-update.json` | 仅正式 Release 的 `post`    | Magisk 始终只看这里                                     |
+| 预发布 | GitHub Releases（prerelease）           | 否（`post` 跳过）           | Release body 含 `versionCode=`                          |
 | CI     | `ci-dist` 分支公开文件                  | 否                          | Package Module 推送；**仅保留最新一版**；用户无需 Token |
 
 - 勾选**预发布**或**草稿**：只发 GitHub Release，不更新镜像站。

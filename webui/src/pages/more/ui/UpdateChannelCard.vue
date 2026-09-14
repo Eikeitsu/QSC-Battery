@@ -85,7 +85,10 @@ function openUrl(url?: string) {
         {{ busy ? "检查中…" : "检查更新" }}
       </van-button>
 
-      <div v-if="result?.stableModuleNewer || result?.stableAppNewer" class="stable-banner">
+      <div
+        v-if="result?.stableModuleNewer || result?.stableAppNewer"
+        class="stable-banner"
+      >
         <p>
           正式通道有新版本
           <template v-if="result.stableModuleNewer">
@@ -118,11 +121,7 @@ function openUrl(url?: string) {
         <div class="row">
           <span class="k">APP 远端</span>
           <span class="v">
-            {{
-              result.app
-                ? `${result.app.version} (${result.app.versionCode})`
-                : "--"
-            }}
+            {{ result.app ? `${result.app.version} (${result.app.versionCode})` : "--" }}
           </span>
         </div>
         <div class="actions">

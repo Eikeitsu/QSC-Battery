@@ -18,12 +18,9 @@ export const UPDATE_CHANNEL_HINT: Record<UpdateChannel, string> = {
 export const UPDATE_URLS = {
   stableModule: "https://eikeitsu.github.io/QSC-Battery/update.json",
   stableApp: "https://eikeitsu.github.io/QSC-Battery/app-update.json",
-  ciModule:
-    "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist/update.json",
-  ciApp:
-    "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist/app-update.json",
-  githubReleases:
-    "https://api.github.com/repos/Eikeitsu/QSC-Battery/releases",
+  ciModule: "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist/update.json",
+  ciApp: "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist/app-update.json",
+  githubReleases: "https://api.github.com/repos/Eikeitsu/QSC-Battery/releases",
 } as const;
 
 export interface RemoteUpdateInfo {
@@ -96,9 +93,7 @@ async function fetchPrerelease(): Promise<RemoteUpdateInfo> {
     let version = tag.replace(/^v/i, "");
     for (const a of assets) {
       const name = String(a.name ?? "");
-      const url = a.browser_download_url
-        ? String(a.browser_download_url)
-        : undefined;
+      const url = a.browser_download_url ? String(a.browser_download_url) : undefined;
       if (name.endsWith("-full.zip")) {
         zipUrl = url;
         const m = /QSC-Battery_v(.+)-full\.zip/.exec(name);
