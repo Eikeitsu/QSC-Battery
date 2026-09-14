@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,23 +26,18 @@ mkdirSync(publishDir, { recursive: true });
 cpSync(builtWeb, publishDir, { recursive: true });
 writeFileSync(
   join(publishDir, "README.md"),
-  "# Built WebUI\n\nCI 自动发布：混淆压缩后的 webroot，勿直接修改。\n",
+  "# Built WebUI\n\nCI 自动发布：构建后的 webroot。历史提交保留（非 force-push）。\n",
 );
+const sha = process.env.GITHUB_SHA || "";
+if (sha) {
+  writeFileSync(join(publishDir, "SOURCE_SHA"), `${sha}\n`);
+}
 
-const remote = `https://x-access-token:${token}@github.com/${repo}.git`;
-execSync("git init", { cwd: publishDir, stdio: "inherit" });
-execSync("git add -A", { cwd: publishDir, stdio: "inherit" });
-execSync(
-  'git -c user.email="github-actions[bot]@users.noreply.github.com" -c user.name="github-actions[bot]" commit -m "chore: publish built webroot"',
-  { cwd: publishDir, stdio: "inherit" },
-);
-execSync(`git branch -M ${branch}`, { cwd: publishDir, stdio: "inherit" });
-execSync(`git remote add origin "${remote}"`, {
-  cwd: publishDir,
+const script = join(repoRoot, "tooling", "scripts", "git-push-tree.sh");
+execSync(`chmod +x ${JSON.stringify(script)}`, { cwd: repoRoot, stdio: "inherit" });
+execFileSync("bash", [script, branch, publishDir, "dist-web: publish built webroot"], {
+  cwd: repoRoot,
   stdio: "inherit",
-});
-execSync(`git push -f origin HEAD:${branch}`, {
-  cwd: publishDir,
-  stdio: "inherit",
+  env: process.env,
 });
 console.log(`[publish-web-branch] pushed ${branch}`);

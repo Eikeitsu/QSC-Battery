@@ -137,26 +137,33 @@ sh 主包没有这个二进制也必须行为一致，阈值判定的唯一真�
 
 ## 工作流职责
 
-| 工作流           | 触发                              | 职责                                                                           |
-| ---------------- | --------------------------------- | ------------------------------------------------------------------------------ |
-| `Lint`           | push / PR                         | ESLint、Stylelint、Markdown、Shellcheck、typecheck、Prettier、Commitlint（PR） |
-| `Build Web`      | `webui/**`、web 构建脚本、package | Vite 构建 Web，上传 Artifact，推送 `dist-web`                                  |
-| `Build Docs`     | `docs/**`                         | 构建并部署 GitHub Pages                                                        |
-| `Package Module` | `webui/**`、`module/**`、打包脚本 | 构建 Magisk zip 并上传 Artifact（不发 Release）；打包前 **CI 戳版本**（见下）  |
-| `Release Module` | **手动触发** / 推送 `v*` 标签     | 构建 zip + 创建 GitHub Release                                                 |
+| 工作流           | 触发                        | 职责                                                                   |
+| ---------------- | --------------------------- | ---------------------------------------------------------------------- |
+| `Lint`           | push / PR                   | ESLint、Stylelint、Markdown、Shellcheck、typecheck、Prettier 等        |
+| `Build Web`      | `webui/**` 等               | Vite 构建 → Artifact + `dist-web`（普通推送，保留历史）                |
+| `Build qscd`     | `native/**` 等              | 编守护 → `ci-dist/qscd/` + `updates/ci/qscd/manifest.json`             |
+| `App`            | `app/**` 等                 | 编 APK → `ci-dist/app/` + `updates/ci/app-update.json`                 |
+| `Build Docs`     | `docs/**`                   | 构建并部署 GitHub Pages                                                |
+| `Package Module` | `module/**`；Web 成功后串联 | 拉取最新 APK/qscd/webroot → 打 zip → `ci-dist/module/` + `update.json` |
+| `Release Module` | 手动 / `v*` 标签            | 发版 zip + GitHub Release                                              |
 
-各工作流互不串联，只按路径变更自行触发。
+各产品**按路径各自触发**；未改的产品不重建、不升 `versionCode`。`ci-dist` / `updates` / `dist-web` **禁止 force-push**，历史提交保留。
 
-### Package Module：ci-dist 产物 + updates/ci 元数据
+### CI 产物布局（`ci-dist`）
 
-`Package Module` 在默认分支上：
+| 目录      | 内容                                       |
+| --------- | ------------------------------------------ |
+| `module/` | `-full` / `-rust` / `-c` / `-sh` / `-lite` |
+| `app/`    | `QSC-Battery.apk`                          |
+| `qscd/`   | `qscd-rust-*` / `qscd-c-*`                 |
 
-1. `detect-ci-changes.py`：相对 `updates/ci/state.json` 的 `sourceSha` 判断模块 / APP / 守护是否变更
-2. 仅为**变更项**分配独立 `versionCode`（扫描 Pages + `updates/*` 远程码）
-3. 按需 stamp / 编 APK / 打 zip / 编守护
-4. `publish-ci-channel.sh`：
-   - **`ci-dist`**：完整 Release 文件列表（5 zip + apk + 4 qscd），无 JSON；未变更文件从上一 tip 继承
-   - **`updates/ci`**：只写变更项的 `update.json` / `app-update.json` / `qscd/manifest.json`
+首次推送会把旧的扁平文件迁进上述目录。
+
+### Package Module
+
+1. `resolve-packaging-deps.sh`：若本提交改了 APP / qscd / WebUI，必须拿到**该 commit** 的成功产物（Actions Artifact 或 `SOURCE_SHA` 对齐），否则**打包失败**；未改的产品才允许用 tip
+2. 仅为本模块分配 `versionCode` 并 stamp
+3. `publish-ci-product.sh module`：只更新 `ci-dist/module/` 与 `updates/ci/update.json`（写入 `SOURCE_SHA`）
 
 Magisk 仍只读 Pages。APP / WebUI 读 `updates/<channel>/`。
 
@@ -194,7 +201,7 @@ Magisk / KernelSU 要求 **`versionCode` 为 ≤ 2147483647 的 int**。
 比较与热更新**只认 versionCode**。展示名后缀仅方便辨认通道，不参与大小比较。
 
 - 预发布：模块 `version` 与 APP `versionName` 为 `….pre`（勾选预发布时自动加）
-- CI：模块与 APP 均为 `yyyy.MM.dd.ci.<run>`（Package Module stamp + `-PqscVersionName`）
+- CI：模块 / APP / 守护各自为 `yyyy.MM.dd.ci.<该工作流 run>`；只升本产品 `versionCode`
 - 正式 APP 默认仍用 `build.gradle.kts` 的 `versionName`（如 `0.3.1`），与模块日期版可并存
 
 不要再使用 12 位 `yyyyMMddHHmm` 作为 `versionCode`（会超 int 上限）。

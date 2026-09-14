@@ -178,10 +178,7 @@ watch(channel, async () => {
         <p>预发布通道：功能可能不完整，重要设备建议用正式版。</p>
       </div>
 
-      <div
-        v-if="result?.stableModuleNewer || result?.stableDaemonNewer"
-        class="notice"
-      >
+      <div v-if="result?.stableModuleNewer || result?.stableDaemonNewer" class="notice">
         <p>
           正式通道有新版本
           <template v-if="result.stableModuleNewer">
@@ -308,7 +305,8 @@ watch(channel, async () => {
   background: var(--qsc-card, #fff);
   color: var(--van-primary-color, #1989fa);
   font-weight: 600;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--van-primary-color, #1989fa) 18%, transparent);
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--van-primary-color, #1989fa) 18%, transparent);
 }
 
 .seg-item:disabled {

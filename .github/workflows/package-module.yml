@@ -1,25 +1,46 @@
 name: Package Module
 
-# 说明：曾出现仅改 module/bin/... 时 paths: module/** 未触发的情况。
-# 主分支改为 paths-ignore（只跳过纯文档），避免漏打 zip。
+# 只打模块 zip。依赖经 resolve-packaging-deps（同 commit 溯源）。
+# Build Web / Build qscd / App 成功后可串联重打包。
+# 输入摘要未变则跳过升码与推送。
 
 on:
   push:
     branches: [main, master]
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
-      - ".gitignore"
-      - "LICENSE"
-      - ".husky/**"
+    paths:
+      - "module/**"
+      - "tooling/scripts/package-module.mjs"
+      - "tooling/scripts/verify-module-zips.mjs"
+      - "tooling/scripts/write-unix-zip.mjs"
+      - "tooling/scripts/lib/**"
+      - "tooling/scripts/stamp-ci-module-version.py"
+      - "tooling/scripts/resolve-packaging-deps.sh"
+      - "tooling/scripts/module-input-digest.sh"
+      - "tooling/scripts/publish-ci-dist.sh"
+      - "tooling/scripts/publish-ci-product.sh"
+      - "tooling/scripts/publish-updates.sh"
+      - "tooling/scripts/git-push-tree.sh"
+      - "tooling/scripts/build-native-cli.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/package-module.yml"
+      - ".github/workflows/reusable-ci-version.yml"
+      - ".github/actions/setup-node-npm/**"
   pull_request:
     branches: [main, master]
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
-      - ".gitignore"
-      - "LICENSE"
-      - ".husky/**"
+    paths:
+      - "module/**"
+      - "tooling/scripts/package-module.mjs"
+      - "tooling/scripts/verify-module-zips.mjs"
+      - "tooling/scripts/write-unix-zip.mjs"
+      - "tooling/scripts/lib/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/package-module.yml"
+  workflow_run:
+    workflows: ["Build Web", "Build qscd", "App"]
+    types: [completed]
+    branches: [main, master]
   workflow_dispatch:
 
 permissions:
@@ -32,123 +53,100 @@ concurrency:
 
 jobs:
   package-module:
+    if: >
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - uses: ./.github/actions/setup-node-npm
 
-      - name: Detect CI artifact changes
-        id: chg
-        run: |
-          eval "$(python3 tooling/scripts/detect-ci-changes.py)"
-          echo "module_changed=$module_changed" >> "$GITHUB_OUTPUT"
-          echo "app_changed=$app_changed" >> "$GITHUB_OUTPUT"
-          echo "daemon_changed=$daemon_changed" >> "$GITHUB_OUTPUT"
-          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
-          echo "changes: module=$module_changed app=$app_changed daemon=$daemon_changed"
-
-      - name: Allocate versionCodes
-        id: ver
-        run: |
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import os
-          from pathlib import Path
-          import sys
-          sys.path.insert(0, "tooling/scripts")
-          from version_code import next_version_codes, read_json_url, updates_url
-
-          m = os.environ["MODULE_CHANGED"] == "1"
-          a = os.environ["APP_CHANGED"] == "1"
-          d = os.environ["DAEMON_CHANGED"] == "1"
-          n = sum([m, a, d])
-          codes = next_version_codes(n, fetch_remote=True) if n else []
-          it = iter(codes)
-          run = os.environ.get("GITHUB_RUN_NUMBER", "0")
-          from datetime import datetime, timezone
-          today = datetime.now(timezone.utc).strftime("%Y.%m.%d")
-          disp = f"{today}.ci.{run}"
-
-          def keep(channel_rel, key_prefix):
-              data = read_json_url(updates_url("ci", channel_rel)) or {}
-              print(f"{key_prefix}_version={data.get('version') or disp}")
-              print(f"{key_prefix}_code={data.get('versionCode') or 0}")
-
-          if m:
-              c = next(it)
-              print(f"module_version={disp}")
-              print(f"module_code={c}")
-          else:
-              keep("update.json", "module")
-          if a:
-              c = next(it)
-              print(f"app_version={disp}")
-              print(f"app_code={c}")
-          else:
-              keep("app-update.json", "app")
-          if d:
-              c = next(it)
-              print(f"daemon_version={disp}")
-              print(f"daemon_code={c}")
-          else:
-              keep("qscd/manifest.json", "daemon")
-          PY
+      - name: Resolve APP / qscd / webroot deps
+        id: deps
         env:
-          MODULE_CHANGED: ${{ steps.chg.outputs.module_changed }}
-          APP_CHANGED: ${{ steps.chg.outputs.app_changed }}
-          DAEMON_CHANGED: ${{ steps.chg.outputs.daemon_changed }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          EXPECTED_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          BEFORE_SHA: ${{ github.event_name == 'push' && github.event.before || '' }}
+          WEB_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Build Web' && github.event.workflow_run.id || '' }}
+          QSCD_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Build qscd' && github.event.workflow_run.id || '' }}
+          APP_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.name == 'App' && github.event.workflow_run.id || '' }}
+          QSC_DEP_WAIT_SECONDS: "480"
+        run: |
+          chmod +x tooling/scripts/resolve-packaging-deps.sh tooling/scripts/module-input-digest.sh
+          tooling/scripts/resolve-packaging-deps.sh
+          DIGEST="$(tooling/scripts/module-input-digest.sh | tail -1)"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "input digest=$DIGEST"
+          # compare to tip
+          tip="$(curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/ci-dist/module/INPUT_DIGEST" 2>/dev/null || true)"
+          if [ -n "$tip" ] && [ "$tip" = "$DIGEST" ]; then
+            echo "unchanged=1" >> "$GITHUB_OUTPUT"
+            echo "module inputs unchanged vs ci-dist tip — skip rebuild/publish"
+          else
+            echo "unchanged=0" >> "$GITHUB_OUTPUT"
+          fi
 
-      - uses: ./.github/actions/build-native
-        if: steps.chg.outputs.module_changed == '1' || steps.chg.outputs.daemon_changed == '1' || steps.chg.outputs.app_changed == '1'
-
-      - uses: ./.github/actions/setup-android
-        if: steps.chg.outputs.module_changed == '1' || steps.chg.outputs.app_changed == '1'
+      - name: Allocate module versionCode
+        id: ver
+        if: steps.deps.outputs.unchanged != '1'
+        run: |
+          eval "$(python3 tooling/scripts/next-version-code.py --fetch-remote)"
+          run="${GITHUB_RUN_NUMBER:-0}"
+          today="$(date -u +%Y.%m.%d)"
+          echo "module_code=${version_code}" >> "$GITHUB_OUTPUT"
+          echo "module_version=${today}.ci.${run}" >> "$GITHUB_OUTPUT"
 
       - name: Stamp CI module.prop
-        if: steps.chg.outputs.module_changed == '1'
+        if: steps.deps.outputs.unchanged != '1'
         run: |
           python3 tooling/scripts/stamp-ci-module-version.py --fetch-remote \
             --code "${{ steps.ver.outputs.module_code }}" \
             --version "${{ steps.ver.outputs.module_version }}"
           cat module/module.prop
 
-      - name: Build companion release APK
-        if: steps.chg.outputs.app_changed == '1'
-        working-directory: app
+      - uses: ./.github/actions/setup-ndk-clang
+        if: steps.deps.outputs.unchanged != '1'
+        id: ndk
+
+      - name: Build native qsc CLI (lightweight)
+        if: steps.deps.outputs.unchanged != '1'
+        env:
+          ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
+          REQUIRE_NATIVE: "0"
         run: |
-          ./gradlew :app:assembleRelease --stacktrace \
-            -PqscVersionName="${{ steps.ver.outputs.app_version }}" \
-            -PqscVersionCode="${{ steps.ver.outputs.app_code }}"
-          mkdir -p ../release
-          cp app/build/outputs/apk/release/app-release.apk ../release/QSC-Battery.apk
+          node tooling/scripts/build-native-cli.mjs || echo "warn: qsc cli build skipped"
+
+      - name: Cache module zip workspace
+        if: steps.deps.outputs.unchanged != '1'
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build/staging
+            node_modules
+          key: pkg-mod-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tooling/scripts/package-module.mjs', 'tooling/scripts/lib/**') }}-${{ steps.deps.outputs.digest }}
+          restore-keys: |
+            pkg-mod-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
 
       - name: Build all module zips
-        if: steps.chg.outputs.module_changed == '1'
+        if: steps.deps.outputs.unchanged != '1'
         env:
-          REQUIRE_COMPANION_APK: ${{ steps.chg.outputs.app_changed == '1' && '1' || '0' }}
-        run: |
-          if [ "${{ steps.chg.outputs.app_changed }}" != "1" ]; then
-            # zip packaging may expect apk; pull inherited apk from ci-dist if needed
-            mkdir -p release
-            if [ ! -f release/QSC-Battery.apk ]; then
-              curl -fsSL -o release/QSC-Battery.apk \
-                "https://raw.githubusercontent.com/${{ github.repository }}/ci-dist/QSC-Battery.apk" \
-                || echo "no inherited apk yet"
-            fi
-            if [ ! -f release/QSC-Battery.apk ]; then
-              export REQUIRE_COMPANION_APK=0
-            fi
-          fi
-          npm run build:module:all
+          QSC_SKIP_BUILD_WEB: "1"
+          QSC_SKIP_BUILD_NATIVE: "1"
+          REQUIRE_COMPANION_APK: "0"
+        run: npm run build:module:all
 
       - name: Verify module zips
-        if: steps.chg.outputs.module_changed == '1'
+        if: steps.deps.outputs.unchanged != '1'
         run: npm run verify:zips
 
       - uses: actions/upload-artifact@v6
-        if: steps.chg.outputs.module_changed == '1' || steps.chg.outputs.app_changed == '1'
+        if: steps.deps.outputs.unchanged != '1'
         with:
           name: magisk-module-ci-${{ github.sha }}
           path: |
@@ -157,28 +155,18 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Publish ci-dist + updates/ci
-        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+      - name: Publish ci-dist/module + updates/ci
+        if: >
+          steps.deps.outputs.unchanged != '1' &&
+          ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
+           (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
+           (github.event_name == 'workflow_run' &&
+            (github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'master')))
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MODULE_CHANGED: ${{ steps.chg.outputs.module_changed }}
-          APP_CHANGED: ${{ steps.chg.outputs.app_changed }}
-          DAEMON_CHANGED: ${{ steps.chg.outputs.daemon_changed }}
           MODULE_VERSION: ${{ steps.ver.outputs.module_version }}
           MODULE_CODE: ${{ steps.ver.outputs.module_code }}
-          APP_VERSION: ${{ steps.ver.outputs.app_version }}
-          APP_CODE: ${{ steps.ver.outputs.app_code }}
-          DAEMON_VERSION: ${{ steps.ver.outputs.daemon_version }}
-          DAEMON_CODE: ${{ steps.ver.outputs.daemon_code }}
+          INPUT_DIGEST: ${{ steps.deps.outputs.digest }}
         run: |
-          # Need natives on tip for inherit path when only app changed
-          if [ "$DAEMON_CHANGED" != "1" ] && [ "$MODULE_CHANGED" != "1" ]; then
-            true
-          fi
-          if [ "$MODULE_CHANGED" != "1" ] && [ "$DAEMON_CHANGED" = "1" ]; then
-            # build-native already ran; binaries in module/bin
-            true
-          fi
-          # If only app changed, still need daemon bins present for publish inherit — publish-ci-dist clones old tip
-          chmod +x tooling/scripts/publish-ci-channel.sh
-          tooling/scripts/publish-ci-channel.sh
+          chmod +x tooling/scripts/publish-ci-product.sh
+          tooling/scripts/publish-ci-product.sh module

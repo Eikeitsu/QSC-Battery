@@ -12,26 +12,34 @@ on:
         required: false
         type: string
         default: ""
-      publish_zips:
-        description: "发布模块 zip（5 个变体：full / rust / c / sh / lite）→ update.json 指向 full"
+      # GitHub choice 无原生主/副标题：选项写成「主标题 — 副说明」
+      publish_scope:
+        description: "发布范围（主标题 — 保留原勾选项说明）"
+        required: true
+        type: choice
+        default: "全部 — 模块 zip（5 变体 full/rust/c/sh/lite，update.json→full）+ Rust/C 守护 + 伴侣 APK"
+        options:
+          - "全部 — 模块 zip（5 变体 full/rust/c/sh/lite，update.json→full）+ Rust/C 守护 + 伴侣 APK"
+          - "仅模块 — 发布模块 zip（5 变体：full / rust / c / sh / lite）→ update.json 指向 full"
+          - "模块+APK — 模块 zip（5 变体）+ 伴侣 APK → app-update.json"
+          - "仅守护 — Rust + C 守护二进制 → 驱动 qscd/manifest"
+          - "仅 Rust 守护 — 发布 Rust 守护（qscd-rust-arm64 / qscd-rust-arm）→ 驱动 qscd/manifest"
+          - "仅 C 守护 — 发布 C 守护（qscd-c-arm64 / qscd-c-arm）→ 驱动 qscd/manifest"
+          - "仅 APK — 发布伴侣 APK → 驱动 app-update.json"
+          - "模块+守护 — zip（5 变体）+ Rust/C 守护（不含 APK）"
+      build_mode:
+        description: "构建方式（主标题 — 说明）"
+        required: true
+        type: choice
+        default: "重新构建 — 完整编译正式版（推荐，可复现、与发版 version 一致）"
+        options:
+          - "重新构建 — 完整编译正式版（推荐，可复现、与发版 version 一致）"
+          - "晋升 CI — 取 ci-dist / Actions 成功产物，仅重盖正式 version 后打包（更快）"
+      ci_promote_sha:
+        description: "晋升 CI 时的 commit SHA（可空=用默认分支最新成功 CI 产物）；重新构建可忽略"
         required: false
-        type: boolean
-        default: true
-      publish_binaries_rust:
-        description: "发布 Rust 守护（qscd-rust-arm64 / qscd-rust-arm）→ 驱动 qscd/manifest"
-        required: false
-        type: boolean
-        default: true
-      publish_binaries_c:
-        description: "发布 C 守护（qscd-c-arm64 / qscd-c-arm）→ 驱动 qscd/manifest"
-        required: false
-        type: boolean
-        default: true
-      publish_apk:
-        description: "发布伴侣 APK → 驱动 app-update.json"
-        required: false
-        type: boolean
-        default: true
+        type: string
+        default: ""
       prerelease:
         description: "标记为预发布"
         required: false
@@ -64,25 +72,58 @@ jobs:
       publish_binaries_rust: ${{ steps.meta.outputs.publish_binaries_rust }}
       publish_binaries_c: ${{ steps.meta.outputs.publish_binaries_c }}
       publish_apk: ${{ steps.meta.outputs.publish_apk }}
+      build_mode: ${{ steps.meta.outputs.build_mode }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Resolve tag
+      - name: Resolve tag and publish scope
         id: meta
         shell: bash
         run: |
+          set -euo pipefail
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             RAW="${{ inputs.version }}"
             RAW="${RAW#v}"
             CUSTOM_NAME="${{ inputs.release_name }}"
+            SCOPE="${{ inputs.publish_scope }}"
+            MODE="${{ inputs.build_mode }}"
             echo "prerelease=${{ inputs.prerelease }}" >> "$GITHUB_OUTPUT"
             echo "draft=${{ inputs.draft }}" >> "$GITHUB_OUTPUT"
-            echo "publish_zips=${{ inputs.publish_zips }}" >> "$GITHUB_OUTPUT"
-            echo "publish_binaries_rust=${{ inputs.publish_binaries_rust }}" >> "$GITHUB_OUTPUT"
-            echo "publish_binaries_c=${{ inputs.publish_binaries_c }}" >> "$GITHUB_OUTPUT"
-            echo "publish_apk=${{ inputs.publish_apk }}" >> "$GITHUB_OUTPUT"
+
+            # parse「主标题 — …」
+            title="${SCOPE%% — *}"
+            zips=false; rust=false; cbin=false; apk=false
+            case "$title" in
+              全部) zips=true; rust=true; cbin=true; apk=true ;;
+              仅模块) zips=true ;;
+              模块+APK) zips=true; apk=true ;;
+              仅守护) rust=true; cbin=true ;;
+              "仅 Rust 守护") rust=true ;;
+              "仅 C 守护") cbin=true ;;
+              仅 APK) apk=true ;;
+              模块+守护) zips=true; rust=true; cbin=true ;;
+              *)
+                echo "未知 publish_scope: $SCOPE" >&2
+                exit 1
+                ;;
+            esac
+            echo "publish_zips=$zips" >> "$GITHUB_OUTPUT"
+            echo "publish_binaries_rust=$rust" >> "$GITHUB_OUTPUT"
+            echo "publish_binaries_c=$cbin" >> "$GITHUB_OUTPUT"
+            echo "publish_apk=$apk" >> "$GITHUB_OUTPUT"
+
+            if [[ "$MODE" == 晋升* ]]; then
+              echo "build_mode=promote" >> "$GITHUB_OUTPUT"
+            else
+              echo "build_mode=rebuild" >> "$GITHUB_OUTPUT"
+            fi
+
+            ZIPS="$zips"
+            RUST="$rust"
+            CBIN="$cbin"
+            APK="$apk"
           else
             TAG_NAME="${GITHUB_REF_NAME}"
             RAW="${TAG_NAME#v}"
@@ -93,22 +134,20 @@ jobs:
             echo "publish_binaries_rust=true" >> "$GITHUB_OUTPUT"
             echo "publish_binaries_c=true" >> "$GITHUB_OUTPUT"
             echo "publish_apk=true" >> "$GITHUB_OUTPUT"
+            echo "build_mode=rebuild" >> "$GITHUB_OUTPUT"
+            ZIPS=true
+            RUST=true
+            CBIN=true
+            APK=true
           fi
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            ZIPS="${{ inputs.publish_zips }}"
-            RUST="${{ inputs.publish_binaries_rust }}"
-            CBIN="${{ inputs.publish_binaries_c }}"
-            APK="${{ inputs.publish_apk }}"
-            if [ "$ZIPS" != "true" ] && [ "$RUST" != "true" ] && \
-               [ "$CBIN" != "true" ] && [ "$APK" != "true" ]; then
-              echo "至少勾选一项发布内容（zip / Rust / C / APK）" >&2
-              exit 1
-            fi
+          if [ "$ZIPS" != "true" ] && [ "$RUST" != "true" ] && \
+             [ "$CBIN" != "true" ] && [ "$APK" != "true" ]; then
+            echo "发布范围无效：至少需要 zip / Rust / C / APK 之一" >&2
+            exit 1
           fi
 
           eval "$(RAW="$RAW" QSC_FETCH_REMOTE_CODES=1 python3 tooling/scripts/resolve-release-version.py)"
-          # 预发布：用户可见 version 加 .pre（versionCode 仍为单调检测码）
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.prerelease }}" = "true" ]; then
             case "$version" in
               *.pre) ;;
@@ -121,7 +160,6 @@ jobs:
           else
             NAME="$TAG"
           fi
-          # update.json 指向 full 变体（双守护 + WebUI）
           ZIP="QSC-Battery_v${version}-full.zip"
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -129,7 +167,7 @@ jobs:
           echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
-          echo "Resolved release: $NAME ($TAG) versionCode=$version_code"
+          echo "Resolved release: $NAME ($TAG) versionCode=$version_code scope zips=$ZIPS rust=$RUST c=$CBIN apk=$APK"
 
       - name: Sync module.prop version
         shell: bash
@@ -149,19 +187,72 @@ jobs:
 
       - uses: ./.github/actions/setup-node-npm
 
-      # 守护二进制：两套实现都要有，四个变体包与 Pages 托管都依赖它们
-      - uses: ./.github/actions/build-native
+      # ----- 晋升 CI：取产物后按正式 version 重打包 -----
+      - name: Promote from CI artifacts
+        id: promote
+        if: steps.meta.outputs.build_mode == 'promote'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PROMOTE_SHA: ${{ inputs.ci_promote_sha }}
+        run: |
+          set -euo pipefail
+          SHA="$PROMOTE_SHA"
+          if [ -z "$SHA" ]; then
+            SHA="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${{ github.event.repository.default_branch }}" -q .sha)"
+          fi
+          echo "promote_sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Promoting CI artifacts @ $SHA"
+          export EXPECTED_SHA="$SHA"
+          export BEFORE_SHA=""
+          export QSC_FETCH_APP=1 QSC_FETCH_QSCD=1 QSC_FETCH_WEB=1
+          export QSC_DEP_WAIT_SECONDS=60
+          # promote 允许 tip（不强制同 SHA），但优先同 SHA
+          chmod +x tooling/scripts/resolve-packaging-deps.sh
+          # 临时放宽：若 tip 存在即用（NEED_* 由 diff 决定；无 before 时会 require all）
+          # 对发版晋升：强制用 tip + 可选同 SHA artifact
+          OWNER_REPO="$GITHUB_REPOSITORY"
+          CI="https://raw.githubusercontent.com/${OWNER_REPO}/ci-dist"
+          mkdir -p release module/bin .build/webroot
+          curl -fsSL -o release/QSC-Battery.apk "${CI}/app/QSC-Battery.apk" \
+            || curl -fsSL -o release/QSC-Battery.apk "${CI}/QSC-Battery.apk"
+          curl -fsSL -o module/bin/qscd-arm64 "${CI}/qscd/qscd-rust-arm64"
+          curl -fsSL -o module/bin/qscd-arm "${CI}/qscd/qscd-rust-arm"
+          curl -fsSL -o module/bin/qscdc-arm64 "${CI}/qscd/qscd-c-arm64"
+          curl -fsSL -o module/bin/qscdc-arm "${CI}/qscd/qscd-c-arm"
+          chmod 0755 module/bin/qscd-arm64 module/bin/qscd-arm module/bin/qscdc-arm64 module/bin/qscdc-arm
+          WEB_TMP="$(mktemp -d)"
+          git clone --depth 1 --branch dist-web \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${OWNER_REPO}.git" "$WEB_TMP"
+          cp -a "$WEB_TMP"/. .build/webroot/
+          rm -rf .build/webroot/.git "$WEB_TMP"
+          rm -rf module/webroot
+          cp -a .build/webroot module/webroot
+          export QSC_SKIP_BUILD_WEB=1 QSC_SKIP_BUILD_NATIVE=1 REQUIRE_COMPANION_APK=1
+          npm run build:module:all
+          npm run verify:zips
 
       - uses: ./.github/actions/setup-android
+        if: steps.meta.outputs.build_mode != 'promote' && steps.meta.outputs.publish_apk == 'true'
+
+      # ----- 重新构建（默认）-----
+      - uses: ./.github/actions/build-native
+        if: steps.meta.outputs.build_mode != 'promote'
 
       - name: Build companion release APK
+        if: steps.meta.outputs.build_mode != 'promote'
         working-directory: app
         env:
           RAW: ${{ steps.meta.outputs.raw }}
           CODE: ${{ steps.meta.outputs.version_code }}
           IS_PRE: ${{ steps.meta.outputs.prerelease }}
+          WANT_APK: ${{ steps.meta.outputs.publish_apk }}
         run: |
-          # 预发布：APP versionName 与模块一致（含 .pre）；正式版保持 gradle 默认展示名
+          if [ "$WANT_APK" != "true" ] && [ "${{ steps.meta.outputs.publish_zips }}" != "true" ]; then
+            echo "skip APK (not in publish scope for zip embedding)"
+            mkdir -p ../release
+            exit 0
+          fi
           if [ "$IS_PRE" = "true" ] || [[ "$RAW" == *.pre ]]; then
             ./gradlew :app:assembleRelease --stacktrace \
               -PqscVersionName="$RAW" \
@@ -173,15 +264,24 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk ../release/QSC-Battery.apk
 
       - name: Build all module zips (full / rust / c / sh / lite)
+        if: steps.meta.outputs.build_mode != 'promote'
         env:
-          REQUIRE_COMPANION_APK: "1"
-        run: npm run build:module:all
+          REQUIRE_COMPANION_APK: ${{ steps.meta.outputs.publish_apk == 'true' && '1' || '0' }}
+        run: |
+          if [ "${{ steps.meta.outputs.publish_zips }}" != "true" ] && \
+             [ "${{ steps.meta.outputs.publish_binaries_rust }}" != "true" ] && \
+             [ "${{ steps.meta.outputs.publish_binaries_c }}" != "true" ]; then
+            echo "skip module zip build (scope is APK-only)"
+            exit 0
+          fi
+          npm run build:module:all
 
-      # 与 Package Module 同一套断言：发版包也必须变体正确、zip 完好
       - name: Verify module zips
+        if: steps.meta.outputs.build_mode != 'promote' && steps.meta.outputs.publish_zips == 'true'
         run: npm run verify:zips
 
       - name: Verify hot update and release contracts
+        if: steps.meta.outputs.build_mode != 'promote'
         run: npm run test:hot-update
 
       # 二进制 / APK 随构件带到 publish / post

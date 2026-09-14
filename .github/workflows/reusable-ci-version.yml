@@ -1,0 +1,41 @@
+name: Reusable CI version
+
+# 分配展示版 yyyy.MM.dd.ci.<run> + 单调 versionCode
+on:
+  workflow_call:
+    inputs:
+      product:
+        description: "日志标签（module/app/daemon）"
+        type: string
+        required: false
+        default: "ci"
+    outputs:
+      version:
+        description: "展示版本"
+        value: ${{ jobs.allocate.outputs.version }}
+      code:
+        description: "versionCode"
+        value: ${{ jobs.allocate.outputs.code }}
+
+permissions:
+  contents: read
+
+jobs:
+  allocate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      code: ${{ steps.ver.outputs.code }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Allocate
+        id: ver
+        run: |
+          eval "$(python3 tooling/scripts/next-version-code.py --fetch-remote)"
+          run="${GITHUB_RUN_NUMBER:-0}"
+          today="$(date -u +%Y.%m.%d)"
+          ver="${today}.ci.${run}"
+          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+          echo "code=${version_code}" >> "$GITHUB_OUTPUT"
+          echo "${{ inputs.product }} ${ver} code=${version_code}"

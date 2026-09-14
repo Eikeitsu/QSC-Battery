@@ -155,7 +155,7 @@ class UpdateRepository(
         }
         val pagesFallback = when (channel) {
             UpdateChannel.Stable -> "https://eikeitsu.github.io/QSC-Battery"
-            UpdateChannel.Ci -> "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist"
+            UpdateChannel.Ci -> "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist/qscd"
             UpdateChannel.Prerelease -> "https://eikeitsu.github.io/QSC-Battery"
         }
         return manifest to pagesFallback

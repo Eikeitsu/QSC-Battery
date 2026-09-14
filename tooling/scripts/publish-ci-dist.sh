@@ -1,42 +1,85 @@
 #!/usr/bin/env bash
-# Publish CI artifacts to the rolling ci-dist branch (NO update JSON).
+# Publish artifacts onto the ci-dist branch (folder layout, no force-push).
 #
-# Full Release-identical file list with stable names. Unchanged products are
-# inherited from the previous tip so the directory stays complete.
+# Usage:
+#   publish-ci-dist.sh --component module|app|qscd [label]
 #
-# Env:
-#   MODULE_CHANGED / APP_CHANGED / DAEMON_CHANGED = 1|0
-#   GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_SHA
-# Workspace inputs (when corresponding CHANGED=1):
-#   release/QSC-Battery_v*-{full,rust,c,sh,lite}.zip
-#   release/QSC-Battery.apk
-#   module/bin/qscd-arm64, qscd-arm, qscdc-arm64, qscdc-arm
+# Layout:
+#   module/QSC-Battery-{full,rust,c,sh,lite}.zip
+#   app/QSC-Battery.apk
+#   qscd/qscd-{rust,c}-{arm64,arm}
+#
+# First run migrates any legacy flat tip into these folders.
+#
+# Env: GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_SHA
+# Inputs by component:
+#   module → release/QSC-Battery_v*-{variant}.zip
+#   app    → release/QSC-Battery.apk
+#   qscd   → module/bin/qscd-arm64|arm + qscdc-arm64|arm
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
+COMPONENT=""
+LABEL="ci"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --component) COMPONENT="$2"; shift 2 ;;
+    *) LABEL="$1"; shift ;;
+  esac
+done
+
+case "$COMPONENT" in
+  module|app|qscd) ;;
+  *)
+    echo "usage: publish-ci-dist.sh --component module|app|qscd [label]" >&2
+    exit 1
+    ;;
+esac
+
 OWNER_REPO="${GITHUB_REPOSITORY:-Eikeitsu/QSC-Battery}"
 SHA="${GITHUB_SHA:-unknown}"
-MODULE_CHANGED="${MODULE_CHANGED:-1}"
-APP_CHANGED="${APP_CHANGED:-1}"
-DAEMON_CHANGED="${DAEMON_CHANGED:-1}"
-LABEL="${1:-ci}"
+TOKEN="${GITHUB_TOKEN:?GITHUB_TOKEN required}"
 
 STAGE="$(mktemp -d)"
-WORK="$(mktemp -d)"
 OLD="$(mktemp -d)"
-cleanup() { rm -rf "$STAGE" "$WORK" "$OLD"; }
+cleanup() { rm -rf "$STAGE" "$OLD"; }
 trap cleanup EXIT
 
-fetch_old() {
-  if [ -z "${GITHUB_TOKEN:-}" ]; then
-    return 0
+chmod +x tooling/scripts/git-push-tree.sh
+
+# Seed from previous tip (if any)
+if git clone --depth 1 --branch ci-dist \
+  "https://x-access-token:${TOKEN}@github.com/${OWNER_REPO}.git" "$OLD" 2>/dev/null; then
+  cp -a "$OLD"/. "$STAGE"/ 2>/dev/null || true
+  rm -rf "$STAGE/.git"
+fi
+
+mkdir -p "$STAGE/module" "$STAGE/app" "$STAGE/qscd"
+
+# --- migrate legacy flat layout once ---
+migrate_flat() {
+  local f
+  for f in QSC-Battery-full.zip QSC-Battery-rust.zip QSC-Battery-c.zip \
+    QSC-Battery-sh.zip QSC-Battery-lite.zip; do
+    if [ -f "$STAGE/$f" ] && [ ! -f "$STAGE/module/$f" ]; then
+      mv "$STAGE/$f" "$STAGE/module/$f"
+      echo "ci-dist: migrate $f → module/"
+    fi
+  done
+  if [ -f "$STAGE/QSC-Battery.apk" ] && [ ! -f "$STAGE/app/QSC-Battery.apk" ]; then
+    mv "$STAGE/QSC-Battery.apk" "$STAGE/app/QSC-Battery.apk"
+    echo "ci-dist: migrate QSC-Battery.apk → app/"
   fi
-  git clone --depth 1 --branch ci-dist \
-    "https://x-access-token:${GITHUB_TOKEN}@github.com/${OWNER_REPO}.git" "$OLD" \
-    2>/dev/null || true
+  for f in qscd-rust-arm64 qscd-rust-arm qscd-c-arm64 qscd-c-arm; do
+    if [ -f "$STAGE/$f" ] && [ ! -f "$STAGE/qscd/$f" ]; then
+      mv "$STAGE/$f" "$STAGE/qscd/$f"
+      echo "ci-dist: migrate $f → qscd/"
+    fi
+  done
 }
+migrate_flat
 
 pick_zip() {
   local variant="$1" dest="$2"
@@ -47,76 +90,72 @@ pick_zip() {
     break
   done
   shopt -u nullglob
-  if [ "$MODULE_CHANGED" = "1" ] && [ -n "$src" ] && [ -f "$src" ]; then
-    cp "$src" "$STAGE/$dest"
-    echo "ci-dist: new $dest from $src"
-  elif [ -f "$OLD/$dest" ]; then
-    cp "$OLD/$dest" "$STAGE/$dest"
-    echo "ci-dist: inherit $dest"
-  else
-    echo "missing $dest (module_changed=$MODULE_CHANGED)" >&2
+  if [ -z "$src" ] || [ ! -f "$src" ]; then
+    echo "missing zip for variant=$variant" >&2
     exit 1
   fi
+  cp "$src" "$STAGE/module/$dest"
+  echo "ci-dist: module/$dest ← $src"
 }
 
-fetch_old
-
-pick_zip full QSC-Battery-full.zip
-pick_zip rust QSC-Battery-rust.zip
-pick_zip c QSC-Battery-c.zip
-pick_zip sh QSC-Battery-sh.zip
-pick_zip lite QSC-Battery-lite.zip
-
-if [ "$APP_CHANGED" = "1" ] && [ -f release/QSC-Battery.apk ]; then
-  cp release/QSC-Battery.apk "$STAGE/QSC-Battery.apk"
-  echo "ci-dist: new QSC-Battery.apk"
-elif [ -f "$OLD/QSC-Battery.apk" ]; then
-  cp "$OLD/QSC-Battery.apk" "$STAGE/QSC-Battery.apk"
-  echo "ci-dist: inherit QSC-Battery.apk"
-else
-  echo "warn: no APK on ci-dist (optional)" >&2
-fi
-
-copy_daemon() {
-  local src="$1" dest="$2"
-  if [ "$DAEMON_CHANGED" = "1" ] && [ -f "$src" ]; then
-    cp "$src" "$STAGE/$dest"
-    chmod 0755 "$STAGE/$dest"
-    echo "ci-dist: new $dest"
-  elif [ -f "$OLD/$dest" ]; then
-    cp "$OLD/$dest" "$STAGE/$dest"
-    chmod 0755 "$STAGE/$dest"
-    echo "ci-dist: inherit $dest"
-  else
-    echo "missing daemon $dest" >&2
-    exit 1
-  fi
-}
-
-copy_daemon module/bin/qscd-arm64 qscd-rust-arm64
-copy_daemon module/bin/qscd-arm qscd-rust-arm
-copy_daemon module/bin/qscdc-arm64 qscd-c-arm64
-copy_daemon module/bin/qscdc-arm qscd-c-arm
+case "$COMPONENT" in
+  module)
+    pick_zip full QSC-Battery-full.zip
+    pick_zip rust QSC-Battery-rust.zip
+    pick_zip c QSC-Battery-c.zip
+    pick_zip sh QSC-Battery-sh.zip
+    pick_zip lite QSC-Battery-lite.zip
+    printf '%s\n' "$SHA" >"$STAGE/module/SOURCE_SHA"
+    if [ -n "${INPUT_DIGEST:-}" ]; then
+      printf '%s\n' "$INPUT_DIGEST" >"$STAGE/module/INPUT_DIGEST"
+    fi
+    ;;
+  app)
+    if [ ! -f release/QSC-Battery.apk ]; then
+      echo "missing release/QSC-Battery.apk" >&2
+      exit 1
+    fi
+    cp release/QSC-Battery.apk "$STAGE/app/QSC-Battery.apk"
+    printf '%s\n' "$SHA" >"$STAGE/app/SOURCE_SHA"
+    echo "ci-dist: app/QSC-Battery.apk"
+    ;;
+  qscd)
+    copy_one() {
+      local src="$1" dest="$2"
+      if [ ! -f "$src" ]; then
+        echo "missing $src" >&2
+        exit 1
+      fi
+      cp "$src" "$STAGE/qscd/$dest"
+      chmod 0755 "$STAGE/qscd/$dest"
+      echo "ci-dist: qscd/$dest"
+    }
+    copy_one module/bin/qscd-arm64 qscd-rust-arm64
+    copy_one module/bin/qscd-arm qscd-rust-arm
+    copy_one module/bin/qscdc-arm64 qscd-c-arm64
+    copy_one module/bin/qscdc-arm qscd-c-arm
+    printf '%s\n' "$SHA" >"$STAGE/qscd/SOURCE_SHA"
+    ;;
+esac
 
 cat >"$STAGE/README.md" <<EOF
 # ci-dist
 
-Rolling **artifact-only** channel for QSC-Battery (full Release file list).
+CI **artifact-only** channel (no update JSON — see \`updates\` branch).
 
-- No \`update.json\` / update metadata here — see the \`updates\` branch.
-- Latest-only: each Package Module run orphan-force-pushes this tip.
-- Magisk / KSU / APatch module updates still use GitHub Pages.
+## Layout
 
-Build: ${LABEL} @ ${SHA}
+| Path | Contents |
+|------|----------|
+| \`module/\` | Magisk zip variants (\`-full\` / \`-rust\` / \`-c\` / \`-sh\` / \`-lite\`) |
+| \`app/\` | Companion \`QSC-Battery.apk\` |
+| \`qscd/\` | Daemon binaries (\`qscd-rust-*\` / \`qscd-c-*\`) |
+
+Each product workflow updates **only its folder** and pushes a normal commit (history kept).
+
+Last touch: ${COMPONENT} @ ${LABEL} / ${SHA}
 EOF
 
-cd "$WORK"
-git init -b ci-dist
-git config user.name "github-actions[bot]"
-git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-cp -a "$STAGE"/. .
-git add -A
-git commit -m "ci-dist: ${LABEL} ${SHA:0:7} (m=${MODULE_CHANGED} a=${APP_CHANGED} d=${DAEMON_CHANGED})"
-git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${OWNER_REPO}.git"
-git push -f origin ci-dist
-echo "published ci-dist artifacts (latest-only)"
+tooling/scripts/git-push-tree.sh ci-dist "$STAGE" \
+  "ci-dist(${COMPONENT}): ${LABEL} ${SHA:0:7}"
+echo "published ci-dist/${COMPONENT}"

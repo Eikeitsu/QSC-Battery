@@ -9,15 +9,22 @@
 ### 更新通道与版本
 
 - APP「更新」与 WebUI「我的」可切换 **正式 / 预发布 / CI**；元数据统一读 **`updates` 分支**（`stable` / `prerelease` / `ci`），检测 **模块 / APP / 守护** 三项并可单独更新
-- APP 更新页：通道与检测结果各一张列表卡；顶栏刷新；行内状态 chip / 更新；「全部更新」收在列表底部；进页/切通道自动检查；会话跨页保留；CI 切换确认；装后刷新
+- **`ci-dist`** 分目录 `module/` · `app/` · `qscd/`；各工作流只推自己的产物，**普通提交保留历史**（不再 orphan / force-push）
+- CI 拆分：`Build qscd` / `App` / `Build Web` / `Package Module` 按路径各自触发；模块打包从 `ci-dist`/`dist-web` 取最新依赖，不重复编守护与 APP
+- 模块打包依赖带溯源：本提交改了 APP/守护/WebUI 时，必须对齐该 commit 的成功产物（否则打包失败，禁止吃过期 tip）
+- `Build qscd`：Rust / C **分别**按路径编译，未改一侧从 `ci-dist` 继承；任一侧新编才升守护 `versionCode`
+- Package Module：输入摘要未变则跳过升码；Web / qscd / App 成功后可串联重打包；可复用版本分配 workflow
+- 发版：发布范围合并为 choice（主标题 — 副说明）；可选「重新构建 / 晋升 CI」
+- 仅对应产品有实际变更时升该产品 `versionCode`；`updates` 分支同理按产品增量提交
 - APP / WebUI 更新页样式收紧：版本相同不再画箭头、提示条内嵌动作、错误文案民用化并挂到对应行
 - 修复守护安装：`qscd_fetch.sh` 版本校验支持 `.pre` / `.ci.N`（此前误报 `manifest_invalid_version`，CI/预发布无法装守护）
+- APP 更新页：通道与检测结果各一张列表卡；顶栏刷新；行内状态 chip / 更新；「全部更新」收在列表底部；进页/切通道自动检查；会话跨页保留；CI 切换确认；装后刷新
 - APP 模块 CLI 安装：刷入前写入 `/data/adb/qsc/install_auto`，`customize.sh` 跳过音量键并用安全默认（保留配置、装 WebUI、跳过联网下守护/内嵌 APK）；管理器手动刷 zip 仍交互
 - APP 模块更新：进入命令行风格安装页展示下载与 magisk/ksud/apd 输出（注明无人值守默认）；CLI 失败再打开 zip 交给管理器
 - WebUI 更新通道：只检测 **模块 + 守护**（不检伴侣 APP）；模块下载后拉起管理器刷写页；守护仍本页替换
 - WebUI 更新通道：自动检查、民用文案、紧凑结果行与 CI 确认，与 APP 心智对齐
 - Magisk / KSU / APatch 模块更新仍只认 **Pages** `update.json`（`module.prop` 不变）
-- **`ci-dist`** 仅存完整产物（与 Release 同清单），不再放检测 JSON；CI 按变更升对应 `versionCode`，未改项不误报
+- **`ci-dist`** 仅存完整产物（与 Release 同清单），不再放检测 JSON
 - 停在预发布 / CI 时检查更新会旁路提示正式版；预发布与草稿不写正式镜像
 - `versionCode` 跨通道全局单调递增；用户可见版本：CI 为 `….ci.N`，预发布为 `….pre`（模块与 APP 一致）
 - WebUI 构建改为固定 `js/app.js`、`css/style.css` 等路径，并生成 `webroot/.qsc-files`；热更新覆盖前整目录替换 webroot、安装时按清单清理废弃 hash 资源，避免热更后 HTML/JS 不一致或双份静态文件

@@ -136,6 +136,21 @@ function maxMtime(path) {
 
 function ensureBuiltWeb() {
   const marker = join(builtWebDir, "index.html");
+  if (process.env.QSC_SKIP_BUILD_WEB === "1") {
+    if (existsSync(marker)) {
+      log("webroot: skip build (QSC_SKIP_BUILD_WEB=1)");
+      return;
+    }
+    const committed = join(moduleRoot, "webroot", "index.html");
+    if (existsSync(committed)) {
+      log("webroot: using committed module/webroot");
+      rmSync(builtWebDir, { recursive: true, force: true });
+      mkdirSync(builtWebDir, { recursive: true });
+      cpSync(join(moduleRoot, "webroot"), builtWebDir, { recursive: true });
+      return;
+    }
+    throw new Error("QSC_SKIP_BUILD_WEB=1 but no webroot available");
+  }
   const stale =
     !existsSync(marker) ||
     (existsSync(webSrcDir) && maxMtime(webSrcDir) > statSync(marker).mtimeMs);
@@ -164,9 +179,11 @@ function ensureNative() {
   const cliBins = ["qsc-arm64", "qsc-arm"];
   if (cliBins.every((name) => existsSync(join(moduleRoot, "bin", name)))) {
     log("native qsc cli up to date");
-  } else if (existsSync(cliScript)) {
+  } else if (existsSync(cliScript) && process.env.QSC_SKIP_BUILD_NATIVE !== "1") {
     log("building native qsc cli");
     execSync(`node ${JSON.stringify(cliScript)}`, { cwd: repoRoot, stdio: "inherit" });
+  } else if (process.env.QSC_SKIP_BUILD_NATIVE === "1") {
+    log("native qsc cli: skip (QSC_SKIP_BUILD_NATIVE=1)");
   }
 
   const wanted = new Set(variantOpts.bins);
@@ -180,6 +197,10 @@ function ensureNative() {
     if (!existsSync(script)) continue;
     if (impl.bins.every((name) => existsSync(join(moduleRoot, "bin", name)))) {
       log(`native qscd (${impl.name}) up to date`);
+      continue;
+    }
+    if (process.env.QSC_SKIP_BUILD_NATIVE === "1") {
+      log(`native qscd (${impl.name}): missing bins but skip build`);
       continue;
     }
     log(`building native qscd (${impl.name})`);

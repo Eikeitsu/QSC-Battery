@@ -1,6 +1,6 @@
 name: App
 
-# 伴侣 APP 仅在 GitHub Actions 云编译，不依赖本地 Android SDK。
+# 伴侣 APP：仅 app 相关路径变更时构建；自行推送 ci-dist/app 与 updates/ci/app-update.json。
 
 on:
   push:
@@ -8,8 +8,12 @@ on:
     paths:
       - "app/**"
       - "tooling/scripts/package-app.mjs"
-      - "docs/public/app-update.json"
+      - "tooling/scripts/publish-ci-dist.sh"
+      - "tooling/scripts/publish-ci-product.sh"
+      - "tooling/scripts/publish-updates.sh"
+      - "tooling/scripts/git-push-tree.sh"
       - ".github/workflows/app.yml"
+      - ".github/workflows/reusable-ci-version.yml"
       - ".github/actions/setup-android/**"
   pull_request:
     paths:
@@ -27,7 +31,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  allocate:
+    uses: ./.github/workflows/reusable-ci-version.yml
+    with:
+      product: app
+
   assemble:
+    needs: allocate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -38,7 +48,10 @@ jobs:
 
       - name: Assemble release + debug
         working-directory: app
-        run: ./gradlew :app:assembleRelease :app:assembleDebug --stacktrace
+        run: |
+          ./gradlew :app:assembleRelease :app:assembleDebug --stacktrace \
+            -PqscVersionName="${{ needs.allocate.outputs.version }}" \
+            -PqscVersionCode="${{ needs.allocate.outputs.code }}"
 
       - name: Stage APKs
         run: |
@@ -57,3 +70,13 @@ jobs:
             app-update.json
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish ci-dist/app + updates/ci
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_VERSION: ${{ needs.allocate.outputs.version }}
+          APP_CODE: ${{ needs.allocate.outputs.code }}
+        run: |
+          chmod +x tooling/scripts/publish-ci-product.sh
+          tooling/scripts/publish-ci-product.sh app

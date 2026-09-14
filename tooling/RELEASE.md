@@ -80,7 +80,7 @@ python3 tooling/scripts/promote-changelog.py --export-docs changelog.md \
 4. 发版用工作流，勿漏同步文档站两份日志
 5. 只发 APK 时 bump APP `versionCode`；只发守护时不必 bump 模块 `update.json`
 
-相关脚本：`promote-changelog.py`、`prepare-release-notes.py`、`resolve-release-version.py`、`version_code.py` / `next-version-code.py`、`stamp-ci-module-version.py`、`detect-ci-changes.py`、`publish-ci-dist.sh`、`publish-updates.sh`、`publish-ci-channel.sh`、`seed-updates-channels.sh`（手动补 `updates` 上 stable/prerelease 目录）、`post-release-update.sh`。  
+相关脚本：`promote-changelog.py`、`prepare-release-notes.py`、`resolve-release-version.py`、`version_code.py` / `next-version-code.py`、`stamp-ci-module-version.py`、`git-push-tree.sh`、`publish-ci-dist.sh`、`publish-ci-product.sh`、`publish-updates.sh`、`fetch-ci-packaging-deps.sh`、`seed-updates-channels.sh`、`post-release-update.sh`。  
 构建细节见 [`BUILD.md`](./BUILD.md)。
 
 ## 更新通道与产物仓
@@ -90,15 +90,16 @@ python3 tooling/scripts/promote-changelog.py --export-docs changelog.md \
 | 仓                 | 用途                                                                                                                      |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------- |
 | **GitHub Pages**   | Magisk / KSU / APatch `updateJson`、文档站、稳定包与守护镜像。**管理器只认这里。**                                        |
-| **`ci-dist` 分支** | CI **完整产物**（5 个 zip + APK + 4 个 qscd），无 `update.json`。latest-only orphan 推送。                                |
+| **`ci-dist` 分支** | CI 产物，分目录：`module/` · `app/` · `qscd/`。各工作流只改自己的目录，**普通推送保留历史**（不再 orphan force-push）。   |
 | **`updates` 分支** | APP / WebUI 检测元数据：`stable/` · `prerelease/` · `ci/` 下各有 `update.json`、`app-update.json`、`qscd/manifest.json`。 |
 
-| 通道   | APP/WebUI 元数据       | 包下载指向           |
-| ------ | ---------------------- | -------------------- |
-| 正式   | `updates/stable/*`     | 通常 Pages           |
-| 预发布 | `updates/prerelease/*` | GitHub Release 资产  |
-| CI     | `updates/ci/*`         | `ci-dist` 稳定文件名 |
+| 通道   | APP/WebUI 元数据       | 包下载指向                    |
+| ------ | ---------------------- | ----------------------------- |
+| 正式   | `updates/stable/*`     | 通常 Pages                    |
+| 预发布 | `updates/prerelease/*` | GitHub Release 资产           |
+| CI     | `updates/ci/*`         | `ci-dist/{module,app,qscd}/…` |
 
 - Magisk `module.prop` 的 `updateJson` **始终** `https://eikeitsu.github.io/QSC-Battery/update.json`。
-- 模块 / APP / 守护三项 **独立 `versionCode`**；CI 按路径变更检测，未改产物不升码、不误报更新，可单独下载。
+- 模块 / APP / 守护三项 **独立工作流 + 独立 `versionCode`**；守护内 Rust / C **分别编译**，未改侧继承，共用通道 `versionCode`（更新检测仍是一个「守护」产品，哈希各自独立）。
+- 发版可用「发布范围」下拉（替代四个勾选）与「重新构建 / 晋升 CI」。
 - 勾选**预发布**或**草稿**：不写 Pages；非草稿预发布写 `updates/prerelease`。正式 `post` 写 Pages 后同步 `updates/stable`。

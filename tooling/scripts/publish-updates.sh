@@ -9,9 +9,11 @@
 #   --app-version V --app-code N --app-apk-url URL [--app-changelog URL]
 #   --daemon-version V --daemon-code N --daemon-base-url URL
 #       (hashes from --daemon-dir of qscd-* files, or flat --daemon-hash NAME=SHA)
-#   --source-sha SHA   (written to channel/state.json for CI change detection)
+#   --source-sha SHA
+#   --state-key module|app|daemon   (which sourceSha field to write; default: infer)
 #
 # Env: GITHUB_TOKEN, GITHUB_REPOSITORY
+# Pushes with history (no force).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -30,6 +32,7 @@ MODULE_VERSION="" MODULE_CODE="" MODULE_ZIP="" MODULE_CHANGELOG=""
 APP_VERSION="" APP_CODE="" APP_APK="" APP_CHANGELOG=""
 DAEMON_VERSION="" DAEMON_CODE="" DAEMON_BASE="" DAEMON_DIR=""
 SOURCE_SHA="${GITHUB_SHA:-}"
+STATE_KEY=""
 DAEMON_HASH_ARGS=()
 
 while [ $# -gt 0 ]; do
@@ -48,15 +51,25 @@ while [ $# -gt 0 ]; do
     --daemon-dir) DAEMON_DIR="$2"; shift 2 ;;
     --daemon-hash) DAEMON_HASH_ARGS+=("$2"); shift 2 ;;
     --source-sha) SOURCE_SHA="$2"; shift 2 ;;
+    --state-key) STATE_KEY="$2"; shift 2 ;;
     *) echo "unknown arg: $1" >&2; exit 1 ;;
   esac
 done
 
+if [ -z "$STATE_KEY" ]; then
+  if [ -n "$MODULE_VERSION" ]; then STATE_KEY=module
+  elif [ -n "$APP_VERSION" ]; then STATE_KEY=app
+  elif [ -n "$DAEMON_VERSION" ]; then STATE_KEY=daemon
+  else STATE_KEY=module
+  fi
+fi
+
 STAGE="$(mktemp -d)"
-WORK="$(mktemp -d)"
 OLD="$(mktemp -d)"
-cleanup() { rm -rf "$STAGE" "$WORK" "$OLD"; }
+cleanup() { rm -rf "$STAGE" "$OLD"; }
 trap cleanup EXIT
+
+chmod +x tooling/scripts/git-push-tree.sh
 
 if [ -n "${GITHUB_TOKEN:-}" ]; then
   git clone --depth 1 --branch updates \
@@ -64,13 +77,9 @@ if [ -n "${GITHUB_TOKEN:-}" ]; then
     2>/dev/null || true
 fi
 
-# Seed stage from previous tip (all channels) so we don't drop siblings
-if [ -d "$OLD/.git" ] || [ -f "$OLD/README.md" ]; then
-  # clone puts files at OLD root
-  if [ -d "$OLD/stable" ] || [ -d "$OLD/ci" ] || [ -d "$OLD/prerelease" ]; then
-    cp -a "$OLD"/. "$STAGE"/ 2>/dev/null || true
-    rm -rf "$STAGE/.git"
-  fi
+if [ -d "$OLD/stable" ] || [ -d "$OLD/ci" ] || [ -d "$OLD/prerelease" ] || [ -f "$OLD/README.md" ]; then
+  cp -a "$OLD"/. "$STAGE"/ 2>/dev/null || true
+  rm -rf "$STAGE/.git"
 fi
 
 mkdir -p "$STAGE/$CHANNEL/qscd"
@@ -78,7 +87,7 @@ mkdir -p "$STAGE/$CHANNEL/qscd"
 export CHANNEL MODULE_VERSION MODULE_CODE MODULE_ZIP MODULE_CHANGELOG
 export APP_VERSION APP_CODE APP_APK APP_CHANGELOG
 export DAEMON_VERSION DAEMON_CODE DAEMON_BASE DAEMON_DIR SOURCE_SHA OWNER_REPO
-export STAGE
+export STATE_KEY STAGE
 python3 - <<'PY'
 import hashlib, json, os, pathlib, sys
 
@@ -173,9 +182,20 @@ elif man:
     write(man_path, man)
     print("updates: keep daemon", man.get("versionCode"))
 
-# state for CI
-state = {"channel": channel, "sourceSha": os.environ.get("SOURCE_SHA") or ""}
-if channel == "ci" and state["sourceSha"]:
+# per-component state for CI
+if channel == "ci":
+    state = load(ch / "state.json") or {"channel": channel}
+    state["channel"] = channel
+    sha = os.environ.get("SOURCE_SHA") or ""
+    key = os.environ.get("STATE_KEY") or ""
+    if sha:
+        state["sourceSha"] = sha
+        if key == "module":
+            state["moduleSourceSha"] = sha
+        elif key == "app":
+            state["appSourceSha"] = sha
+        elif key == "daemon":
+            state["daemonSourceSha"] = sha
     write(ch / "state.json", state)
 
 readme = stage / "README.md"
@@ -183,19 +203,14 @@ readme.write_text(
     "# updates\n\n"
     "APP / WebUI update **metadata only** (`stable` / `prerelease` / `ci`).\n\n"
     "- Magisk / KSU / APatch still use **GitHub Pages** `update.json`.\n"
-    "- CI binaries live on **`ci-dist`**; prerelease packages on GitHub Releases; "
-    "stable package URLs usually point at Pages.\n",
+    "- CI binaries live on **`ci-dist`** (`module/` / `app/` / `qscd/`); "
+    "prerelease packages on GitHub Releases; "
+    "stable package URLs usually point at Pages.\n"
+    "- Each product workflow updates only its JSON and pushes a normal commit.\n",
     encoding="utf-8",
 )
 PY
 
-cd "$WORK"
-git init -b updates
-git config user.name "github-actions[bot]"
-git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-cp -a "$STAGE"/. .
-git add -A
-git commit -m "updates(${CHANNEL}): sync metadata"
-git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${OWNER_REPO}.git"
-git push -f origin updates
-echo "published updates/${CHANNEL}"
+tooling/scripts/git-push-tree.sh updates "$STAGE" \
+  "updates(${CHANNEL}/${STATE_KEY}): sync metadata"
+echo "published updates/${CHANNEL} (${STATE_KEY})"

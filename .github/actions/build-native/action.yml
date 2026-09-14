@@ -1,33 +1,62 @@
 name: Build native qscd
-description: 装好 Rust Android 目标与 NDK，交叉编译 Rust 与 C 两套事件等待器
+description: 按需交叉编译 Rust / C 守护与可选 qsc CLI
 
 inputs:
   ndk-version:
     description: NDK 版本
     required: false
     default: r26d
+  build-rust:
+    description: 编译 Rust qscd
+    required: false
+    default: "true"
+  build-c:
+    description: 编译 C qscd
+    required: false
+    default: "true"
+  build-cli:
+    description: 编译 qsc CLI
+    required: false
+    default: "true"
 
 runs:
   using: composite
   steps:
     - name: Setup Rust (Android targets)
+      if: inputs.build-rust == 'true'
       shell: bash
       run: |
         rustup toolchain install stable --profile minimal
         rustup target add aarch64-linux-android armv7-linux-androideabi
 
     - uses: ./.github/actions/setup-ndk-clang
+      if: inputs.build-rust == 'true' || inputs.build-c == 'true' || inputs.build-cli == 'true'
       id: ndk
       with:
         ndk-version: ${{ inputs.ndk-version }}
 
-    # REQUIRE_NATIVE：CI 里缺依赖必须失败，不能静默产出不带守护的包
-    - name: Build native qscd (Rust + C) + qsc CLI
+    - name: Build selected natives
       shell: bash
       env:
         ANDROID_NDK_ROOT: ${{ steps.ndk.outputs.ndk-path }}
         REQUIRE_NATIVE: "1"
+        BUILD_RUST: ${{ inputs.build-rust }}
+        BUILD_C: ${{ inputs.build-c }}
+        BUILD_CLI: ${{ inputs.build-cli }}
       run: |
-        node tooling/scripts/build-native.mjs
-        node tooling/scripts/build-native-c.mjs
-        node tooling/scripts/build-native-cli.mjs
+        set -euo pipefail
+        if [ "$BUILD_RUST" = "true" ]; then
+          node tooling/scripts/build-native.mjs
+        else
+          echo "skip rust qscd"
+        fi
+        if [ "$BUILD_C" = "true" ]; then
+          node tooling/scripts/build-native-c.mjs
+        else
+          echo "skip c qscd"
+        fi
+        if [ "$BUILD_CLI" = "true" ]; then
+          node tooling/scripts/build-native-cli.mjs
+        else
+          echo "skip qsc cli"
+        fi

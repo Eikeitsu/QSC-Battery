@@ -1,0 +1,145 @@
+name: Build qscd
+
+# Rust / C 按路径分别编译；未变更的一侧从 ci-dist 继承。
+# 任一侧新编成功才升守护 versionCode 并推送。
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "native/qscd/**"
+      - "native/qscd-c/**"
+      - "tooling/scripts/build-native.mjs"
+      - "tooling/scripts/build-native-c.mjs"
+      - "tooling/scripts/publish-ci-dist.sh"
+      - "tooling/scripts/publish-ci-product.sh"
+      - "tooling/scripts/publish-updates.sh"
+      - "tooling/scripts/git-push-tree.sh"
+      - ".github/actions/build-native/**"
+      - ".github/actions/setup-ndk-clang/**"
+      - ".github/workflows/build-qscd.yml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "native/qscd/**"
+      - "native/qscd-c/**"
+      - "tooling/scripts/build-native.mjs"
+      - "tooling/scripts/build-native-c.mjs"
+      - ".github/actions/build-native/**"
+      - ".github/actions/setup-ndk-clang/**"
+      - ".github/workflows/build-qscd.yml"
+  workflow_dispatch:
+    inputs:
+      force_both:
+        description: "强制重编 Rust + C"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: build-qscd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.chg.outputs.rust }}
+      c: ${{ steps.chg.outputs.c }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Detect rust / c changes
+        id: chg
+        run: |
+          set -euo pipefail
+          rust=0
+          c=0
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force_both }}" = "true" ]; then
+            rust=1; c=1
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # 手动默认：两侧都编（与 force 相同语义，方便补种）
+            rust=1; c=1
+          else
+            before="${{ github.event.before }}"
+            head="${{ github.sha }}"
+            if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+              rust=1; c=1
+            else
+              files="$(git diff --name-only "$before...$head" || true)"
+              echo "$files"
+              echo "$files" | grep -E '^(native/qscd/|tooling/scripts/build-native\.mjs|\.github/actions/build-native/)' >/dev/null && rust=1 || true
+              echo "$files" | grep -E '^(native/qscd-c/|tooling/scripts/build-native-c\.mjs)' >/dev/null && c=1 || true
+              # 共享工具链 / 工作流改动：两侧都编
+              echo "$files" | grep -E '^(\.github/actions/setup-ndk-clang/|\.github/workflows/build-qscd\.yml)' >/dev/null && {
+                rust=1; c=1
+              } || true
+            fi
+          fi
+          # 至少一侧；若过滤后都为 0（例如只改了 publish 脚本），两侧都编以保持可推送
+          if [ "$rust" = "0" ] && [ "$c" = "0" ]; then
+            rust=1; c=1
+          fi
+          echo "rust=$rust" >> "$GITHUB_OUTPUT"
+          echo "c=$c" >> "$GITHUB_OUTPUT"
+          echo "detect: rust=$rust c=$c"
+
+  allocate:
+    needs: detect
+    uses: ./.github/workflows/reusable-ci-version.yml
+    with:
+      product: daemon
+
+  build:
+    needs: [detect, allocate]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup-node-npm
+
+      - uses: ./.github/actions/build-native
+        with:
+          build-rust: ${{ needs.detect.outputs.rust == '1' && 'true' || 'false' }}
+          build-c: ${{ needs.detect.outputs.c == '1' && 'true' || 'false' }}
+          build-cli: "false"
+
+      - name: Inherit unchanged side from ci-dist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          NEED_RUST: ${{ needs.detect.outputs.rust }}
+          NEED_C: ${{ needs.detect.outputs.c }}
+        run: |
+          set -euo pipefail
+          chmod +x tooling/scripts/inherit-qscd-from-ci-dist.sh
+          tooling/scripts/inherit-qscd-from-ci-dist.sh
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: qscd-binaries-${{ github.sha }}
+          path: |
+            module/bin/qscd-arm64
+            module/bin/qscd-arm
+            module/bin/qscdc-arm64
+            module/bin/qscdc-arm
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish ci-dist/qscd + updates/ci
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DAEMON_VERSION: ${{ needs.allocate.outputs.version }}
+          DAEMON_CODE: ${{ needs.allocate.outputs.code }}
+          RUST_BUILT: ${{ needs.detect.outputs.rust }}
+          C_BUILT: ${{ needs.detect.outputs.c }}
+        run: |
+          echo "publish daemon version=$DAEMON_VERSION code=$DAEMON_CODE (rust_built=$RUST_BUILT c_built=$C_BUILT)"
+          chmod +x tooling/scripts/publish-ci-product.sh
+          tooling/scripts/publish-ci-product.sh daemon
