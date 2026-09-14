@@ -63,10 +63,16 @@ QSC_FALLBACK_SWITCHES="\
 /sys/devices/platform/soc/soc@0:mca_charger/handle_state,start=0,stop=1 \
 /sys/devices/platform/soc/mca_business_charger/handle_state,start=0,stop=1 \
 /sys/devices/platform/soc/mca_charger/handle_state,start=0,stop=1 \
+/sys/devices/platform/soc@0/soc:mca_business_charger/handle_state,start=0,stop=1 \
+/sys/devices/platform/soc@0/soc:mca_charger/handle_state,start=0,stop=1 \
+/sys/devices/platform/soc@0/mca_business_charger/handle_state,start=0,stop=1 \
+/sys/devices/platform/soc@0/mca_charger/handle_state,start=0,stop=1 \
 /sys/class/power_supply/mca-charger/handle_state,start=0,stop=1 \
 /sys/class/power_supply/mca_charger/handle_state,start=0,stop=1 \
 /sys/devices/platform/soc/soc:mca_business_charger/stop_handle_charge,start=0,stop=1 \
-/sys/devices/platform/soc/soc:mca_charger/stop_handle_charge,start=0,stop=1"
+/sys/devices/platform/soc/soc:mca_charger/stop_handle_charge,start=0,stop=1 \
+/sys/devices/platform/soc@0/soc:mca_business_charger/stop_handle_charge,start=0,stop=1 \
+/sys/devices/platform/soc@0/soc:mca_charger/stop_handle_charge,start=0,stop=1"
 
 # 仅当常规开关全部写失败时才试：电流墙 / 端口 suspend（易与快充协商打架，故置后）
 QSC_LAST_RESORT_SWITCHES="\
@@ -177,24 +183,45 @@ qsc_is_policy_switch_node() {
 	return 1
 }
 
+# MCA 节点：0814 靠列表盲写也能停充；现版若走 verify+chmod 会回滚/弄坏权限
+qsc_is_mca_switch_node() {
+	case "$1" in
+		*handle_state*|*stop_handle_charge*) return 0 ;;
+	esac
+	return 1
+}
+
 # 按列表写停充/恢复。
 # stop + first/verify：逐个尝试；verify 时写入后检查是否真停充
+# MCA 节点：raw echo、不做硬回滚（对齐 0814 + 专用 MCA 路径）
 qsc_write_switch_list() {
 	local mode="$1"
 	local list="$2"
 	local first_only="${3:-}"
 	local allow_policy="${4:-}"
-	local i route val start_val
+	local i route val start_val _wrote _is_mca
 	for i in $list; do
 		route="$(echo "$i" | sed -n 's/,start=.*//g;$p')"
-		[ -f "$route" ] || continue
+		_is_mca=0
+		if qsc_is_mca_switch_node "$route"; then
+			_is_mca=1
+			qsc_mca_node_ok "$route" 2>/dev/null || [ -e "$route" ] || continue
+		else
+			[ -f "$route" ] || continue
+		fi
 		if [ "$allow_policy" != "1" ] && qsc_is_policy_switch_node "$route"; then
 			continue
 		fi
 		if [ "$mode" = "stop" ]; then
 			val="$(echo "$i" | sed -n 's/.*,stop=//g;s/_/ /g;$p')"
-			if qsc_write_node "$route" "$val"; then
-				if [ "$first_only" = "verify" ]; then
+			_wrote=0
+			if [ "$_is_mca" = "1" ]; then
+				qsc_mca_raw_echo "$route" "$val" && _wrote=1
+			else
+				qsc_write_node "$route" "$val" && _wrote=1
+			fi
+			if [ "$_wrote" = "1" ]; then
+				if [ "$first_only" = "verify" ] && [ "$_is_mca" != "1" ]; then
 					_vd="$(echo "$config_conf" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
 					_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
 					[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
@@ -204,8 +231,23 @@ qsc_write_switch_list() {
 						qsc_log_once "sw_ineff_${route##*/}" warn "节点写入成功但未停充，已跳过 $route"
 						continue
 					fi
+				elif [ "$_is_mca" = "1" ] && [ "$first_only" = "verify" ]; then
+					# MCA 常延迟生效：只软复核，对齐专用 qsc_mca_write，不回滚
+					_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
+					_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
+					if [ "$_vd" -gt 0 ] 2>/dev/null; then
+						sleep "$_vd"
+						if ! qsc_charge_looks_stopped; then
+							qsc_log_once mca_verify_soft debug "MCA 列表写入后瞬时仍显示充电中（已保持）"
+						fi
+					fi
+					# 列表误打到 MCA 时补写 profile，后续走专用路径
+					if type qsc_write_device_profile >/dev/null 2>&1; then
+						qsc_write_device_profile "$route" >/dev/null 2>&1 || true
+					fi
 				fi
 				stop_nodes="$stop_nodes $route=$val"
+				[ "$_is_mca" = "1" ] && stop_nodes="$stop_nodes (MCA)"
 				log_log=1
 				stop_ok=1
 				qsc_save_active_switch "$i"
@@ -215,7 +257,13 @@ qsc_write_switch_list() {
 			fi
 		else
 			val="$(echo "$i" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
-			if qsc_write_node "$route" "$val"; then
+			_wrote=0
+			if [ "$_is_mca" = "1" ]; then
+				qsc_mca_raw_echo "$route" "$val" && _wrote=1
+			else
+				qsc_write_node "$route" "$val" && _wrote=1
+			fi
+			if [ "$_wrote" = "1" ]; then
 				start_node="$route"
 				start_val="$val"
 				log_log2=1
@@ -295,7 +343,10 @@ qsc_stop_wakelock_wanted() {
 			esac
 			# 有 MCA 的小米机（17/K90 等）深睡也会改回 handle_state，持锁更稳
 			if [ -f /sys/devices/platform/soc/soc:mca_business_charger/handle_state ] \
-				|| [ -f /sys/devices/platform/soc/soc:mca_charger/handle_state ]; then
+				|| [ -f /sys/devices/platform/soc/soc:mca_charger/handle_state ] \
+				|| [ -e /sys/devices/platform/soc@0/soc:mca_charger/handle_state ] \
+				|| [ -e /sys/devices/platform/soc@0/mca_charger/handle_state ] \
+				|| [ "$(qsc_profile_get mca 2>/dev/null)" = "1" ]; then
 				return 0
 			fi
 			return 1
@@ -384,7 +435,7 @@ qsc_mca_write() {
 	qsc_load_device_profile 2>/dev/null || true
 
 	# 1) 已缓存且仍存在的路径优先
-	if [ -n "$QSC_MCA_PATH" ] && [ -f "$QSC_MCA_PATH" ]; then
+	if qsc_mca_node_ok "$QSC_MCA_PATH" 2>/dev/null || { [ -n "$QSC_MCA_PATH" ] && [ -e "$QSC_MCA_PATH" ]; }; then
 		if qsc_mca_raw_echo "$QSC_MCA_PATH" "$val"; then
 			path="$QSC_MCA_PATH"
 		fi
@@ -392,8 +443,8 @@ qsc_mca_write() {
 
 	# 2) 候选列表实时扫（小米17: soc:mca_business_charger 优先）
 	if [ -z "$path" ]; then
-		for cand in $QSC_MCA_CANDIDATES; do
-			[ -f "$cand" ] || continue
+		for cand in $QSC_MCA_CANDIDATES $QSC_MCA_STOP_HANDLE_CANDIDATES; do
+			qsc_mca_node_ok "$cand" 2>/dev/null || [ -e "$cand" ] || continue
 			if qsc_mca_raw_echo "$cand" "$val"; then
 				path="$cand"
 				break
@@ -401,18 +452,18 @@ qsc_mca_write() {
 		done
 	fi
 
-	# 3) find 兜底
+	# 3) find / 通配兜底
 	if [ -z "$path" ]; then
 		cand="$(qsc_find_mca_path 2>/dev/null)" || cand=""
-		if [ -n "$cand" ] && [ -f "$cand" ] && qsc_mca_raw_echo "$cand" "$val"; then
+		if { qsc_mca_node_ok "$cand" 2>/dev/null || [ -e "$cand" ]; } && qsc_mca_raw_echo "$cand" "$val"; then
 			path="$cand"
 		fi
 	fi
 
-	# 4) stop_handle_charge 变体
+	# 4) 旧路径：仅 stop_handle 候选（find 已含；保留兼容）
 	if [ -z "$path" ]; then
 		for cand in $QSC_MCA_STOP_HANDLE_CANDIDATES; do
-			[ -f "$cand" ] || continue
+			qsc_mca_node_ok "$cand" 2>/dev/null || [ -e "$cand" ] || continue
 			if qsc_mca_raw_echo "$cand" "$val"; then
 				path="$cand"
 				break
