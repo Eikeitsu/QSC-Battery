@@ -95,7 +95,7 @@ fun ModuleInstallConsoleScreen(
                 } else {
                     null
                 }
-                withContext(Dispatchers.Main.immediate) {
+                scope.launch(Dispatchers.Main.immediate) {
                     progress = f ?: progress
                     if (f != null && lines.lastOrNull()?.startsWith("# progress") == true) {
                         lines[lines.lastIndex] = "# progress ${(f * 100).toInt()}%"
