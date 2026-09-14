@@ -12,6 +12,18 @@ export default defineConfig({
   root,
   base: "./",
   plugins: [
+    {
+      name: "qsc-webroot-cache",
+      transformIndexHtml(html) {
+        if (process.env.NODE_ENV === "production") {
+          return html.replace(
+            "<head>",
+            '<head>\n    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />',
+          );
+        }
+        return html;
+      },
+    },
     vue(),
     Components({
       dts: "components.d.ts",
@@ -30,11 +42,12 @@ export default defineConfig({
     cssCodeSplit: false,
     rollupOptions: {
       output: {
-        entryFileNames: "js/app-[hash].js",
-        chunkFileNames: "js/[name]-[hash].js",
+        // 固定文件名：Magisk 热更新为「只增改不删」，hash 后缀会留下旧 js/css 并让 index 与资源不一致
+        entryFileNames: "js/app.js",
+        chunkFileNames: "js/[name].js",
         assetFileNames: (info) => {
-          if (info.name?.endsWith(".css")) return "css/style-[hash][extname]";
-          return "assets/[name]-[hash][extname]";
+          if (info.name?.endsWith(".css")) return "css/style.css";
+          return "assets/[name][extname]";
         },
       },
     },

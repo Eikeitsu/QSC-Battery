@@ -612,9 +612,10 @@ fun ChargeSegmented(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(ChargeTheme.colors.surfaceStrong)
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+            .border(1.dp, ChargeTheme.colors.stroke, RoundedCornerShape(14.dp))
+            .background(ChargeTheme.colors.surface)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         options.forEachIndexed { index, label ->
             val selected = index == selectedIndex
@@ -622,9 +623,14 @@ fun ChargeSegmented(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(11.dp))
-                    .background(
-                        if (selected) ChargeTheme.colors.accent.copy(alpha = 0.16f)
-                        else Color.Transparent,
+                    .then(
+                        if (selected) {
+                            Modifier.background(ChargeTheme.colors.accent)
+                        } else {
+                            Modifier
+                                .border(1.dp, ChargeTheme.colors.stroke, RoundedCornerShape(11.dp))
+                                .background(ChargeTheme.colors.surfaceStrong)
+                        },
                     )
                     .clickable { onSelect(index) }
                     .padding(vertical = 10.dp),
@@ -633,8 +639,8 @@ fun ChargeSegmented(
                 Text(
                     text = label,
                     style = ChargeTheme.typography.label,
-                    color = if (selected) ChargeTheme.colors.accent else ChargeTheme.colors.muted,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (selected) ChargeTheme.colors.onAccent else ChargeTheme.colors.ink,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 )
             }
         }

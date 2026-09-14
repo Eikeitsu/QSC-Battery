@@ -766,6 +766,13 @@ set_perm "$MODPATH/hotinstall.sh" root root 0755
 [ -f /data/adb/qsc/bin/qsc ] && set_perm /data/adb/qsc/bin/qsc root root 0755
 
 # 非首次：本模块无 system/sepolicy 等开机挂载，更新默认可免重启
+if [ "$INSTALL_WEBUI" = "1" ] && [ -f "$LIBDIR/hot_update.sh" ]; then
+	# shellcheck disable=SC1090
+	. "$LIBDIR/hot_update.sh"
+	type hot_update_prune_webroot >/dev/null 2>&1 &&
+		hot_update_prune_webroot "$MODPATH"
+fi
+
 ui_print "--------------------------------"
 if [ -f "$LIBDIR/hot_update.sh" ]; then
 	HOT_UPDATE_DESC="[♻️热更新中 | 正在重启服务] 本次更新无需重启；稍后自动显示实时充电状态"

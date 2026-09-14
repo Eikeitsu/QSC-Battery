@@ -4,7 +4,7 @@
  * 旧版原生源码归档在 archives/webroot-vanilla-202607/，勿覆盖归档。
  */
 import { execSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, rmSync, readdirSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,5 +40,8 @@ function walk(dir, prefix = "") {
   }
 }
 walk(outDir);
+const manifestPath = join(outDir, ".qsc-files");
+writeFileSync(manifestPath, `${files.sort().join("\n")}\n`, "utf8");
+files.push(".qsc-files");
 log(`output -> ${outDir} (${files.length} files)`);
 log("done");

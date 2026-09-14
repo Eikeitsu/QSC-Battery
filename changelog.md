@@ -13,7 +13,8 @@
 - **`ci-dist`** 仅存完整产物（与 Release 同清单），不再放检测 JSON；CI 按变更升对应 `versionCode`，未改项不误报
 - 停在预发布 / CI 时检查更新会旁路提示正式版；预发布与草稿不写正式镜像
 - `versionCode` 跨通道全局单调递增；用户可见版本：CI 为 `….ci.N`，预发布为 `….pre`（模块与 APP 一致）
-- APP 更新页通道选择去掉白卡片套分段控件；选中态改为 accent 浅底，避免「白套浅绿套白」
+- APP 更新页通道选择去掉白卡片套分段控件；分段选中为 accent 实底 + 未选中描边/浅底，与页面背景区分更明显
+- WebUI 构建改为固定 `js/app.js`、`css/style.css` 等路径，并生成 `webroot/.qsc-files`；热更新覆盖前整目录替换 webroot、安装时按清单清理废弃 hash 资源，避免热更后 HTML/JS 不一致或双份静态文件
 
 ### 停充兼容
 

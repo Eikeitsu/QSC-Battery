@@ -127,6 +127,26 @@ hot_update_needs_reboot() {
 
 # 把旧模块中的用户数据并入新包
 # 用法: hot_update_preserve_paths <old> <new> rel1 rel2 ...
+# 按 build-web 生成的清单删掉 webroot 里已废弃的 hash 资源（增量合并 / 旧包残留）
+hot_update_prune_webroot() {
+	_root="$1/webroot"
+	_list="$_root/.qsc-files"
+	[ -d "$_root" ] || return 0
+	[ -f "$_list" ] || return 0
+	(
+		cd "$_root" 2>/dev/null || exit 0
+		find . -type f ! -path './.qsc-files' 2>/dev/null | while IFS= read -r _f; do
+			[ -n "$_f" ] || continue
+			_rel="${_f#./}"
+			grep -Fxq "$_rel" "$_list" 2>/dev/null && continue
+			rm -f "$_rel" 2>/dev/null
+		done
+		find . -depth -type d -empty 2>/dev/null | while IFS= read -r _d; do
+			[ -n "$_d" ] && [ "$_d" != "." ] && rmdir "$_d" 2>/dev/null
+		done
+	) || true
+}
+
 hot_update_preserve_paths() {
 	_old_root="$1"
 	_new_root="$2"
@@ -607,6 +627,10 @@ pkill -f "$OLD/bin/qsc_switch.sh" 2>/dev/null || true
 sleep 1
 
 # 就地覆盖（只增改不删），全程不出现空模块窗口。
+# webroot 含 Vite 产物：必须先整目录替换，否则旧 js/css 会残留。
+if [ -d "$SRC/webroot" ] && [ -f "$SRC/webroot/index.html" ]; then
+	rm -rf "$OLD/webroot" 2>/dev/null
+fi
 # 不使用 cp -a：部分 Android toybox/第三方环境对该短选项兼容性不一致。
 _cp_err="$(cp -rfp "$SRC"/. "$OLD"/ 2>&1)"
 _cp_rc=$?
