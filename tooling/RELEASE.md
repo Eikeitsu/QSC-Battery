@@ -80,7 +80,7 @@ python3 tooling/scripts/promote-changelog.py --export-docs changelog.md \
 4. 发版用工作流，勿漏同步文档站两份日志
 5. 只发 APK 时 bump APP `versionCode`；只发守护时不必 bump 模块 `update.json`
 
-相关脚本：`promote-changelog.py`、`prepare-release-notes.py`、`resolve-release-version.py`、`version_code.py` / `next-version-code.py`、`stamp-ci-module-version.py`、`detect-ci-changes.py`、`publish-ci-dist.sh`、`publish-updates.sh`、`publish-ci-channel.sh`、`post-release-update.sh`。  
+相关脚本：`promote-changelog.py`、`prepare-release-notes.py`、`resolve-release-version.py`、`version_code.py` / `next-version-code.py`、`stamp-ci-module-version.py`、`detect-ci-changes.py`、`publish-ci-dist.sh`、`publish-updates.sh`、`publish-ci-channel.sh`、`seed-updates-channels.sh`（手动补 `updates` 上 stable/prerelease 目录）、`post-release-update.sh`。  
 构建细节见 [`BUILD.md`](./BUILD.md)。
 
 ## 更新通道与产物仓
