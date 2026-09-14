@@ -1,6 +1,7 @@
 name: App
 
-# 伴侣 APP 仅在 GitHub Actions 云编译，不依赖本�?Android SDK�?
+# 伴侣 APP 仅在 GitHub Actions 云编译，不依赖本地 Android SDK。
+
 on:
   push:
     branches: [main, master]

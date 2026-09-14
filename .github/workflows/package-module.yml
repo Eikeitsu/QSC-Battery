@@ -1,6 +1,8 @@
 name: Package Module
 
-# 说明：曾出现仅改 module/bin/... �?paths: module/** 未触发的情况�?# 主分支改�?paths-ignore（只跳过纯文档），避免漏�?zip�?
+# 说明：曾出现仅改 module/bin/... 时 paths: module/** 未触发的情况。
+# 主分支改为 paths-ignore（只跳过纯文档），避免漏打 zip。
+
 on:
   push:
     branches: [main, master]
@@ -40,7 +42,8 @@ jobs:
 
       - uses: ./.github/actions/setup-android
 
-      # �?stamp：模�?version=�?ci.N；再�?APK，使 versionName 与检测用 versionCode 一�?      - name: Stamp CI module.prop version
+      # 先 stamp：模块 version=….ci.N；再编 APK，使 versionName 与检测用 versionCode 一致
+      - name: Stamp CI module.prop version
         id: stamp
         run: |
           eval "$(python3 tooling/scripts/stamp-ci-module-version.py --fetch-remote)"
@@ -76,7 +79,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # 默认分支 CI 推送到 ci-dist（公开 JSON+包，�?Token）；PR 不推
+      # 默认分支 CI 推送到 ci-dist（公开 JSON+包，无 Token）；PR 不推
       - name: Publish ci-dist branch
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
         env:
