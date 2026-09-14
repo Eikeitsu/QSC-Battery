@@ -1,0 +1,14 @@
+{
+  "version": "2026.09.14.ci.226",
+  "versionCode": 2026091316,
+  "channel": "ci",
+  "baseUrl": "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist",
+  "qscd-rust-arm64": "fda40b5db61a894406231f8f055258283d8ec0c75887e39680211132c0140077",
+  "qscd-rust-arm64Url": "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist/qscd-rust-arm64",
+  "qscd-rust-arm": "fcb6c6cc14b05b3805be93f719a7c03487803623e8ad5bc7b5ffb7e7fa0fd7ac",
+  "qscd-rust-armUrl": "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist/qscd-rust-arm",
+  "qscd-c-arm64": "16a5794968118476421cbe91ca63dfc85f05f1e28736cbd9c72c3b08be6259c2",
+  "qscd-c-arm64Url": "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist/qscd-c-arm64",
+  "qscd-c-arm": "ddb68bd5280990d5ed0e19bb61baabac7c09d79061a07f15ea142cacf606ce09",
+  "qscd-c-armUrl": "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist/qscd-c-arm"
+}
