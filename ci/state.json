@@ -1,4 +1,5 @@
 {
   "channel": "ci",
-  "sourceSha": "f098d1221c00a24c71fa020e2ae489905ae05f7d"
+  "sourceSha": "129041cc3ecd9fd8e7232ec965e99ecdc7197937",
+  "daemonSourceSha": "129041cc3ecd9fd8e7232ec965e99ecdc7197937"
 }
