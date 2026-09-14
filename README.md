@@ -1,9 +1,15 @@
 # ci-dist
 
-Rolling **artifact-only** channel for QSC-Battery (full Release file list).
+CI **artifact-only** channel (no update JSON — see `updates` branch).
 
-- No `update.json` / update metadata here — see the `updates` branch.
-- Latest-only: each Package Module run orphan-force-pushes this tip.
-- Magisk / KSU / APatch module updates still use GitHub Pages.
+## Layout
 
-Build: 2026.09.14.ci.226 @ f098d1221c00a24c71fa020e2ae489905ae05f7d
+| Path | Contents |
+|------|----------|
+| `module/` | Magisk zip variants (`-full` / `-rust` / `-c` / `-sh` / `-lite`) |
+| `app/` | Companion `QSC-Battery.apk` |
+| `qscd/` | Daemon binaries (`qscd-rust-*` / `qscd-c-*`) |
+
+Each product workflow updates **only its folder** and pushes a normal commit (history kept).
+
+Last touch: qscd @ 2026.09.14.ci.1 / 129041cc3ecd9fd8e7232ec965e99ecdc7197937
