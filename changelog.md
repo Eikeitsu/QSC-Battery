@@ -8,9 +8,12 @@
 
 ### 更新通道与版本
 
-- APP「更新」与 WebUI「我的」可切换 **正式 / 预发布 / CI**；正式仍走 Pages（Magisk 同源），预发布直连 GitHub Release，CI 走 `ci-dist`（无 Token，只保留最新构建）
+- APP「更新」与 WebUI「我的」可切换 **正式 / 预发布 / CI**；元数据统一读 **`updates` 分支**（`stable` / `prerelease` / `ci`），检测 **模块 / APP / 守护** 三项并可单独更新
+- Magisk / KSU / APatch 模块更新仍只认 **Pages** `update.json`（`module.prop` 不变）
+- **`ci-dist`** 仅存完整产物（与 Release 同清单），不再放检测 JSON；CI 按变更升对应 `versionCode`，未改项不误报
 - 停在预发布 / CI 时检查更新会旁路提示正式版；预发布与草稿不写正式镜像
 - `versionCode` 跨通道全局单调递增；用户可见版本：CI 为 `….ci.N`，预发布为 `….pre`（模块与 APP 一致）
+- APP 更新页通道选择去掉白卡片套分段控件；选中态改为 accent 浅底，避免「白套浅绿套白」
 
 ### 停充兼容
 

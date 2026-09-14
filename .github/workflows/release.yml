@@ -305,6 +305,56 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # 预发布不写 Pages；写 updates/prerelease 供 APP/WebUI（避免 api.github.com 403）
+      - name: Publish updates/prerelease
+        if: ${{ needs.build.outputs.prerelease == 'true' && needs.build.outputs.draft != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RAW: ${{ needs.build.outputs.raw }}
+          CODE: ${{ needs.build.outputs.version_code }}
+          TAG: ${{ needs.build.outputs.tag }}
+          PUBLISH_ZIPS: ${{ needs.build.outputs.publish_zips }}
+          PUBLISH_APK: ${{ needs.build.outputs.publish_apk }}
+          PUBLISH_RUST: ${{ needs.build.outputs.publish_binaries_rust }}
+          PUBLISH_C: ${{ needs.build.outputs.publish_binaries_c }}
+        run: |
+          set -euo pipefail
+          chmod +x tooling/scripts/publish-updates.sh
+          REL="https://github.com/${{ github.repository }}/releases/download/${TAG}"
+          ARGS=(prerelease --source-sha "${{ github.sha }}")
+          if [ "$PUBLISH_ZIPS" = "true" ]; then
+            ARGS+=(
+              --module-version "$RAW"
+              --module-code "$CODE"
+              --module-zip-url "${REL}/QSC-Battery_v${RAW}-full.zip"
+              --module-changelog "https://github.com/${{ github.repository }}/releases/tag/${TAG}"
+            )
+          fi
+          if [ "$PUBLISH_APK" = "true" ]; then
+            ARGS+=(
+              --app-version "$RAW"
+              --app-code "$CODE"
+              --app-apk-url "${REL}/QSC-Battery_v${RAW}.apk"
+              --app-changelog "https://github.com/${{ github.repository }}/releases/tag/${TAG}"
+            )
+          fi
+          if [ "$PUBLISH_RUST" = "true" ] || [ "$PUBLISH_C" = "true" ]; then
+            DDIR="$(mktemp -d)"
+            [ -f module/bin/qscd-arm64 ] && cp module/bin/qscd-arm64 "$DDIR/qscd-rust-arm64"
+            [ -f module/bin/qscd-arm ] && cp module/bin/qscd-arm "$DDIR/qscd-rust-arm"
+            [ -f module/bin/qscdc-arm64 ] && cp module/bin/qscdc-arm64 "$DDIR/qscd-c-arm64"
+            [ -f module/bin/qscdc-arm ] && cp module/bin/qscdc-arm "$DDIR/qscd-c-arm"
+            # Release asset names match qscd-rust-* / qscd-c-*
+            ARGS+=(
+              --daemon-version "$RAW"
+              --daemon-code "$CODE"
+              --daemon-base-url "$REL"
+              --daemon-dir "$DDIR"
+            )
+          fi
+          tooling/scripts/publish-updates.sh "${ARGS[@]}"
+          rm -rf "${DDIR:-}"
+
   post:
     needs: [build, publish]
     if: ${{ needs.build.outputs.draft != 'true' && needs.build.outputs.prerelease != 'true' }}
@@ -348,3 +398,56 @@ jobs:
           PUBLISH_BINS_C: ${{ needs.build.outputs.publish_binaries_c }}
           PUBLISH_APK: ${{ needs.build.outputs.publish_apk }}
         run: bash tooling/scripts/post-release-update.sh
+
+      - name: Sync updates/stable metadata
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RAW: ${{ needs.build.outputs.raw }}
+          CODE: ${{ needs.build.outputs.version_code }}
+          PAGES_BASE: https://eikeitsu.github.io/QSC-Battery
+          PUBLISH_ZIPS: ${{ needs.build.outputs.publish_zips }}
+          PUBLISH_APK: ${{ needs.build.outputs.publish_apk }}
+          PUBLISH_RUST: ${{ needs.build.outputs.publish_binaries_rust }}
+          PUBLISH_C: ${{ needs.build.outputs.publish_binaries_c }}
+        run: |
+          set -euo pipefail
+          chmod +x tooling/scripts/publish-updates.sh
+          ARGS=(stable --source-sha "${{ github.sha }}")
+          if [ "$PUBLISH_ZIPS" = "true" ]; then
+            ARGS+=(
+              --module-version "$RAW"
+              --module-code "$CODE"
+              --module-zip-url "${PAGES_BASE}/releases/QSC-Battery_v${RAW}-full.zip"
+              --module-changelog "${PAGES_BASE}/changelog.md"
+            )
+          fi
+          if [ "$PUBLISH_APK" = "true" ]; then
+            # Prefer Pages app-update.json fields if present
+            APP_VER="$RAW"
+            APP_CODE="$CODE"
+            if [ -f docs/public/app-update.json ]; then
+              APP_VER="$(python3 -c 'import json;print(json.load(open("docs/public/app-update.json"))["version"])')"
+              APP_CODE="$(python3 -c 'import json;print(json.load(open("docs/public/app-update.json"))["versionCode"])')"
+            fi
+            ARGS+=(
+              --app-version "$APP_VER"
+              --app-code "$APP_CODE"
+              --app-apk-url "${PAGES_BASE}/releases/QSC-Battery_v${RAW}.apk"
+              --app-changelog "${PAGES_BASE}/changelog.md"
+            )
+          fi
+          if [ "$PUBLISH_RUST" = "true" ] || [ "$PUBLISH_C" = "true" ]; then
+            DDIR="$(mktemp -d)"
+            [ -f docs/public/qscd/qscd-rust-arm64 ] && cp docs/public/qscd/qscd-rust-arm64 "$DDIR/"
+            [ -f docs/public/qscd/qscd-rust-arm ] && cp docs/public/qscd/qscd-rust-arm "$DDIR/"
+            [ -f docs/public/qscd/qscd-c-arm64 ] && cp docs/public/qscd/qscd-c-arm64 "$DDIR/"
+            [ -f docs/public/qscd/qscd-c-arm ] && cp docs/public/qscd/qscd-c-arm "$DDIR/"
+            ARGS+=(
+              --daemon-version "$RAW"
+              --daemon-code "$CODE"
+              --daemon-base-url "${PAGES_BASE}/qscd"
+              --daemon-dir "$DDIR"
+            )
+          fi
+          tooling/scripts/publish-updates.sh "${ARGS[@]}"
+          rm -rf "${DDIR:-}"

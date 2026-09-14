@@ -2,16 +2,15 @@ package com.qsc.battery.data.repo
 
 import android.content.Context
 import com.qsc.battery.BuildConfig
+import com.qsc.battery.core.ModulePaths
+import com.qsc.battery.core.RootBridge
 import com.qsc.battery.data.model.RemoteUpdateInfo
 import com.qsc.battery.data.model.UpdateChannel
 import com.qsc.battery.data.model.UpdateCheckResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -19,7 +18,10 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
-class UpdateRepository(private val context: Context) {
+class UpdateRepository(
+    private val context: Context,
+    private val root: RootBridge,
+) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(12, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -49,18 +51,29 @@ class UpdateRepository(private val context: Context) {
         val appRemote = runCatching { resolveApp(channel) }
             .onFailure { if (err == null) err = it.message }
             .getOrNull()
+        val daemonRemote = runCatching { resolveDaemon(channel) }
+            .onFailure { if (err == null) err = it.message }
+            .getOrNull()
+
+        val daemonLocalVersion = readDataFile("native_version")
+        val daemonLocalCode = readDataFile("native_version_code")?.toLongOrNull() ?: 0L
 
         var stableModuleNewer: RemoteUpdateInfo? = null
         var stableAppNewer: RemoteUpdateInfo? = null
+        var stableDaemonNewer: RemoteUpdateInfo? = null
         if (channel != UpdateChannel.Stable) {
             val stableModule = runCatching { fetchUpdateJson(BuildConfig.MODULE_UPDATE_URL) }.getOrNull()
             val stableApp = runCatching { fetchUpdateJson(BuildConfig.APP_UPDATE_URL) }.getOrNull()
+            val stableDaemon = runCatching { fetchDaemonJson(BuildConfig.DAEMON_UPDATE_URL) }.getOrNull()
             val localCode = localModule?.versionCode ?: 0L
             if (stableModule != null && stableModule.versionCode > localCode) {
                 stableModuleNewer = stableModule
             }
             if (stableApp != null && stableApp.versionCode > appCode) {
                 stableAppNewer = stableApp
+            }
+            if (stableDaemon != null && stableDaemon.versionCode > daemonLocalCode) {
+                stableDaemonNewer = stableDaemon
             }
         }
 
@@ -75,8 +88,15 @@ class UpdateRepository(private val context: Context) {
             appLocalCode = appCode,
             appRemote = appRemote,
             appHasUpdate = appRemote != null && appRemote.versionCode > appCode,
+            daemonLocalVersion = daemonLocalVersion,
+            daemonLocalCode = daemonLocalCode,
+            daemonRemote = daemonRemote,
+            daemonHasUpdate = daemonRemote != null &&
+                daemonRemote.versionCode > 0L &&
+                daemonRemote.versionCode > daemonLocalCode,
             stableModuleNewer = stableModuleNewer,
             stableAppNewer = stableAppNewer,
+            stableDaemonNewer = stableDaemonNewer,
             error = err,
         )
     }
@@ -97,16 +117,44 @@ class UpdateRepository(private val context: Context) {
             }
         }
 
+    fun channelDaemonUrls(channel: UpdateChannel): Pair<String, String> {
+        val manifest = when (channel) {
+            UpdateChannel.Stable -> BuildConfig.DAEMON_UPDATE_URL
+            UpdateChannel.Ci -> BuildConfig.CI_DAEMON_UPDATE_URL
+            UpdateChannel.Prerelease -> BuildConfig.PRE_DAEMON_UPDATE_URL
+        }
+        val pagesFallback = when (channel) {
+            UpdateChannel.Stable -> "https://eikeitsu.github.io/QSC-Battery"
+            UpdateChannel.Ci -> "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist"
+            UpdateChannel.Prerelease -> "https://eikeitsu.github.io/QSC-Battery"
+        }
+        return manifest to pagesFallback
+    }
+
+    private suspend fun readDataFile(name: String): String? {
+        val r = root.exec("cat '${ModulePaths.DATADIR}/$name' 2>/dev/null")
+        return r.out.trim().takeIf { r.ok && it.isNotEmpty() }
+    }
+
     private fun resolveModule(channel: UpdateChannel): RemoteUpdateInfo = when (channel) {
         UpdateChannel.Stable -> fetchUpdateJson(BuildConfig.MODULE_UPDATE_URL)
         UpdateChannel.Ci -> fetchUpdateJson(BuildConfig.CI_MODULE_UPDATE_URL)
-        UpdateChannel.Prerelease -> fetchPrerelease(preferZip = true)
+        UpdateChannel.Prerelease -> fetchUpdateJson(BuildConfig.PRE_MODULE_UPDATE_URL)
     }
 
     private fun resolveApp(channel: UpdateChannel): RemoteUpdateInfo = when (channel) {
         UpdateChannel.Stable -> fetchUpdateJson(BuildConfig.APP_UPDATE_URL)
         UpdateChannel.Ci -> fetchUpdateJson(BuildConfig.CI_APP_UPDATE_URL)
-        UpdateChannel.Prerelease -> fetchPrerelease(preferZip = false)
+        UpdateChannel.Prerelease -> fetchUpdateJson(BuildConfig.PRE_APP_UPDATE_URL)
+    }
+
+    private fun resolveDaemon(channel: UpdateChannel): RemoteUpdateInfo {
+        val url = when (channel) {
+            UpdateChannel.Stable -> BuildConfig.DAEMON_UPDATE_URL
+            UpdateChannel.Ci -> BuildConfig.CI_DAEMON_UPDATE_URL
+            UpdateChannel.Prerelease -> BuildConfig.PRE_DAEMON_UPDATE_URL
+        }
+        return fetchDaemonJson(url).copy(manifestUrl = url)
     }
 
     private fun fetchUpdateJson(url: String): RemoteUpdateInfo {
@@ -117,8 +165,28 @@ class UpdateRepository(private val context: Context) {
             .build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) error("HTTP ${resp.code}")
-            val text = resp.body.string()
-            return parseUpdateJson(text)
+            return parseUpdateJson(resp.body.string())
+        }
+    }
+
+    private fun fetchDaemonJson(url: String): RemoteUpdateInfo {
+        val req = Request.Builder()
+            .url(url)
+            .header("User-Agent", "QSC-Battery-App")
+            .get()
+            .build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) error("daemon HTTP ${resp.code}")
+            val obj = json.parseToJsonElement(resp.body.string()).jsonObject
+            fun str(k: String) = obj[k]?.jsonPrimitive?.contentOrNull
+            fun long(k: String) = obj[k]?.jsonPrimitive?.longOrNull ?: 0L
+            return RemoteUpdateInfo(
+                version = str("version").orEmpty(),
+                versionCode = long("versionCode"),
+                baseUrl = str("baseUrl"),
+                changelog = str("changelog"),
+                manifestUrl = url,
+            )
         }
     }
 
@@ -133,69 +201,5 @@ class UpdateRepository(private val context: Context) {
             apkUrl = str("apkUrl"),
             changelog = str("changelog"),
         )
-    }
-
-    /** Newest non-draft prerelease that is not a CI tag. */
-    private fun fetchPrerelease(preferZip: Boolean): RemoteUpdateInfo {
-        val req = Request.Builder()
-            .url(BuildConfig.GITHUB_RELEASES_URL)
-            .header("Accept", "application/vnd.github+json")
-            .header("User-Agent", "QSC-Battery-App")
-            .get()
-            .build()
-        client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) error("GitHub Releases HTTP ${resp.code}")
-            val arr = json.parseToJsonElement(resp.body.string()) as JsonArray
-            for (el in arr) {
-                val obj = el.jsonObject
-                val draft = obj["draft"]?.jsonPrimitive?.booleanOrNull == true
-                val pre = obj["prerelease"]?.jsonPrimitive?.booleanOrNull == true
-                if (draft || !pre) continue
-                val tag = obj["tag_name"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                if (tag.startsWith("ci", ignoreCase = true) || tag.contains("ci-latest", true)) {
-                    continue
-                }
-                val body = obj["body"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                val code = parseVersionCodeFromBody(body)
-                    ?: error("prerelease $tag missing versionCode= in body")
-                val assets = obj["assets"]?.jsonArray ?: JsonArray(emptyList())
-                var zipUrl: String? = null
-                var apkUrl: String? = null
-                var version = tag.removePrefix("v").removePrefix("V")
-                for (asset in assets) {
-                    val a = asset.jsonObject
-                    val name = a["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                    val url = a["browser_download_url"]?.jsonPrimitive?.contentOrNull
-                    when {
-                        name.endsWith("-full.zip") -> {
-                            zipUrl = url
-                            Regex("""QSC-Battery_v(.+)-full\.zip""").find(name)?.groupValues?.getOrNull(1)
-                                ?.let { version = it }
-                        }
-                        name.endsWith(".apk") && name.startsWith("QSC-Battery") -> apkUrl = url
-                    }
-                }
-                if (preferZip && zipUrl.isNullOrBlank()) continue
-                if (!preferZip && apkUrl.isNullOrBlank()) {
-                    // APP 通道：允许仅有 zip 的预发布（无 apk 时仍返回元数据）
-                }
-                return RemoteUpdateInfo(
-                    version = version,
-                    versionCode = code,
-                    zipUrl = zipUrl,
-                    apkUrl = apkUrl,
-                    changelog = obj["html_url"]?.jsonPrimitive?.contentOrNull,
-                )
-            }
-            error("暂无可用的预发布")
-        }
-    }
-
-    private fun parseVersionCodeFromBody(body: String): Long? {
-        Regex("""versionCode\s*[=:]\s*(\d+)""").find(body)?.groupValues?.getOrNull(1)
-            ?.toLongOrNull()?.let { return it }
-        Regex("""<!--\s*qsc:versionCode=(\d+)\s*-->""").find(body)?.groupValues?.getOrNull(1)
-            ?.toLongOrNull()?.let { return it }
-        return null
     }
 }

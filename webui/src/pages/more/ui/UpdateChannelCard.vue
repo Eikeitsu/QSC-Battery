@@ -37,7 +37,7 @@ async function check() {
     const r = await checkUpdateChannel(channel.value);
     result.value = r;
     if (r.error) showToast(r.error);
-    else if (!r.module && !r.app) showToast("未获取到远端信息");
+    else if (!r.module && !r.app && !r.daemon) showToast("未获取到远端信息");
     else showToast("检查完成");
   } catch (e) {
     showToast(e instanceof Error ? e.message : String(e));
@@ -56,7 +56,10 @@ function openUrl(url?: string) {
 </script>
 
 <template>
-  <SectionHead title="更新通道" hint="正式 / 预发布 / CI · 检查不影响 Magisk 正式镜像" />
+  <SectionHead
+    title="更新通道"
+    hint="正式 / 预发布 / CI · 读 updates 分支；Magisk 仍用 Pages"
+  />
   <ThemedCard>
     <div class="channel-wrap">
       <div class="seg" role="tablist" aria-label="更新通道">
@@ -86,7 +89,9 @@ function openUrl(url?: string) {
       </van-button>
 
       <div
-        v-if="result?.stableModuleNewer || result?.stableAppNewer"
+        v-if="
+          result?.stableModuleNewer || result?.stableAppNewer || result?.stableDaemonNewer
+        "
         class="stable-banner"
       >
         <p>
@@ -99,6 +104,11 @@ function openUrl(url?: string) {
           <template v-if="result.stableAppNewer">
             · APP {{ result.stableAppNewer.version }} ({{
               result.stableAppNewer.versionCode
+            }})
+          </template>
+          <template v-if="result.stableDaemonNewer">
+            · 守护 {{ result.stableDaemonNewer.version }} ({{
+              result.stableDaemonNewer.versionCode
             }})
           </template>
         </p>
@@ -124,6 +134,16 @@ function openUrl(url?: string) {
             {{ result.app ? `${result.app.version} (${result.app.versionCode})` : "--" }}
           </span>
         </div>
+        <div class="row">
+          <span class="k">守护远端</span>
+          <span class="v">
+            {{
+              result.daemon
+                ? `${result.daemon.version} (${result.daemon.versionCode})`
+                : "--"
+            }}
+          </span>
+        </div>
         <div class="actions">
           <van-button
             v-if="result.module?.zipUrl"
@@ -142,6 +162,15 @@ function openUrl(url?: string) {
             @click="openUrl(result.app?.apkUrl || result.module?.apkUrl)"
           >
             打开 APP
+          </van-button>
+          <van-button
+            v-if="result.daemon?.manifestUrl || result.daemon?.baseUrl"
+            size="small"
+            plain
+            type="primary"
+            @click="openUrl(result.daemon?.manifestUrl || result.daemon?.baseUrl)"
+          >
+            打开守护清单
           </van-button>
         </div>
         <p v-if="result.error" class="err">{{ result.error }}</p>
@@ -175,10 +204,9 @@ function openUrl(url?: string) {
 }
 
 .seg-item.on {
-  background: var(--qsc-card, #fff);
-  color: var(--qsc-text);
+  background: color-mix(in srgb, var(--van-primary-color, #1989fa) 16%, transparent);
+  color: var(--van-primary-color, #1989fa);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .hint {

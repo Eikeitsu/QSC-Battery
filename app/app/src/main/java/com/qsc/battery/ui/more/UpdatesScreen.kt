@@ -16,6 +16,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.UpdateChannel
 import com.qsc.battery.data.model.UpdateCheckResult
@@ -24,6 +26,7 @@ import com.qsc.battery.ui.design.charge.ChargeBanner
 import com.qsc.battery.ui.design.charge.ChargeDivider
 import com.qsc.battery.ui.design.charge.ChargeListRow
 import com.qsc.battery.ui.design.charge.ChargePrimaryButton
+import com.qsc.battery.ui.design.charge.ChargeSecondaryButton
 import com.qsc.battery.ui.design.charge.ChargeSection
 import com.qsc.battery.ui.design.charge.ChargeSegmented
 import com.qsc.battery.ui.design.charge.ChargeTheme
@@ -60,12 +63,19 @@ fun UpdatesScreen(
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
         ) {
             Text(
-                text = "选择更新通道后检查模块与伴侣 APP。正式版走文档站；预发布直连 GitHub Release；CI 走 ci-dist 滚动构建。",
+                text = "检查模块 / APP / 守护。管理器模块更新仍走 Pages；本页读 updates 分支元数据。",
                 style = ChargeTheme.typography.caption,
                 color = ChargeTheme.colors.muted,
             )
 
-            ChargeSection(title = "更新通道") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "更新通道",
+                    style = ChargeTheme.typography.label,
+                    color = ChargeTheme.colors.accent,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
                 ChargeSegmented(
                     options = channelOptions,
                     selectedIndex = channel.ordinal,
@@ -78,17 +88,17 @@ fun UpdatesScreen(
                         }
                     },
                 )
+                Text(
+                    text = when (channel) {
+                        UpdateChannel.Stable -> "正式：updates/stable（包 URL 指向 Pages）"
+                        UpdateChannel.Prerelease -> "预发布：updates/prerelease → GitHub Release"
+                        UpdateChannel.Ci -> "CI：updates/ci → ci-dist 产物"
+                    },
+                    style = ChargeTheme.typography.caption,
+                    color = ChargeTheme.colors.muted,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
             }
-
-            Text(
-                text = when (channel) {
-                    UpdateChannel.Stable -> "正式：Pages 镜像，与 Magisk 在线更新同源"
-                    UpdateChannel.Prerelease -> "预发布：GitHub 预发布资产，不写文档站"
-                    UpdateChannel.Ci -> "CI：ci-dist 分支滚动包，可能不稳定"
-                },
-                style = ChargeTheme.typography.caption,
-                color = ChargeTheme.colors.muted,
-            )
 
             ChargePrimaryButton(
                 text = if (busy) "检查中…" else "检查更新",
@@ -116,13 +126,17 @@ fun UpdatesScreen(
                         if (isNotEmpty()) append("；")
                         append("正式 APP ${it.version} (${it.versionCode})")
                     }
+                    r.stableDaemonNewer?.let {
+                        if (isNotEmpty()) append("；")
+                        append("正式守护 ${it.version} (${it.versionCode})")
+                    }
                 }
                 if (stableHint.isNotEmpty()) {
                     ChargeBanner(
                         text = "正式通道有新版本：$stableHint。可切回「正式」后检查更新。",
                         tone = BannerTone.Info,
                     )
-                    ChargePrimaryButton(
+                    ChargeSecondaryButton(
                         text = "切换到正式通道",
                         enabled = !busy,
                         onClick = {
@@ -194,9 +208,9 @@ fun UpdatesScreen(
                 }
 
                 val appApkUrl = r.appRemote?.apkUrl
-                if (!appApkUrl.isNullOrBlank()) {
+                if (r.appHasUpdate && !appApkUrl.isNullOrBlank()) {
                     ChargePrimaryButton(
-                        text = if (r.appHasUpdate) "下载并安装 APP" else "重新下载安装 APP",
+                        text = "下载并安装 APP",
                         enabled = !busy,
                         onClick = {
                             scope.launch {
@@ -213,10 +227,53 @@ fun UpdatesScreen(
                             }
                         },
                     )
-                } else {
-                    r.error?.let { err ->
-                        ChargeBanner(text = err, tone = BannerTone.Warn)
-                    }
+                }
+
+                ChargeSection(title = "守护 · ${r.channel.label}") {
+                    ChargeListRow(
+                        title = "本地",
+                        value = "${r.daemonLocalVersion ?: "--"} (${r.daemonLocalCode})",
+                    )
+                    ChargeDivider()
+                    ChargeListRow(
+                        title = "远端",
+                        value = "${r.daemonRemote?.version ?: "--"} (${r.daemonRemote?.versionCode ?: 0})",
+                    )
+                    ChargeDivider()
+                    ChargeListRow(
+                        title = "状态",
+                        summary = when {
+                            r.daemonRemote == null -> "无远端清单"
+                            r.daemonHasUpdate -> "有新版本"
+                            else -> "已是最新或无法比较"
+                        },
+                    )
+                }
+
+                if (r.daemonHasUpdate && r.daemonRemote?.manifestUrl != null) {
+                    ChargePrimaryButton(
+                        text = "下载并更新守护",
+                        enabled = !busy,
+                        onClick = {
+                            scope.launch {
+                                busy = true
+                                val (manifest, pages) = container.updateRepository.channelDaemonUrls(channel)
+                                val msg = container.daemonRepository.install(
+                                    impl = "rust",
+                                    manifestUrl = r.daemonRemote?.manifestUrl ?: manifest,
+                                    pagesBase = r.daemonRemote?.baseUrl ?: pages,
+                                )
+                                snackbar.showSnackbar(
+                                    if (msg.contains("ok=1")) "守护已更新" else msg.take(160),
+                                )
+                                busy = false
+                            }
+                        },
+                    )
+                }
+
+                r.error?.let { err ->
+                    ChargeBanner(text = err, tone = BannerTone.Warn)
                 }
             }
         }

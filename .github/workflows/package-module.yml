@@ -35,57 +35,150 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - uses: ./.github/actions/setup-node-npm
 
+      - name: Detect CI artifact changes
+        id: chg
+        run: |
+          eval "$(python3 tooling/scripts/detect-ci-changes.py)"
+          echo "module_changed=$module_changed" >> "$GITHUB_OUTPUT"
+          echo "app_changed=$app_changed" >> "$GITHUB_OUTPUT"
+          echo "daemon_changed=$daemon_changed" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "changes: module=$module_changed app=$app_changed daemon=$daemon_changed"
+
+      - name: Allocate versionCodes
+        id: ver
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, "tooling/scripts")
+          from version_code import next_version_codes, read_json_url, updates_url
+
+          m = os.environ["MODULE_CHANGED"] == "1"
+          a = os.environ["APP_CHANGED"] == "1"
+          d = os.environ["DAEMON_CHANGED"] == "1"
+          n = sum([m, a, d])
+          codes = next_version_codes(n, fetch_remote=True) if n else []
+          it = iter(codes)
+          run = os.environ.get("GITHUB_RUN_NUMBER", "0")
+          from datetime import datetime, timezone
+          today = datetime.now(timezone.utc).strftime("%Y.%m.%d")
+          disp = f"{today}.ci.{run}"
+
+          def keep(channel_rel, key_prefix):
+              data = read_json_url(updates_url("ci", channel_rel)) or {}
+              print(f"{key_prefix}_version={data.get('version') or disp}")
+              print(f"{key_prefix}_code={data.get('versionCode') or 0}")
+
+          if m:
+              c = next(it)
+              print(f"module_version={disp}")
+              print(f"module_code={c}")
+          else:
+              keep("update.json", "module")
+          if a:
+              c = next(it)
+              print(f"app_version={disp}")
+              print(f"app_code={c}")
+          else:
+              keep("app-update.json", "app")
+          if d:
+              c = next(it)
+              print(f"daemon_version={disp}")
+              print(f"daemon_code={c}")
+          else:
+              keep("qscd/manifest.json", "daemon")
+          PY
+        env:
+          MODULE_CHANGED: ${{ steps.chg.outputs.module_changed }}
+          APP_CHANGED: ${{ steps.chg.outputs.app_changed }}
+          DAEMON_CHANGED: ${{ steps.chg.outputs.daemon_changed }}
+
       - uses: ./.github/actions/build-native
+        if: steps.chg.outputs.module_changed == '1' || steps.chg.outputs.daemon_changed == '1' || steps.chg.outputs.app_changed == '1'
 
       - uses: ./.github/actions/setup-android
+        if: steps.chg.outputs.module_changed == '1' || steps.chg.outputs.app_changed == '1'
 
-      # 先 stamp：模块 version=….ci.N；再编 APK，使 versionName 与检测用 versionCode 一致
-      - name: Stamp CI module.prop version
-        id: stamp
+      - name: Stamp CI module.prop
+        if: steps.chg.outputs.module_changed == '1'
         run: |
-          eval "$(python3 tooling/scripts/stamp-ci-module-version.py --fetch-remote)"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
-          echo "CI stamp: $version (versionCode=$version_code)"
-          echo "---- module.prop ----"
+          python3 tooling/scripts/stamp-ci-module-version.py --fetch-remote \
+            --code "${{ steps.ver.outputs.module_code }}" \
+            --version "${{ steps.ver.outputs.module_version }}"
           cat module/module.prop
 
       - name: Build companion release APK
+        if: steps.chg.outputs.app_changed == '1'
         working-directory: app
         run: |
           ./gradlew :app:assembleRelease --stacktrace \
-            -PqscVersionName="${{ steps.stamp.outputs.version }}" \
-            -PqscVersionCode="${{ steps.stamp.outputs.version_code }}"
+            -PqscVersionName="${{ steps.ver.outputs.app_version }}" \
+            -PqscVersionCode="${{ steps.ver.outputs.app_code }}"
           mkdir -p ../release
           cp app/build/outputs/apk/release/app-release.apk ../release/QSC-Battery.apk
 
-      - name: Build all module zips (full / rust / c / sh / lite)
+      - name: Build all module zips
+        if: steps.chg.outputs.module_changed == '1'
         env:
-          REQUIRE_COMPANION_APK: "1"
-        run: npm run build:module:all
+          REQUIRE_COMPANION_APK: ${{ steps.chg.outputs.app_changed == '1' && '1' || '0' }}
+        run: |
+          if [ "${{ steps.chg.outputs.app_changed }}" != "1" ]; then
+            # zip packaging may expect apk; pull inherited apk from ci-dist if needed
+            mkdir -p release
+            if [ ! -f release/QSC-Battery.apk ]; then
+              curl -fsSL -o release/QSC-Battery.apk \
+                "https://raw.githubusercontent.com/${{ github.repository }}/ci-dist/QSC-Battery.apk" \
+                || echo "no inherited apk yet"
+            fi
+            if [ ! -f release/QSC-Battery.apk ]; then
+              export REQUIRE_COMPANION_APK=0
+            fi
+          fi
+          npm run build:module:all
 
       - name: Verify module zips
+        if: steps.chg.outputs.module_changed == '1'
         run: npm run verify:zips
 
       - uses: actions/upload-artifact@v6
+        if: steps.chg.outputs.module_changed == '1' || steps.chg.outputs.app_changed == '1'
         with:
-          name: magisk-module-${{ steps.stamp.outputs.version }}-${{ github.sha }}
+          name: magisk-module-ci-${{ github.sha }}
           path: |
             release/*.zip
             release/QSC-Battery.apk
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
-      # 默认分支 CI 推送到 ci-dist（公开 JSON+包，无 Token）；PR 不推
-      - name: Publish ci-dist branch
+      - name: Publish ci-dist + updates/ci
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODULE_CHANGED: ${{ steps.chg.outputs.module_changed }}
+          APP_CHANGED: ${{ steps.chg.outputs.app_changed }}
+          DAEMON_CHANGED: ${{ steps.chg.outputs.daemon_changed }}
+          MODULE_VERSION: ${{ steps.ver.outputs.module_version }}
+          MODULE_CODE: ${{ steps.ver.outputs.module_code }}
+          APP_VERSION: ${{ steps.ver.outputs.app_version }}
+          APP_CODE: ${{ steps.ver.outputs.app_code }}
+          DAEMON_VERSION: ${{ steps.ver.outputs.daemon_version }}
+          DAEMON_CODE: ${{ steps.ver.outputs.daemon_code }}
         run: |
-          chmod +x tooling/scripts/publish-ci-dist.sh
-          tooling/scripts/publish-ci-dist.sh \
-            "${{ steps.stamp.outputs.version }}" \
-            "${{ steps.stamp.outputs.version_code }}"
+          # Need natives on tip for inherit path when only app changed
+          if [ "$DAEMON_CHANGED" != "1" ] && [ "$MODULE_CHANGED" != "1" ]; then
+            true
+          fi
+          if [ "$MODULE_CHANGED" != "1" ] && [ "$DAEMON_CHANGED" = "1" ]; then
+            # build-native already ran; binaries in module/bin
+            true
+          fi
+          # If only app changed, still need daemon bins present for publish inherit — publish-ci-dist clones old tip
+          chmod +x tooling/scripts/publish-ci-channel.sh
+          tooling/scripts/publish-ci-channel.sh

@@ -1,4 +1,4 @@
-/** 更新通道：与 APP UpdateChannel 对齐 */
+/** 更新通道：与 APP UpdateChannel 对齐；元数据统一读 updates 分支 */
 
 export const UPDATE_CHANNELS = ["stable", "prerelease", "ci"] as const;
 export type UpdateChannel = (typeof UPDATE_CHANNELS)[number];
@@ -10,17 +10,23 @@ export const UPDATE_CHANNEL_LABEL: Record<UpdateChannel, string> = {
 };
 
 export const UPDATE_CHANNEL_HINT: Record<UpdateChannel, string> = {
-  stable: "文档站镜像，与 Magisk 在线更新同源",
-  prerelease: "GitHub 预发布资产，不写文档站",
-  ci: "ci-dist 滚动构建，可能不稳定",
+  stable: "updates/stable（包 URL 指向 Pages；Magisk 仍只认 Pages）",
+  prerelease: "updates/prerelease → GitHub Release 资产",
+  ci: "updates/ci → ci-dist 完整产物",
 };
 
+const UPDATES = "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/updates";
+
 export const UPDATE_URLS = {
-  stableModule: "https://eikeitsu.github.io/QSC-Battery/update.json",
-  stableApp: "https://eikeitsu.github.io/QSC-Battery/app-update.json",
-  ciModule: "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist/update.json",
-  ciApp: "https://raw.githubusercontent.com/Eikeitsu/QSC-Battery/ci-dist/app-update.json",
-  githubReleases: "https://api.github.com/repos/Eikeitsu/QSC-Battery/releases",
+  stableModule: `${UPDATES}/stable/update.json`,
+  stableApp: `${UPDATES}/stable/app-update.json`,
+  stableDaemon: `${UPDATES}/stable/qscd/manifest.json`,
+  preModule: `${UPDATES}/prerelease/update.json`,
+  preApp: `${UPDATES}/prerelease/app-update.json`,
+  preDaemon: `${UPDATES}/prerelease/qscd/manifest.json`,
+  ciModule: `${UPDATES}/ci/update.json`,
+  ciApp: `${UPDATES}/ci/app-update.json`,
+  ciDaemon: `${UPDATES}/ci/qscd/manifest.json`,
 } as const;
 
 export interface RemoteUpdateInfo {
@@ -29,14 +35,18 @@ export interface RemoteUpdateInfo {
   zipUrl?: string;
   apkUrl?: string;
   changelog?: string;
+  baseUrl?: string;
+  manifestUrl?: string;
 }
 
 export interface ChannelCheckResult {
   channel: UpdateChannel;
   module: RemoteUpdateInfo | null;
   app: RemoteUpdateInfo | null;
+  daemon: RemoteUpdateInfo | null;
   stableModuleNewer: RemoteUpdateInfo | null;
   stableAppNewer: RemoteUpdateInfo | null;
+  stableDaemonNewer: RemoteUpdateInfo | null;
   error: string | null;
 }
 
@@ -53,6 +63,7 @@ function parseJsonUpdate(text: string): RemoteUpdateInfo {
     zipUrl: obj.zipUrl ? String(obj.zipUrl) : undefined,
     apkUrl: obj.apkUrl ? String(obj.apkUrl) : undefined,
     changelog: obj.changelog ? String(obj.changelog) : undefined,
+    baseUrl: obj.baseUrl ? String(obj.baseUrl) : undefined,
   };
 }
 
@@ -64,54 +75,31 @@ async function fetchJsonUpdate(url: string): Promise<RemoteUpdateInfo> {
   return parseJsonUpdate(await resp.text());
 }
 
-function parseVersionCodeFromBody(body: string): number | null {
-  const m =
-    /versionCode\s*[=:]\s*(\d+)/.exec(body) ||
-    /<!--\s*qsc:versionCode=(\d+)\s*-->/.exec(body);
-  return m ? Number(m[1]) : null;
+async function fetchDaemon(url: string): Promise<RemoteUpdateInfo> {
+  const info = await fetchJsonUpdate(url);
+  return { ...info, manifestUrl: url };
 }
 
-async function fetchPrerelease(): Promise<RemoteUpdateInfo> {
-  const resp = await fetch(UPDATE_URLS.githubReleases, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      "User-Agent": "QSC-Battery-WebUI",
-    },
-  });
-  if (!resp.ok) throw new Error(`GitHub Releases HTTP ${resp.status}`);
-  const arr = (await resp.json()) as Array<Record<string, unknown>>;
-  for (const obj of arr) {
-    if (obj.draft === true || obj.prerelease !== true) continue;
-    const tag = String(obj.tag_name ?? "");
-    if (/^ci/i.test(tag) || /ci-latest/i.test(tag)) continue;
-    const body = String(obj.body ?? "");
-    const code = parseVersionCodeFromBody(body);
-    if (code == null) continue;
-    const assets = (obj.assets as Array<Record<string, unknown>>) || [];
-    let zipUrl: string | undefined;
-    let apkUrl: string | undefined;
-    let version = tag.replace(/^v/i, "");
-    for (const a of assets) {
-      const name = String(a.name ?? "");
-      const url = a.browser_download_url ? String(a.browser_download_url) : undefined;
-      if (name.endsWith("-full.zip")) {
-        zipUrl = url;
-        const m = /QSC-Battery_v(.+)-full\.zip/.exec(name);
-        if (m) version = m[1];
-      } else if (name.endsWith(".apk") && name.startsWith("QSC-Battery")) {
-        apkUrl = url;
-      }
-    }
-    if (!zipUrl && !apkUrl) continue;
+function urlsFor(channel: UpdateChannel) {
+  if (channel === "ci") {
     return {
-      version,
-      versionCode: code,
-      zipUrl,
-      apkUrl,
-      changelog: obj.html_url ? String(obj.html_url) : undefined,
+      module: UPDATE_URLS.ciModule,
+      app: UPDATE_URLS.ciApp,
+      daemon: UPDATE_URLS.ciDaemon,
     };
   }
-  throw new Error("暂无可用的预发布");
+  if (channel === "prerelease") {
+    return {
+      module: UPDATE_URLS.preModule,
+      app: UPDATE_URLS.preApp,
+      daemon: UPDATE_URLS.preDaemon,
+    };
+  }
+  return {
+    module: UPDATE_URLS.stableModule,
+    app: UPDATE_URLS.stableApp,
+    daemon: UPDATE_URLS.stableDaemon,
+  };
 }
 
 export async function checkUpdateChannel(
@@ -120,42 +108,40 @@ export async function checkUpdateChannel(
   let error: string | null = null;
   let module: RemoteUpdateInfo | null = null;
   let app: RemoteUpdateInfo | null = null;
+  let daemon: RemoteUpdateInfo | null = null;
+  const u = urlsFor(channel);
   try {
-    if (channel === "stable") {
-      module = await fetchJsonUpdate(UPDATE_URLS.stableModule);
-      app = await fetchJsonUpdate(UPDATE_URLS.stableApp).catch(() => null);
-    } else if (channel === "ci") {
-      module = await fetchJsonUpdate(UPDATE_URLS.ciModule);
-      app = await fetchJsonUpdate(UPDATE_URLS.ciApp).catch(() => null);
-    } else {
-      const pre = await fetchPrerelease();
-      module = pre;
-      app = pre.apkUrl ? pre : null;
-    }
+    module = await fetchJsonUpdate(u.module);
+    app = await fetchJsonUpdate(u.app).catch(() => null);
+    daemon = await fetchDaemon(u.daemon).catch(() => null);
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
 
   let stableModuleNewer: RemoteUpdateInfo | null = null;
   let stableAppNewer: RemoteUpdateInfo | null = null;
+  let stableDaemonNewer: RemoteUpdateInfo | null = null;
   if (channel !== "stable") {
     const sm = await fetchJsonUpdate(UPDATE_URLS.stableModule).catch(() => null);
     const sa = await fetchJsonUpdate(UPDATE_URLS.stableApp).catch(() => null);
+    const sd = await fetchDaemon(UPDATE_URLS.stableDaemon).catch(() => null);
     if (sm && (!module || sm.versionCode > module.versionCode)) {
-      // 旁路：相对「当前通道远端」或至少有正式包时提示；与 APP 一致用「大于本地」更准，
-      // WebUI 无本地 module.prop 时改为：正式 code 存在且（无当前远端或正式更新）
       stableModuleNewer = sm;
     }
-    if (sa) stableAppNewer = sa;
-    // 收紧：仅当正式 versionCode 严格大于当前通道远端时提示，避免误报
+    if (sa && (!app || sa.versionCode > app.versionCode)) {
+      stableAppNewer = sa;
+    }
+    if (sd && (!daemon || sd.versionCode > daemon.versionCode)) {
+      stableDaemonNewer = sd;
+    }
     if (sm && module && sm.versionCode <= module.versionCode) {
       stableModuleNewer = null;
     }
     if (sa && app && sa.versionCode <= app.versionCode) {
       stableAppNewer = null;
     }
-    if (sa && !app) {
-      stableAppNewer = sa;
+    if (sd && daemon && sd.versionCode <= daemon.versionCode) {
+      stableDaemonNewer = null;
     }
   }
 
@@ -163,8 +149,10 @@ export async function checkUpdateChannel(
     channel,
     module,
     app,
+    daemon,
     stableModuleNewer,
     stableAppNewer,
+    stableDaemonNewer,
     error,
   };
 }

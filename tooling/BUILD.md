@@ -147,16 +147,20 @@ sh 主包没有这个二进制也必须行为一致，阈值判定的唯一真�
 
 各工作流互不串联，只按路径变更自行触发。
 
-### Package Module 的 CI 戳版本与 ci-dist
+### Package Module：ci-dist 产物 + updates/ci 元数据
 
-`Package Module` 在打包前跑 `stamp-ci-module-version.py`：
+`Package Module` 在默认分支上：
 
-- **只改工作区** `module/module.prop` 的 `version` / `versionCode`（展示名 `yyyy.MM.dd.ci.<run>`）
-- **`versionCode` 全局单调**（`next_version_code` = 已知源 max+1，含 Pages JSON、`module.prop`、远程 `ci-dist/update.json`）
-- 默认分支成功构建后 **force-push `ci-dist` 分支**（每次 orphan 单提交，**只保留最新一版** full zip / apk / `update.json`，避免历史膨胀）；**不**改 Pages 根 `update.json`
-- Artifact 仍上传，便于在 Actions 页人工下载
+1. `detect-ci-changes.py`：相对 `updates/ci/state.json` 的 `sourceSha` 判断模块 / APP / 守护是否变更
+2. 仅为**变更项**分配独立 `versionCode`（扫描 Pages + `updates/*` 远程码）
+3. 按需 stamp / 编 APK / 打 zip / 编守护
+4. `publish-ci-channel.sh`：
+   - **`ci-dist`**：完整 Release 文件列表（5 zip + apk + 4 qscd），无 JSON；未变更文件从上一 tip 继承
+   - **`updates/ci`**：只写变更项的 `update.json` / `app-update.json` / `qscd/manifest.json`
 
-本地默认 `npm run package:module` **不**戳号。模拟：
+Magisk 仍只读 Pages。APP / WebUI 读 `updates/<channel>/`。
+
+本地默认 `npm run package:module` **不**推分支。模拟戳号：
 
 ```bash
 set GITHUB_RUN_NUMBER=1   # PowerShell: $env:GITHUB_RUN_NUMBER=1

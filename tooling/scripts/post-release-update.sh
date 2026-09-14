@@ -161,11 +161,14 @@ if [ "$PUBLISH_BINS_RUST" = "true" ] || [ "$PUBLISH_BINS_C" = "true" ]; then
     done
   fi
   if [ "$QSCD_ANY" = "1" ]; then
-    RAW="$RAW" python3 - <<'PY'
+    RAW="$RAW" CODE="$CODE" python3 - <<'PY'
 import hashlib, json, os, pathlib
 
 out = pathlib.Path("docs/public/qscd")
-data = {"version": os.environ["RAW"]}
+data = {
+    "version": os.environ["RAW"],
+    "versionCode": int(os.environ.get("CODE") or "0"),
+}
 for path in sorted(out.glob("qscd-*")):
     if path.name == "manifest.json":
         continue

@@ -613,16 +613,19 @@ fun ChargeSegmented(
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(ChargeTheme.colors.surfaceStrong)
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         options.forEachIndexed { index, label ->
             val selected = index == selectedIndex
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (selected) ChargeTheme.colors.surface else Color.Transparent)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(
+                        if (selected) ChargeTheme.colors.accent.copy(alpha = 0.16f)
+                        else Color.Transparent,
+                    )
                     .clickable { onSelect(index) }
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center,
@@ -630,7 +633,7 @@ fun ChargeSegmented(
                 Text(
                     text = label,
                     style = ChargeTheme.typography.label,
-                    color = if (selected) ChargeTheme.colors.ink else ChargeTheme.colors.muted,
+                    color = if (selected) ChargeTheme.colors.accent else ChargeTheme.colors.muted,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 )
             }

@@ -18,7 +18,7 @@ MODDIR="${MODDIR:-$(cd "${0%/*}/.." && pwd)}"
 . "$MODDIR/bin/common.sh"
 
 PAGES_BASE="${QSCD_PAGES_BASE:-https://eikeitsu.github.io/QSC-Battery}"
-MANIFEST_URL="$PAGES_BASE/qscd/manifest.json"
+MANIFEST_URL="${QSCD_MANIFEST_URL:-$PAGES_BASE/qscd/manifest.json}"
 TMPDIR="$DATADIR/.qscd_tmp"
 PROGRESS_FILE="$DATADIR/qscd_download_progress"
 
@@ -174,6 +174,8 @@ qscd_activate() {
 	echo "$_impl" >"$DATADIR/native_impl_used" 2>/dev/null
 	echo "$_from" >"$DATADIR/native_src" 2>/dev/null
 	echo "$_version" >"$DATADIR/native_version" 2>/dev/null
+	_code="${QSCD_REMOTE_VERSION_CODE:-}"
+	[ -n "$_code" ] && echo "$_code" >"$DATADIR/native_version_code" 2>/dev/null
 	qscd_conf_set native_impl "$_impl"
 	qscd_conf_set native_daemon 1
 	case "$_impl" in
@@ -203,6 +205,7 @@ cmd_status() {
 	case "$_impl" in rust|c) ;; *) _impl="" ;; esac
 	out impl "$_impl"
 	out local_version "$(cat "$DATADIR/native_version" 2>/dev/null | tr -d ' \r\n')"
+	out local_version_code "$(cat "$DATADIR/native_version_code" 2>/dev/null | tr -d ' \r\n')"
 	out src "$(cat "$DATADIR/native_src" 2>/dev/null | tr -d ' \r\n')"
 	# 模块自带的候选（sh 版一个都没有）
 	_bundled=""
@@ -265,12 +268,23 @@ cmd_install() {
 	[ -n "$_want" ] || fail "manifest_no_entry"
 	_remote_version="$(qscd_manifest_get version)"
 	qscd_valid_version "$_remote_version" || fail "manifest_invalid_version"
+	_remote_code="$(qscd_manifest_get versionCode | tr -cd '0-9')"
+	export QSCD_REMOTE_VERSION_CODE="$_remote_code"
 	_sha_len="$(printf '%s' "$_want" | wc -c | tr -d ' ')"
 	case "$_want" in *[!0-9a-fA-F]*) fail "manifest_invalid_sha256" ;; esac
 	[ "$_sha_len" = "64" ] || fail "manifest_invalid_sha256"
 
 	qscd_progress 35 binary
-	qscd_download "$PAGES_BASE/qscd/$_name" "$TMPDIR/qscd" || fail "download_failed"
+	_bin_url="$(qscd_manifest_get "${_name}Url")"
+	if [ -z "$_bin_url" ]; then
+		_base="$(qscd_manifest_get baseUrl)"
+		if [ -n "$_base" ]; then
+			_bin_url="${_base%/}/$_name"
+		else
+			_bin_url="$PAGES_BASE/qscd/$_name"
+		fi
+	fi
+	qscd_download "$_bin_url" "$TMPDIR/qscd" || fail "download_failed"
 
 	qscd_progress 65 verify
 	_got="$(qscd_sha256 "$TMPDIR/qscd")"
@@ -336,6 +350,7 @@ cmd_check() {
 	qscd_download "$MANIFEST_URL" "$TMPDIR/manifest.json" || fail "manifest_download_failed"
 	_remote_version="$(qscd_manifest_get version)"
 	qscd_valid_version "$_remote_version" || fail "manifest_invalid_version"
+	_remote_code="$(qscd_manifest_get versionCode | tr -cd '0-9')"
 	_name="qscd-${_impl}-${_suffix}"
 	_remote_hash="$(qscd_manifest_get "$_name" | tr 'A-F' 'a-f')"
 	[ -n "$_remote_hash" ] || fail "manifest_no_entry"
@@ -343,13 +358,23 @@ cmd_check() {
 	case "$_remote_hash" in *[!0-9a-f]*) fail "manifest_invalid_sha256" ;; esac
 	[ "$_hash_len" = "64" ] || fail "manifest_invalid_sha256"
 	_local_version="$(cat "$DATADIR/native_version" 2>/dev/null | tr -d ' \r\n')"
+	_local_code="$(cat "$DATADIR/native_version_code" 2>/dev/null | tr -cd '0-9')"
 	_local_hash=""
 	[ -f "$BINDIR/qscd" ] && _local_hash="$(qscd_sha256 "$BINDIR/qscd")"
 	_hash_match=0
 	[ -n "$_local_hash" ] && [ "$_local_hash" = "$_remote_hash" ] && _hash_match=1
 	_state=unknown
 	_update=0
-	if qscd_valid_version "$_local_version"; then
+	if [ -n "$_remote_code" ] && [ -n "$_local_code" ]; then
+		if [ "$_remote_code" -gt "$_local_code" ] 2>/dev/null; then
+			_state=update
+			_update=1
+		elif [ "$_remote_code" -eq "$_local_code" ] 2>/dev/null; then
+			_state=same
+		else
+			_state=local_newer
+		fi
+	elif qscd_valid_version "$_local_version"; then
 		case "$(qscd_version_compare "$_remote_version" "$_local_version")" in
 			0) _state=same ;;
 			1) _state=update; _update=1 ;;
@@ -366,7 +391,9 @@ cmd_check() {
 	out ok 1
 	out impl "$_impl"
 	out local_version "$_local_version"
+	out local_version_code "$_local_code"
 	out remote_version "$_remote_version"
+	out remote_version_code "$_remote_code"
 	out version_state "$_state"
 	out update_available "$_update"
 	out hash_match "$_hash_match"

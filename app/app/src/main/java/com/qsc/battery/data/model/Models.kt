@@ -140,6 +140,9 @@ data class RemoteUpdateInfo(
     val zipUrl: String? = null,
     val apkUrl: String? = null,
     val changelog: String? = null,
+    /** 守护：下载基址（配合 qscd_fetch QSCD_PAGES_BASE / manifest） */
+    val baseUrl: String? = null,
+    val manifestUrl: String? = null,
 )
 
 data class UpdateCheckResult(
@@ -151,8 +154,13 @@ data class UpdateCheckResult(
     val appLocalCode: Long,
     val appRemote: RemoteUpdateInfo?,
     val appHasUpdate: Boolean,
-    /** 当前非正式通道时，Pages 正式版高于本地则提示 */
+    val daemonLocalVersion: String? = null,
+    val daemonLocalCode: Long = 0L,
+    val daemonRemote: RemoteUpdateInfo? = null,
+    val daemonHasUpdate: Boolean = false,
+    /** 当前非正式通道时，正式通道高于本地则提示 */
     val stableModuleNewer: RemoteUpdateInfo? = null,
     val stableAppNewer: RemoteUpdateInfo? = null,
+    val stableDaemonNewer: RemoteUpdateInfo? = null,
     val error: String? = null,
 )

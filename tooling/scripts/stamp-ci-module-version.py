@@ -81,7 +81,19 @@ def main() -> int:
     parser.add_argument(
         "--fetch-remote",
         action="store_true",
-        help="include ci-dist update.json when allocating versionCode",
+        help="include updates/* JSON when allocating versionCode",
+    )
+    parser.add_argument(
+        "--code",
+        type=int,
+        default=0,
+        help="use this versionCode instead of allocating",
+    )
+    parser.add_argument(
+        "--version",
+        type=str,
+        default="",
+        help="override display version (default: yyyy.MM.dd.ci.<run>)",
     )
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
@@ -107,8 +119,11 @@ def main() -> int:
     today_ymd = ymd_int(today)
 
     fetch = args.fetch_remote or os.environ.get("QSC_FETCH_REMOTE_CODES", "1") != "0"
-    code = next_version_code(repo=repo, fetch_remote=fetch)
-    version = format_ci_version(today_ymd, run)
+    if args.code > 0:
+        code = args.code
+    else:
+        code = next_version_code(repo=repo, fetch_remote=fetch)
+    version = args.version.strip() or format_ci_version(today_ymd, run)
 
     if not args.dry_run:
         text = args.prop.read_text(encoding="utf-8")
