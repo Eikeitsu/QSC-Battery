@@ -126,11 +126,10 @@ qscd_version_compare() {
 }
 
 qscd_valid_version() {
+	# 与模块/APP 一致：2026.09.13[.N] / ….pre / ….ci.N
 	_v="$1"
-	case "$_v" in
-		""|*[!0-9.]*|.*|*.|*..*) return 1 ;;
-	esac
-	qscd_version_key "$_v" | grep -q '[0-9]'
+	[ -n "$_v" ] || return 1
+	printf '%s' "$_v" | grep -Eq '^[0-9]+(\.[0-9]+)+(\.pre|\.ci\.[0-9]+)?$'
 }
 
 # 换过守护后必须重拉 service.sh：主循环把"等待器不可用"缓存在内存里，

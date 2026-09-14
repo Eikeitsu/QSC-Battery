@@ -10,6 +10,8 @@
 
 - APP「更新」与 WebUI「我的」可切换 **正式 / 预发布 / CI**；元数据统一读 **`updates` 分支**（`stable` / `prerelease` / `ci`），检测 **模块 / APP / 守护** 三项并可单独更新
 - APP 更新页：通道与检测结果各一张列表卡；顶栏刷新；行内状态 chip / 更新；「全部更新」收在列表底部；进页/切通道自动检查；会话跨页保留；CI 切换确认；装后刷新
+- APP / WebUI 更新页样式收紧：版本相同不再画箭头、提示条内嵌动作、错误文案民用化并挂到对应行
+- 修复守护安装：`qscd_fetch.sh` 版本校验支持 `.pre` / `.ci.N`（此前误报 `manifest_invalid_version`，CI/预发布无法装守护）
 - APP 模块 CLI 安装：刷入前写入 `/data/adb/qsc/install_auto`，`customize.sh` 跳过音量键并用安全默认（保留配置、装 WebUI、跳过联网下守护/内嵌 APK）；管理器手动刷 zip 仍交互
 - APP 模块更新：进入命令行风格安装页展示下载与 magisk/ksud/apd 输出（注明无人值守默认）；CLI 失败再打开 zip 交给管理器
 - WebUI 更新通道：只检测 **模块 + 守护**（不检伴侣 APP）；模块下载后拉起管理器刷写页；守护仍本页替换

@@ -2,9 +2,10 @@ package com.qsc.battery.ui.more
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,9 +14,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,14 +34,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.UpdateChannel
 import com.qsc.battery.data.model.UpdateCheckResult
-import com.qsc.battery.ui.design.charge.BannerTone
-import com.qsc.battery.ui.design.charge.ChargeBanner
 import com.qsc.battery.ui.design.charge.ChargeChipTone
 import com.qsc.battery.ui.design.charge.ChargeDivider
 import com.qsc.battery.ui.design.charge.ChargeSection
@@ -66,6 +66,7 @@ fun UpdatesScreen(
     val result by session.result.collectAsState()
     val work by session.work.collectAsState()
     val actionError by session.actionError.collectAsState()
+    val actionErrorTarget by session.actionErrorTarget.collectAsState()
     var showTech by remember { mutableStateOf(false) }
     var pendingCi by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -105,20 +106,22 @@ fun UpdatesScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            ChargeTopBar(title = "更新", onBack = onBack)
-            Icon(
-                imageVector = Icons.Outlined.Refresh,
-                contentDescription = "刷新",
-                tint = if (busy) ChargeTheme.colors.muted else ChargeTheme.colors.accent,
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = ChargeTheme.dimens.pageHorizontal)
-                    .size(40.dp)
-                    .clickable(enabled = !busy) { session.refresh() }
-                    .padding(8.dp),
-            )
-        }
+        ChargeTopBar(
+            title = "更新",
+            onBack = onBack,
+            subtitle = "检查并安装模块、伴侣 APP 与守护",
+            actions = {
+                Icon(
+                    imageVector = Icons.Outlined.Refresh,
+                    contentDescription = "刷新",
+                    tint = if (busy) ChargeTheme.colors.muted else ChargeTheme.colors.accent,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clickable(enabled = !busy) { session.refresh() }
+                        .padding(8.dp),
+                )
+            },
+        )
         if (checking || work is UpdateWork.Downloading || work is UpdateWork.Installing) {
             val fraction = (work as? UpdateWork.Downloading)?.fraction
             if (fraction != null) {
@@ -145,24 +148,15 @@ fun UpdatesScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
-                .padding(
-                    top = ChargeTheme.dimens.pageContentTop,
-                    bottom = ChargeTheme.dimens.sectionGap,
-                ),
+                .padding(bottom = ChargeTheme.dimens.sectionGap),
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
         ) {
-            Text(
-                text = "检查并安装模块、伴侣 APP 与守护。",
-                style = ChargeTheme.typography.caption,
-                color = ChargeTheme.colors.muted,
-            )
-
             ChargeSection(title = "更新通道") {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     ChargeSegmented(
                         options = channelOptions,
@@ -177,30 +171,29 @@ fun UpdatesScreen(
                             }
                         },
                     )
-                    Text(
-                        text = when (channel) {
-                            UpdateChannel.Stable -> "推荐大多数用户"
-                            UpdateChannel.Prerelease -> "尝鲜功能，可能不稳定"
-                            UpdateChannel.Ci -> "开发构建，风险较高"
-                        },
-                        style = ChargeTheme.typography.caption,
-                        color = ChargeTheme.colors.muted,
-                    )
                     Row(
-                        modifier = Modifier.clickable { showTech = !showTech },
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Info,
-                            contentDescription = null,
-                            tint = ChargeTheme.colors.muted,
-                            modifier = Modifier.size(14.dp),
-                        )
                         Text(
-                            text = if (showTech) "收起通道说明" else "了解通道",
+                            text = when (channel) {
+                                UpdateChannel.Stable -> "推荐大多数用户"
+                                UpdateChannel.Prerelease -> "尝鲜功能，可能不稳定"
+                                UpdateChannel.Ci -> "开发构建，风险较高"
+                            },
                             style = ChargeTheme.typography.caption,
                             color = ChargeTheme.colors.muted,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = if (showTech) "收起" else "了解通道",
+                            style = ChargeTheme.typography.caption,
+                            color = ChargeTheme.colors.accent,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .clickable { showTech = !showTech }
+                                .padding(start = 8.dp, top = 2.dp, bottom = 2.dp),
                         )
                     }
                     if (showTech) {
@@ -221,9 +214,9 @@ fun UpdatesScreen(
             }
 
             if (channel == UpdateChannel.Prerelease) {
-                ChargeBanner(
+                InlineNotice(
                     text = "预发布通道：功能可能不完整，重要设备建议用正式版。",
-                    tone = BannerTone.Info,
+                    tone = NoticeTone.Info,
                 )
             }
 
@@ -248,34 +241,27 @@ fun UpdatesScreen(
             val r = result
             if (r != null) {
                 val stableHint = buildString {
-                    r.stableModuleNewer?.let { append("正式模块 ${it.version}") }
+                    r.stableModuleNewer?.let { append("模块 ${it.version}") }
                     r.stableAppNewer?.let {
-                        if (isNotEmpty()) append("；")
-                        append("正式 APP ${it.version}")
+                        if (isNotEmpty()) append(" · ")
+                        append("APP ${it.version}")
                     }
                     r.stableDaemonNewer?.let {
-                        if (isNotEmpty()) append("；")
-                        append("正式守护 ${it.version}")
+                        if (isNotEmpty()) append(" · ")
+                        append("守护 ${it.version}")
                     }
                 }
                 if (stableHint.isNotEmpty()) {
-                    ChargeBanner(
-                        text = "正式通道有新版本：$stableHint",
-                        tone = BannerTone.Info,
+                    InlineNotice(
+                        text = "正式通道有新版本 · $stableHint",
+                        tone = NoticeTone.Info,
+                        action = "切换到正式",
+                        actionEnabled = !busy,
+                        onAction = { session.setChannel(UpdateChannel.Stable) },
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        ChargeTextAction(
-                            text = "切换到正式",
-                            enabled = !busy,
-                            onClick = { session.setChannel(UpdateChannel.Stable) },
-                        )
-                    }
                 }
 
-                ChargeSection(title = "可更新组件") {
+                ChargeSection(title = "组件") {
                     ProductRow(
                         title = "模块",
                         localText = r.moduleLocal?.version ?: "未安装",
@@ -323,13 +309,16 @@ fun UpdatesScreen(
                         actionsEnabled = !busy,
                         onAction = { session.updateTarget(UpdateTarget.Daemon) },
                         onOpenChangelog = { openChangelog(context, it) },
+                        rowError = actionError?.takeIf {
+                            actionErrorTarget == UpdateTarget.Daemon && it.isNotBlank()
+                        },
                     )
                     if (UpdatesSession.updatableCount(r) >= 2) {
                         ChargeDivider()
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp),
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.End,
                         ) {
                             ChargeTextAction(
@@ -348,22 +337,25 @@ fun UpdatesScreen(
                     }
                 }
 
-                val err = actionError ?: r.error
-                if (!err.isNullOrBlank()) {
-                    ChargeBanner(text = err, tone = BannerTone.Warn)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
-                        ChargeTextAction(
-                            text = "重试",
-                            enabled = !busy,
-                            onClick = {
-                                session.clearActionError()
-                                session.refresh()
-                            },
-                        )
-                    }
+                val pageErr = when {
+                    !r.error.isNullOrBlank() -> r.error
+                    actionErrorTarget == null && !actionError.isNullOrBlank() -> actionError
+                    actionErrorTarget != null &&
+                        actionErrorTarget != UpdateTarget.Daemon &&
+                        !actionError.isNullOrBlank() -> actionError
+                    else -> null
+                }
+                if (!pageErr.isNullOrBlank()) {
+                    InlineNotice(
+                        text = pageErr,
+                        tone = NoticeTone.Warn,
+                        action = "重试",
+                        actionEnabled = !busy,
+                        onAction = {
+                            session.clearActionError()
+                            session.refresh()
+                        },
+                    )
                 }
             }
         }
@@ -397,6 +389,56 @@ private fun daemonChip(r: UpdateCheckResult): ChipSpec = when {
     else -> ChipSpec("最新", ChargeChipTone.Ok)
 }
 
+private fun versionLine(local: String, remote: String): String {
+    val l = local.ifBlank { "--" }
+    val r = remote.ifBlank { "--" }
+    return if (l == r) l else "$l → $r"
+}
+
+private enum class NoticeTone { Info, Warn }
+
+@Composable
+private fun InlineNotice(
+    text: String,
+    tone: NoticeTone,
+    action: String? = null,
+    actionEnabled: Boolean = true,
+    onAction: (() -> Unit)? = null,
+) {
+    val bg = when (tone) {
+        NoticeTone.Info -> ChargeTheme.colors.accent.copy(alpha = 0.10f)
+        NoticeTone.Warn -> ChargeTheme.colors.danger.copy(alpha = 0.10f)
+    }
+    val border = when (tone) {
+        NoticeTone.Info -> ChargeTheme.colors.accent.copy(alpha = 0.22f)
+        NoticeTone.Warn -> ChargeTheme.colors.danger.copy(alpha = 0.24f)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(ChargeTheme.dimens.radiusMd))
+            .background(bg)
+            .border(1.dp, border, RoundedCornerShape(ChargeTheme.dimens.radiusMd))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = text,
+            style = ChargeTheme.typography.caption,
+            color = ChargeTheme.colors.ink,
+            modifier = Modifier.weight(1f),
+        )
+        if (!action.isNullOrBlank() && onAction != null) {
+            ChargeTextAction(
+                text = action,
+                enabled = actionEnabled,
+                onClick = onAction,
+            )
+        }
+    }
+}
+
 @Composable
 private fun ProductRow(
     title: String,
@@ -410,6 +452,7 @@ private fun ProductRow(
     actionsEnabled: Boolean,
     onAction: () -> Unit,
     onOpenChangelog: (String) -> Unit,
+    rowError: String? = null,
 ) {
     val active = when (work) {
         is UpdateWork.Downloading -> work.target == target
@@ -427,34 +470,18 @@ private fun ProductRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp)
+                .padding(top = 12.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = ChargeTheme.typography.caption,
-                    color = ChargeTheme.colors.muted,
-                )
-                Text(
-                    text = "$localText → $remoteText",
-                    style = ChargeTheme.typography.body,
-                    color = ChargeTheme.colors.ink,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-                if (!changelog.isNullOrBlank()) {
-                    Text(
-                        text = "更新说明",
-                        style = ChargeTheme.typography.caption,
-                        color = ChargeTheme.colors.accent,
-                        modifier = Modifier
-                            .padding(top = 4.dp)
-                            .clickable { onOpenChangelog(changelog) },
-                    )
-                }
-            }
+            Text(
+                text = title,
+                style = ChargeTheme.typography.body,
+                color = ChargeTheme.colors.ink,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
             ChargeStatusChip(text = chip.text, tone = chip.tone)
             if (!actionLabel.isNullOrBlank() && progressLabel == null) {
                 ChargeTonalButton(
@@ -464,13 +491,37 @@ private fun ProductRow(
                 )
             }
         }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = if (progressLabel == null && rowError.isNullOrBlank()) 12.dp else 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = versionLine(localText, remoteText),
+                style = ChargeTheme.typography.caption,
+                color = ChargeTheme.colors.muted,
+                modifier = Modifier.weight(1f),
+            )
+            if (!changelog.isNullOrBlank()) {
+                Text(
+                    text = "说明",
+                    style = ChargeTheme.typography.caption,
+                    color = ChargeTheme.colors.accent,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.clickable { onOpenChangelog(changelog) },
+                )
+            }
+        }
         if (progressLabel != null) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
                     text = progressLabel,
@@ -483,7 +534,7 @@ private fun ProductRow(
                         progress = { fraction },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(4.dp),
+                            .height(3.dp),
                         color = ChargeTheme.colors.accent,
                         trackColor = ChargeTheme.colors.stroke,
                     )
@@ -491,12 +542,23 @@ private fun ProductRow(
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(4.dp),
+                            .height(3.dp),
                         color = ChargeTheme.colors.accent,
                         trackColor = ChargeTheme.colors.stroke,
                     )
                 }
             }
+        }
+        if (!rowError.isNullOrBlank()) {
+            Text(
+                text = rowError,
+                style = ChargeTheme.typography.caption,
+                color = ChargeTheme.colors.danger,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 12.dp),
+            )
         }
     }
 }

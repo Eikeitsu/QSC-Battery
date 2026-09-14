@@ -232,6 +232,7 @@ export async function removeDaemon(): Promise<DaemonActionResult> {
 const ERROR_TEXT: Record<string, string> = {
   unsupported_arch: "本机 CPU 架构没有可用的守护文件（仅 arm64 / armv7）",
   manifest_download_failed: "取不到文件清单，检查网络后重试",
+  manifest_invalid_version: "远端版本号格式无效，请换通道或稍后重试",
   manifest_no_entry: "清单里没有本机架构的文件，可能该版本尚未发布",
   download_failed: "下载失败，检查网络后重试",
   no_sha256_tool: "系统缺少 sha256 工具，无法校验文件，已放弃安装",

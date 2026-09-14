@@ -26,9 +26,16 @@ const actionBusy = ref<"module" | "daemon" | "">("");
 const result = ref<ChannelCheckResult | null>(null);
 const showTech = ref(false);
 const bootstrapped = ref(false);
+const actionError = ref("");
 
 const hint = computed(() => UPDATE_CHANNEL_HINT[channel.value]);
 const tech = computed(() => UPDATE_CHANNEL_TECH[channel.value]);
+
+function versionLine(local?: string | null, remote?: string | null): string {
+  const l = (local || "").trim() || "--";
+  const r = (remote || "").trim() || "--";
+  return l === r ? l : `${l} → ${r}`;
+}
 
 async function selectChannel(next: UpdateChannel) {
   if (next === channel.value) return;
@@ -48,6 +55,7 @@ async function selectChannel(next: UpdateChannel) {
 
 async function check(silent = false) {
   busy.value = true;
+  actionError.value = "";
   try {
     const r = await checkUpdateChannel(channel.value);
     result.value = r;
@@ -70,6 +78,7 @@ async function updateModule() {
     return;
   }
   actionBusy.value = "module";
+  actionError.value = "";
   try {
     const r = await api.downloadAndOpenModuleInstaller(url);
     if (r.ok) {
@@ -92,6 +101,7 @@ async function updateDaemon() {
     return;
   }
   actionBusy.value = "daemon";
+  actionError.value = "";
   try {
     const r = await api.installDaemon("rust", {
       manifestUrl: d.manifestUrl,
@@ -101,10 +111,14 @@ async function updateDaemon() {
       showToast(r.version ? `守护已更新至 ${r.version}` : "守护已更新");
       await check(true);
     } else {
-      showToast(api.daemonErrorText(r.error));
+      const msg = api.daemonErrorText(r.error);
+      actionError.value = msg;
+      showToast(msg);
     }
   } catch (e) {
-    showToast(e instanceof Error ? e.message : String(e));
+    const msg = e instanceof Error ? e.message : String(e);
+    actionError.value = msg;
+    showToast(msg);
   } finally {
     actionBusy.value = "";
   }
@@ -151,19 +165,22 @@ watch(channel, async () => {
           {{ busy ? "…" : "刷新" }}
         </button>
       </div>
-      <p class="hint">{{ hint }}</p>
-      <button type="button" class="tech-toggle" @click="showTech = !showTech">
-        {{ showTech ? "收起通道说明" : "了解通道" }}
-      </button>
+
+      <div class="meta">
+        <p class="hint">{{ hint }}</p>
+        <button type="button" class="tech-toggle" @click="showTech = !showTech">
+          {{ showTech ? "收起" : "了解通道" }}
+        </button>
+      </div>
       <p v-if="showTech" class="tech">{{ tech }}</p>
 
-      <div v-if="channel === 'prerelease'" class="stable-banner soft">
-        <p>当前为预发布通道：功能可能不完整，重要设备建议用正式版。</p>
+      <div v-if="channel === 'prerelease'" class="notice soft">
+        <p>预发布通道：功能可能不完整，重要设备建议用正式版。</p>
       </div>
 
       <div
         v-if="result?.stableModuleNewer || result?.stableDaemonNewer"
-        class="stable-banner"
+        class="notice"
       >
         <p>
           正式通道有新版本
@@ -174,21 +191,22 @@ watch(channel, async () => {
             · 守护 {{ result.stableDaemonNewer.version }}
           </template>
         </p>
-        <van-button size="mini" plain type="primary" @click="selectChannel('stable')">
+        <button
+          type="button"
+          class="notice-action"
+          :disabled="busy || !!actionBusy"
+          @click="selectChannel('stable')"
+        >
           切换到正式
-        </van-button>
+        </button>
       </div>
 
       <div v-if="busy && !result" class="loading">正在检查更新…</div>
 
       <div v-if="result" class="result">
         <div class="item">
-          <div class="item-main">
+          <div class="item-top">
             <span class="name">模块</span>
-            <span class="ver">
-              {{ result.moduleLocalVersion || "--" }} →
-              {{ result.module?.version || "--" }}
-            </span>
             <span
               class="chip"
               :data-tone="
@@ -197,15 +215,13 @@ watch(channel, async () => {
             >
               {{ !result.module ? "无数据" : result.moduleHasUpdate ? "可更新" : "最新" }}
             </span>
-          </div>
-          <div class="item-actions">
             <button
               v-if="result.module?.changelog"
               type="button"
               class="link"
               @click="api.openUrl(result.module.changelog!)"
             >
-              更新说明
+              说明
             </button>
             <van-button
               v-if="result.module?.zipUrl && result.moduleHasUpdate"
@@ -215,18 +231,17 @@ watch(channel, async () => {
               :disabled="!!actionBusy"
               @click="updateModule"
             >
-              下载并刷入
+              更新
             </van-button>
           </div>
+          <p class="ver">
+            {{ versionLine(result.moduleLocalVersion, result.module?.version) }}
+          </p>
         </div>
 
         <div class="item">
-          <div class="item-main">
+          <div class="item-top">
             <span class="name">守护</span>
-            <span class="ver">
-              {{ result.daemonLocalVersion || "--" }} →
-              {{ result.daemon?.version || "--" }}
-            </span>
             <span
               class="chip"
               :data-tone="
@@ -235,8 +250,6 @@ watch(channel, async () => {
             >
               {{ !result.daemon ? "无数据" : result.daemonHasUpdate ? "可更新" : "最新" }}
             </span>
-          </div>
-          <div class="item-actions">
             <van-button
               v-if="result.daemonHasUpdate"
               size="mini"
@@ -245,9 +258,13 @@ watch(channel, async () => {
               :disabled="!!actionBusy"
               @click="updateDaemon"
             >
-              下载并替换
+              更新
             </van-button>
           </div>
+          <p class="ver">
+            {{ versionLine(result.daemonLocalVersion, result.daemon?.version) }}
+          </p>
+          <p v-if="actionError" class="row-err">{{ actionError }}</p>
         </div>
 
         <p v-if="result.error" class="err">{{ result.error }}</p>
@@ -291,6 +308,7 @@ watch(channel, async () => {
   background: var(--qsc-card, #fff);
   color: var(--van-primary-color, #1989fa);
   font-weight: 600;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--van-primary-color, #1989fa) 18%, transparent);
 }
 
 .seg-item:disabled {
@@ -305,14 +323,23 @@ watch(channel, async () => {
   font-weight: 600;
   padding: 6px 4px;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .refresh:disabled {
   color: var(--qsc-text-2);
 }
 
+.meta {
+  margin-top: 10px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .hint {
-  margin: 10px 0 6px;
+  margin: 0;
   font-size: 12px;
   line-height: 1.45;
   color: var(--qsc-text-2);
@@ -323,8 +350,10 @@ watch(channel, async () => {
   background: transparent;
   padding: 0;
   font-size: 12px;
-  color: var(--qsc-text-2);
+  font-weight: 600;
+  color: var(--van-primary-color, #1989fa);
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .tech {
@@ -334,25 +363,41 @@ watch(channel, async () => {
   color: var(--qsc-text-2);
 }
 
-.stable-banner {
+.notice {
   margin-top: 12px;
   padding: 10px 12px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--van-primary-color, #1989fa) 12%, transparent);
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
 }
 
-.stable-banner.soft {
+.notice.soft {
   background: color-mix(in srgb, var(--qsc-fill-2, rgba(0, 0, 0, 0.06)) 80%, transparent);
 }
 
-.stable-banner p {
+.notice p {
   margin: 0;
+  flex: 1;
   font-size: 12px;
   line-height: 1.45;
   color: var(--qsc-text);
+}
+
+.notice-action {
+  border: 0;
+  background: transparent;
+  color: var(--van-primary-color, #1989fa);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.notice-action:disabled {
+  opacity: 0.5;
 }
 
 .loading {
@@ -365,23 +410,19 @@ watch(channel, async () => {
   margin-top: 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 .item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 0;
+  padding: 12px 0;
   border-top: 1px solid var(--qsc-border, rgba(0, 0, 0, 0.06));
 }
 
 .item:first-child {
   border-top: 0;
-  padding-top: 0;
+  padding-top: 2px;
 }
 
-.item-main {
+.item-top {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -389,18 +430,17 @@ watch(channel, async () => {
 }
 
 .name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--qsc-text);
-  width: 2.5em;
-  flex-shrink: 0;
+  margin-right: auto;
 }
 
 .ver {
-  flex: 1;
-  font-size: 13px;
-  color: var(--qsc-text);
-  min-width: 0;
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--qsc-text-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -429,14 +469,6 @@ watch(channel, async () => {
   background: color-mix(in srgb, var(--van-danger-color, #ee0a24) 12%, transparent);
 }
 
-.item-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-  align-items: center;
-}
-
 .link {
   border: 0;
   background: transparent;
@@ -444,12 +476,15 @@ watch(channel, async () => {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  padding: 4px;
+  padding: 0;
+  flex-shrink: 0;
 }
 
+.row-err,
 .err {
-  margin: 0;
+  margin: 8px 0 0;
   font-size: 12px;
+  line-height: 1.4;
   color: var(--van-danger-color, #ee0a24);
 }
 </style>

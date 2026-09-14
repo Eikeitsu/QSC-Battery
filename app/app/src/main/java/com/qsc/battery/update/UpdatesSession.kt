@@ -56,6 +56,9 @@ class UpdatesSession(
     private val _actionError = MutableStateFlow<String?>(null)
     val actionError: StateFlow<String?> = _actionError.asStateFlow()
 
+    private val _actionErrorTarget = MutableStateFlow<UpdateTarget?>(null)
+    val actionErrorTarget: StateFlow<UpdateTarget?> = _actionErrorTarget.asStateFlow()
+
     private val _snackbar = MutableStateFlow<String?>(null)
     val snackbar: StateFlow<String?> = _snackbar.asStateFlow()
 
@@ -72,6 +75,7 @@ class UpdatesSession(
 
     fun clearActionError() {
         _actionError.value = null
+        _actionErrorTarget.value = null
     }
 
     /** 首次进入：读设置并检查。 */
@@ -145,18 +149,17 @@ class UpdatesSession(
                 }
                 _work.value = UpdateWork.Checking
                 _actionError.value = null
+                _actionErrorTarget.value = null
                 val ch = _channel.value
                 val r = runCatching { updates.check(status, ch) }
                     .onFailure {
                         _actionError.value = it.message ?: "检查失败"
+                        _actionErrorTarget.value = null
                         _snackbar.value = it.message ?: "检查失败"
                     }
                     .getOrNull()
                 if (r != null) {
                     _result.value = r
-                    if (!r.error.isNullOrBlank()) {
-                        _actionError.value = r.error
-                    }
                 }
                 _work.value = UpdateWork.Idle
             }
@@ -166,6 +169,7 @@ class UpdatesSession(
     private suspend fun performUpdate(target: UpdateTarget): Boolean {
         val r = _result.value ?: return false
         _actionError.value = null
+        _actionErrorTarget.value = null
         return when (target) {
             UpdateTarget.Module -> {
                 // 模块安装改由 ModuleInstallConsoleScreen 展示命令行过程
@@ -205,7 +209,7 @@ class UpdatesSession(
                     scheduleCheck(0L)
                     true
                 } else {
-                    fail(msg.take(160).ifBlank { "守护安装失败" }, UpdateTarget.Daemon)
+                    fail(humanizeDaemonError(msg), UpdateTarget.Daemon)
                     false
                 }
             }
@@ -240,6 +244,7 @@ class UpdatesSession(
 
     private fun fail(message: String, target: UpdateTarget) {
         _actionError.value = message
+        _actionErrorTarget.value = target
         _snackbar.value = message
         _work.value = UpdateWork.Idle
         notifier.failure("更新失败", message.take(80))
@@ -262,6 +267,35 @@ class UpdatesSession(
             if (canUpdateApp(r)) n++
             if (canUpdateDaemon(r)) n++
             return n
+        }
+
+        fun humanizeDaemonError(raw: String): String {
+            val code = Regex("""(?m)^error=(\S+)""")
+                .find(raw)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.trim()
+                .orEmpty()
+            return when (code) {
+                "unsupported_arch" -> "本机架构没有可用的守护文件"
+                "manifest_download_failed" -> "取不到守护清单，请检查网络后重试"
+                "manifest_invalid_version" -> "远端版本号格式无效，请换通道或稍后重试"
+                "manifest_no_entry" -> "清单里没有本机架构的文件"
+                "download_failed" -> "守护下载失败，请检查网络后重试"
+                "no_sha256_tool" -> "系统缺少校验工具，已放弃安装"
+                "sha256_mismatch" -> "文件校验失败，已丢弃"
+                "probe_failed" -> "已下载但本机自检未通过，已回滚"
+                "bad_impl" -> "参数错误"
+                else -> if (code.isNotBlank()) {
+                    "守护安装失败（$code）"
+                } else {
+                    raw.lineSequence()
+                        .map { it.trim() }
+                        .firstOrNull { it.isNotBlank() && !it.startsWith("ok=") }
+                        ?.take(120)
+                        ?: "守护安装失败"
+                }
+            }
         }
     }
 }
