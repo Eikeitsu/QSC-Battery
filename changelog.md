@@ -2,59 +2,21 @@
 
 ## Unreleased
 
-### 停充
+### 新增
 
-- 修复红米 K60U 等「简介已停充、实际仍在充」：现版会**对非 MCA 机也盲扫** `handle_state`（0814 仅 `mca=1` 才走），且把 `Not charging` 当成已停充；现改回 **0814 门禁**（未识别 MCA 不抢先盲扫），停充复核**以电流为准**，无效则改试通用节点；假停充逾约 8s 自愈重试
+- **更新通道（正式 / 预发布 / CI）**：APP「更新」与 WebUI「我的」可切换通道；检测统一读 `updates` 分支（`stable` / `prerelease` / `ci`），下载分别为 Pages / GitHub Release / `ci-dist`；可分别检测并更新 **模块 · APP · 守护**；本地高于当前通道时可「切换」安装通道版；CI 可选用 CDN（jsDelivr，默认关；正式/预发布不展示），关 CDN 时检测与下载链接均回退 GitHub raw
+- **通道安装体验**：模块支持写 `install_auto` 后 CLI 无人值守刷入（失败再打开管理器；WebUI 成功后硬刷新）；APP 模块更新进命令行风格安装页；守护按当前 `native_impl`（Rust/C）下载，APP/WebUI 可预拉清单与二进制经 `QSCD_LOCAL_BIN` 安装；守护 **分侧 versionCode**（只升变更一侧）；版本展示 CI 为 `….ci.N`、预发布为 `….pre`；停在预发布/CI 时旁路提示正式版
+- **发版与 CI 产物**：`ci-dist` 分目录 `module/` · `app/` · `qscd/`（仅完整产物）；工作流按路径拆分构建；`versionCode` 跨通道单调递增且按产品增量；发版勾选多产物；Pages / updates 元数据与清单字段对齐
+- **WebUI 信息架构**：「策略 / 我的」改为 Hub + 二级子路由（日常项留一级，开关排障 / 运行采样 / 守护、机型社区 / 工具说明 / 关于进子页）
 
-### 更新页与守护下载
+### 修复
 
-- WebUI 模块更新：对齐 APP，写 `install_auto` 后 CLI 无人值守刷入；失败再打开管理器；成功后硬刷新 WebUI
-- WebUI 更新通道：同步检测/安装 **模块 · APP · 守护**（对齐 APP 更新页）
-- APP / WebUI：本地高于当前通道（如 CI→正式）时标记「可切换」，可安装通道版；守护支持热切换
-- APP 通道守护更新：OkHttp 预拉清单+二进制，经 `QSCD_LOCAL_BIN` 安装（对齐 WebUI，修复设备 curl 失败）
-- APP / WebUI：「使用 CDN」仅在 **CI** 通道显示；正式/预发布不展示；说明 jsDelivr 缓存可能导致刚发版检不到
-- WebUI：清除进度文件残留，避免更新一开始闪「失败」；更新通道卡片样式收紧；CDN 行与内容左右对齐
-- APP 更新页：检查中底部提示改为居中卡片；顶栏进度条与「更新通道」拉开间距；下载/安装时不再叠顶栏进度（只保留行内进度）
-- 更新通道（WebUI）：**检测**一律读 `updates` 分支；**下载**正式→Pages、预发布→GitHub Release、CI→`ci-dist`；「使用 CDN」只影响 updates/ci-dist 元数据；守护可由 WebView 预拉再交给 `qscd_fetch`；未安装守护显示「未知 → 版本」与进度条
-- 发版：`updates/stable` 下载 URL 指向 Pages；`updates/prerelease` 指向 Release 资产
-- 守护安装：清单/二进制优先走 **jsDelivr**（设备 curl 常打不开 `raw.githubusercontent.com`）；`qscd_fetch` 对 raw / Pages 自动回退通道镜像；`QSCD_PAGES_BASE` 不再误带 `/qscd` 后缀；支持 `QSCD_LOCAL_BIN`
-- APP/WebUI 安装前会把清单落到本地并把 raw URL 改写为 CDN，兼容尚未刷入新 `qscd_fetch` 前的下载路径问题（完整回退仍需新脚本）
-- 更新通道安装守护时按当前 `native_impl`（Rust/C）下载，不再写死 Rust
-- 守护 **Rust / C 分侧 versionCode**（`rustVersionCode` / `cVersionCode`）：只升变更一侧；检测/安装只看当前实现；UI 显示「守护 · Rust/C」
-- WebUI「策略 / 我的」改为 Hub + 二级子路由：日常项留一级，开关排障 / 运行采样 / 守护、机型社区 / 工具说明 / 关于进子页；顶栏返回、底栏仍高亮所属 Tab
-- Pages `qscd/manifest.json` 补齐 `versionCode` / `baseUrl` / `*Url` / 分侧版本字段，与 updates/stable 对齐
+- **K60U 等假停充**（简介已停充、实际仍在充）：非 MCA 机不再盲扫 `handle_state`（对齐 0814 门禁）；停充复核以电流为准，无效则改试通用节点；假停充逾约 8s 自愈重试
+- **K90U 等 MCA**：列表写 `handle_state` 不再 `chmod`+硬回滚；加强 `soc@0` / `stop_handle_charge` 探测；未插电粘住 `present=1` 时需 VBUS 或类型旁证，不再单信孤立 `Not charging`；放电判定忽略电流符号；Rust `plugged` 与 shell 对齐
 
 ### 构建
 
-- APP 迁到 AGP 内置 Kotlin（去掉 `builtInKotlin` / `newDsl` 兼容开关）；CI Actions 升到 `upload-artifact@v6` / `download-artifact@v6` / `setup-gradle@v5` / Pages `upload-pages-artifact@v4` + `deploy-pages@v5`，消除 Node 20 弃用警告
-
-### 更新通道与版本
-
-- APP「更新」与 WebUI「我的」可切换 **正式 / 预发布 / CI**；元数据统一读 **`updates` 分支**（`stable` / `prerelease` / `ci`），检测 **模块 / APP / 守护** 三项并可单独更新
-- **`ci-dist`** 分目录 `module/` · `app/` · `qscd/`；各工作流只推自己的产物，**普通提交保留历史**（不再 orphan / force-push）
-- CI 拆分：`Build qscd` / `App` / `Build Web` / `Package Module` 按路径各自触发；模块打包从 `ci-dist`/`dist-web` 取最新依赖，不重复编守护与 APP
-- 模块打包依赖带溯源：本提交改了 APP/守护/WebUI 时，必须对齐该 commit 的成功产物（否则打包失败，禁止吃过期 tip）
-- `Build qscd`：Rust / C **分别**按路径编译，未改一侧从 `ci-dist` 继承；任一侧新编才升守护 `versionCode`
-- Package Module：输入摘要未变则跳过升码；Web / qscd / App 成功后可串联重打包；可复用版本分配 workflow
-- 发版：发布范围用 **多个 boolean 勾选**（GitHub choice 无法多选）；构建方式 / 发布形态为 choice（重新构建·晋升 CI；正式版·预发布·草稿）
-- 对照 0814：K90U 停充回归——列表写入 `handle_state` 时不再 `chmod`+硬回滚（0814 盲写可停；后加 verify 会把 MCA 判无效并还原）；加强 MCA 路径探测（`soc@0` 嵌套 / `stop_handle_charge` / 不用 `-type f`）
-- 仅对应产品有实际变更时升该产品 `versionCode`；`updates` 分支同理按产品增量提交
-- APP / WebUI 更新页样式收紧：版本相同不再画箭头、提示条内嵌动作、错误文案民用化并挂到对应行
-- 修复守护安装：`qscd_fetch.sh` 版本校验支持 `.pre` / `.ci.N`（此前误报 `manifest_invalid_version`，CI/预发布无法装守护）
-- APP 更新页：通道与检测结果各一张列表卡；顶栏刷新；行内状态 chip / 更新；「全部更新」收在列表底部；进页/切通道自动检查；会话跨页保留；CI 切换确认；装后刷新
-- APP 模块 CLI 安装：刷入前写入 `/data/adb/qsc/install_auto`，`customize.sh` 跳过音量键并用安全默认（保留配置、装 WebUI、跳过联网下守护/内嵌 APK）；管理器手动刷 zip 仍交互
-- APP 模块更新：进入命令行风格安装页展示下载与 magisk/ksud/apd 输出（注明无人值守默认）；CLI 失败再打开 zip 交给管理器
-- WebUI 更新通道：只检测 **模块 + 守护**（不检伴侣 APP）；模块下载后拉起管理器刷写页；守护仍本页替换
-- WebUI 更新通道：自动检查、民用文案、紧凑结果行与 CI 确认，与 APP 心智对齐
-- Magisk / KSU / APatch 模块更新仍只认 **Pages** `update.json`（`module.prop` 不变）
-- **`ci-dist`** 仅存完整产物（与 Release 同清单），不再放检测 JSON
-- 停在预发布 / CI 时检查更新会旁路提示正式版；预发布与草稿不写正式镜像
-- `versionCode` 跨通道全局单调递增；用户可见版本：CI 为 `….ci.N`，预发布为 `….pre`（模块与 APP 一致）
-- WebUI 构建改为固定 `js/app.js`、`css/style.css` 等路径，并生成 `webroot/.qsc-files`；热更新覆盖前整目录替换 webroot、安装时按清单清理废弃 hash 资源，避免热更后 HTML/JS 不一致或双份静态文件
-
-### 停充兼容
-
-- 修复 K90U 等 MCA：未插电粘住 `present=1` 时误报已插电、停充 / 拔线清理异常；`present` 需 VBUS 或类型旁证（停充冷却期内除外），不再单信孤立 `Not charging`；放电判定忽略电流符号；Rust `plugged` 与 shell 对齐
+- APP 迁到 AGP 内置 Kotlin；CI Actions 升到 artifact/setup-gradle/Pages v5–v6，消除 Node 20 弃用警告；WebUI 固定 `js/app.js` 等路径并生成 `webroot/.qsc-files`，热更整目录替换以免 HTML/JS 不一致
 
 ## 2026.09.13.2
 
