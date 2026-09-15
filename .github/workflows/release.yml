@@ -514,6 +514,7 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x tooling/scripts/publish-updates.sh
+          # 正式通道下载指向 Pages（与 Magisk 镜像同源）；预发布仍用 Release 公开链接
           ARGS=(stable --source-sha "${{ github.sha }}")
           if [ "$PUBLISH_ZIPS" = "true" ]; then
             ARGS+=(
@@ -524,7 +525,6 @@ jobs:
             )
           fi
           if [ "$PUBLISH_APK" = "true" ]; then
-            # Prefer Pages app-update.json fields if present
             APP_VER="$RAW"
             APP_CODE="$CODE"
             if [ -f docs/public/app-update.json ]; then

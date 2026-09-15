@@ -1,5 +1,9 @@
 import { PATHS } from "@/shared/config/paths";
-import { pagesRootForDaemon, preferGithubCdn } from "@/shared/lib/githubCdn";
+import {
+  pagesRootForDaemon,
+  rewriteManifestBody,
+  toChannelAssetUrl,
+} from "@/shared/lib/githubCdn";
 import { exec } from "./ksu";
 
 /** 守护实现：Rust 为主力，C 保持基础事件唤醒兼容 */
@@ -180,17 +184,61 @@ export async function checkDaemonUpdate(impl: DaemonImpl): Promise<{
 /** 下载耗时可能较长（含 manifest + 二进制两次请求），给足超时 */
 const INSTALL_TIMEOUT_MS = 180_000;
 
-/** WebView 拉清单并改写为 jsDelivr，落到模块 data，供 fetch 读本地文件 */
-async function materializeDaemonManifest(url: string): Promise<string> {
-  const reachable = preferGithubCdn(url);
+async function writeBinaryFile(dest: string, data: ArrayBuffer): Promise<boolean> {
+  const bytes = new Uint8Array(data);
+  const dir = dest.replace(/\/[^/]+$/, "");
+  const init = await exec(`mkdir -p '${dir}' && : > '${dest}' && echo ok`, 10_000);
+  if (!(init.stdout || "").includes("ok")) return false;
+  const chunk = 18 * 1024;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    const slice = bytes.subarray(i, Math.min(i + chunk, bytes.length));
+    let bin = "";
+    for (let j = 0; j < slice.length; j++) bin += String.fromCharCode(slice[j]!);
+    const b64 = btoa(bin);
+    const r = await exec(`echo '${b64}' | base64 -d >> '${dest}'`, 30_000);
+    if (r.errno !== 0 && r.errno !== -2) {
+      // errno 0 = success; some bridges return 0 with empty stdout
+    }
+    // Verify growth occasionally is expensive; fail only on hard exec errors
+    if (r.errno === -1) return false;
+  }
+  const check = await exec(`[ -s '${dest}' ] && echo ok`, 5_000);
+  return (check.stdout || "").includes("ok");
+}
+
+function pickBinUrl(manifestText: string, impl: DaemonImpl, arch: string): string {
+  const name = `qscd-${impl}-${arch}`;
+  try {
+    const obj = JSON.parse(manifestText) as Record<string, unknown>;
+    const direct = obj[`${name}Url`];
+    if (typeof direct === "string" && direct.trim()) return toChannelAssetUrl(direct);
+    const base =
+      typeof obj.baseUrl === "string" ? obj.baseUrl.trim().replace(/\/+$/, "") : "";
+    if (base) return toChannelAssetUrl(`${base}/${name}`);
+  } catch {
+    /* fall through */
+  }
+  return "";
+}
+
+async function resolveArchSuffix(): Promise<string> {
+  const r = await exec(`getprop ro.product.cpu.abi 2>/dev/null`, 5_000);
+  const abi = (r.stdout || "").trim();
+  if (abi.startsWith("arm64")) return "arm64";
+  if (abi.startsWith("armeabi")) return "arm";
+  return "";
+}
+
+/** WebView 拉通道清单并改写成通道直链，落到模块 data */
+async function materializeDaemonManifest(
+  url: string,
+): Promise<{ path: string; body: string }> {
+  const reachable = toChannelAssetUrl(url);
   const resp = await fetch(reachable, { headers: { "User-Agent": "QSC-Battery-WebUI" } });
   if (!resp.ok) throw new Error(`daemon manifest HTTP ${resp.status}`);
-  const rewritten = (await resp.text()).replace(
-    /https:\/\/raw\.githubusercontent\.com\/[^"\s]+/g,
-    (u) => preferGithubCdn(u),
-  );
+  const body = rewriteManifestBody(await resp.text());
   const dest = `${PATHS.DATADIR}/update_manifest.json`;
-  const b64 = btoa(unescape(encodeURIComponent(rewritten)));
+  const b64 = btoa(unescape(encodeURIComponent(body)));
   const r = await exec(
     `mkdir -p '${PATHS.DATADIR}' && echo '${b64}' | base64 -d > '${dest}' && chmod 0644 '${dest}' && echo ok`,
     15_000,
@@ -198,33 +246,63 @@ async function materializeDaemonManifest(url: string): Promise<string> {
   if (!(r.stdout || "").includes("ok")) {
     throw new Error("write daemon manifest failed");
   }
-  return dest;
+  return { path: dest, body };
 }
 
-/** 从 Pages / updates 通道下载指定实现；成功后自动替换并重启服务 */
+/**
+ * 从更新通道 / Pages 下载指定实现。
+ * - 无 opts：策略页旧路径，默认 Pages（qscd_fetch 内置）
+ * - 有 manifestUrl：更新通道路径，清单与二进制走通道直链（WebView 预拉二进制）
+ */
 export async function installDaemon(
   impl: DaemonImpl,
   opts?: { manifestUrl?: string; pagesBase?: string },
 ): Promise<DaemonActionResult> {
   const env: string[] = [];
-  let manifest = opts?.manifestUrl?.trim() || "";
+  const manifest = opts?.manifestUrl?.trim() || "";
+  let localBin = "";
+
   if (manifest) {
     try {
-      manifest = await materializeDaemonManifest(manifest);
+      const { path, body } = await materializeDaemonManifest(manifest);
+      env.push(`QSCD_MANIFEST_URL='${path.replace(/'/g, "")}'`);
+      const arch = await resolveArchSuffix();
+      if (!arch) {
+        return { ok: false, error: "unsupported_arch", impl: "", version: "" };
+      }
+      const binUrl = pickBinUrl(body, impl, arch);
+      if (binUrl) {
+        const resp = await fetch(binUrl, {
+          headers: { "User-Agent": "QSC-Battery-WebUI" },
+        });
+        if (!resp.ok) {
+          return { ok: false, error: "download_failed", impl: "", version: "" };
+        }
+        localBin = `${PATHS.DATADIR}/.qscd_channel_bin`;
+        const ok = await writeBinaryFile(localBin, await resp.arrayBuffer());
+        if (!ok) {
+          return { ok: false, error: "download_failed", impl: "", version: "" };
+        }
+        env.push(`QSCD_LOCAL_BIN='${localBin.replace(/'/g, "")}'`);
+      }
     } catch {
-      manifest = preferGithubCdn(manifest);
+      return { ok: false, error: "manifest_download_failed", impl: "", version: "" };
     }
-    env.push(`QSCD_MANIFEST_URL='${manifest.replace(/'/g, "")}'`);
   }
+
   if (opts?.pagesBase) {
     const root = pagesRootForDaemon(opts.pagesBase);
     if (root) env.push(`QSCD_PAGES_BASE='${root.replace(/'/g, "")}'`);
   }
+
   const prefix = env.length ? `${env.join(" ")} ` : "";
   const r = await exec(
     `${prefix}sh '${PATHS.QSCD_FETCH}' install ${impl} 2>/dev/null`,
     INSTALL_TIMEOUT_MS,
   );
+  if (localBin) {
+    await exec(`rm -f '${localBin}'`, 5_000);
+  }
   const kv = parseKv(r.stdout || "");
   return {
     ok: kv.ok === "1",
@@ -260,10 +338,10 @@ export async function removeDaemon(): Promise<DaemonActionResult> {
 
 const ERROR_TEXT: Record<string, string> = {
   unsupported_arch: "本机 CPU 架构没有可用的守护文件（仅 arm64 / armv7）",
-  manifest_download_failed: "取不到文件清单，检查网络后重试",
+  manifest_download_failed: "取不到通道清单，请检查网络或切换「使用 CDN」后重试",
   manifest_invalid_version: "远端版本号格式无效，请换通道或稍后重试",
   manifest_no_entry: "清单里没有本机架构的文件，可能该版本尚未发布",
-  download_failed: "下载失败，检查网络后重试",
+  download_failed: "通道二进制下载失败，请检查网络或切换「使用 CDN」后重试",
   no_sha256_tool: "系统缺少 sha256 工具，无法校验文件，已放弃安装",
   sha256_mismatch: "文件校验不通过，已丢弃（请勿使用来源不明的文件）",
   probe_failed: "文件已下载但本机自检未通过，已回滚",

@@ -197,9 +197,7 @@ class UpdateRepository(
                 if (!resp.isSuccessful) error("daemon manifest HTTP ${resp.code}")
                 resp.body.string()
             }
-            val rewritten = Regex("""https://raw\.githubusercontent\.com/[^"\s]+""").replace(body) {
-                com.qsc.battery.core.GithubCdn.preferReachable(it.value)
-            }
+            val rewritten = com.qsc.battery.core.GithubCdn.rewriteManifestBody(body)
             val dest = "${ModulePaths.DATADIR}/update_manifest.json"
             val b64 = android.util.Base64.encodeToString(
                 rewritten.toByteArray(Charsets.UTF_8),

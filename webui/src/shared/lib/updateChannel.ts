@@ -1,6 +1,7 @@
-/** 更新通道：WebUI 只检模块 + 守护（不检伴侣 APP） */
+/** 更新通道：WebUI 只检模块 + 守护（不检伴侣 APP）；资产走 updates/ci-dist，不走 Pages 站点 */
 
 import { readLocalModule } from "@/shared/api/moduleUpdate";
+import { updatesMetaBase, toChannelAssetUrl } from "@/shared/lib/githubCdn";
 
 export const UPDATE_CHANNELS = ["stable", "prerelease", "ci"] as const;
 export type UpdateChannel = (typeof UPDATE_CHANNELS)[number];
@@ -18,20 +19,41 @@ export const UPDATE_CHANNEL_HINT: Record<UpdateChannel, string> = {
 };
 
 export const UPDATE_CHANNEL_TECH: Record<UpdateChannel, string> = {
-  stable: "正式：updates/stable；包地址通常指向 Pages。Magisk 仍只认 Pages update.json。",
-  prerelease: "预发布：updates/prerelease → GitHub Release 资产",
-  ci: "CI：updates/ci → ci-dist（jsDelivr）完整产物",
+  stable: "正式：updates/stable 检测；模块/APP/守护下载 Pages",
+  prerelease: "预发布：updates/prerelease 检测；下载对应预发布 Release 资产",
+  ci: "CI：updates/ci 检测；下载 ci-dist 产物",
 };
 
-const UPDATES = "https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@updates";
+export function channelUpdateUrls(channel: UpdateChannel = "stable") {
+  const base = updatesMetaBase();
+  const seg =
+    channel === "ci" ? "ci" : channel === "prerelease" ? "prerelease" : "stable";
+  return {
+    module: `${base}/${seg}/update.json`,
+    daemon: `${base}/${seg}/qscd/manifest.json`,
+  };
+}
 
+/** @deprecated 动态 URL 请用 channelUpdateUrls()；保留静态字段避免旧引用炸掉 */
 export const UPDATE_URLS = {
-  stableModule: `${UPDATES}/stable/update.json`,
-  stableDaemon: `${UPDATES}/stable/qscd/manifest.json`,
-  preModule: `${UPDATES}/prerelease/update.json`,
-  preDaemon: `${UPDATES}/prerelease/qscd/manifest.json`,
-  ciModule: `${UPDATES}/ci/update.json`,
-  ciDaemon: `${UPDATES}/ci/qscd/manifest.json`,
+  get stableModule() {
+    return channelUpdateUrls("stable").module;
+  },
+  get stableDaemon() {
+    return channelUpdateUrls("stable").daemon;
+  },
+  get preModule() {
+    return channelUpdateUrls("prerelease").module;
+  },
+  get preDaemon() {
+    return channelUpdateUrls("prerelease").daemon;
+  },
+  get ciModule() {
+    return channelUpdateUrls("ci").module;
+  },
+  get ciDaemon() {
+    return channelUpdateUrls("ci").daemon;
+  },
 } as const;
 
 export interface RemoteUpdateInfo {
@@ -59,6 +81,8 @@ export interface ChannelCheckResult {
   daemon: RemoteUpdateInfo | null;
   daemonHasUpdate: boolean;
   daemonImpl: "rust" | "c";
+  /** 本地未安装守护时为 true */
+  daemonMissing: boolean;
   stableModuleNewer: RemoteUpdateInfo | null;
   stableDaemonNewer: RemoteUpdateInfo | null;
   error: string | null;
@@ -69,15 +93,22 @@ export function parseUpdateChannel(raw: string | null | undefined): UpdateChanne
   return "stable";
 }
 
+/** 展示用：空本地显示「未知」 */
+export function versionLine(local?: string | null, remote?: string | null): string {
+  const l = (local || "").trim() || "未知";
+  const r = (remote || "").trim() || "--";
+  return l === r ? l : `${l} → ${r}`;
+}
+
 function parseJsonUpdate(text: string): RemoteUpdateInfo {
   const obj = JSON.parse(text) as Record<string, unknown>;
   return {
     version: String(obj.version ?? ""),
     versionCode: Number(obj.versionCode ?? 0),
-    zipUrl: obj.zipUrl ? String(obj.zipUrl) : undefined,
-    apkUrl: obj.apkUrl ? String(obj.apkUrl) : undefined,
+    zipUrl: obj.zipUrl ? toChannelAssetUrl(String(obj.zipUrl)) : undefined,
+    apkUrl: obj.apkUrl ? toChannelAssetUrl(String(obj.apkUrl)) : undefined,
     changelog: obj.changelog ? String(obj.changelog) : undefined,
-    baseUrl: obj.baseUrl ? String(obj.baseUrl) : undefined,
+    baseUrl: obj.baseUrl ? toChannelAssetUrl(String(obj.baseUrl)) : undefined,
     rustVersion: obj.rustVersion ? String(obj.rustVersion) : undefined,
     rustVersionCode:
       obj.rustVersionCode != null ? Number(obj.rustVersionCode) : undefined,
@@ -121,16 +152,6 @@ async function fetchJsonUpdate(url: string): Promise<RemoteUpdateInfo> {
 async function fetchDaemon(url: string): Promise<RemoteUpdateInfo> {
   const info = await fetchJsonUpdate(url);
   return { ...info, manifestUrl: url };
-}
-
-function urlsFor(channel: UpdateChannel) {
-  if (channel === "ci") {
-    return { module: UPDATE_URLS.ciModule, daemon: UPDATE_URLS.ciDaemon };
-  }
-  if (channel === "prerelease") {
-    return { module: UPDATE_URLS.preModule, daemon: UPDATE_URLS.preDaemon };
-  }
-  return { module: UPDATE_URLS.stableModule, daemon: UPDATE_URLS.stableDaemon };
 }
 
 async function readDaemonLocal(
@@ -182,7 +203,7 @@ export async function checkUpdateChannel(
   let error: string | null = null;
   let module: RemoteUpdateInfo | null = null;
   let daemonRaw: RemoteUpdateInfo | null = null;
-  const u = urlsFor(channel);
+  const u = channelUpdateUrls(channel);
   try {
     module = await fetchJsonUpdate(u.module);
     daemonRaw = await fetchDaemon(u.daemon).catch(() => null);
@@ -203,21 +224,25 @@ export async function checkUpdateChannel(
     module.versionCode > moduleLocalCode
   );
   const daemon = daemonRaw ? forImpl(daemonRaw, daemonImpl) : null;
+  const daemonMissing = !localDaemon.version && !localDaemon.code;
   const daemonHasUpdate = !!(
     daemon &&
     daemon.versionCode > 0 &&
-    daemon.versionCode > localDaemon.code
+    (daemonMissing || daemon.versionCode > localDaemon.code)
   );
 
   let stableModuleNewer: RemoteUpdateInfo | null = null;
   let stableDaemonNewer: RemoteUpdateInfo | null = null;
   if (channel !== "stable") {
-    const sm = await fetchJsonUpdate(UPDATE_URLS.stableModule).catch(() => null);
-    const sd = await fetchDaemon(UPDATE_URLS.stableDaemon).catch(() => null);
+    const stableUrls = channelUpdateUrls("stable");
+    const sm = await fetchJsonUpdate(stableUrls.module).catch(() => null);
+    const sd = await fetchDaemon(stableUrls.daemon).catch(() => null);
     if (sm && sm.versionCode > moduleLocalCode) stableModuleNewer = sm;
     if (sd) {
       const sdi = forImpl(sd, daemonImpl);
-      if (sdi.versionCode > localDaemon.code) stableDaemonNewer = sdi;
+      if (daemonMissing || sdi.versionCode > localDaemon.code) {
+        stableDaemonNewer = sdi;
+      }
     }
   }
 
@@ -232,6 +257,7 @@ export async function checkUpdateChannel(
     daemon,
     daemonHasUpdate,
     daemonImpl,
+    daemonMissing,
     stableModuleNewer,
     stableDaemonNewer,
     error,

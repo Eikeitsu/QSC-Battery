@@ -51,13 +51,14 @@ qscd_arch_suffix() {
 }
 
 # 下载到标准输出以外的文件；curl 优先，其次 busybox wget
-# 对 raw.githubusercontent.com 自动再试 jsDelivr（设备侧 curl 在国内常被墙）
+# 对 raw.githubusercontent.com / 本项目 Pages 自动再试通道直链（jsDelivr @main/docs/public）
 qscd_download() {
 	_url="$1"
 	_dest="$2"
 	rm -f "$_dest" 2>/dev/null
 	_try_one() {
 		_u="$1"
+		[ -n "$_u" ] || return 1
 		if command -v curl >/dev/null 2>&1; then
 			curl -fsSL --connect-timeout 15 --max-time 120 \
 				-A "QSC-Battery-qscd_fetch" \
@@ -76,33 +77,46 @@ qscd_download() {
 		return 1
 	}
 	_try_one "$_url" && return 0
-	_cdn="$(qscd_jsdelivr_url "$_url")"
-	if [ -n "$_cdn" ] && [ "$_cdn" != "$_url" ]; then
-		_try_one "$_cdn" && return 0
+	_alt="$(qscd_channel_mirror_url "$_url")"
+	if [ -n "$_alt" ] && [ "$_alt" != "$_url" ]; then
+		_try_one "$_alt" && return 0
 	fi
 	rm -f "$_dest" 2>/dev/null
 	return 1
 }
 
-# raw.githubusercontent.com/OWNER/REPO/BRANCH/path → cdn.jsdelivr.net/gh/OWNER/REPO@BRANCH/path
-qscd_jsdelivr_url() {
+# 更新通道镜像：raw → jsDelivr；Pages → jsDelivr @main/docs/public（不依赖 Pages 站点）
+qscd_channel_mirror_url() {
 	_u="$1"
 	case "$_u" in
-		https://raw.githubusercontent.com/*) ;;
-		*) echo ""; return 0 ;;
+		https://raw.githubusercontent.com/*)
+			_rest="${_u#https://raw.githubusercontent.com/}"
+			_owner="${_rest%%/*}"
+			_rest="${_rest#*/}"
+			_repo="${_rest%%/*}"
+			_rest="${_rest#*/}"
+			_branch="${_rest%%/*}"
+			_path="${_rest#*/}"
+			[ -n "$_owner" ] && [ -n "$_repo" ] && [ -n "$_branch" ] && [ -n "$_path" ] || {
+				echo ""
+				return 0
+			}
+			echo "https://cdn.jsdelivr.net/gh/${_owner}/${_repo}@${_branch}/${_path}"
+			;;
+		https://eikeitsu.github.io/QSC-Battery/* | https://eikeitsu.github.io/QSC-Battery)
+			_path="${_u#https://eikeitsu.github.io/QSC-Battery}"
+			_path="${_path#/}"
+			echo "https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@main/docs/public/${_path}"
+			;;
+		*)
+			echo ""
+			;;
 	esac
-	_rest="${_u#https://raw.githubusercontent.com/}"
-	_owner="${_rest%%/*}"
-	_rest="${_rest#*/}"
-	_repo="${_rest%%/*}"
-	_rest="${_rest#*/}"
-	_branch="${_rest%%/*}"
-	_path="${_rest#*/}"
-	[ -n "$_owner" ] && [ -n "$_repo" ] && [ -n "$_branch" ] && [ -n "$_path" ] || {
-		echo ""
-		return 0
-	}
-	echo "https://cdn.jsdelivr.net/gh/${_owner}/${_repo}@${_branch}/${_path}"
+}
+
+# 兼容旧名
+qscd_jsdelivr_url() {
+	qscd_channel_mirror_url "$1"
 }
 
 
@@ -395,7 +409,13 @@ cmd_install() {
 			_bin_url="$PAGES_BASE/qscd/$_name"
 		fi
 	fi
-	qscd_download "$_bin_url" "$TMPDIR/qscd" || fail "download_failed"
+	# 更新通道可预下载到本地，避开设备 curl 打不开通道 CDN 的情况
+	if [ -n "${QSCD_LOCAL_BIN:-}" ] && [ -f "$QSCD_LOCAL_BIN" ]; then
+		cp -f "$QSCD_LOCAL_BIN" "$TMPDIR/qscd" 2>/dev/null || fail "download_failed"
+		[ -s "$TMPDIR/qscd" ] || fail "download_failed"
+	else
+		qscd_download "$_bin_url" "$TMPDIR/qscd" || fail "download_failed"
+	fi
 
 	qscd_progress 65 verify
 	_got="$(qscd_sha256 "$TMPDIR/qscd")"

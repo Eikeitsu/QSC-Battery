@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { showConfirmDialog, showToast } from "vant";
 import SectionHead from "@/shared/ui/SectionHead.vue";
+import SwitchCell from "@/shared/ui/SwitchCell.vue";
 import ThemedCard from "@/shared/ui/ThemedCard.vue";
 import * as api from "@/shared/api";
 import {
@@ -11,8 +12,11 @@ import {
   UPDATE_CHANNEL_LABEL,
   UPDATE_CHANNEL_TECH,
   checkUpdateChannel,
+  isPreferCdn,
   parseUpdateChannel,
   readStorage,
+  setPreferCdn,
+  versionLine,
   writeStorage,
   type ChannelCheckResult,
   type UpdateChannel,
@@ -21,21 +25,38 @@ import {
 const channel = ref<UpdateChannel>(
   parseUpdateChannel(readStorage(STORAGE_KEYS.updateChannel)),
 );
+const preferCdn = ref(isPreferCdn());
 const busy = ref(false);
 const actionBusy = ref<"module" | "daemon" | "">("");
 const result = ref<ChannelCheckResult | null>(null);
 const showTech = ref(false);
 const bootstrapped = ref(false);
 const actionError = ref("");
+const progress = ref<api.DaemonDownloadProgress>({ percent: 0, stage: "" });
+let progressTimer: ReturnType<typeof setInterval> | null = null;
 
 const hint = computed(() => UPDATE_CHANNEL_HINT[channel.value]);
 const tech = computed(() => UPDATE_CHANNEL_TECH[channel.value]);
-
-function versionLine(local?: string | null, remote?: string | null): string {
-  const l = (local || "").trim() || "--";
-  const r = (remote || "").trim() || "--";
-  return l === r ? l : `${l} → ${r}`;
-}
+const daemonTitle = computed(() => {
+  const impl = result.value?.daemonImpl === "c" ? "C" : "Rust";
+  return `守护 · ${impl}`;
+});
+const actionBusyLabel = computed(() => {
+  if (actionBusy.value === "module") return "正在下载模块…";
+  if (actionBusy.value === "daemon") {
+    const labels: Record<string, string> = {
+      prepare: "正在准备…",
+      manifest: "正在获取通道清单…",
+      binary: "正在下载守护…",
+      verify: "正在校验…",
+      activate: "正在切换服务…",
+      done: "已完成",
+      failed: "失败",
+    };
+    return labels[progress.value.stage] || "正在更新守护…";
+  }
+  return "";
+});
 
 async function selectChannel(next: UpdateChannel) {
   if (next === channel.value) return;
@@ -51,6 +72,12 @@ async function selectChannel(next: UpdateChannel) {
   }
   channel.value = next;
   writeStorage(STORAGE_KEYS.updateChannel, next);
+}
+
+function onPreferCdn(on: boolean) {
+  preferCdn.value = on;
+  setPreferCdn(on);
+  void check(true);
 }
 
 async function check(silent = false) {
@@ -71,6 +98,22 @@ async function check(silent = false) {
   }
 }
 
+function startProgress(seed: api.DaemonDownloadProgress) {
+  if (progressTimer) clearInterval(progressTimer);
+  progress.value = seed;
+  progressTimer = setInterval(() => {
+    void api.loadDaemonDownloadProgress().then((p) => {
+      if (p.stage || p.percent > 0) progress.value = p;
+    });
+  }, 400);
+}
+
+function stopProgress() {
+  if (progressTimer) clearInterval(progressTimer);
+  progressTimer = null;
+  progress.value = { percent: 0, stage: "" };
+}
+
 async function updateModule() {
   const url = result.value?.module?.zipUrl;
   if (!url) {
@@ -79,9 +122,12 @@ async function updateModule() {
   }
   actionBusy.value = "module";
   actionError.value = "";
+  progress.value = { percent: 15, stage: "binary" };
+  startProgress({ percent: 20, stage: "binary" });
   try {
     const r = await api.downloadAndOpenModuleInstaller(url);
     if (r.ok) {
+      progress.value = { percent: 100, stage: "done" };
       showToast("已打开模块管理器，请确认刷写");
       await check(true);
     } else {
@@ -90,6 +136,7 @@ async function updateModule() {
   } catch (e) {
     showToast(e instanceof Error ? e.message : String(e));
   } finally {
+    stopProgress();
     actionBusy.value = "";
   }
 }
@@ -102,14 +149,16 @@ async function updateDaemon() {
   }
   actionBusy.value = "daemon";
   actionError.value = "";
+  startProgress({ percent: 5, stage: "prepare" });
   try {
     const st = await api.loadDaemonStatus().catch(() => null);
-    const impl = st?.impl === "c" ? "c" : "rust";
+    const impl = st?.impl === "c" ? "c" : result.value?.daemonImpl === "c" ? "c" : "rust";
     const r = await api.installDaemon(impl, {
       manifestUrl: d.manifestUrl,
       pagesBase: d.baseUrl,
     });
     if (r.ok) {
+      progress.value = { percent: 100, stage: "done" };
       showToast(r.version ? `守护已更新至 ${r.version}` : "守护已更新");
       await check(true);
     } else {
@@ -122,6 +171,7 @@ async function updateDaemon() {
     actionError.value = msg;
     showToast(msg);
   } finally {
+    stopProgress();
     actionBusy.value = "";
   }
 }
@@ -131,6 +181,8 @@ onMounted(async () => {
   bootstrapped.value = true;
 });
 
+onUnmounted(stopProgress);
+
 watch(channel, async () => {
   if (!bootstrapped.value) return;
   await check(true);
@@ -138,7 +190,10 @@ watch(channel, async () => {
 </script>
 
 <template>
-  <SectionHead title="更新通道" hint="仅检测模块与守护 · 可在本页直接安装" />
+  <SectionHead
+    title="更新通道"
+    hint="检测读 updates · 正式下载 Pages · 预发布下载 Release · CI 下载 ci-dist"
+  />
   <ThemedCard>
     <div class="channel-wrap">
       <div class="toolbar">
@@ -167,6 +222,14 @@ watch(channel, async () => {
           {{ busy ? "…" : "刷新" }}
         </button>
       </div>
+
+      <SwitchCell
+        title="使用 CDN"
+        label="开启后 updates/ci-dist 元数据走 jsDelivr；关闭则走 GitHub raw。正式 Pages / 预发布 Release 链接不受影响"
+        :model-value="preferCdn"
+        :disabled="busy || !!actionBusy"
+        @update:model-value="onPreferCdn"
+      />
 
       <div class="meta">
         <p class="hint">{{ hint }}</p>
@@ -203,6 +266,16 @@ watch(channel, async () => {
       <div v-if="busy && !result" class="loading" role="status">
         <span class="loading-spin" aria-hidden="true"></span>
         <span>正在检查更新…</span>
+      </div>
+
+      <div v-if="actionBusy" class="progress" role="status" aria-live="polite">
+        <div class="progress-head">
+          <span>{{ actionBusyLabel }}</span>
+          <span>{{ progress.percent }}%</span>
+        </div>
+        <div class="progress-track">
+          <span :style="{ width: `${Math.max(progress.percent, 8)}%` }"></span>
+        </div>
       </div>
 
       <div v-if="result" class="result">
@@ -243,16 +316,22 @@ watch(channel, async () => {
 
         <div class="item">
           <div class="item-top">
-            <span class="name"
-              >守护 · {{ result.daemonImpl === "c" ? "C" : "Rust" }}</span
-            >
+            <span class="name">{{ daemonTitle }}</span>
             <span
               class="chip"
               :data-tone="
                 !result.daemon ? 'warn' : result.daemonHasUpdate ? 'update' : 'ok'
               "
             >
-              {{ !result.daemon ? "无数据" : result.daemonHasUpdate ? "可更新" : "最新" }}
+              {{
+                !result.daemon
+                  ? "无数据"
+                  : result.daemonMissing
+                    ? "未安装"
+                    : result.daemonHasUpdate
+                      ? "可更新"
+                      : "最新"
+              }}
             </span>
             <van-button
               v-if="result.daemonHasUpdate"
@@ -262,7 +341,7 @@ watch(channel, async () => {
               :disabled="!!actionBusy"
               @click="updateDaemon"
             >
-              更新
+              {{ result.daemonMissing ? "安装" : "更新" }}
             </van-button>
           </div>
           <p class="ver">
@@ -286,6 +365,7 @@ watch(channel, async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 4px;
 }
 
 .seg {
@@ -432,6 +512,37 @@ watch(channel, async () => {
   to {
     transform: rotate(360deg);
   }
+}
+
+.progress {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--qsc-fill-2, rgba(0, 0, 0, 0.05)) 90%, transparent);
+}
+
+.progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--qsc-text-2);
+  margin-bottom: 8px;
+}
+
+.progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--qsc-border, rgba(0, 0, 0, 0.08)) 80%, transparent);
+  overflow: hidden;
+}
+
+.progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--van-primary-color, #1989fa);
+  transition: width 0.25s ease;
 }
 
 .result {

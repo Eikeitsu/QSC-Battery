@@ -28,6 +28,8 @@ export const STORAGE_KEYS = {
   devicePresetsRepoMeta: "qsc_device_presets_repo_meta",
   /** 更新通道：stable | prerelease | ci */
   updateChannel: "qsc_update_channel",
+  /** 更新通道是否优先 jsDelivr（关则直连 raw / 通道原 URL） */
+  preferCdn: "qsc_prefer_cdn",
 } as const;
 
 /** @deprecated 使用 STORAGE_KEYS.fontScale */

@@ -2,6 +2,7 @@
 import { exec } from "./ksu";
 import { PATHS } from "@/shared/config/paths";
 import { APP } from "@/shared/config/app";
+import { toChannelAssetUrl } from "@/shared/lib/githubCdn";
 
 export interface LocalModuleInfo {
   version: string;
@@ -41,31 +42,28 @@ function shellQuote(s: string): string {
   return `'${String(s).replace(/'/g, `'\\''`)}'`;
 }
 
-/**
- * 下载 zip 到公共 Download，再用 ACTION_VIEW 拉起已安装的模块管理器刷写页。
- */
-export async function downloadAndOpenModuleInstaller(zipUrl: string): Promise<{
-  ok: boolean;
-  error: string;
-  detail: string;
-  zipPath: string;
-}> {
-  const url = String(zipUrl || "").trim();
-  if (!url) return { ok: false, error: "no_url", detail: "", zipPath: "" };
+async function writeBinaryFile(dest: string, data: ArrayBuffer): Promise<boolean> {
+  const bytes = new Uint8Array(data);
+  const dir = dest.replace(/\/[^/]+$/, "");
+  const init = await exec(`mkdir -p '${dir}' && : > '${dest}' && echo ok`, 10_000);
+  if (!(init.stdout || "").includes("ok")) return false;
+  const chunk = 18 * 1024;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    const slice = bytes.subarray(i, Math.min(i + chunk, bytes.length));
+    let bin = "";
+    for (let j = 0; j < slice.length; j++) bin += String.fromCharCode(slice[j]!);
+    const b64 = btoa(bin);
+    const r = await exec(`echo '${b64}' | base64 -d >> '${dest}'`, 60_000);
+    if (r.errno === -1) return false;
+  }
+  const check = await exec(`[ -s '${dest}' ] && echo ok`, 5_000);
+  return (check.stdout || "").includes("ok");
+}
 
-  const dir = "/sdcard/Download";
-  const zip = `${dir}/${APP.moduleId}-update.zip`;
-  const u = shellQuote(url);
+async function openZipInManager(zip: string): Promise<{ ok: boolean; detail: string }> {
   const z = shellQuote(zip);
   const pkgs = MANAGER_PACKAGES.map((p) => shellQuote(p)).join(" ");
-
   const script = [
-    `mkdir -p '${dir}'`,
-    `rm -f ${z}`,
-    `OK=0`,
-    `(command -v curl >/dev/null && curl -fsSL --connect-timeout 15 --max-time 180 -o ${z} ${u} && OK=1) || true`,
-    `[ "$OK" = 1 ] || (command -v wget >/dev/null && wget -q -O ${z} ${u} && OK=1) || true`,
-    `[ "$OK" = 1 ] && [ -s ${z} ] || { echo error=download_failed; exit 0; }`,
     `chmod 0644 ${z} 2>/dev/null || true`,
     `URI="file://${zip}"`,
     `LAUNCHED=0`,
@@ -79,25 +77,74 @@ export async function downloadAndOpenModuleInstaller(zipUrl: string): Promise<{
     `[ "$LAUNCHED" = 1 ] && echo ok=1 || echo error=open_manager_failed`,
     `echo zip=${zip}`,
   ].join("\n");
+  const r = await exec(script, 30_000);
+  const out = `${r.stdout || ""}\n${r.stderr || ""}`.trim();
+  return { ok: /\bok=1\b/.test(out), detail: out };
+}
+
+/**
+ * 优先 WebView 拉通道直链（不经 Pages 站点），失败再试设备 curl。
+ * 下载到公共 Download，再用 ACTION_VIEW 拉起模块管理器刷写页。
+ */
+export async function downloadAndOpenModuleInstaller(zipUrl: string): Promise<{
+  ok: boolean;
+  error: string;
+  detail: string;
+  zipPath: string;
+}> {
+  const url = toChannelAssetUrl(String(zipUrl || "").trim());
+  if (!url) return { ok: false, error: "no_url", detail: "", zipPath: "" };
+
+  const dir = "/sdcard/Download";
+  const zip = `${dir}/${APP.moduleId}-update.zip`;
+  const u = shellQuote(url);
+  const z = shellQuote(zip);
+
+  // 1) WebView 通道直链
+  try {
+    const resp = await fetch(url, { headers: { "User-Agent": "QSC-Battery-WebUI" } });
+    if (resp.ok) {
+      const buf = await resp.arrayBuffer();
+      if (buf.byteLength > 0 && (await writeBinaryFile(zip, buf))) {
+        const opened = await openZipInManager(zip);
+        if (opened.ok)
+          return { ok: true, error: "", detail: opened.detail, zipPath: zip };
+        return {
+          ok: false,
+          error: "open_manager_failed",
+          detail: opened.detail,
+          zipPath: zip,
+        };
+      }
+    }
+  } catch {
+    /* fall through to curl */
+  }
+
+  // 2) 设备 curl / wget 兜底
+  const script = [
+    `mkdir -p '${dir}'`,
+    `rm -f ${z}`,
+    `OK=0`,
+    `(command -v curl >/dev/null && curl -fsSL --connect-timeout 15 --max-time 180 -o ${z} ${u} && OK=1) || true`,
+    `[ "$OK" = 1 ] || (command -v wget >/dev/null && wget -q -O ${z} ${u} && OK=1) || true`,
+    `[ "$OK" = 1 ] && [ -s ${z} ] || { echo error=download_failed; exit 0; }`,
+    `echo downloaded=1`,
+  ].join("\n");
 
   const r = await exec(script, 240_000);
   const out = `${r.stdout || ""}\n${r.stderr || ""}`.trim();
-  const zipPath = (out.match(/zip=(\S+)/) || [])[1] || zip;
-
-  if (/\bok=1\b/.test(out)) {
-    return { ok: true, error: "", detail: out, zipPath };
-  }
-  if (/error=download_failed/.test(out)) {
+  if (/error=download_failed/.test(out) || !/downloaded=1/.test(out)) {
     return { ok: false, error: "download_failed", detail: out, zipPath: "" };
   }
-  if (/error=open_manager_failed/.test(out)) {
-    return { ok: false, error: "open_manager_failed", detail: out, zipPath };
-  }
+
+  const opened = await openZipInManager(zip);
+  if (opened.ok) return { ok: true, error: "", detail: opened.detail, zipPath: zip };
   return {
     ok: false,
     error: r.errno === -1 ? "no_ksu_bridge" : "open_manager_failed",
-    detail: out || r.stderr || `errno=${r.errno}`,
-    zipPath,
+    detail: opened.detail || out,
+    zipPath: zip,
   };
 }
 
@@ -109,7 +156,7 @@ export async function downloadAndInstallModule(zipUrl: string) {
 export function moduleInstallErrorText(code: string): string {
   const map: Record<string, string> = {
     no_url: "没有模块下载地址",
-    download_failed: "下载失败，请检查网络后重试",
+    download_failed: "下载失败，请检查网络或切换「使用 CDN」后重试",
     download_empty: "下载文件为空",
     open_manager_failed: "已下载，但未能打开模块管理器，请到 Download 目录手动刷入 zip",
     install_failed: "未能打开刷写界面，请到 Download 目录手动安装 zip",

@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Seed stable/ + prerelease/ metadata on a checkout of the `updates` branch.
 #
-# Typical use (after cloning or worktree for updates):
+# 注意：生产发版由 release.yml 写入 GitHub Release 公开下载链接。
+# 本脚本仅本地/bootstrap：从 docs/public 拷贝字段，zip/apk/守护 URL 仍可能是 Pages，
+# 下次正式发版后会被 Release URL 覆盖。
+#
+# Typical use:
 #   export UPDATES_ROOT=/path/to/updates-wt
 #   export DOCS_ROOT=/path/to/QSC-Battery/docs/public
 #   bash tooling/scripts/seed-updates-channels.sh
-#
-# Does not touch ci/; run from repo root or set UPDATES_ROOT to the updates branch tree.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="${UPDATES_ROOT:-$ROOT}"
@@ -59,7 +61,7 @@ pre_mod = {
 }
 pre_app = {
     **stable_app,
-    "version": app["version"] + "-pre",
+    "version": str(app.get("version") or "") + "-pre",
     "channel": "prerelease",
 }
 pre_daemon = daemon_manifest("prerelease", pre_ver, int(mod["versionCode"]) + 1)
@@ -74,5 +76,5 @@ for channel, triple in (
     (ch / "update.json").write_text(json.dumps(m, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (ch / "app-update.json").write_text(json.dumps(a, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (ch / "qscd/manifest.json").write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print("seeded", channel)
+    print("seeded", channel, "(bootstrap; production URLs come from Release publish)")
 PY
