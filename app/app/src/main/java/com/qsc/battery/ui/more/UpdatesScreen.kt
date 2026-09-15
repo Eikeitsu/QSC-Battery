@@ -48,6 +48,7 @@ import com.qsc.battery.ui.design.charge.ChargeSegmented
 import com.qsc.battery.ui.design.charge.ChargeStatusChip
 import com.qsc.battery.ui.design.charge.ChargeTextAction
 import com.qsc.battery.ui.design.charge.ChargeTheme
+import com.qsc.battery.ui.design.charge.ChargeToggleRow
 import com.qsc.battery.ui.design.charge.ChargeTonalButton
 import com.qsc.battery.ui.design.charge.ChargeTopBar
 import com.qsc.battery.update.UpdateTarget
@@ -63,6 +64,7 @@ fun UpdatesScreen(
 ) {
     val session = container.updatesSession
     val channel by session.channel.collectAsState()
+    val preferCdn by session.preferCdn.collectAsState()
     val result by session.result.collectAsState()
     val work by session.work.collectAsState()
     val actionError by session.actionError.collectAsState()
@@ -144,62 +146,74 @@ fun UpdatesScreen(
             verticalArrangement = Arrangement.spacedBy(ChargeTheme.dimens.sectionGap),
         ) {
             ChargeSection(title = "更新通道") {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    ChargeSegmented(
-                        options = channelOptions,
-                        selectedIndex = channel.ordinal,
-                        onSelect = { index ->
-                            if (busy) return@ChargeSegmented
-                            val next = UpdateChannel.entries.getOrElse(index) { UpdateChannel.Stable }
-                            if (next == UpdateChannel.Ci && channel != UpdateChannel.Ci) {
-                                pendingCi = true
-                            } else {
-                                session.setChannel(next)
-                            }
-                        },
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text(
-                            text = when (channel) {
-                                UpdateChannel.Stable -> "推荐大多数用户"
-                                UpdateChannel.Prerelease -> "尝鲜功能，可能不稳定"
-                                UpdateChannel.Ci -> "开发构建，风险较高"
+                        ChargeSegmented(
+                            options = channelOptions,
+                            selectedIndex = channel.ordinal,
+                            onSelect = { index ->
+                                if (busy) return@ChargeSegmented
+                                val next = UpdateChannel.entries.getOrElse(index) { UpdateChannel.Stable }
+                                if (next == UpdateChannel.Ci && channel != UpdateChannel.Ci) {
+                                    pendingCi = true
+                                } else {
+                                    session.setChannel(next)
+                                }
                             },
-                            style = ChargeTheme.typography.caption,
-                            color = ChargeTheme.colors.muted,
-                            modifier = Modifier.weight(1f),
                         )
-                        Text(
-                            text = if (showTech) "收起" else "了解通道",
-                            style = ChargeTheme.typography.caption,
-                            color = ChargeTheme.colors.accent,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier
-                                .clickable { showTech = !showTech }
-                                .padding(start = 8.dp, top = 2.dp, bottom = 2.dp),
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                text = when (channel) {
+                                    UpdateChannel.Stable -> "推荐大多数用户"
+                                    UpdateChannel.Prerelease -> "尝鲜功能，可能不稳定"
+                                    UpdateChannel.Ci -> "开发构建，风险较高"
+                                },
+                                style = ChargeTheme.typography.caption,
+                                color = ChargeTheme.colors.muted,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = if (showTech) "收起" else "了解通道",
+                                style = ChargeTheme.typography.caption,
+                                color = ChargeTheme.colors.accent,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier
+                                    .clickable { showTech = !showTech }
+                                    .padding(start = 8.dp, top = 2.dp, bottom = 2.dp),
+                            )
+                        }
+                        if (showTech) {
+                            Text(
+                                text = when (channel) {
+                                    UpdateChannel.Stable ->
+                                        "正式：updates/stable；包地址通常指向 Pages。"
+                                    UpdateChannel.Prerelease ->
+                                        "预发布：updates/prerelease → GitHub Release。"
+                                    UpdateChannel.Ci ->
+                                        "CI：updates/ci → ci-dist（jsDelivr）产物。"
+                                },
+                                style = ChargeTheme.typography.caption,
+                                color = ChargeTheme.colors.muted,
+                            )
+                        }
                     }
-                    if (showTech) {
-                        Text(
-                            text = when (channel) {
-                                UpdateChannel.Stable ->
-                                    "正式：updates/stable；包地址通常指向 Pages。"
-                                UpdateChannel.Prerelease ->
-                                    "预发布：updates/prerelease → GitHub Release。"
-                                UpdateChannel.Ci ->
-                                    "CI：updates/ci → ci-dist（jsDelivr）产物。"
-                            },
-                            style = ChargeTheme.typography.caption,
-                            color = ChargeTheme.colors.muted,
+                    if (channel == UpdateChannel.Ci) {
+                        ChargeDivider()
+                        ChargeToggleRow(
+                            title = "使用 CDN",
+                            checked = preferCdn,
+                            summary = "开启后 CI 元数据/产物走 jsDelivr；关闭则走 GitHub raw",
+                            enabled = !busy,
+                            onCheckedChange = { session.setPreferCdn(it) },
                         )
                     }
                 }

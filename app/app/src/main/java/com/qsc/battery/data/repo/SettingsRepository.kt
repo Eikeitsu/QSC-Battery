@@ -29,6 +29,8 @@ class SettingsRepository(private val context: Context) {
         val dynamicBatteryIcon = booleanPreferencesKey("dynamic_battery_icon")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
         val updateChannel = stringPreferencesKey("update_channel")
+        /** 仅 CI 通道：updates/ci-dist 走 jsDelivr（默认开） */
+        val preferCdn = booleanPreferencesKey("prefer_cdn")
     }
 
     val settings: Flow<ThemeSettings> = context.settingsStore.data.map { prefs ->
@@ -56,6 +58,17 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setUpdateChannel(channel: UpdateChannel) {
         context.settingsStore.edit { it[Keys.updateChannel] = channel.wire }
+    }
+
+    val preferCdn: Flow<Boolean> = context.settingsStore.data.map {
+        it[Keys.preferCdn] ?: true
+    }
+
+    suspend fun preferCdn(): Boolean =
+        context.settingsStore.data.first()[Keys.preferCdn] ?: true
+
+    suspend fun setPreferCdn(enabled: Boolean) {
+        context.settingsStore.edit { it[Keys.preferCdn] = enabled }
     }
 
     suspend fun alternativeIconEnabled(): Boolean =

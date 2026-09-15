@@ -35,8 +35,9 @@ class DaemonRepository(private val root: RootBridge) {
         impl: String,
         manifestUrl: String? = null,
         pagesBase: String? = null,
+        localBin: String? = null,
     ): String {
-        val env = envPrefix(manifestUrl, pagesBase)
+        val env = envPrefix(manifestUrl, pagesBase, localBin)
         val r = root.exec("${env}sh '${ModulePaths.QSCD_FETCH}' install '$impl' 2>/dev/null")
         return (r.out + "\n" + r.err).trim()
     }
@@ -53,15 +54,25 @@ class DaemonRepository(private val root: RootBridge) {
 
     suspend fun hasBinary(): Boolean = root.exists(ModulePaths.QSCD)
 
-    private fun envPrefix(manifestUrl: String?, pagesBase: String?): String {
+    private fun envPrefix(
+        manifestUrl: String?,
+        pagesBase: String?,
+        localBin: String? = null,
+    ): String {
         val parts = mutableListOf<String>()
-        val manifest = manifestUrl?.takeIf { it.isNotBlank() }?.let(GithubCdn::preferReachable)
+        // 本地路径（materialize）原样；仅 HTTP 走 CDN 改写
+        val manifest = manifestUrl?.takeIf { it.isNotBlank() }?.let { u ->
+            if (u.startsWith("http")) GithubCdn.preferReachable(u) else u
+        }
         val pages = GithubCdn.pagesRootForDaemon(pagesBase)
         if (!manifest.isNullOrBlank()) {
             parts += "QSCD_MANIFEST_URL='${manifest.replace("'", "")}'"
         }
         if (!pages.isNullOrBlank()) {
             parts += "QSCD_PAGES_BASE='${pages.replace("'", "")}'"
+        }
+        if (!localBin.isNullOrBlank()) {
+            parts += "QSCD_LOCAL_BIN='${localBin.replace("'", "")}'"
         }
         return if (parts.isEmpty()) "" else parts.joinToString(" ", postfix = " ")
     }

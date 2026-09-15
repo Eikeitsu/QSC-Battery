@@ -4,6 +4,9 @@
 
 ### 更新页与守护下载
 
+- APP 通道守护更新：OkHttp 预拉清单+二进制，经 `QSCD_LOCAL_BIN` 安装（对齐 WebUI，修复设备 curl 失败）
+- APP / WebUI：「使用 CDN」仅在 **CI** 通道显示；正式/预发布不展示
+- WebUI：清除进度文件残留，避免更新一开始闪「失败」；更新通道卡片样式收紧
 - APP 更新页：检查中底部提示改为居中卡片；顶栏进度条与「更新通道」拉开间距；下载/安装时不再叠顶栏进度（只保留行内进度）
 - 更新通道（WebUI）：**检测**一律读 `updates` 分支；**下载**正式→Pages、预发布→GitHub Release、CI→`ci-dist`；「使用 CDN」只影响 updates/ci-dist 元数据；守护可由 WebView 预拉再交给 `qscd_fetch`；未安装守护显示「未知 → 版本」与进度条
 - 发版：`updates/stable` 下载 URL 指向 Pages；`updates/prerelease` 指向 Release 资产

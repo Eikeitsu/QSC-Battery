@@ -46,17 +46,21 @@ const actionBusyLabel = computed(() => {
   if (actionBusy.value === "daemon") {
     const labels: Record<string, string> = {
       prepare: "正在准备…",
-      manifest: "正在获取通道清单…",
+      manifest: "正在获取清单…",
       binary: "正在下载守护…",
       verify: "正在校验…",
       activate: "正在切换服务…",
       done: "已完成",
-      failed: "失败",
     };
-    return labels[progress.value.stage] || "正在更新守护…";
+    const stage = progress.value.stage;
+    if (stage === "failed") return "正在更新守护…";
+    return labels[stage] || "正在更新守护…";
   }
   return "";
 });
+const progressPct = computed(() =>
+  Math.max(0, Math.min(100, progress.value.percent || 0)),
+);
 
 async function selectChannel(next: UpdateChannel) {
   if (next === channel.value) return;
@@ -103,7 +107,13 @@ function startProgress(seed: api.DaemonDownloadProgress) {
   progress.value = seed;
   progressTimer = setInterval(() => {
     void api.loadDaemonDownloadProgress().then((p) => {
-      if (p.stage || p.percent > 0) progress.value = p;
+      if (!actionBusy.value) return;
+      // 忽略上次失败残留，避免一闪「失败」
+      if (p.stage === "failed") return;
+      if (!p.stage && p.percent <= 0) return;
+      // 进度只前进，避免抖动回退
+      const nextPct = Math.max(progress.value.percent, p.percent);
+      progress.value = { percent: nextPct, stage: p.stage || progress.value.stage };
     });
   }, 400);
 }
@@ -122,7 +132,6 @@ async function updateModule() {
   }
   actionBusy.value = "module";
   actionError.value = "";
-  progress.value = { percent: 15, stage: "binary" };
   startProgress({ percent: 20, stage: "binary" });
   try {
     const r = await api.downloadAndOpenModuleInstaller(url);
@@ -149,6 +158,7 @@ async function updateDaemon() {
   }
   actionBusy.value = "daemon";
   actionError.value = "";
+  await api.clearDaemonDownloadProgress().catch(() => undefined);
   startProgress({ percent: 5, stage: "prepare" });
   try {
     const st = await api.loadDaemonStatus().catch(() => null);
@@ -190,10 +200,7 @@ watch(channel, async () => {
 </script>
 
 <template>
-  <SectionHead
-    title="更新通道"
-    hint="检测读 updates · 正式下载 Pages · 预发布下载 Release · CI 下载 ci-dist"
-  />
+  <SectionHead title="更新通道" hint="正式 / 预发布 / CI 三通道检测与安装" />
   <ThemedCard>
     <div class="channel-wrap">
       <div class="toolbar">
@@ -224,8 +231,9 @@ watch(channel, async () => {
       </div>
 
       <SwitchCell
+        v-if="channel === 'ci'"
         title="使用 CDN"
-        label="开启后 updates/ci-dist 元数据走 jsDelivr；关闭则走 GitHub raw。正式 Pages / 预发布 Release 链接不受影响"
+        label="开启后 CI 元数据/产物走 jsDelivr；关闭则走 GitHub raw"
         :model-value="preferCdn"
         :disabled="busy || !!actionBusy"
         @update:model-value="onPreferCdn"
@@ -271,10 +279,10 @@ watch(channel, async () => {
       <div v-if="actionBusy" class="progress" role="status" aria-live="polite">
         <div class="progress-head">
           <span>{{ actionBusyLabel }}</span>
-          <span>{{ progress.percent }}%</span>
+          <span class="progress-pct">{{ progressPct }}%</span>
         </div>
         <div class="progress-track">
-          <span :style="{ width: `${Math.max(progress.percent, 8)}%` }"></span>
+          <span :style="{ width: `${Math.max(progressPct, 6)}%` }"></span>
         </div>
       </div>
 
@@ -302,6 +310,7 @@ watch(channel, async () => {
               v-if="result.module?.zipUrl && result.moduleHasUpdate"
               size="mini"
               type="primary"
+              round
               :loading="actionBusy === 'module'"
               :disabled="!!actionBusy"
               @click="updateModule"
@@ -337,6 +346,7 @@ watch(channel, async () => {
               v-if="result.daemonHasUpdate"
               size="mini"
               type="primary"
+              round
               :loading="actionBusy === 'daemon'"
               :disabled="!!actionBusy"
               @click="updateDaemon"
@@ -358,14 +368,13 @@ watch(channel, async () => {
 
 <style scoped lang="scss">
 .channel-wrap {
-  padding: 14px var(--qsc-cell-pad-x, 16px) 16px;
+  padding: 12px var(--qsc-cell-pad-x, 16px) 14px;
 }
 
 .toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
 }
 
 .seg {
@@ -373,27 +382,31 @@ watch(channel, async () => {
   display: flex;
   gap: 2px;
   padding: 3px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--qsc-fill-2, rgba(0, 0, 0, 0.06)) 85%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--qsc-fill-2, rgba(0, 0, 0, 0.06)) 90%, transparent);
 }
 
 .seg-item {
   flex: 1;
   border: 0;
-  border-radius: 8px;
-  padding: 8px 0;
+  border-radius: 9px;
+  padding: 9px 0;
   font-size: 13px;
+  letter-spacing: 0.01em;
   color: var(--qsc-text-2);
   background: transparent;
   cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .seg-item.on {
   background: var(--qsc-card, #fff);
   color: var(--van-primary-color, #1989fa);
-  font-weight: 600;
-  box-shadow: 0 0 0 1px
-    color-mix(in srgb, var(--van-primary-color, #1989fa) 18%, transparent);
+  font-weight: 650;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .seg-item:disabled {
@@ -406,7 +419,7 @@ watch(channel, async () => {
   color: var(--van-primary-color, #1989fa);
   font-size: 13px;
   font-weight: 600;
-  padding: 6px 4px;
+  padding: 6px 2px;
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -416,7 +429,7 @@ watch(channel, async () => {
 }
 
 .meta {
-  margin-top: 10px;
+  margin-top: 12px;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -452,7 +465,7 @@ watch(channel, async () => {
   margin-top: 12px;
   padding: 10px 12px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--van-primary-color, #1989fa) 12%, transparent);
+  background: color-mix(in srgb, var(--van-primary-color, #1989fa) 10%, transparent);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -491,21 +504,20 @@ watch(channel, async () => {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 18px 16px;
+  padding: 16px;
   border-radius: 12px;
-  border: 1px solid var(--qsc-border, rgba(0, 0, 0, 0.06));
-  background: color-mix(in srgb, var(--qsc-fill-2, rgba(0, 0, 0, 0.04)) 80%, transparent);
+  background: color-mix(in srgb, var(--qsc-fill-2, rgba(0, 0, 0, 0.04)) 85%, transparent);
   font-size: 13px;
   color: var(--qsc-text-2);
 }
 
 .loading-spin {
-  width: 16px;
-  height: 16px;
-  border: 2px solid color-mix(in srgb, var(--qsc-accent, #3b82f6) 25%, transparent);
-  border-top-color: var(--qsc-accent, #3b82f6);
+  width: 15px;
+  height: 15px;
+  border: 2px solid color-mix(in srgb, var(--van-primary-color, #1989fa) 22%, transparent);
+  border-top-color: var(--van-primary-color, #1989fa);
   border-radius: 50%;
-  animation: qsc-spin 0.8s linear infinite;
+  animation: qsc-spin 0.75s linear infinite;
 }
 
 @keyframes qsc-spin {
@@ -516,9 +528,9 @@ watch(channel, async () => {
 
 .progress {
   margin-top: 12px;
-  padding: 10px 12px;
+  padding: 12px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--qsc-fill-2, rgba(0, 0, 0, 0.05)) 90%, transparent);
+  background: color-mix(in srgb, var(--van-primary-color, #1989fa) 6%, transparent);
 }
 
 .progress-head {
@@ -530,10 +542,16 @@ watch(channel, async () => {
   margin-bottom: 8px;
 }
 
+.progress-pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--van-primary-color, #1989fa);
+}
+
 .progress-track {
-  height: 6px;
+  height: 5px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--qsc-border, rgba(0, 0, 0, 0.08)) 80%, transparent);
+  background: color-mix(in srgb, var(--van-primary-color, #1989fa) 14%, transparent);
   overflow: hidden;
 }
 
@@ -542,11 +560,11 @@ watch(channel, async () => {
   height: 100%;
   border-radius: inherit;
   background: var(--van-primary-color, #1989fa);
-  transition: width 0.25s ease;
+  transition: width 0.28s ease;
 }
 
 .result {
-  margin-top: 14px;
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
 }
@@ -558,7 +576,7 @@ watch(channel, async () => {
 
 .item:first-child {
   border-top: 0;
-  padding-top: 2px;
+  padding-top: 4px;
 }
 
 .item-top {
@@ -570,7 +588,7 @@ watch(channel, async () => {
 
 .name {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 650;
   color: var(--qsc-text);
   margin-right: auto;
 }
@@ -595,17 +613,17 @@ watch(channel, async () => {
 
 .chip[data-tone="ok"] {
   color: var(--van-success-color, #07c160);
-  background: color-mix(in srgb, var(--van-success-color, #07c160) 14%, transparent);
+  background: color-mix(in srgb, var(--van-success-color, #07c160) 12%, transparent);
 }
 
 .chip[data-tone="update"] {
   color: var(--van-primary-color, #1989fa);
-  background: color-mix(in srgb, var(--van-primary-color, #1989fa) 14%, transparent);
+  background: color-mix(in srgb, var(--van-primary-color, #1989fa) 12%, transparent);
 }
 
 .chip[data-tone="warn"] {
   color: var(--van-danger-color, #ee0a24);
-  background: color-mix(in srgb, var(--van-danger-color, #ee0a24) 12%, transparent);
+  background: color-mix(in srgb, var(--van-danger-color, #ee0a24) 10%, transparent);
 }
 
 .link {

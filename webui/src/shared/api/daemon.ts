@@ -155,6 +155,11 @@ export async function loadDaemonDownloadProgress(): Promise<DaemonDownloadProgre
   };
 }
 
+/** 清掉上次失败残留，避免新安装一开始闪「失败」 */
+export async function clearDaemonDownloadProgress(): Promise<void> {
+  await exec(`rm -f '${PATHS.QSCD_PROGRESS}' 2>/dev/null`, 3000);
+}
+
 export async function checkDaemonUpdate(impl: DaemonImpl): Promise<{
   value: DaemonUpdateStatus | null;
   error: string;
@@ -264,6 +269,7 @@ export async function installDaemon(
 
   if (manifest) {
     try {
+      await clearDaemonDownloadProgress();
       const { path, body } = await materializeDaemonManifest(manifest);
       env.push(`QSCD_MANIFEST_URL='${path.replace(/'/g, "")}'`);
       const arch = await resolveArchSuffix();

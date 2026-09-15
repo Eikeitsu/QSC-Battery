@@ -1,7 +1,6 @@
-package com.qsc.battery.data.repo
-
 import android.content.Context
 import com.qsc.battery.BuildConfig
+import com.qsc.battery.core.GithubCdn
 import com.qsc.battery.core.ModulePaths
 import com.qsc.battery.core.RootBridge
 import com.qsc.battery.data.model.RemoteUpdateInfo
@@ -30,9 +29,15 @@ class UpdateRepository(
         .build()
     private val json = Json { ignoreUnknownKeys = true }
 
+    data class ChannelDaemonPrep(
+        val localManifest: String,
+        val localBin: String?,
+    )
+
     suspend fun check(
         statusRepo: StatusRepository,
         channel: UpdateChannel,
+        preferCdn: Boolean = true,
     ): UpdateCheckResult = withContext(Dispatchers.IO) {
         val localModule = runCatching { statusRepo.readModuleProp() }.getOrNull()
         val appInfo = context.packageManager.getPackageInfo(context.packageName, 0)
@@ -45,13 +50,13 @@ class UpdateRepository(
         val appName = appInfo.versionName ?: BuildConfig.VERSION_NAME
 
         var err: String? = null
-        val moduleRemote = runCatching { resolveModule(channel) }
+        val moduleRemote = runCatching { resolveModule(channel, preferCdn) }
             .onFailure { err = it.message }
             .getOrNull()
-        val appRemote = runCatching { resolveApp(channel) }
+        val appRemote = runCatching { resolveApp(channel, preferCdn) }
             .onFailure { if (err == null) err = it.message }
             .getOrNull()
-        val daemonRemote = runCatching { resolveDaemon(channel) }
+        val daemonRemote = runCatching { resolveDaemon(channel, preferCdn) }
             .onFailure { if (err == null) err = it.message }
             .getOrNull()
 
@@ -182,12 +187,65 @@ class UpdateRepository(
     }
 
     /**
+     * APP OkHttp 拉清单 + 二进制，写入模块 data，供 qscd_fetch 走 QSCD_LOCAL_BIN
+     *（避开设备 curl 访问 GitHub raw / 慢 CDN）。
+     */
+    suspend fun prepareChannelDaemonInstall(
+        manifestUrl: String,
+        impl: String,
+        preferCdn: Boolean = true,
+        onProgress: ((Long, Long?) -> Unit)? = null,
+    ): ChannelDaemonPrep = withContext(Dispatchers.IO) {
+        val reachable = metaUrl(manifestUrl, preferCdn)
+        val req = Request.Builder()
+            .url(reachable)
+            .header("User-Agent", "QSC-Battery-App")
+            .get()
+            .build()
+        val body = client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) error("daemon manifest HTTP ${resp.code}")
+            resp.body.string()
+        }
+        val rewritten = GithubCdn.rewriteManifestBody(body, preferCdn)
+        val localManifest = "${ModulePaths.DATADIR}/update_manifest.json"
+        writeDataText(localManifest, rewritten)
+
+        val arch = archSuffix()
+        if (arch.isEmpty()) error("unsupported_arch")
+        val binUrl = pickBinUrl(rewritten, impl, arch, preferCdn)
+        if (binUrl.isBlank()) {
+            return@withContext ChannelDaemonPrep(localManifest = localManifest, localBin = null)
+        }
+        val cache = downloadToCache(binUrl, "qscd_channel_bin", onProgress)
+        val localBin = "${ModulePaths.DATADIR}/.qscd_channel_bin"
+        val abs = cache.absolutePath.replace("'", "")
+        val r = root.exec(
+            "mkdir -p '${ModulePaths.DATADIR}' && " +
+                "cp -f '$abs' '$localBin' && chmod 0755 '$localBin' && " +
+                "[ -s '$localBin' ] && echo ok",
+        )
+        if (!r.ok || !r.out.contains("ok")) {
+            error("write daemon binary failed: ${r.err.ifBlank { r.out }}")
+        }
+        ChannelDaemonPrep(localManifest = localManifest, localBin = localBin)
+    }
+
+    suspend fun cleanupChannelDaemonBin() {
+        withContext(Dispatchers.IO) {
+            root.exec("rm -f '${ModulePaths.DATADIR}/.qscd_channel_bin' 2>/dev/null")
+        }
+    }
+
+    /**
      * APP 侧拉取清单并把 raw.githubusercontent.com 改成 jsDelivr，写入模块 data 目录，
      * 供 qscd_fetch 以本地文件读取（避开设备 curl 访问 GitHub raw）。
      */
-    suspend fun materializeDaemonManifest(url: String): String =
+    suspend fun materializeDaemonManifest(
+        url: String,
+        preferCdn: Boolean = true,
+    ): String =
         withContext(Dispatchers.IO) {
-            val reachable = com.qsc.battery.core.GithubCdn.preferReachable(url)
+            val reachable = metaUrl(url, preferCdn)
             val req = Request.Builder()
                 .url(reachable)
                 .header("User-Agent", "QSC-Battery-App")
@@ -197,22 +255,60 @@ class UpdateRepository(
                 if (!resp.isSuccessful) error("daemon manifest HTTP ${resp.code}")
                 resp.body.string()
             }
-            val rewritten = com.qsc.battery.core.GithubCdn.rewriteManifestBody(body)
+            val rewritten = GithubCdn.rewriteManifestBody(body, preferCdn)
             val dest = "${ModulePaths.DATADIR}/update_manifest.json"
-            val b64 = android.util.Base64.encodeToString(
-                rewritten.toByteArray(Charsets.UTF_8),
-                android.util.Base64.NO_WRAP,
-            )
-            val r = root.exec(
-                "mkdir -p '${ModulePaths.DATADIR}' && " +
-                    "echo '$b64' | base64 -d > '$dest' && " +
-                    "chmod 0644 '$dest' && echo ok",
-            )
-            if (!r.ok || !r.out.contains("ok")) {
-                error("write daemon manifest failed: ${r.err.ifBlank { r.out }}")
-            }
+            writeDataText(dest, rewritten)
             dest
         }
+
+    private fun writeDataText(dest: String, text: String) {
+        val b64 = android.util.Base64.encodeToString(
+            text.toByteArray(Charsets.UTF_8),
+            android.util.Base64.NO_WRAP,
+        )
+        val r = root.exec(
+            "mkdir -p '${ModulePaths.DATADIR}' && " +
+                "echo '$b64' | base64 -d > '$dest' && " +
+                "chmod 0644 '$dest' && echo ok",
+        )
+        if (!r.ok || !r.out.contains("ok")) {
+            error("write daemon manifest failed: ${r.err.ifBlank { r.out }}")
+        }
+    }
+
+    private fun metaUrl(url: String, preferCdn: Boolean): String =
+        GithubCdn.forCiMeta(GithubCdn.preferReachable(url), preferCdn)
+
+    private fun archSuffix(): String {
+        val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
+        return when {
+            abi.startsWith("arm64") -> "arm64"
+            abi.startsWith("armeabi") -> "arm"
+            else -> ""
+        }
+    }
+
+    private fun pickBinUrl(
+        manifestText: String,
+        impl: String,
+        arch: String,
+        preferCdn: Boolean,
+    ): String {
+        val name = "qscd-$impl-$arch"
+        return try {
+            val obj = json.parseToJsonElement(manifestText).jsonObject
+            fun str(k: String) = obj[k]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+            val direct = str("${name}Url")
+            if (direct.isNotEmpty()) {
+                metaUrl(direct, preferCdn)
+            } else {
+                val base = str("baseUrl").trimEnd('/')
+                if (base.isNotEmpty()) metaUrl("$base/$name", preferCdn) else ""
+            }
+        } catch (_: Exception) {
+            ""
+        }
+    }
 
     private suspend fun preferredDaemonImpl(): String {
         val used = readDataFile("native_impl_used")?.lowercase()
@@ -228,26 +324,36 @@ class UpdateRepository(
         return r.out.trim().takeIf { r.ok && it.isNotEmpty() }
     }
 
-    private fun resolveModule(channel: UpdateChannel): RemoteUpdateInfo = when (channel) {
-        UpdateChannel.Stable -> fetchUpdateJson(BuildConfig.MODULE_UPDATE_URL)
-        UpdateChannel.Ci -> fetchUpdateJson(BuildConfig.CI_MODULE_UPDATE_URL)
-        UpdateChannel.Prerelease -> fetchUpdateJson(BuildConfig.PRE_MODULE_UPDATE_URL)
+    private fun resolveModule(channel: UpdateChannel, preferCdn: Boolean): RemoteUpdateInfo {
+        val url = when (channel) {
+            UpdateChannel.Stable -> BuildConfig.MODULE_UPDATE_URL
+            UpdateChannel.Ci -> BuildConfig.CI_MODULE_UPDATE_URL
+            UpdateChannel.Prerelease -> BuildConfig.PRE_MODULE_UPDATE_URL
+        }
+        return fetchUpdateJson(channelUrl(url, channel, preferCdn))
     }
 
-    private fun resolveApp(channel: UpdateChannel): RemoteUpdateInfo = when (channel) {
-        UpdateChannel.Stable -> fetchUpdateJson(BuildConfig.APP_UPDATE_URL)
-        UpdateChannel.Ci -> fetchUpdateJson(BuildConfig.CI_APP_UPDATE_URL)
-        UpdateChannel.Prerelease -> fetchUpdateJson(BuildConfig.PRE_APP_UPDATE_URL)
+    private fun resolveApp(channel: UpdateChannel, preferCdn: Boolean): RemoteUpdateInfo {
+        val url = when (channel) {
+            UpdateChannel.Stable -> BuildConfig.APP_UPDATE_URL
+            UpdateChannel.Ci -> BuildConfig.CI_APP_UPDATE_URL
+            UpdateChannel.Prerelease -> BuildConfig.PRE_APP_UPDATE_URL
+        }
+        return fetchUpdateJson(channelUrl(url, channel, preferCdn))
     }
 
-    private fun resolveDaemon(channel: UpdateChannel): RemoteUpdateInfo {
+    private fun resolveDaemon(channel: UpdateChannel, preferCdn: Boolean): RemoteUpdateInfo {
         val url = when (channel) {
             UpdateChannel.Stable -> BuildConfig.DAEMON_UPDATE_URL
             UpdateChannel.Ci -> BuildConfig.CI_DAEMON_UPDATE_URL
             UpdateChannel.Prerelease -> BuildConfig.PRE_DAEMON_UPDATE_URL
         }
-        return fetchDaemonJson(url).copy(manifestUrl = url)
+        val fetchUrl = channelUrl(url, channel, preferCdn)
+        return fetchDaemonJson(fetchUrl).copy(manifestUrl = fetchUrl)
     }
+
+    private fun channelUrl(url: String, channel: UpdateChannel, preferCdn: Boolean): String =
+        if (channel == UpdateChannel.Ci) metaUrl(url, preferCdn) else url
 
     private fun fetchUpdateJson(url: String): RemoteUpdateInfo {
         val req = Request.Builder()

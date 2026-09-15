@@ -47,6 +47,9 @@ class UpdatesSession(
     private val _channel = MutableStateFlow(UpdateChannel.Stable)
     val channel: StateFlow<UpdateChannel> = _channel.asStateFlow()
 
+    private val _preferCdn = MutableStateFlow(true)
+    val preferCdn: StateFlow<Boolean> = _preferCdn.asStateFlow()
+
     private val _result = MutableStateFlow<UpdateCheckResult?>(null)
     val result: StateFlow<UpdateCheckResult?> = _result.asStateFlow()
 
@@ -84,6 +87,7 @@ class UpdatesSession(
         booted = true
         scope.launch {
             _channel.value = settings.updateChannel()
+            _preferCdn.value = settings.preferCdn()
             scheduleCheck(debounceMs = 0L)
         }
     }
@@ -94,6 +98,17 @@ class UpdatesSession(
         scope.launch {
             settings.setUpdateChannel(next)
             scheduleCheck(debounceMs = 300L)
+        }
+    }
+
+    fun setPreferCdn(on: Boolean) {
+        if (on == _preferCdn.value) return
+        _preferCdn.value = on
+        scope.launch {
+            settings.setPreferCdn(on)
+            if (_channel.value == UpdateChannel.Ci) {
+                scheduleCheck(debounceMs = 200L)
+            }
         }
     }
 
@@ -151,7 +166,8 @@ class UpdatesSession(
                 _actionError.value = null
                 _actionErrorTarget.value = null
                 val ch = _channel.value
-                val r = runCatching { updates.check(status, ch) }
+                val cdn = _preferCdn.value
+                val r = runCatching { updates.check(status, ch, cdn) }
                     .onFailure {
                         _actionError.value = it.message ?: "检查失败"
                         _actionErrorTarget.value = null
@@ -194,36 +210,66 @@ class UpdatesSession(
             }
             UpdateTarget.Daemon -> {
                 if (!canUpdateDaemon(r)) return false
-                _work.value = UpdateWork.Installing(UpdateTarget.Daemon, "正在安装守护…")
-                notifier.start("安装守护", "正在下载并安装…")
                 val (manifest, pages) = updates.channelDaemonUrls(_channel.value)
                 val impl = daemon.preferredImpl()
                 val remoteManifest = r.daemonRemote?.manifestUrl ?: manifest
-                val localManifest = runCatching {
-                    updates.materializeDaemonManifest(remoteManifest)
-                }.getOrNull()
-                var msg = daemon.install(
-                    impl = impl,
-                    manifestUrl = localManifest ?: remoteManifest,
-                    pagesBase = r.daemonRemote?.baseUrl ?: pages,
-                )
-                // 旧版 qscd_fetch 不认本地清单路径时，回退到 CDN HTTP
-                if (!msg.contains("ok=1") && localManifest != null) {
-                    msg = daemon.install(
-                        impl = impl,
+                val preferCdn = _preferCdn.value
+                _work.value = UpdateWork.Downloading(UpdateTarget.Daemon, null, "正在下载守护…")
+                notifier.start("安装守护", "正在下载…")
+                val prep = runCatching {
+                    updates.prepareChannelDaemonInstall(
                         manifestUrl = remoteManifest,
-                        pagesBase = r.daemonRemote?.baseUrl ?: pages,
-                    )
+                        impl = impl,
+                        preferCdn = preferCdn,
+                    ) { read, total ->
+                        val f = if (total != null && total > 0L) {
+                            (read.toDouble() / total.toDouble()).toFloat().coerceIn(0f, 1f)
+                        } else {
+                            null
+                        }
+                        val label = if (f != null) {
+                            "下载守护 ${(f * 100).toInt()}%"
+                        } else {
+                            "正在下载守护…"
+                        }
+                        scope.launch(Dispatchers.Main.immediate) {
+                            _work.value = UpdateWork.Downloading(UpdateTarget.Daemon, f, label)
+                        }
+                        notifier.progress("安装守护", label, f)
+                    }
+                }.getOrElse {
+                    fail(it.message ?: "守护下载失败", UpdateTarget.Daemon)
+                    return false
                 }
-                if (msg.contains("ok=1")) {
-                    notifier.success("守护已更新", "安装完成")
-                    _snackbar.value = "守护已更新"
-                    _work.value = UpdateWork.Idle
-                    scheduleCheck(0L)
-                    true
-                } else {
-                    fail(humanizeDaemonError(msg), UpdateTarget.Daemon)
-                    false
+                try {
+                    _work.value = UpdateWork.Installing(UpdateTarget.Daemon, "正在安装守护…")
+                    notifier.progress("安装守护", "正在安装…", null)
+                    var msg = daemon.install(
+                        impl = impl,
+                        manifestUrl = prep.localManifest,
+                        pagesBase = r.daemonRemote?.baseUrl ?: pages,
+                        localBin = prep.localBin,
+                    )
+                    // 旧版 qscd_fetch 不认本地清单/二进制时，回退到 CDN HTTP
+                    if (!msg.contains("ok=1") && prep.localBin != null) {
+                        msg = daemon.install(
+                            impl = impl,
+                            manifestUrl = remoteManifest,
+                            pagesBase = r.daemonRemote?.baseUrl ?: pages,
+                        )
+                    }
+                    if (msg.contains("ok=1")) {
+                        notifier.success("守护已更新", "安装完成")
+                        _snackbar.value = "守护已更新"
+                        _work.value = UpdateWork.Idle
+                        scheduleCheck(0L)
+                        true
+                    } else {
+                        fail(humanizeDaemonError(msg), UpdateTarget.Daemon)
+                        false
+                    }
+                } finally {
+                    updates.cleanupChannelDaemonBin()
                 }
             }
         }
