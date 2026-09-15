@@ -1,3 +1,5 @@
+package com.qsc.battery.core
+
 /**
  * 更新通道：
  * - 元数据：updates 分支（可走 jsDelivr）

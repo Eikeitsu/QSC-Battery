@@ -1,3 +1,5 @@
+package com.qsc.battery.data.repo
+
 import android.content.Context
 import com.qsc.battery.BuildConfig
 import com.qsc.battery.core.GithubCdn
@@ -261,7 +263,7 @@ class UpdateRepository(
             dest
         }
 
-    private fun writeDataText(dest: String, text: String) {
+    private suspend fun writeDataText(dest: String, text: String) {
         val b64 = android.util.Base64.encodeToString(
             text.toByteArray(Charsets.UTF_8),
             android.util.Base64.NO_WRAP,
