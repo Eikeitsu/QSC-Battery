@@ -47,7 +47,7 @@ class UpdatesSession(
     private val _channel = MutableStateFlow(UpdateChannel.Stable)
     val channel: StateFlow<UpdateChannel> = _channel.asStateFlow()
 
-    private val _preferCdn = MutableStateFlow(true)
+    private val _preferCdn = MutableStateFlow(false)
     val preferCdn: StateFlow<Boolean> = _preferCdn.asStateFlow()
 
     private val _result = MutableStateFlow<UpdateCheckResult?>(null)
@@ -215,10 +215,10 @@ class UpdatesSession(
             }
             UpdateTarget.Daemon -> {
                 if (!canUpdateDaemon(r)) return false
-                val (manifest, pages) = updates.channelDaemonUrls(_channel.value)
+                val preferCdn = _preferCdn.value
+                val (manifest, pages) = updates.channelDaemonUrls(_channel.value, preferCdn)
                 val impl = daemon.preferredImpl()
                 val remoteManifest = r.daemonRemote?.manifestUrl ?: manifest
-                val preferCdn = _preferCdn.value
                 _work.value = UpdateWork.Downloading(UpdateTarget.Daemon, null, "正在下载守护…")
                 notifier.start("安装守护", "正在下载…")
                 val prep = runCatching {
@@ -254,13 +254,15 @@ class UpdatesSession(
                         manifestUrl = prep.localManifest,
                         pagesBase = r.daemonRemote?.baseUrl ?: pages,
                         localBin = prep.localBin,
+                        preferCdn = preferCdn,
                     )
-                    // 旧版 qscd_fetch 不认本地清单/二进制时，回退到 CDN HTTP
+                    // 旧版 qscd_fetch 不认本地清单/二进制时，回退到 HTTP 拉取
                     if (!msg.contains("ok=1") && prep.localBin != null) {
                         msg = daemon.install(
                             impl = impl,
                             manifestUrl = remoteManifest,
                             pagesBase = r.daemonRemote?.baseUrl ?: pages,
+                            preferCdn = preferCdn,
                         )
                     }
                     if (msg.contains("ok=1")) {

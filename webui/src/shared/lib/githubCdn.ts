@@ -15,9 +15,9 @@ const OWNER_REPO = "Eikeitsu/QSC-Battery";
 
 type StringLike = string | null | undefined;
 
-/** 默认开：读 updates 元数据时优先 jsDelivr */
+/** 默认关：读 updates / ci-dist 走 GitHub raw；开则走 jsDelivr */
 export function isPreferCdn(): boolean {
-  return readStorageFlag(STORAGE_KEYS.preferCdn, true);
+  return readStorageFlag(STORAGE_KEYS.preferCdn, false);
 }
 
 export function setPreferCdn(on: boolean): void {

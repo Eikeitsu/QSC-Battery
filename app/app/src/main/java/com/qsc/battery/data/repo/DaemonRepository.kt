@@ -24,8 +24,9 @@ class DaemonRepository(private val root: RootBridge) {
         impl: String? = null,
         manifestUrl: String? = null,
         pagesBase: String? = null,
+        preferCdn: Boolean = false,
     ): String {
-        val env = envPrefix(manifestUrl, pagesBase)
+        val env = envPrefix(manifestUrl, pagesBase, preferCdn = preferCdn)
         val arg = impl?.takeIf { it.isNotBlank() }?.let { " '$it'" } ?: ""
         val r = root.exec("${env}sh '${ModulePaths.QSCD_FETCH}' check$arg 2>/dev/null")
         return (r.out + "\n" + r.err).trim()
@@ -36,8 +37,9 @@ class DaemonRepository(private val root: RootBridge) {
         manifestUrl: String? = null,
         pagesBase: String? = null,
         localBin: String? = null,
+        preferCdn: Boolean = false,
     ): String {
-        val env = envPrefix(manifestUrl, pagesBase, localBin)
+        val env = envPrefix(manifestUrl, pagesBase, localBin, preferCdn)
         val r = root.exec("${env}sh '${ModulePaths.QSCD_FETCH}' install '$impl' 2>/dev/null")
         return (r.out + "\n" + r.err).trim()
     }
@@ -58,13 +60,14 @@ class DaemonRepository(private val root: RootBridge) {
         manifestUrl: String?,
         pagesBase: String?,
         localBin: String? = null,
+        preferCdn: Boolean = false,
     ): String {
         val parts = mutableListOf<String>()
-        // 本地路径（materialize）原样；仅 HTTP 走 CDN 改写
+        // 本地路径（materialize）原样；仅 HTTP 按 CDN 开关改写
         val manifest = manifestUrl?.takeIf { it.isNotBlank() }?.let { u ->
-            if (u.startsWith("http")) GithubCdn.preferReachable(u) else u
+            if (u.startsWith("http")) GithubCdn.toChannelAssetUrl(u, preferCdn) else u
         }
-        val pages = GithubCdn.pagesRootForDaemon(pagesBase)
+        val pages = GithubCdn.pagesRootForDaemon(pagesBase, preferCdn)
         if (!manifest.isNullOrBlank()) {
             parts += "QSCD_MANIFEST_URL='${manifest.replace("'", "")}'"
         }

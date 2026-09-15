@@ -61,11 +61,11 @@ class SettingsRepository(private val context: Context) {
     }
 
     val preferCdn: Flow<Boolean> = context.settingsStore.data.map {
-        it[Keys.preferCdn] ?: true
+        it[Keys.preferCdn] ?: false
     }
 
     suspend fun preferCdn(): Boolean =
-        context.settingsStore.data.first()[Keys.preferCdn] ?: true
+        context.settingsStore.data.first()[Keys.preferCdn] ?: false
 
     suspend fun setPreferCdn(enabled: Boolean) {
         context.settingsStore.edit { it[Keys.preferCdn] = enabled }

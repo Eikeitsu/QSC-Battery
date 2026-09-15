@@ -44,7 +44,7 @@ class UpdateRepository(
     suspend fun check(
         statusRepo: StatusRepository,
         channel: UpdateChannel,
-        preferCdn: Boolean = true,
+        preferCdn: Boolean = false,
     ): UpdateCheckResult = withContext(Dispatchers.IO) {
         val localModule = runCatching { statusRepo.readModuleProp() }.getOrNull()
         val appInfo = context.packageManager.getPackageInfo(context.packageName, 0)
@@ -88,9 +88,18 @@ class UpdateRepository(
         var stableAppNewer: RemoteUpdateInfo? = null
         var stableDaemonNewer: RemoteUpdateInfo? = null
         if (channel != UpdateChannel.Stable) {
-            val stableModule = runCatching { fetchUpdateJson(BuildConfig.MODULE_UPDATE_URL) }.getOrNull()
-            val stableApp = runCatching { fetchUpdateJson(BuildConfig.APP_UPDATE_URL) }.getOrNull()
-            val stableDaemon = runCatching { fetchDaemonJson(BuildConfig.DAEMON_UPDATE_URL) }.getOrNull()
+            val stableModule = runCatching {
+                fetchUpdateJson(GithubCdn.toChannelAssetUrl(BuildConfig.MODULE_UPDATE_URL, preferCdn), preferCdn)
+            }.getOrNull()
+            val stableApp = runCatching {
+                fetchUpdateJson(GithubCdn.toChannelAssetUrl(BuildConfig.APP_UPDATE_URL, preferCdn), preferCdn)
+            }.getOrNull()
+            val stableDaemon = runCatching {
+                fetchDaemonJson(
+                    GithubCdn.toChannelAssetUrl(BuildConfig.DAEMON_UPDATE_URL, preferCdn),
+                    preferCdn,
+                )
+            }.getOrNull()
             val localCode = localModule?.versionCode ?: 0L
             if (stableModule != null && stableModule.versionCode > localCode) {
                 stableModuleNewer = stableModule
@@ -201,7 +210,7 @@ class UpdateRepository(
             }
         }
 
-    fun channelDaemonUrls(channel: UpdateChannel): Pair<String, String> {
+    fun channelDaemonUrls(channel: UpdateChannel, preferCdn: Boolean = false): Pair<String, String> {
         val manifest = when (channel) {
             UpdateChannel.Stable -> BuildConfig.DAEMON_UPDATE_URL
             UpdateChannel.Ci -> BuildConfig.CI_DAEMON_UPDATE_URL
@@ -209,11 +218,12 @@ class UpdateRepository(
         }
         val pagesFallback = when (channel) {
             UpdateChannel.Stable -> "https://eikeitsu.github.io/QSC-Battery"
-            // Site root（不含 /qscd）；fetch 会拼 /qscd/<name>。二进制优先走 manifest *Url（jsDelivr）
+            // Site root（不含 /qscd）；fetch 会拼 /qscd/<name>。二进制优先走 manifest *Url
             UpdateChannel.Ci -> "https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@ci-dist"
             UpdateChannel.Prerelease -> "https://eikeitsu.github.io/QSC-Battery"
         }
-        return manifest to pagesFallback
+        return GithubCdn.toChannelAssetUrl(manifest, preferCdn) to
+            GithubCdn.toChannelAssetUrl(pagesFallback, preferCdn)
     }
 
     /**
@@ -223,7 +233,7 @@ class UpdateRepository(
     suspend fun prepareChannelDaemonInstall(
         manifestUrl: String,
         impl: String,
-        preferCdn: Boolean = true,
+        preferCdn: Boolean = false,
         onProgress: ((Long, Long?) -> Unit)? = null,
     ): ChannelDaemonPrep = withContext(Dispatchers.IO) {
         val reachable = metaUrl(manifestUrl, preferCdn)
@@ -311,7 +321,7 @@ class UpdateRepository(
      */
     suspend fun materializeDaemonManifest(
         url: String,
-        preferCdn: Boolean = true,
+        preferCdn: Boolean = false,
     ): String =
         withContext(Dispatchers.IO) {
             val reachable = metaUrl(url, preferCdn)
@@ -346,7 +356,7 @@ class UpdateRepository(
     }
 
     private fun metaUrl(url: String, preferCdn: Boolean): String =
-        GithubCdn.forCiMeta(GithubCdn.preferReachable(url), preferCdn)
+        GithubCdn.toChannelAssetUrl(url, preferCdn)
 
     private fun archSuffix(): String {
         val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
@@ -399,7 +409,7 @@ class UpdateRepository(
             UpdateChannel.Ci -> BuildConfig.CI_MODULE_UPDATE_URL
             UpdateChannel.Prerelease -> BuildConfig.PRE_MODULE_UPDATE_URL
         }
-        return fetchUpdateJson(channelUrl(url, channel, preferCdn))
+        return fetchUpdateJson(channelUrl(url, preferCdn), preferCdn)
     }
 
     private fun resolveApp(channel: UpdateChannel, preferCdn: Boolean): RemoteUpdateInfo {
@@ -408,7 +418,7 @@ class UpdateRepository(
             UpdateChannel.Ci -> BuildConfig.CI_APP_UPDATE_URL
             UpdateChannel.Prerelease -> BuildConfig.PRE_APP_UPDATE_URL
         }
-        return fetchUpdateJson(channelUrl(url, channel, preferCdn))
+        return fetchUpdateJson(channelUrl(url, preferCdn), preferCdn)
     }
 
     private fun resolveDaemon(channel: UpdateChannel, preferCdn: Boolean): RemoteUpdateInfo {
@@ -417,14 +427,14 @@ class UpdateRepository(
             UpdateChannel.Ci -> BuildConfig.CI_DAEMON_UPDATE_URL
             UpdateChannel.Prerelease -> BuildConfig.PRE_DAEMON_UPDATE_URL
         }
-        val fetchUrl = channelUrl(url, channel, preferCdn)
-        return fetchDaemonJson(fetchUrl).copy(manifestUrl = fetchUrl)
+        val fetchUrl = channelUrl(url, preferCdn)
+        return fetchDaemonJson(fetchUrl, preferCdn).copy(manifestUrl = fetchUrl)
     }
 
-    private fun channelUrl(url: String, channel: UpdateChannel, preferCdn: Boolean): String =
-        if (channel == UpdateChannel.Ci) metaUrl(url, preferCdn) else url
+    private fun channelUrl(url: String, preferCdn: Boolean): String =
+        metaUrl(url, preferCdn)
 
-    private fun fetchUpdateJson(url: String): RemoteUpdateInfo {
+    private fun fetchUpdateJson(url: String, preferCdn: Boolean): RemoteUpdateInfo {
         val req = Request.Builder()
             .url(url)
             .header("User-Agent", "QSC-Battery-App")
@@ -432,11 +442,11 @@ class UpdateRepository(
             .build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) error("HTTP ${resp.code}")
-            return parseUpdateJson(resp.body.string())
+            return parseUpdateJson(resp.body.string(), preferCdn)
         }
     }
 
-    private fun fetchDaemonJson(url: String): RemoteUpdateInfo {
+    private fun fetchDaemonJson(url: String, preferCdn: Boolean): RemoteUpdateInfo {
         val req = Request.Builder()
             .url(url)
             .header("User-Agent", "QSC-Battery-App")
@@ -444,33 +454,26 @@ class UpdateRepository(
             .build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) error("daemon HTTP ${resp.code}")
-            val obj = json.parseToJsonElement(resp.body.string()).jsonObject
-            fun str(k: String) = obj[k]?.jsonPrimitive?.contentOrNull
-            fun long(k: String) = obj[k]?.jsonPrimitive?.longOrNull ?: 0L
-            return RemoteUpdateInfo(
-                version = str("version").orEmpty(),
-                versionCode = long("versionCode"),
-                baseUrl = str("baseUrl"),
-                changelog = str("changelog"),
-                manifestUrl = url,
-                rustVersion = str("rustVersion"),
-                rustVersionCode = long("rustVersionCode"),
-                cVersion = str("cVersion"),
-                cVersionCode = long("cVersionCode"),
-            )
+            return parseUpdateJson(resp.body.string(), preferCdn).copy(manifestUrl = url)
         }
     }
 
-    private fun parseUpdateJson(text: String): RemoteUpdateInfo {
+    private fun parseUpdateJson(text: String, preferCdn: Boolean): RemoteUpdateInfo {
         val obj = json.parseToJsonElement(text).jsonObject
         fun str(k: String) = obj[k]?.jsonPrimitive?.contentOrNull
         fun long(k: String) = obj[k]?.jsonPrimitive?.longOrNull ?: 0L
+        fun assetUrl(k: String) = str(k)?.let { metaUrl(it, preferCdn) }
         return RemoteUpdateInfo(
             version = str("version").orEmpty(),
             versionCode = long("versionCode"),
-            zipUrl = str("zipUrl"),
-            apkUrl = str("apkUrl"),
+            zipUrl = assetUrl("zipUrl"),
+            apkUrl = assetUrl("apkUrl"),
             changelog = str("changelog"),
+            baseUrl = assetUrl("baseUrl"),
+            rustVersion = str("rustVersion"),
+            rustVersionCode = long("rustVersionCode"),
+            cVersion = str("cVersion"),
+            cVersionCode = long("cVersionCode"),
         )
     }
 }
