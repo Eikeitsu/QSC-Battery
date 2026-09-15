@@ -29,7 +29,16 @@ const base = import.meta.env.BASE_URL;
       aria-label="返回"
       @click="$emit('back')"
     >
-      ←
+      <svg class="back-ico" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          d="M15.5 5.5 9 12l6.5 6.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
     </button>
     <div class="md3-top">
       <p v-if="!subPage" class="md3-eyebrow">{{ store.deviceName || "本机" }}</p>
@@ -49,7 +58,16 @@ const base = import.meta.env.BASE_URL;
       aria-label="返回"
       @click="$emit('back')"
     >
-      ←
+      <svg class="back-ico" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          d="M15.5 5.5 9 12l6.5 6.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
     </button>
     <div class="titles">
       <h1>{{ subPage ? pageTitle || APP.name : APP.name }}</h1>
@@ -65,7 +83,16 @@ const base = import.meta.env.BASE_URL;
       aria-label="返回"
       @click="$emit('back')"
     >
-      ←
+      <svg class="back-ico" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          d="M15.5 5.5 9 12l6.5 6.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
     </button>
     <img v-else class="logo" :src="`${base}img/icon.png`" width="36" height="36" alt="" />
     <div class="titles">
@@ -78,18 +105,30 @@ const base = import.meta.env.BASE_URL;
 <style scoped lang="scss">
 .back {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  margin-right: 4px;
+  box-sizing: border-box;
+  width: 40px;
+  height: 40px;
+  margin: 0 0 0 -10px;
+  padding: 0;
   border: 0;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--qsc-fill-2, rgba(0, 0, 0, 0.06)) 90%, transparent);
+  border-radius: 12px;
+  background: transparent;
   color: var(--qsc-text);
-  font-size: 18px;
-  line-height: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease;
+}
+
+.back:active {
+  background: color-mix(in srgb, var(--qsc-text) 8%, transparent);
+}
+
+.back-ico {
+  width: 22px;
+  height: 22px;
+  display: block;
 }
 
 .logo {
@@ -129,8 +168,20 @@ const base = import.meta.env.BASE_URL;
 
 .topbar-md3.is-sub {
   flex-direction: row;
-  align-items: flex-end;
-  gap: 8px;
+  align-items: center;
+  gap: 2px;
+  padding-bottom: 10px;
+}
+
+.topbar-md3.is-sub .back {
+  margin-left: -8px;
+  border-radius: 999px;
+}
+
+.topbar-md3.is-sub .md3-top {
+  width: auto;
+  flex: 1;
+  min-width: 0;
 }
 
 .md3-top {
@@ -160,7 +211,12 @@ const base = import.meta.env.BASE_URL;
 }
 
 .topbar-md3.is-sub h1 {
-  font-size: 22px;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topbar-miuix {
@@ -171,11 +227,28 @@ const base = import.meta.env.BASE_URL;
 .topbar-miuix.is-sub,
 .topbar-default.is-sub {
   align-items: center;
+  gap: 2px;
+}
+
+.topbar-miuix.is-sub .back {
+  width: 36px;
+  height: 36px;
+  margin-left: -8px;
+  border-radius: 10px;
+}
+
+.topbar-miuix.is-sub .back-ico {
+  width: 20px;
+  height: 20px;
 }
 
 .topbar-miuix .titles h1 {
   font-size: 18px;
   font-weight: 700;
+}
+
+.topbar-default.is-sub .back {
+  margin-left: -8px;
 }
 
 .topbar-default .logo {
