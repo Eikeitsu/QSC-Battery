@@ -7,12 +7,13 @@
 #   EVENT_NAME (push|workflow_run|…)
 #   GITHUB_REPOSITORY, GITHUB_TOKEN (for readiness checks on workflow_run)
 #
-# Prints:
+# Prints (stdout, for eval):
 #   need_app=0|1
 #   need_qscd=0|1
 #   need_web=0|1
-#   siblings_ready=0|1   (1 if every needed sibling already has a successful build for EXPECTED_SHA)
-#   run_package=0|1      (recommendation)
+#   siblings_ready=0|1
+#   run_package=0|1
+# Diagnostic lines (ready:/pending:) go to stderr so eval stays safe.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -113,25 +114,25 @@ RAW="https://raw.githubusercontent.com/${OWNER_REPO:-Eikeitsu/QSC-Battery}"
 SIBLINGS_READY=1
 if [ "$NEED_APP" = "1" ]; then
   if workflow_ok "app.yml" || tip_sha_ok "${RAW}/ci-dist/app/SOURCE_SHA"; then
-    echo "ready: app"
+    echo "ready: app" >&2
   else
-    echo "pending: app"
+    echo "pending: app" >&2
     SIBLINGS_READY=0
   fi
 fi
 if [ "$NEED_QSCD" = "1" ]; then
   if workflow_ok "build-qscd.yml" || tip_sha_ok "${RAW}/ci-dist/qscd/SOURCE_SHA"; then
-    echo "ready: qscd"
+    echo "ready: qscd" >&2
   else
-    echo "pending: qscd"
+    echo "pending: qscd" >&2
     SIBLINGS_READY=0
   fi
 fi
 if [ "$NEED_WEB" = "1" ]; then
   if workflow_ok "build-web.yml" || tip_sha_ok "${RAW}/dist-web/SOURCE_SHA"; then
-    echo "ready: web"
+    echo "ready: web" >&2
   else
-    echo "pending: web"
+    echo "pending: web" >&2
     SIBLINGS_READY=0
   fi
 fi
