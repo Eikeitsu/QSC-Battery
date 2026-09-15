@@ -41,7 +41,7 @@ const daemonTitle = computed(() => {
   return `守护 · ${impl}`;
 });
 const actionBusyLabel = computed(() => {
-  if (actionBusy.value === "module") return "正在下载模块…";
+  if (actionBusy.value === "module") return "正在无人值守刷入模块…";
   if (actionBusy.value === "app") return "正在下载 APP…";
   if (actionBusy.value === "daemon") {
     const labels: Record<string, string> = {
@@ -134,7 +134,7 @@ async function updateModule() {
     try {
       await showConfirmDialog({
         title: "切回通道模块？",
-        message: `本地模块高于当前通道，将刷入 ${result.value.module?.version || "通道版"}，需在模块管理器中确认。`,
+        message: `本地模块高于当前通道，将无人值守刷入 ${result.value.module?.version || "通道版"}（跳过音量键）。失败则打开管理器。`,
       });
     } catch {
       return;
@@ -147,8 +147,20 @@ async function updateModule() {
     const r = await api.downloadAndOpenModuleInstaller(url);
     if (r.ok) {
       progress.value = { percent: 100, stage: "done" };
-      showToast("已打开模块管理器，请确认刷写");
-      await check(true);
+      if (r.mode === "cli") {
+        showToast("模块已无人值守刷入，正在刷新界面…");
+        await check(true);
+        // 新 WebUI 已写入模块目录，硬刷新以加载最新 UI
+        setTimeout(() => {
+          const href = window.location.href.split("#")[0] || window.location.href;
+          window.location.replace(
+            `${href}${href.includes("?") ? "&" : "?"}_r=${Date.now()}`,
+          );
+        }, 800);
+      } else {
+        showToast("CLI 失败，已打开模块管理器，请确认刷写");
+        await check(true);
+      }
     } else {
       showToast(api.moduleInstallErrorText(r.error));
     }

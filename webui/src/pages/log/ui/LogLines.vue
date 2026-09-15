@@ -17,9 +17,11 @@ withDefaults(
       v-for="(line, i) in lines"
       :key="i"
       class="log-line"
-      :class="`lv-${line.level}`"
-      v-text="line.raw"
-    ></span>
+      :class="[`lv-${line.level}`, { context: line.context }]"
+    >
+      <span v-if="line.context" class="ctx-tag">边界</span>
+      <span class="log-text" v-text="line.raw"></span>
+    </span>
   </div>
   <p v-else class="log-empty">
     {{ filtered ? "没有该等级的日志" : "暂无日志（触发功能后才会写入）" }}
@@ -68,6 +70,25 @@ withDefaults(
 
 .lv-error {
   color: var(--qsc-danger);
+}
+
+.log-line.context {
+  color: var(--qsc-text-3);
+  opacity: 0.78;
+}
+
+.ctx-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 650;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+  color: var(--qsc-text-3);
+  background: color-mix(in srgb, var(--qsc-text) 8%, transparent);
+  vertical-align: 1px;
 }
 
 .log-empty {

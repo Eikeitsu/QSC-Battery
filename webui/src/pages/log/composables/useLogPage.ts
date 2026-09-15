@@ -44,7 +44,7 @@ export function useLogPage() {
     useChargeEvents(80);
 
   const logEntries = computed(() => parseLogText(store.logText));
-  // 平铺：按等级滤行。会话：先全量分组，再组内滤行（边界行始终保留）。
+  // 平铺：按等级滤行。会话：先全量分组，再组内滤行；不匹配的停充/恢复边界作弱化上下文。
   const visibleLogLines = computed(() =>
     filterLogEntries(logEntries.value, levelFilter.value),
   );

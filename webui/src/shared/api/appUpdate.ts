@@ -2,6 +2,7 @@
 import { exec } from "./ksu";
 import { APP } from "@/shared/config/app";
 import { toChannelAssetUrl } from "@/shared/lib/githubCdn";
+import { silentUnlinkFile } from "./silentUnlink";
 
 const APP_PACKAGES = ["com.qsc.battery", "com.qsc.battery.debug"] as const;
 
@@ -120,10 +121,12 @@ export async function downloadAndInstallApp(apkUrl: string): Promise<{
   const install = await exec(`pm install -r ${a} 2>&1`, 120_000);
   const out = `${install.stdout || ""}\n${install.stderr || ""}`.trim();
   if (/Success/i.test(out) || install.errno === 0) {
+    silentUnlinkFile(apk);
     return { ok: true, error: "", detail: out, apkPath: apk, mode: "pm" };
   }
 
   if (await openApkInstaller(apk)) {
+    silentUnlinkFile(apk, 180);
     return {
       ok: true,
       error: "",
@@ -133,6 +136,7 @@ export async function downloadAndInstallApp(apkUrl: string): Promise<{
     };
   }
 
+  silentUnlinkFile(apk);
   return {
     ok: false,
     error: "install_failed",

@@ -251,7 +251,7 @@ fun UpdatesScreen(
                         ChargeToggleRow(
                             title = "使用 CDN",
                             checked = preferCdn,
-                            summary = "开启后 CI 元数据/产物走 jsDelivr；关闭则走 GitHub raw",
+                            summary = "开启后 CI 走 jsDelivr（有缓存，刚发版检不到可关或稍后再试）；关闭则走 GitHub raw",
                             enabled = !busy,
                             onCheckedChange = { session.setPreferCdn(it) },
                         )

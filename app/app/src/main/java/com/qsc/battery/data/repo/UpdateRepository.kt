@@ -1,6 +1,7 @@
 package com.qsc.battery.data.repo
 
 import android.content.Context
+import android.util.Log
 import com.qsc.battery.BuildConfig
 import com.qsc.battery.core.GithubCdn
 import com.qsc.battery.core.ModulePaths
@@ -30,6 +31,10 @@ class UpdateRepository(
         .followSslRedirects(true)
         .build()
     private val json = Json { ignoreUnknownKeys = true }
+
+    private companion object {
+        const val TAG = "QscUpdateCleanup"
+    }
 
     data class ChannelDaemonPrep(
         val localManifest: String,
@@ -252,12 +257,51 @@ class UpdateRepository(
         if (!r.ok || !r.out.contains("ok")) {
             error("write daemon binary failed: ${r.err.ifBlank { r.out }}")
         }
+        runCatching {
+            if (cache.isFile) {
+                cache.delete()
+                if (cache.isFile) {
+                    Log.d(TAG, "cache still exists after delete: ${cache.absolutePath}")
+                }
+            }
+        }
         ChannelDaemonPrep(localManifest = localManifest, localBin = localBin)
     }
 
     suspend fun cleanupChannelDaemonBin() {
         withContext(Dispatchers.IO) {
-            root.exec("rm -f '${ModulePaths.DATADIR}/.qscd_channel_bin' 2>/dev/null")
+            val paths = listOf(
+                "${ModulePaths.DATADIR}/.qscd_channel_bin",
+                "${ModulePaths.DATADIR}/update_manifest.json",
+            )
+            for (path in paths) {
+                silentUnlinkRootFile(path)
+            }
+        }
+    }
+
+    /** 静默删 APP 私有缓存更新包；不对用户提示，仅 debug 可查 */
+    fun deleteCacheUpdateFile(fileName: String) {
+        val name = fileName.trim().substringAfterLast('/').substringAfterLast('\\')
+        if (name.isEmpty() || name == "." || name == "..") return
+        val target = java.io.File(context.cacheDir, name)
+        if (!target.isFile) return
+        runCatching { target.delete() }
+        if (target.isFile) {
+            Log.d(TAG, "cache still exists after delete: ${target.absolutePath}")
+        }
+    }
+
+    /** 仅删已知绝对路径普通文件；删不掉时打 debug */
+    private suspend fun silentUnlinkRootFile(path: String) {
+        val p = path.trim()
+        if (!p.startsWith("/") || p.contains("..") || p.endsWith("/")) return
+        val exists = root.exec("[ -f '$p' ] && echo yes || echo no")
+        if (!exists.out.contains("yes")) return
+        root.exec("rm -f -- '$p' >/dev/null 2>&1; true")
+        val still = root.exec("[ -e '$p' ] && echo yes || echo no")
+        if (still.out.contains("yes")) {
+            Log.d(TAG, "still exists after unlink: $p")
         }
     }
 

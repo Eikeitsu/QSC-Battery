@@ -1,15 +1,19 @@
-/** WebUI：下载模块 zip，并拉起 Magisk / KSU / APatch 等管理器的刷写界面（非无感 CLI）。 */
+/** WebUI：下载模块 zip → 无人值守 CLI 刷入（失败再打开管理器）。 */
 import { exec } from "./ksu";
 import { PATHS } from "@/shared/config/paths";
 import { APP } from "@/shared/config/app";
 import { toChannelAssetUrl } from "@/shared/lib/githubCdn";
+import { silentUnlinkFile } from "./silentUnlink";
 
 export interface LocalModuleInfo {
   version: string;
   versionCode: number;
 }
 
-/** 常见模块管理器包名（优先匹配当前机上已安装的）。 */
+/** 与 APP ModulePaths.INSTALL_AUTO 一致：customize.sh 见此文件则跳过音量键 */
+const INSTALL_AUTO = "/data/adb/qsc/install_auto";
+
+/** 常见模块管理器包名（CLI 失败时兜底）。 */
 const MANAGER_PACKAGES = [
   "com.rifsxd.ksunext",
   "me.weishu.kernelsu",
@@ -19,6 +23,8 @@ const MANAGER_PACKAGES = [
   "me.bmax.apatch",
   "com.sukisu.ultra",
 ] as const;
+
+const INSTALL_TIMEOUT_MS = 300_000;
 
 export async function readLocalModule(): Promise<LocalModuleInfo | null> {
   const r = await exec(
@@ -60,6 +66,82 @@ async function writeBinaryFile(dest: string, data: ArrayBuffer): Promise<boolean
   return (check.stdout || "").includes("ok");
 }
 
+async function downloadZip(
+  url: string,
+  zip: string,
+): Promise<{ ok: boolean; detail: string }> {
+  const u = shellQuote(url);
+  const z = shellQuote(zip);
+  const dir = zip.replace(/\/[^/]+$/, "");
+
+  try {
+    const resp = await fetch(url, { headers: { "User-Agent": "QSC-Battery-WebUI" } });
+    if (resp.ok) {
+      const buf = await resp.arrayBuffer();
+      if (buf.byteLength > 0 && (await writeBinaryFile(zip, buf))) {
+        return { ok: true, detail: `webview bytes=${buf.byteLength}` };
+      }
+    }
+  } catch {
+    /* curl fallback */
+  }
+
+  const script = [
+    `mkdir -p '${dir}'`,
+    `rm -f ${z}`,
+    `OK=0`,
+    `(command -v curl >/dev/null && curl -fsSL --connect-timeout 15 --max-time 180 -o ${z} ${u} && OK=1) || true`,
+    `[ "$OK" = 1 ] || (command -v wget >/dev/null && wget -q -O ${z} ${u} && OK=1) || true`,
+    `[ "$OK" = 1 ] && [ -s ${z} ] || { echo error=download_failed; exit 0; }`,
+    `echo downloaded=1`,
+  ].join("\n");
+  const r = await exec(script, 240_000);
+  const out = `${r.stdout || ""}\n${r.stderr || ""}`.trim();
+  if (/error=download_failed/.test(out) || !/downloaded=1/.test(out)) {
+    return { ok: false, detail: out };
+  }
+  return { ok: true, detail: out };
+}
+
+async function enableUnattended(): Promise<void> {
+  await exec(`mkdir -p /data/adb/qsc && touch '${INSTALL_AUTO}'`, 5_000);
+}
+
+async function clearUnattended(): Promise<void> {
+  silentUnlinkFile(INSTALL_AUTO);
+}
+
+/** Root CLI 刷入；任一成功即返回 */
+async function installModuleCli(zip: string): Promise<{ ok: boolean; detail: string }> {
+  const path = zip.replace(/'/g, "");
+  const attempts = [
+    `magisk --install-module '${path}'`,
+    `ksud module install '${path}'`,
+    `/data/adb/ksud module install '${path}'`,
+    `nsenter --mount=/proc/1/ns/mnt -- /data/adb/ksud module install '${path}'`,
+    `nsenter --mount=/proc/1/ns/mnt -- /data/adb/magisk/magisk --install-module '${path}'`,
+    `/data/adb/ap/bin/apd module install '${path}'`,
+    `nsenter --mount=/proc/1/ns/mnt -- /data/adb/ap/bin/apd module install '${path}'`,
+  ];
+  const logs: string[] = [];
+  for (const cmd of attempts) {
+    logs.push(`$ ${cmd}`);
+    const r = await exec(cmd, INSTALL_TIMEOUT_MS);
+    const out = `${r.stdout || ""}\n${r.stderr || ""}`.trim();
+    if (out) logs.push(out);
+    logs.push(`# exit=${r.errno}`);
+    // 与 APP RootBridge 一致：优先看 errno；部分环境成功输出含 Success
+    if (
+      r.errno === 0 ||
+      /\bSuccess\b/i.test(out) ||
+      /installed successfully/i.test(out)
+    ) {
+      return { ok: true, detail: logs.join("\n") };
+    }
+  }
+  return { ok: false, detail: logs.join("\n") };
+}
+
 async function openZipInManager(zip: string): Promise<{ ok: boolean; detail: string }> {
   const z = shellQuote(zip);
   const pkgs = MANAGER_PACKAGES.map((p) => shellQuote(p)).join(" ");
@@ -82,70 +164,75 @@ async function openZipInManager(zip: string): Promise<{ ok: boolean; detail: str
   return { ok: /\bok=1\b/.test(out), detail: out };
 }
 
+export type ModuleInstallMode = "cli" | "manager" | "";
+
 /**
- * 优先 WebView 拉通道直链（不经 Pages 站点），失败再试设备 curl。
- * 下载到公共 Download，再用 ACTION_VIEW 拉起模块管理器刷写页。
+ * 下载 → 写 install_auto → CLI 无人值守刷入 → 清 flag。
+ * CLI 失败再打开模块管理器。
  */
 export async function downloadAndOpenModuleInstaller(zipUrl: string): Promise<{
   ok: boolean;
   error: string;
   detail: string;
   zipPath: string;
+  mode: ModuleInstallMode;
 }> {
   const url = toChannelAssetUrl(String(zipUrl || "").trim());
-  if (!url) return { ok: false, error: "no_url", detail: "", zipPath: "" };
+  if (!url) {
+    return { ok: false, error: "no_url", detail: "", zipPath: "", mode: "" };
+  }
 
   const dir = "/sdcard/Download";
   const zip = `${dir}/${APP.moduleId}-update.zip`;
-  const u = shellQuote(url);
-  const z = shellQuote(zip);
 
-  // 1) WebView 通道直链
+  const dl = await downloadZip(url, zip);
+  if (!dl.ok) {
+    return {
+      ok: false,
+      error: "download_failed",
+      detail: dl.detail,
+      zipPath: "",
+      mode: "",
+    };
+  }
+
   try {
-    const resp = await fetch(url, { headers: { "User-Agent": "QSC-Battery-WebUI" } });
-    if (resp.ok) {
-      const buf = await resp.arrayBuffer();
-      if (buf.byteLength > 0 && (await writeBinaryFile(zip, buf))) {
-        const opened = await openZipInManager(zip);
-        if (opened.ok)
-          return { ok: true, error: "", detail: opened.detail, zipPath: zip };
-        return {
-          ok: false,
-          error: "open_manager_failed",
-          detail: opened.detail,
-          zipPath: zip,
-        };
-      }
+    await enableUnattended();
+    const cli = await installModuleCli(zip);
+    if (cli.ok) {
+      silentUnlinkFile(zip);
+      return {
+        ok: true,
+        error: "",
+        detail: `${dl.detail}\n${cli.detail}`,
+        zipPath: zip,
+        mode: "cli",
+      };
     }
-  } catch {
-    /* fall through to curl */
+
+    const opened = await openZipInManager(zip);
+    if (opened.ok) {
+      // 管理器可能还要读：延迟静默删
+      silentUnlinkFile(zip, 120);
+      return {
+        ok: true,
+        error: "",
+        detail: `${cli.detail}\n${opened.detail}`,
+        zipPath: zip,
+        mode: "manager",
+      };
+    }
+    silentUnlinkFile(zip);
+    return {
+      ok: false,
+      error: "install_failed",
+      detail: `${cli.detail}\n${opened.detail}`,
+      zipPath: zip,
+      mode: "",
+    };
+  } finally {
+    await clearUnattended();
   }
-
-  // 2) 设备 curl / wget 兜底
-  const script = [
-    `mkdir -p '${dir}'`,
-    `rm -f ${z}`,
-    `OK=0`,
-    `(command -v curl >/dev/null && curl -fsSL --connect-timeout 15 --max-time 180 -o ${z} ${u} && OK=1) || true`,
-    `[ "$OK" = 1 ] || (command -v wget >/dev/null && wget -q -O ${z} ${u} && OK=1) || true`,
-    `[ "$OK" = 1 ] && [ -s ${z} ] || { echo error=download_failed; exit 0; }`,
-    `echo downloaded=1`,
-  ].join("\n");
-
-  const r = await exec(script, 240_000);
-  const out = `${r.stdout || ""}\n${r.stderr || ""}`.trim();
-  if (/error=download_failed/.test(out) || !/downloaded=1/.test(out)) {
-    return { ok: false, error: "download_failed", detail: out, zipPath: "" };
-  }
-
-  const opened = await openZipInManager(zip);
-  if (opened.ok) return { ok: true, error: "", detail: opened.detail, zipPath: zip };
-  return {
-    ok: false,
-    error: r.errno === -1 ? "no_ksu_bridge" : "open_manager_failed",
-    detail: opened.detail || out,
-    zipPath: zip,
-  };
 }
 
 /** @deprecated 使用 downloadAndOpenModuleInstaller */
@@ -159,8 +246,8 @@ export function moduleInstallErrorText(code: string): string {
     download_failed: "下载失败，请检查网络或切换「使用 CDN」后重试",
     download_empty: "下载文件为空",
     open_manager_failed: "已下载，但未能打开模块管理器，请到 Download 目录手动刷入 zip",
-    install_failed: "未能打开刷写界面，请到 Download 目录手动安装 zip",
-    no_ksu_bridge: "当前不在 KernelSU 等 WebUI 环境，无法自动拉起管理器",
+    install_failed: "无人值守刷入失败，且未能打开管理器；请到 Download 目录手动安装 zip",
+    no_ksu_bridge: "当前不在 KernelSU 等 WebUI 环境，无法自动刷入",
   };
   return map[code] || `操作失败（${code || "未知"}）`;
 }

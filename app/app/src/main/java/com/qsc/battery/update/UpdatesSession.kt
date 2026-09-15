@@ -205,6 +205,11 @@ class UpdatesSession(
                     modules.promptInstallApk(file)
                     notifier.success("APP 安装", "已打开系统安装界面")
                     _snackbar.value = "请完成系统安装后返回并刷新"
+                    // 安装器可能还要读文件：后台延迟静默删，不提示
+                    scope.launch(Dispatchers.IO) {
+                        delay(180_000L)
+                        updates.deleteCacheUpdateFile("QSC-Battery.apk")
+                    }
                 }
                 true
             }
@@ -269,7 +274,10 @@ class UpdatesSession(
                         false
                     }
                 } finally {
-                    updates.cleanupChannelDaemonBin()
+                    // 后台静默清理临时文件，成败不提示
+                    scope.launch(Dispatchers.IO) {
+                        runCatching { updates.cleanupChannelDaemonBin() }
+                    }
                 }
             }
         }

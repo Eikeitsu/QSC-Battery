@@ -5,6 +5,7 @@ import {
   toChannelAssetUrl,
 } from "@/shared/lib/githubCdn";
 import { exec } from "./ksu";
+import { silentUnlinkFile } from "./silentUnlink";
 
 /** 守护实现：Rust 为主力，C 保持基础事件唤醒兼容 */
 export type DaemonImpl = "rust" | "c";
@@ -157,7 +158,7 @@ export async function loadDaemonDownloadProgress(): Promise<DaemonDownloadProgre
 
 /** 清掉上次失败残留，避免新安装一开始闪「失败」 */
 export async function clearDaemonDownloadProgress(): Promise<void> {
-  await exec(`rm -f '${PATHS.QSCD_PROGRESS}' 2>/dev/null`, 3000);
+  silentUnlinkFile(PATHS.QSCD_PROGRESS);
 }
 
 export async function checkDaemonUpdate(impl: DaemonImpl): Promise<{
@@ -307,8 +308,9 @@ export async function installDaemon(
     INSTALL_TIMEOUT_MS,
   );
   if (localBin) {
-    await exec(`rm -f '${localBin}'`, 5_000);
+    silentUnlinkFile(localBin);
   }
+  silentUnlinkFile(`${PATHS.DATADIR}/update_manifest.json`);
   const kv = parseKv(r.stdout || "");
   return {
     ok: kv.ok === "1",

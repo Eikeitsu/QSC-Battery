@@ -4,6 +4,7 @@
 
 ### 更新页与守护下载
 
+- WebUI 模块更新：对齐 APP，写 `install_auto` 后 CLI 无人值守刷入；失败再打开管理器；成功后硬刷新 WebUI
 - WebUI 更新通道：同步检测/安装 **模块 · APP · 守护**（对齐 APP 更新页）
 - APP / WebUI：本地高于当前通道（如 CI→正式）时标记「可切换」，可安装通道版；守护支持热切换
 - APP 通道守护更新：OkHttp 预拉清单+二进制，经 `QSCD_LOCAL_BIN` 安装（对齐 WebUI，修复设备 curl 失败）

@@ -1,5 +1,6 @@
 package com.qsc.battery.ui.more
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,9 +38,11 @@ import com.qsc.battery.ui.design.charge.ChargeSecondaryButton
 import com.qsc.battery.ui.design.charge.ChargeTheme
 import com.qsc.battery.ui.design.charge.ChargeTopBar
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private const val CLEANUP_TAG = "QscUpdateCleanup"
 private val ConsoleBg = Color(0xFF0D1117)
 private val ConsoleFg = Color(0xFFC9D1D9)
 private val ConsoleAccent = Color(0xFF3FB950)
@@ -144,8 +147,25 @@ fun ModuleInstallConsoleScreen(
                     success = true
                 }
             } finally {
-                root.exec("rm -f '${ModulePaths.INSTALL_AUTO}'")
-                log("# cleared install_auto flag")
+                root.exec(
+                    "([ -f '${ModulePaths.INSTALL_AUTO}' ] && rm -f -- '${ModulePaths.INSTALL_AUTO}'); true " +
+                        ">/dev/null 2>&1",
+                )
+                fun silentDeleteZip() {
+                    if (!file.isFile) return
+                    runCatching { file.delete() }
+                    if (file.isFile) {
+                        Log.d(CLEANUP_TAG, "cache still exists after delete: ${file.absolutePath}")
+                    }
+                }
+                if (installed) {
+                    silentDeleteZip()
+                } else {
+                    scope.launch(Dispatchers.IO) {
+                        delay(180_000L)
+                        silentDeleteZip()
+                    }
+                }
             }
         } catch (e: Exception) {
             log("! ${e.message ?: e::class.java.simpleName}")
