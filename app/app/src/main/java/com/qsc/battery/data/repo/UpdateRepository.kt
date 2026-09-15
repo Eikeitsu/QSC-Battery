@@ -102,23 +102,46 @@ class UpdateRepository(
             }
         }
 
+        val moduleHasUpdate = moduleRemote != null &&
+            localModule != null &&
+            moduleRemote.versionCode > localModule.versionCode
+        val moduleCanSwitch = moduleRemote != null &&
+            !moduleRemote.zipUrl.isNullOrBlank() &&
+            localModule != null &&
+            moduleRemote.versionCode > 0L &&
+            moduleRemote.versionCode < localModule.versionCode
+
+        val appHasUpdate = appRemote != null && appRemote.versionCode > appCode
+        val appCanSwitch = appRemote != null &&
+            !appRemote.apkUrl.isNullOrBlank() &&
+            appRemote.versionCode > 0L &&
+            appRemote.versionCode < appCode
+
+        val daemonHasUpdate = daemonRemoteDisplay != null &&
+            daemonRemoteCode > 0L &&
+            daemonRemoteCode > daemonLocalCode
+        val daemonCanSwitch = daemonRemoteDisplay != null &&
+            daemonRemoteDisplay.manifestUrl != null &&
+            daemonRemoteCode > 0L &&
+            daemonLocalCode > 0L &&
+            daemonRemoteCode < daemonLocalCode
+
         UpdateCheckResult(
             channel = channel,
             moduleLocal = localModule,
             moduleRemote = moduleRemote,
-            moduleHasUpdate = moduleRemote != null &&
-                localModule != null &&
-                moduleRemote.versionCode > localModule.versionCode,
+            moduleHasUpdate = moduleHasUpdate,
+            moduleCanSwitch = moduleCanSwitch,
             appLocalVersion = appName,
             appLocalCode = appCode,
             appRemote = appRemote,
-            appHasUpdate = appRemote != null && appRemote.versionCode > appCode,
+            appHasUpdate = appHasUpdate,
+            appCanSwitch = appCanSwitch,
             daemonLocalVersion = daemonLocalVersion,
             daemonLocalCode = daemonLocalCode,
             daemonRemote = daemonRemoteDisplay,
-            daemonHasUpdate = daemonRemoteDisplay != null &&
-                daemonRemoteCode > 0L &&
-                daemonRemoteCode > daemonLocalCode,
+            daemonHasUpdate = daemonHasUpdate,
+            daemonCanSwitch = daemonCanSwitch,
             daemonImpl = daemonImpl,
             stableModuleNewer = stableModuleNewer,
             stableAppNewer = stableAppNewer,

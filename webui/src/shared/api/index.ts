@@ -4,6 +4,7 @@ export * from "./apps";
 export * from "./history";
 export * from "./daemon";
 export * from "./moduleUpdate";
+export * from "./appUpdate";
 export * from "./batterySnapshot";
 export * from "./statusBundle";
 export * from "./events";

@@ -165,14 +165,18 @@ data class UpdateCheckResult(
     val moduleLocal: ModuleProp?,
     val moduleRemote: RemoteUpdateInfo?,
     val moduleHasUpdate: Boolean,
+    /** 本地高于通道版本（如 CI→正式），仍可安装通道包 */
+    val moduleCanSwitch: Boolean = false,
     val appLocalVersion: String,
     val appLocalCode: Long,
     val appRemote: RemoteUpdateInfo?,
     val appHasUpdate: Boolean,
+    val appCanSwitch: Boolean = false,
     val daemonLocalVersion: String? = null,
     val daemonLocalCode: Long = 0L,
     val daemonRemote: RemoteUpdateInfo? = null,
     val daemonHasUpdate: Boolean = false,
+    val daemonCanSwitch: Boolean = false,
     /** 当前检测所用的守护实现 rust|c */
     val daemonImpl: String = "rust",
     /** 当前非正式通道时，正式通道高于本地则提示 */

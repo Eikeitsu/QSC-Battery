@@ -71,6 +71,7 @@ fun UpdatesScreen(
     val actionErrorTarget by session.actionErrorTarget.collectAsState()
     var showTech by remember { mutableStateOf(false) }
     var pendingCi by remember { mutableStateOf(false) }
+    var pendingSwitch by remember { mutableStateOf<UpdateTarget?>(null) }
     val context = LocalContext.current
     val channelOptions = remember { UpdateChannel.entries.map { it.label } }
     val busy = work !is UpdateWork.Idle
@@ -103,6 +104,45 @@ fun UpdatesScreen(
             },
             dismissButton = {
                 TextButton(onClick = { pendingCi = false }) { Text("取消") }
+            },
+        )
+    }
+
+    val switchTarget = pendingSwitch
+    if (switchTarget != null) {
+        val r = result
+        AlertDialog(
+            onDismissRequest = { pendingSwitch = null },
+            title = { Text("切回通道版本？") },
+            text = {
+                Text(
+                    when (switchTarget) {
+                        UpdateTarget.Daemon ->
+                            "本地守护高于当前通道，将热切换为通道版本（${r?.daemonRemote?.version ?: "--"}）。"
+                        UpdateTarget.Module ->
+                            "本地模块高于当前通道，将刷入通道包（${r?.moduleRemote?.version ?: "--"}），需在模块管理器中确认。"
+                        UpdateTarget.App ->
+                            "本地 APP 高于当前通道。系统通常拒绝降级安装，若失败请先卸载再装通道版（${r?.appRemote?.version ?: "--"}）。"
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingSwitch = null
+                        when (switchTarget) {
+                            UpdateTarget.Module -> {
+                                val url = r?.moduleRemote?.zipUrl
+                                if (!url.isNullOrBlank()) onInstallModule(url)
+                            }
+                            UpdateTarget.App, UpdateTarget.Daemon ->
+                                session.updateTarget(switchTarget)
+                        }
+                    },
+                ) { Text("确认切换") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingSwitch = null }) { Text("取消") }
             },
         )
     }
@@ -274,6 +314,18 @@ fun UpdatesScreen(
                     )
                 }
 
+                val switchHint = buildList {
+                    if (r.moduleCanSwitch) add("模块")
+                    if (r.appCanSwitch) add("APP")
+                    if (r.daemonCanSwitch) add("守护")
+                }
+                if (switchHint.isNotEmpty()) {
+                    InlineNotice(
+                        text = "本地高于本通道（${switchHint.joinToString("、")}），可切回通道版；守护可热切换",
+                        tone = NoticeTone.Info,
+                    )
+                }
+
                 ChargeSection(title = "组件") {
                     ProductRow(
                         title = "模块",
@@ -283,6 +335,7 @@ fun UpdatesScreen(
                         changelog = r.moduleRemote?.changelog,
                         actionLabel = when {
                             r.moduleLocal == null && UpdatesSession.canUpdateModule(r) -> "安装"
+                            UpdatesSession.isModuleSwitch(r) -> "切换"
                             UpdatesSession.canUpdateModule(r) -> "更新"
                             else -> null
                         },
@@ -291,7 +344,11 @@ fun UpdatesScreen(
                         actionsEnabled = !busy,
                         onAction = {
                             val url = r.moduleRemote?.zipUrl ?: return@ProductRow
-                            onInstallModule(url)
+                            if (UpdatesSession.isModuleSwitch(r)) {
+                                pendingSwitch = UpdateTarget.Module
+                            } else {
+                                onInstallModule(url)
+                            }
                         },
                         onOpenChangelog = { openChangelog(context, it) },
                     )
@@ -302,11 +359,21 @@ fun UpdatesScreen(
                         remoteText = r.appRemote?.version ?: "--",
                         chip = appChip(r),
                         changelog = r.appRemote?.changelog,
-                        actionLabel = if (UpdatesSession.canUpdateApp(r)) "更新" else null,
+                        actionLabel = when {
+                            UpdatesSession.isAppSwitch(r) -> "切换"
+                            UpdatesSession.canUpdateApp(r) -> "更新"
+                            else -> null
+                        },
                         work = work,
                         target = UpdateTarget.App,
                         actionsEnabled = !busy,
-                        onAction = { session.updateTarget(UpdateTarget.App) },
+                        onAction = {
+                            if (UpdatesSession.isAppSwitch(r)) {
+                                pendingSwitch = UpdateTarget.App
+                            } else {
+                                session.updateTarget(UpdateTarget.App)
+                            }
+                        },
                         onOpenChangelog = { openChangelog(context, it) },
                     )
                     ChargeDivider()
@@ -316,11 +383,21 @@ fun UpdatesScreen(
                         remoteText = r.daemonRemote?.version ?: "--",
                         chip = daemonChip(r),
                         changelog = r.daemonRemote?.changelog,
-                        actionLabel = if (UpdatesSession.canUpdateDaemon(r)) "更新" else null,
+                        actionLabel = when {
+                            UpdatesSession.isDaemonSwitch(r) -> "切换"
+                            UpdatesSession.canUpdateDaemon(r) -> "更新"
+                            else -> null
+                        },
                         work = work,
                         target = UpdateTarget.Daemon,
                         actionsEnabled = !busy,
-                        onAction = { session.updateTarget(UpdateTarget.Daemon) },
+                        onAction = {
+                            if (UpdatesSession.isDaemonSwitch(r)) {
+                                pendingSwitch = UpdateTarget.Daemon
+                            } else {
+                                session.updateTarget(UpdateTarget.Daemon)
+                            }
+                        },
                         onOpenChangelog = { openChangelog(context, it) },
                         rowError = actionError?.takeIf {
                             actionErrorTarget == UpdateTarget.Daemon && it.isNotBlank()
@@ -335,12 +412,22 @@ fun UpdatesScreen(
                             horizontalArrangement = Arrangement.End,
                         ) {
                             ChargeTextAction(
-                                text = "全部更新",
+                                text = if (
+                                    r.moduleCanSwitch || r.appCanSwitch || r.daemonCanSwitch
+                                ) {
+                                    "全部处理"
+                                } else {
+                                    "全部更新"
+                                },
                                 enabled = !busy,
                                 onClick = {
                                     val moduleUrl = r.moduleRemote?.zipUrl
                                     if (UpdatesSession.canUpdateModule(r) && !moduleUrl.isNullOrBlank()) {
-                                        onInstallModule(moduleUrl)
+                                        if (UpdatesSession.isModuleSwitch(r)) {
+                                            pendingSwitch = UpdateTarget.Module
+                                        } else {
+                                            onInstallModule(moduleUrl)
+                                        }
                                     } else {
                                         session.updateAll()
                                     }
@@ -387,18 +474,21 @@ private fun moduleChip(r: UpdateCheckResult): ChipSpec = when {
     r.moduleRemote == null -> ChipSpec("无数据", ChargeChipTone.Warn)
     r.moduleLocal == null -> ChipSpec("未安装", ChargeChipTone.Update)
     r.moduleHasUpdate -> ChipSpec("可更新", ChargeChipTone.Update)
+    r.moduleCanSwitch -> ChipSpec("可切换", ChargeChipTone.Update)
     else -> ChipSpec("最新", ChargeChipTone.Ok)
 }
 
 private fun appChip(r: UpdateCheckResult): ChipSpec = when {
     r.appRemote == null -> ChipSpec("无数据", ChargeChipTone.Warn)
     r.appHasUpdate -> ChipSpec("可更新", ChargeChipTone.Update)
+    r.appCanSwitch -> ChipSpec("可切换", ChargeChipTone.Update)
     else -> ChipSpec("最新", ChargeChipTone.Ok)
 }
 
 private fun daemonChip(r: UpdateCheckResult): ChipSpec = when {
     r.daemonRemote == null -> ChipSpec("无数据", ChargeChipTone.Warn)
     r.daemonHasUpdate -> ChipSpec("可更新", ChargeChipTone.Update)
+    r.daemonCanSwitch -> ChipSpec("可切换", ChargeChipTone.Update)
     else -> ChipSpec("最新", ChargeChipTone.Ok)
 }
 

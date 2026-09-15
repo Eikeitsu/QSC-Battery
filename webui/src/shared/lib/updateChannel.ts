@@ -1,6 +1,7 @@
-/** 更新通道：WebUI 只检模块 + 守护（不检伴侣 APP）；资产走 updates/ci-dist，不走 Pages 站点 */
+/** 更新通道：WebUI 检模块 + APP + 守护；资产走 updates/ci-dist，不走 Pages 站点 */
 
 import { readLocalModule } from "@/shared/api/moduleUpdate";
+import { readLocalApp } from "@/shared/api/appUpdate";
 import { updatesMetaBase, toChannelAssetUrl } from "@/shared/lib/githubCdn";
 
 export const UPDATE_CHANNELS = ["stable", "prerelease", "ci"] as const;
@@ -30,6 +31,7 @@ export function channelUpdateUrls(channel: UpdateChannel = "stable") {
     channel === "ci" ? "ci" : channel === "prerelease" ? "prerelease" : "stable";
   return {
     module: `${base}/${seg}/update.json`,
+    app: `${base}/${seg}/app-update.json`,
     daemon: `${base}/${seg}/qscd/manifest.json`,
   };
 }
@@ -39,17 +41,26 @@ export const UPDATE_URLS = {
   get stableModule() {
     return channelUpdateUrls("stable").module;
   },
+  get stableApp() {
+    return channelUpdateUrls("stable").app;
+  },
   get stableDaemon() {
     return channelUpdateUrls("stable").daemon;
   },
   get preModule() {
     return channelUpdateUrls("prerelease").module;
   },
+  get preApp() {
+    return channelUpdateUrls("prerelease").app;
+  },
   get preDaemon() {
     return channelUpdateUrls("prerelease").daemon;
   },
   get ciModule() {
     return channelUpdateUrls("ci").module;
+  },
+  get ciApp() {
+    return channelUpdateUrls("ci").app;
   },
   get ciDaemon() {
     return channelUpdateUrls("ci").daemon;
@@ -76,14 +87,24 @@ export interface ChannelCheckResult {
   moduleLocalCode: number;
   module: RemoteUpdateInfo | null;
   moduleHasUpdate: boolean;
+  /** 本地高于通道版本（如 CI→正式），仍可安装通道包 */
+  moduleCanSwitch: boolean;
+  appLocalVersion: string;
+  appLocalCode: number;
+  appMissing: boolean;
+  app: RemoteUpdateInfo | null;
+  appHasUpdate: boolean;
+  appCanSwitch: boolean;
   daemonLocalVersion: string;
   daemonLocalCode: number;
   daemon: RemoteUpdateInfo | null;
   daemonHasUpdate: boolean;
+  daemonCanSwitch: boolean;
   daemonImpl: "rust" | "c";
   /** 本地未安装守护时为 true */
   daemonMissing: boolean;
   stableModuleNewer: RemoteUpdateInfo | null;
+  stableAppNewer: RemoteUpdateInfo | null;
   stableDaemonNewer: RemoteUpdateInfo | null;
   error: string | null;
 }
@@ -141,8 +162,12 @@ function forImpl(info: RemoteUpdateInfo, impl: "rust" | "c"): RemoteUpdateInfo {
   };
 }
 
+/** 检测元数据：禁浏览器缓存；URL 加时间戳减轻 CDN 命中旧文件 */
 async function fetchJsonUpdate(url: string): Promise<RemoteUpdateInfo> {
-  const resp = await fetch(url, {
+  const sep = url.includes("?") ? "&" : "?";
+  const bust = `${url}${sep}_=${Date.now()}`;
+  const resp = await fetch(bust, {
+    cache: "no-store",
     headers: { "User-Agent": "QSC-Battery-WebUI" },
   });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -202,17 +227,25 @@ export async function checkUpdateChannel(
 ): Promise<ChannelCheckResult> {
   let error: string | null = null;
   let module: RemoteUpdateInfo | null = null;
+  let app: RemoteUpdateInfo | null = null;
   let daemonRaw: RemoteUpdateInfo | null = null;
   const u = channelUpdateUrls(channel);
   try {
-    module = await fetchJsonUpdate(u.module);
-    daemonRaw = await fetchDaemon(u.daemon).catch(() => null);
+    const [mod, appInfo, daemon] = await Promise.all([
+      fetchJsonUpdate(u.module),
+      fetchJsonUpdate(u.app).catch(() => null),
+      fetchDaemon(u.daemon).catch(() => null),
+    ]);
+    module = mod;
+    app = appInfo;
+    daemonRaw = daemon;
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
 
   const daemonImpl = await preferredDaemonImpl().catch(() => "rust" as const);
   const localMod = await readLocalModule().catch(() => null);
+  const localApp = await readLocalApp().catch(() => null);
   const localDaemon = await readDaemonLocal(daemonImpl).catch(() => ({
     version: "",
     code: 0,
@@ -223,6 +256,28 @@ export async function checkUpdateChannel(
     module.versionCode > 0 &&
     module.versionCode > moduleLocalCode
   );
+  const moduleCanSwitch = !!(
+    module?.zipUrl &&
+    module.versionCode > 0 &&
+    moduleLocalCode > 0 &&
+    module.versionCode < moduleLocalCode
+  );
+
+  const appLocalCode = localApp?.versionCode ?? 0;
+  const appMissing = !localApp;
+  const appHasUpdate = !!(
+    app &&
+    app.versionCode > 0 &&
+    (appMissing || app.versionCode > appLocalCode)
+  );
+  const appCanSwitch = !!(
+    app?.apkUrl &&
+    !appMissing &&
+    app.versionCode > 0 &&
+    appLocalCode > 0 &&
+    app.versionCode < appLocalCode
+  );
+
   const daemon = daemonRaw ? forImpl(daemonRaw, daemonImpl) : null;
   const daemonMissing = !localDaemon.version && !localDaemon.code;
   const daemonHasUpdate = !!(
@@ -230,14 +285,25 @@ export async function checkUpdateChannel(
     daemon.versionCode > 0 &&
     (daemonMissing || daemon.versionCode > localDaemon.code)
   );
+  const daemonCanSwitch = !!(
+    daemon &&
+    !daemonMissing &&
+    daemon.versionCode > 0 &&
+    localDaemon.code > 0 &&
+    daemon.versionCode < localDaemon.code &&
+    (daemon.manifestUrl || daemon.baseUrl)
+  );
 
   let stableModuleNewer: RemoteUpdateInfo | null = null;
+  let stableAppNewer: RemoteUpdateInfo | null = null;
   let stableDaemonNewer: RemoteUpdateInfo | null = null;
   if (channel !== "stable") {
     const stableUrls = channelUpdateUrls("stable");
     const sm = await fetchJsonUpdate(stableUrls.module).catch(() => null);
+    const sa = await fetchJsonUpdate(stableUrls.app).catch(() => null);
     const sd = await fetchDaemon(stableUrls.daemon).catch(() => null);
     if (sm && sm.versionCode > moduleLocalCode) stableModuleNewer = sm;
+    if (sa && (appMissing || sa.versionCode > appLocalCode)) stableAppNewer = sa;
     if (sd) {
       const sdi = forImpl(sd, daemonImpl);
       if (daemonMissing || sdi.versionCode > localDaemon.code) {
@@ -252,13 +318,22 @@ export async function checkUpdateChannel(
     moduleLocalCode,
     module,
     moduleHasUpdate,
+    moduleCanSwitch,
+    appLocalVersion: localApp?.version || "",
+    appLocalCode,
+    appMissing,
+    app,
+    appHasUpdate,
+    appCanSwitch,
     daemonLocalVersion: localDaemon.version,
     daemonLocalCode: localDaemon.code,
     daemon,
     daemonHasUpdate,
+    daemonCanSwitch,
     daemonImpl,
     daemonMissing,
     stableModuleNewer,
+    stableAppNewer,
     stableDaemonNewer,
     error,
   };

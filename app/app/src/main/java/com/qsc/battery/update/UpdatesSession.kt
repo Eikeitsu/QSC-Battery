@@ -312,13 +312,22 @@ class UpdatesSession(
     companion object {
         fun canUpdateModule(r: UpdateCheckResult): Boolean =
             !r.moduleRemote?.zipUrl.isNullOrBlank() &&
-                (r.moduleHasUpdate || r.moduleLocal == null)
+                (r.moduleHasUpdate || r.moduleCanSwitch || r.moduleLocal == null)
+
+        fun isModuleSwitch(r: UpdateCheckResult): Boolean =
+            r.moduleCanSwitch && !r.moduleHasUpdate && r.moduleLocal != null
 
         fun canUpdateApp(r: UpdateCheckResult): Boolean =
-            r.appHasUpdate && !r.appRemote?.apkUrl.isNullOrBlank()
+            (r.appHasUpdate || r.appCanSwitch) && !r.appRemote?.apkUrl.isNullOrBlank()
+
+        fun isAppSwitch(r: UpdateCheckResult): Boolean =
+            r.appCanSwitch && !r.appHasUpdate
 
         fun canUpdateDaemon(r: UpdateCheckResult): Boolean =
-            r.daemonHasUpdate && r.daemonRemote?.manifestUrl != null
+            (r.daemonHasUpdate || r.daemonCanSwitch) && r.daemonRemote?.manifestUrl != null
+
+        fun isDaemonSwitch(r: UpdateCheckResult): Boolean =
+            r.daemonCanSwitch && !r.daemonHasUpdate
 
         fun updatableCount(r: UpdateCheckResult): Int {
             var n = 0
