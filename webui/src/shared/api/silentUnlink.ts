@@ -1,7 +1,7 @@
 /** 后台静默删单个普通文件：不对用户提示；禁止目录 / rm -rf。 */
 import { exec } from "./ksu";
 
-const DBG = "[qsc-cleanup]";
+// const DBG = "[qsc-cleanup]";
 
 function safeAbsFilePath(absPath: string): string | null {
   const raw = String(absPath || "").trim();
@@ -22,7 +22,7 @@ async function unlinkOnce(p: string): Promise<void> {
   const still = await exec(`[ -e '${p}' ] && echo yes || echo no`, 3_000);
   if ((still.stdout || "").includes("yes")) {
     // 仅排障：预期应删掉但仍在
-    console.debug(`${DBG} still exists after unlink: ${p}`);
+    // console.debug(`${DBG} still exists after unlink: ${p}`);
   }
 }
 

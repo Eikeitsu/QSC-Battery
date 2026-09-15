@@ -67,8 +67,9 @@ function badgeClass(label: string, index: number): string {
               v-for="(label, i) in s.badges"
               :key="`${s.id}-${label}`"
               :class="badgeClass(label, i)"
-              >{{ label }}</span
             >
+              {{ label }}
+            </span>
           </span>
           <span class="sess-text">{{ s.title }}</span>
         </span>
