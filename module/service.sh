@@ -189,6 +189,8 @@ rm -f "$DATADIR/qscd_unusable" "$DATADIR/qscd_features" \
 	"$DATADIR/qscd_last_wake_reason"
 rm -f /data/system/qsc_xp_arm 2>/dev/null || true
 rm -f "$DATADIR/power_off"
+# 每启动周期重试 MCA（避免上次误判永久跳过；真无效会再次标记）
+rm -f "$DATADIR/mca_ineffective"
 echo "$(date +%F_%T) service.sh 启动，开始循环" > "$DATADIR/service_start.log"
 # XP 日志落点与镜像（供 APP/WebUI LSP 页）
 type qsc_xp_bootstrap_logs >/dev/null 2>&1 && qsc_xp_bootstrap_logs

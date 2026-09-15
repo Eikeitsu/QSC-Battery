@@ -221,29 +221,23 @@ qsc_write_switch_list() {
 				qsc_write_node "$route" "$val" && _wrote=1
 			fi
 			if [ "$_wrote" = "1" ]; then
-				if [ "$first_only" = "verify" ] && [ "$_is_mca" != "1" ]; then
-					_vd="$(echo "$config_conf" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
-					_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
-					[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
-					if ! qsc_charge_looks_stopped; then
-						start_val="$(echo "$i" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
-						qsc_write_node "$route" "$start_val" 2>/dev/null || true
-						qsc_log_once "sw_ineff_${route##*/}" warn "节点写入成功但未停充，已跳过 $route"
-						continue
-					fi
-				elif [ "$_is_mca" = "1" ] && [ "$first_only" = "verify" ]; then
-					# MCA 常延迟生效：只软复核，对齐专用 qsc_mca_write，不回滚
+				if [ "$first_only" = "verify" ]; then
 					_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
 					_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
-					if [ "$_vd" -gt 0 ] 2>/dev/null; then
-						sleep "$_vd"
-						if ! qsc_charge_looks_stopped; then
-							qsc_log_once mca_verify_soft debug "MCA 列表写入后瞬时仍显示充电中（已保持）"
+					if [ "$_is_mca" = "1" ]; then
+						# MCA：不 chmod 回滚；无效则跳过，改试后续通用节点（K60U 等假 MCA）
+						if ! qsc_mca_stop_verify; then
+							qsc_mca_mark_ineffective "$route"
+							continue
 						fi
-					fi
-					# 列表误打到 MCA 时补写 profile，后续走专用路径
-					if type qsc_write_device_profile >/dev/null 2>&1; then
-						qsc_write_device_profile "$route" >/dev/null 2>&1 || true
+					else
+						[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
+						if ! qsc_charge_looks_stopped; then
+							start_val="$(echo "$i" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
+							qsc_write_node "$route" "$start_val" 2>/dev/null || true
+							qsc_log_once "sw_ineff_${route##*/}" warn "节点写入成功但未停充，已跳过 $route"
+							continue
+						fi
 					fi
 				fi
 				stop_nodes="$stop_nodes $route=$val"
@@ -251,6 +245,9 @@ qsc_write_switch_list() {
 				log_log=1
 				stop_ok=1
 				qsc_save_active_switch "$i"
+				if [ "$_is_mca" = "1" ] && type qsc_write_device_profile >/dev/null 2>&1; then
+					qsc_write_device_profile "$route" >/dev/null 2>&1 || true
+				fi
 				if [ "$first_only" = "first" ] || [ "$first_only" = "verify" ]; then
 					return 0
 				fi
@@ -286,20 +283,56 @@ qsc_clear_active_switch() {
 	rm -f "$DATADIR/active_switch" 2>/dev/null
 }
 
-# 粗判是否已停充（供 verify；MCA 写入后可能短暂仍显示 Charging，故 MCA 路径不依赖此函数）
+# 粗判是否已停充（供 verify）。
+# MCA/K60U 等机型插电充电时 status 也可能长期报 Not charging，不能单信 status；
+# 电流明显偏大时一律视为仍在充，避免「写成功但假停充」。
 qsc_charge_looks_stopped() {
 	local st cur
+	cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
+	case "$cur" in
+		""|*[!0-9]*) ;;
+		*)
+			# ≥150mA：仍在充（即使 status=Not charging）
+			if [ "$cur" -ge 150000 ] 2>/dev/null; then
+				return 1
+			fi
+			# <80mA：几乎无充电电流
+			if [ "$cur" -lt 80000 ] 2>/dev/null; then
+				return 0
+			fi
+			;;
+	esac
 	st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
 	case "$st" in
 		"Not charging"|Discharging|Full) return 0 ;;
 	esac
-	cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
-	case "$cur" in
-		""|*[!0-9]*) return 1 ;;
-	esac
-	# |current_now| < 80mA 视为几乎无充电电流
-	[ "$cur" -lt 80000 ] 2>/dev/null && return 0
 	return 1
+}
+
+# MCA 停充复核：允许短暂延迟；仍大电流则视为本机 MCA 无效
+qsc_mca_stop_verify() {
+	local _vd
+	_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
+	_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
+	[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
+	if qsc_charge_looks_stopped; then
+		return 0
+	fi
+	# K90 等偶发延迟生效：再等 1s
+	sleep 1
+	qsc_charge_looks_stopped
+}
+
+qsc_mca_mark_ineffective() {
+	local why="${1:-电流仍高}"
+	mkdir -p "$DATADIR" 2>/dev/null
+	touch "$DATADIR/mca_ineffective" 2>/dev/null
+	qsc_log_once mca_ineffective warn \
+		"MCA 写入成功但未真正停充（${why}），本启动周期改试其它节点"
+}
+
+qsc_mca_skip_stop() {
+	[ -f "$DATADIR/mca_ineffective" ]
 }
 
 # 仅重写 data/active_switch；MCA 节点不加 chmod
@@ -380,7 +413,7 @@ qsc_stop_wakelock_release() {
 
 # 插电且处于停充态：仅 MCA/preferred 持续重申（非 MCA 停充成功后不再写节点，避免小米 OS2 闪充）
 qsc_maintain_stop_while_plugged() {
-	local online
+	local online _ts _now
 	[ -f "$DATADIR/power_switch" ] || {
 		qsc_stop_wakelock_release
 		return 1
@@ -399,6 +432,24 @@ qsc_maintain_stop_while_plugged() {
 		qsc_stop_wakelock_release
 		return 1
 	}
+
+	# 假停充自愈：标记已超过数秒但电流仍大（K60U 等 MCA 假成功遗留）
+	# → 清停充标记，让主循环重新走完整停充分支（会跳过已判定无效的 MCA）
+	_ts="$(cat "$DATADIR/power_stop_ts" 2>/dev/null | tr -d ' \r\n')"
+	_now="$(date +%s 2>/dev/null | tr -d ' \r\n')"
+	case "$_ts" in ""|*[!0-9]*) _ts=0 ;; esac
+	case "$_now" in ""|*[!0-9]*) _now=0 ;; esac
+	if [ "$_now" -gt 0 ] && [ "$_ts" -gt 0 ] && [ $((_now - _ts)) -ge 8 ]; then
+		if ! qsc_charge_looks_stopped; then
+			qsc_log_once fake_stop warn \
+				"假停充：已标记停充但电流仍高，清除标记并重试停充"
+			rm -f "$DATADIR/power_switch" "$DATADIR/active_switch" \
+				"$DATADIR/power_on" "$DATADIR/power_off" 2>/dev/null
+			qsc_stop_wakelock_release
+			return 1
+		fi
+	fi
+
 	qsc_stop_wakelock_acquire
 	# MCA：系统会改回 handle_state，必须每轮重申
 	if qsc_mca_write stop; then
@@ -409,7 +460,7 @@ qsc_maintain_stop_while_plugged() {
 	if [ "${QSC_REASSERT:-0}" = "1" ] && [ -n "$QSC_PREF_PATH" ] && [ -f "$QSC_PREF_PATH" ]; then
 		qsc_pref_write stop && return 0
 	fi
-	# 通用节点：停充后静默，不写 active_switch
+	# 通用节点：停充后静默，不写 active_switch（避免小米 OS2 闪充）
 	return 0
 }
 
@@ -432,7 +483,21 @@ qsc_mca_write() {
 		*) return 1 ;;
 	esac
 
+	# 本启动周期已证实 MCA 停充无效（可写但不控充）→ 跳过
+	if [ "$label" = "stop" ] && qsc_mca_skip_stop; then
+		return 1
+	fi
+
 	qsc_load_device_profile 2>/dev/null || true
+
+	# 对齐 0814：未识别为 MCA 的机型不抢先盲扫 handle_state
+	# （K60U 等非 MCA 不应走专用路径；有路径残留时仅尝试该路径）
+	if [ "${QSC_MCA:-0}" != "1" ]; then
+		if ! qsc_mca_node_ok "$QSC_MCA_PATH" 2>/dev/null && \
+			{ [ -z "$QSC_MCA_PATH" ] || [ ! -e "$QSC_MCA_PATH" ]; }; then
+			return 1
+		fi
+	fi
 
 	# 1) 已缓存且仍存在的路径优先
 	if qsc_mca_node_ok "$QSC_MCA_PATH" 2>/dev/null || { [ -n "$QSC_MCA_PATH" ] && [ -e "$QSC_MCA_PATH" ]; }; then
@@ -441,8 +506,8 @@ qsc_mca_write() {
 		fi
 	fi
 
-	# 2) 候选列表实时扫（小米17: soc:mca_business_charger 优先）
-	if [ -z "$path" ]; then
+	# 2) 仅 MCA 机型才做候选/find 盲扫（小米17/K90）
+	if [ -z "$path" ] && [ "${QSC_MCA:-0}" = "1" ]; then
 		for cand in $QSC_MCA_CANDIDATES $QSC_MCA_STOP_HANDLE_CANDIDATES; do
 			qsc_mca_node_ok "$cand" 2>/dev/null || [ -e "$cand" ] || continue
 			if qsc_mca_raw_echo "$cand" "$val"; then
@@ -452,16 +517,14 @@ qsc_mca_write() {
 		done
 	fi
 
-	# 3) find / 通配兜底
-	if [ -z "$path" ]; then
+	if [ -z "$path" ] && [ "${QSC_MCA:-0}" = "1" ]; then
 		cand="$(qsc_find_mca_path 2>/dev/null)" || cand=""
 		if { qsc_mca_node_ok "$cand" 2>/dev/null || [ -e "$cand" ]; } && qsc_mca_raw_echo "$cand" "$val"; then
 			path="$cand"
 		fi
 	fi
 
-	# 4) 旧路径：仅 stop_handle 候选（find 已含；保留兼容）
-	if [ -z "$path" ]; then
+	if [ -z "$path" ] && [ "${QSC_MCA:-0}" = "1" ]; then
 		for cand in $QSC_MCA_STOP_HANDLE_CANDIDATES; do
 			qsc_mca_node_ok "$cand" 2>/dev/null || [ -e "$cand" ] || continue
 			if qsc_mca_raw_echo "$cand" "$val"; then
@@ -479,13 +542,6 @@ qsc_mca_write() {
 		return 1
 	fi
 
-	QSC_MCA=1
-	QSC_MCA_PATH="$path"
-	QSC_MCA_STOP=1
-	QSC_MCA_START=0
-	if [ "$(qsc_profile_get mca_path 2>/dev/null)" != "$path" ]; then
-		qsc_write_device_profile "$path" >/dev/null 2>&1 || true
-	fi
 	if qsc_debug_enabled; then
 		_mca_readback=""
 		qsc_read_node "$path" && _mca_readback="$QSC_NODE_VAL"
@@ -494,20 +550,33 @@ qsc_mca_write() {
 	fi
 
 	if [ "$label" = "stop" ]; then
+		# 硬复核：写入成功 ≠ 真停充
+		if ! qsc_mca_stop_verify; then
+			qsc_mca_mark_ineffective "$path"
+			stop_ok=0
+			return 1
+		fi
+		QSC_MCA=1
+		QSC_MCA_PATH="$path"
+		QSC_MCA_STOP=1
+		QSC_MCA_START=0
+		if [ "$(qsc_profile_get mca_path 2>/dev/null)" != "$path" ]; then
+			qsc_write_device_profile "$path" >/dev/null 2>&1 || true
+		fi
 		stop_nodes="$path=$val (MCA)"
 		log_log=1
 		stop_ok=1
 		qsc_save_active_switch "${path},start=0,stop=1"
-		# 软复核：MCA 常延迟生效，仅打日志不回滚
-		_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
-		_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
-		if [ "$_vd" -gt 0 ] 2>/dev/null; then
-			sleep "$_vd"
-			if ! qsc_charge_looks_stopped; then
-				qsc_log_once mca_verify_soft debug "MCA 写入后瞬时仍显示充电中（常见，已保持停充写入）"
-			fi
-		fi
+		rm -f "$DATADIR/mca_ineffective" 2>/dev/null
+		qsc_log_once_clear mca_ineffective 2>/dev/null || true
 	else
+		QSC_MCA=1
+		QSC_MCA_PATH="$path"
+		QSC_MCA_STOP=1
+		QSC_MCA_START=0
+		if [ "$(qsc_profile_get mca_path 2>/dev/null)" != "$path" ]; then
+			qsc_write_device_profile "$path" >/dev/null 2>&1 || true
+		fi
 		start_node="$path"
 		start_val="$val"
 		log_log2=1
