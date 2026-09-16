@@ -78,7 +78,7 @@
 | `native_impl`                      | rust       | `rust` / `c` / `off`                         |
 | `native_version`                   | （运行时） | 当前守护版本元数据（只读/状态）              |
 | `switch_verify_sec`                | 1          | 写开关后校验等待（非全量盲写兜底等）         |
-| `switch_batch_blind`               | 1          | `1`=0814 全量盲写+每轮重申；`0`=首成功后重申 |
+| `switch_batch_blind`               | 1          | `1`=全量盲写+每轮重申；`0`=首成功后重申 |
 
 ### 历史与曲线
 

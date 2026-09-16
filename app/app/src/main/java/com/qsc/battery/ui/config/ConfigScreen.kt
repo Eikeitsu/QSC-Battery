@@ -223,7 +223,7 @@ fun ConfigScreen(
                         ChargeToggleRow(
                             title = "全量盲写停充节点",
                             checked = v("switch_batch_blind") != "0",
-                            summary = "开=0814 全量写+每轮重申；关=首成功后仅重申",
+                            summary = "开=全量写+每轮重申；关=首成功后仅重申",
                             onCheckedChange = {
                                 setLocal("switch_batch_blind", if (it) "1" else "0")
                             },

@@ -171,7 +171,7 @@ onMounted(async () => {
         />
         <SwitchCell
           title="全量盲写停充节点"
-          label="开=对齐 0814：尽量写全列表并每轮重申（兼容最好）；关=只写首个成功节点后重申"
+          label="开=尽量写全列表并每轮重申（兼容最好）；关=只写首个成功节点后重申"
           :model-value="store.settings.switch_batch_blind !== '0'"
           @update:model-value="(v) => onSwitch('switch_batch_blind', v)"
         />
