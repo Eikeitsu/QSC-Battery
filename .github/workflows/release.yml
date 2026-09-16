@@ -4,9 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "日期（首发填 20260717；同日第2版填 20260717.2）"
-        required: true
+        description: "可空=自动升号（＜当天首版→升至当天；≥当天首版→当前+1）；可手填如 20260916 / 20260916.2"
+        required: false
         type: string
+        default: ""
       release_name:
         description: "Release 标题（可空，默认用 Tag）"
         required: false
@@ -147,7 +148,14 @@ jobs:
             exit 1
           fi
 
-          eval "$(RAW="$RAW" QSC_FETCH_REMOTE_CODES=1 python3 tooling/scripts/resolve-release-version.py)"
+          CHANNEL=stable
+          if [ "$PRE" = "true" ]; then
+            CHANNEL=prerelease
+          fi
+          if [ -z "$RAW" ]; then
+            echo "Auto-bump display version from channel=$CHANNEL"
+          fi
+          eval "$(RAW="$RAW" QSC_CHANNEL="$CHANNEL" QSC_FETCH_REMOTE_CODES=1 python3 tooling/scripts/resolve-release-version.py)"
           if [ "$PRE" = "true" ]; then
             case "$version" in
               *.pre) ;;

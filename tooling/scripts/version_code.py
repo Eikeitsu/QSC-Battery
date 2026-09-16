@@ -126,6 +126,31 @@ def next_version_code(
     return nxt
 
 
+def code_from_ymd_rev(ymd: int, rev: int) -> int:
+    """展示版对齐的 versionCode：YYYYMMDD * 100 + 修订号（当天首版=…01）。"""
+    if not (1 <= rev <= 99):
+        raise SystemExit(f"revision must be 1..99, got: {rev}")
+    if ymd < 20000101 or ymd > 21001231:
+        raise SystemExit(f"ymd out of range: {ymd}")
+    code = ymd * 100 + rev
+    if code > INT32_MAX:
+        raise SystemExit(f"versionCode {code} exceeds int32 max {INT32_MAX}")
+    return code
+
+
+def allocate_aligned_version_code(
+    ymd: int,
+    rev: int,
+    repo: Path | None = None,
+    extras: list[int] | None = None,
+    fetch_remote: bool = False,
+) -> int:
+    """发版用：优先日期对齐码，且不低于跨通道已知 max+1（防回退）。"""
+    desired = code_from_ymd_rev(ymd, rev)
+    floor = next_version_code(repo=repo, extras=extras, fetch_remote=fetch_remote)
+    return max(desired, floor)
+
+
 def next_version_codes(
     count: int,
     repo: Path | None = None,
