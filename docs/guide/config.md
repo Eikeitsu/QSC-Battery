@@ -64,20 +64,20 @@
 
 ### 省电与守护
 
-| 键                                 | 默认       | 含义                                         |
-| ---------------------------------- | ---------- | -------------------------------------------- |
-| `power_saver`                      | 1          | 省电模式（强烈建议保持开启）                 |
-| `loop_interval_sec`                | 3          | 近阈值检查间隔（秒）                         |
-| `loop_interval_maintain_sec`       | 8          | 停充维持间隔                                 |
-| `loop_interval_idle_sec`           | 90         | 未插电、无 qscd 时间隔                       |
-| `loop_interval_idle_native_sec`    | 300        | 未插电、有 qscd 时超时兜底                   |
-| `loop_interval_plugged_sec`        | 15         | 插电、离阈值远                               |
-| `loop_interval_plugged_native_sec` | 90         | 插电、有 watch 时                            |
-| `loop_interval_near_window`        | 3          | 「接近阈值」窗口（%）                        |
-| `native_daemon`                    | 1          | 启用事件守护                                 |
-| `native_impl`                      | rust       | `rust` / `c` / `off`                         |
-| `native_version`                   | （运行时） | 当前守护版本元数据（只读/状态）              |
-| `switch_verify_sec`                | 1          | 写开关后校验等待（非全量盲写兜底等）         |
+| 键                                 | 默认       | 含义                                    |
+| ---------------------------------- | ---------- | --------------------------------------- |
+| `power_saver`                      | 1          | 省电模式（强烈建议保持开启）            |
+| `loop_interval_sec`                | 3          | 近阈值检查间隔（秒）                    |
+| `loop_interval_maintain_sec`       | 8          | 停充维持间隔                            |
+| `loop_interval_idle_sec`           | 90         | 未插电、无 qscd 时间隔                  |
+| `loop_interval_idle_native_sec`    | 300        | 未插电、有 qscd 时超时兜底              |
+| `loop_interval_plugged_sec`        | 15         | 插电、离阈值远                          |
+| `loop_interval_plugged_native_sec` | 90         | 插电、有 watch 时                       |
+| `loop_interval_near_window`        | 3          | 「接近阈值」窗口（%）                   |
+| `native_daemon`                    | 1          | 启用事件守护                            |
+| `native_impl`                      | rust       | `rust` / `c` / `off`                    |
+| `native_version`                   | （运行时） | 当前守护版本元数据（只读/状态）         |
+| `switch_verify_sec`                | 1          | 写开关后校验等待（非全量盲写兜底等）    |
 | `switch_batch_blind`               | 1          | `1`=全量盲写+每轮重申；`0`=首成功后重申 |
 
 ### 历史与曲线
