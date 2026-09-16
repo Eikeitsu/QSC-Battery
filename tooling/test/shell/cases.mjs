@@ -366,23 +366,29 @@ export const cases = [
   },
 
   {
-    // 写入成功但没真停下来的节点要自动回滚，不能留在停充值上
-    name: "节点写入成功但仍在充电 → 回滚该节点并标记停充可能未生效",
+    // 0814 / switch_batch_blind=1（默认）：常规列表盲写成功即认，不做电流硬回滚。
+    // 大电流瞬时读数不能再把有效节点判成「无效」并回滚（会误伤 K60U 等）。
+    // 电流墙校验仅保留在末位兜底路径。
+    name: "全量盲写：写入成功即认停充（瞬时大电流不回滚）",
     sysfs: {
       "battery/capacity": "85",
       "battery/status": "Charging",
       "battery/temp": COOL,
-      // 电流仍很大 → qsc_charge_looks_stopped 为假
       "battery/current_now": "1500000",
       "usb/online": "1",
     },
-    config: { ...FAST, power_stop: "80", power_start: "75", temperature_switch: "0" },
+    config: {
+      ...FAST,
+      power_stop: "80",
+      power_start: "75",
+      temperature_switch: "0",
+      switch_batch_blind: "1",
+    },
     node: { initial: "0", stop: "1", start: "0" },
     expect: {
-      node: "0",
-      files: { power_switch: false, stop_fail_hint: true, no_node_logged: true },
-      // 简介里 no_node_logged 的分支在 stop_fail_hint 之前返回
-      descIncludes: "停充节点无效",
+      node: "1",
+      files: { power_switch: true, stop_fail_hint: false, no_node_logged: false },
+      descIncludes: "已停充",
     },
   },
 

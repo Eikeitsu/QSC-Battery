@@ -38,7 +38,7 @@ import com.qsc.battery.ui.more.UpdatesScreen
 import com.qsc.battery.ui.more.XpPanelScreen
 import com.qsc.battery.ui.nav.QscTab
 import com.qsc.battery.ui.onboarding.OnboardingScreen
-
+import com.qsc.battery.ui.update.StartupUpdatePrompt
 private val enter = fadeIn() + slideInVertically { it / 28 }
 private val exit = fadeOut() + slideOutVertically { -it / 28 }
 
@@ -84,6 +84,10 @@ fun QscAppRoot(container: AppContainer) {
             }
         },
     ) {
+        StartupUpdatePrompt(
+            container = container,
+            onGoUpdates = { nav.navigate("updates") },
+        )
         NavHost(
             navController = nav,
             startDestination = QscTab.Home.route,
