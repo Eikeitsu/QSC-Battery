@@ -12,4 +12,4 @@ CI **artifact-only** channel (no update JSON — see `updates` branch).
 
 Each product workflow updates **only its folder** and pushes a normal commit (history kept).
 
-Last touch: app @ 2026.09.16.ci.55 / 242816fb151baba61e612a5db85cdcacc4392d9a
+Last touch: module @ 2026.09.16.ci.258 / 242816fb151baba61e612a5db85cdcacc4392d9a
