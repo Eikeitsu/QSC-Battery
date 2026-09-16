@@ -1,5 +1,24 @@
 ﻿# 更新日志
 
+## 2026.09.16
+
+### 新增
+
+- **全量盲写开关** `switch_batch_blind`（默认开）：对齐 0814 全量写节点并在条件满足时每轮重申；关闭则只写首个成功节点后重申。WebUI「更多选项 → 冷门/实验」、APP「进阶策略 → 停充行为」可改
+- **APP 启动检测正式版更新**：打开伴侣 APP（完成引导后）静默查一次正式通道；有模块 / APP / 守护可升级时弹窗，可「去更新」或「稍后」；失败或已最新不提示
+- **更新通道（正式 / 预发布 / CI）**：APP「更新」与 WebUI「我的」可切换通道；检测统一读 `updates` 分支（`stable` / `prerelease` / `ci`），下载分别为 Pages / GitHub Release / `ci-dist`；可分别检测并更新 **模块 · APP · 守护**；本地高于当前通道时可「切换」安装通道版；CI 可选用 CDN（jsDelivr，默认关；正式/预发布不展示），关 CDN 时检测与下载链接均回退 GitHub raw
+- **通道安装体验**：模块支持写 `install_auto` 后 CLI 无人值守刷入（失败再打开管理器；WebUI 成功后硬刷新）；APP 模块更新进命令行风格安装页；守护按当前 `native_impl`（Rust/C）下载，APP/WebUI 可预拉清单与二进制经 `QSCD_LOCAL_BIN` 安装；守护 **分侧 versionCode**（只升变更一侧）；版本展示 CI 为 `….ci.N`、预发布为 `….pre`；停在预发布/CI 时旁路提示正式版
+- **发版与 CI 产物**：`ci-dist` 分目录 `module/` · `app/` · `qscd/`（仅完整产物）；工作流按路径拆分构建；`versionCode` 跨通道单调递增且按产品增量；发版勾选多产物；Pages / updates 元数据与清单字段对齐
+- **WebUI 信息架构**：「策略 / 我的」改为 Hub + 二级子路由（日常项留一级，开关排障 / 运行采样 / 守护、机型社区 / 工具说明 / 关于进子页）
+
+### 修复
+
+- **停充回归**：以可靠基线收敛——① `Not charging`+|I| 不再误判为放电（否则会否决插电、`charge_eval` 进不去，K60U/K90U 等多机失效）；② 常规节点恢复 **盲写整批**，取消电流硬回滚；③ MCA 写成功即认（不因单次大电流拉黑）；④ 停充条件仍满足时每轮重申；⑤ 未识别 MCA 不盲扫 `handle_state`；⑥ dumpsys `powered:true` 作插电正证据兜底。末位电流墙仍校验；省电/快照等优化保留在不破坏上述语义的前提下
+
+### 构建
+
+- APP 迁到 AGP 内置 Kotlin；CI Actions 升到 artifact/setup-gradle/Pages v5–v6，消除 Node 20 弃用警告；WebUI 固定 `js/app.js` 等路径并生成 `webroot/.qsc-files`，热更整目录替换以免 HTML/JS 不一致
+
 ## 2026.09.13.2
 
 - 模块在线更新改为指向 `-full`；原无后缀主包改为 `-sh`；新增无 WebUI / 无内嵌 APK 的 `-lite`
