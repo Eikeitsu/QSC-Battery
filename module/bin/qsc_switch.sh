@@ -362,18 +362,23 @@ if [ "$charge_eval" = "1" ]; then
 			fi
 		fi
 		sleep 3
-		# 首次停充；若 status 仍为充电中说明未粘住，仅对 MCA/preferred 或首次后再试写
-		if [ "$first_stop" = "1" ]; then
+		# switch_batch_blind=1（默认）：0814 每轮全量重申；=0：首次写节点，其后只重申生效节点
+		_batch="${QSCV_switch_batch_blind:-1}"
+		_batch="$(qsc_clamp_int "$_batch" 0 1 1)"
+		if [ "$first_stop" = "1" ] || [ "$_batch" = "1" ]; then
 			qsc_power_stop
 		else
-			# status 仍 Charging：系统改回了节点。MCA/preferred 重申；通用节点再写一次 active
 			if ! qsc_mca_write stop; then
 				qsc_load_device_profile 2>/dev/null || true
-				if [ "${QSC_REASSERT:-0}" = "1" ] && qsc_pref_write stop; then
-					:
-				else
-					qsc_reaffirm_active_stop || qsc_power_stop
+				if ! qsc_pref_write stop; then
+					if ! qsc_reaffirm_active_stop; then
+						qsc_maintain_stop_while_plugged
+					fi
 				fi
+			fi
+			# 已在停充态：维持标记，避免重申失败被当成「没停充」
+			if [ -f "$DATADIR/power_switch" ]; then
+				stop_ok=1
 			fi
 		fi
 		if [ "$stop_ok" = "1" ]; then

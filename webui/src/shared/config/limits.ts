@@ -246,6 +246,10 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   );
   if (String(verify) !== String(input.switch_verify_sec)) mark(true);
   next.switch_verify_sec = String(verify);
+  next.switch_batch_blind =
+    next.switch_batch_blind === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
+  if (next.switch_batch_blind !== String(input.switch_batch_blind || BinaryFlag.On))
+    mark(true);
   const wp = String(next.wireless_policy || "same");
   next.wireless_policy = wp === "ignore" ? "ignore" : "same";
   if (next.wireless_policy !== String(input.wireless_policy || "same")) mark(true);

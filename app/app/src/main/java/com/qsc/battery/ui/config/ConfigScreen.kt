@@ -219,6 +219,15 @@ fun ConfigScreen(
                             selectedId = v("wireless_policy").ifBlank { "same" },
                             onSelect = { setLocal("wireless_policy", it) },
                         )
+                        ChargeDivider()
+                        ChargeToggleRow(
+                            title = "全量盲写停充节点",
+                            checked = v("switch_batch_blind") != "0",
+                            summary = "开=0814 全量写+每轮重申；关=首成功后仅重申",
+                            onCheckedChange = {
+                                setLocal("switch_batch_blind", if (it) "1" else "0")
+                            },
+                        )
                     }
 
                     ChargeSection(title = "通知与行为") {

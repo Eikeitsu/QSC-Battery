@@ -192,16 +192,19 @@ qsc_ps_plugged() {
 	return 1
 }
 
-# 明显在放电 / 靠电池：戳破 present 假插电（小米 / K90U 电流符号常不统一）
+# 明显在放电 / 靠电池：戳破 present 假插电。
+# 注意：MCA/K90U 插电充电时常报 Not charging 且 |I| 很大——绝不能据此判放电，
+# 否则会否决 present/VBUS，整轮 charge_eval=0（0814 之后多机停充失效的主因之一）。
 qsc_ps_looks_discharging() {
 	local p cur cur_int st
 	if qsc_ps_read "$PSDIR/battery/status"; then
 		st="$QSC_PS_VAL"
 		case "$st" in
 			Discharging|discharging) ;;
-			"Not charging"|Notcharging|not_charging) ;;
 			*) return 1 ;;
 		esac
+	else
+		return 1
 	fi
 	for p in "$PSDIR/battery/current_now" \
 		"$PSDIR/bms/current_now" \
@@ -215,7 +218,7 @@ qsc_ps_looks_discharging() {
 			case "$cur_int" in
 				""|*[!0-9]*) continue ;;
 			esac
-			# |I|>10mA 即视为在耗电（忽略符号；小米放电电流经常为正）
+			# 仅 status=Discharging 时，|I|>10mA 视为在耗电
 			if [ "$cur_int" -gt 10000 ] 2>/dev/null; then
 				return 0
 			fi

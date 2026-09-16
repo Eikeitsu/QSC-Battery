@@ -160,14 +160,14 @@ qsc_merge_config() {
 	_core_migrated=0
 	for _nk in wireless_policy history_enable history_interval_sec \
 		app_stop app_stop_list native_daemon native_impl chart_show \
-		notify_power_status; do
+		notify_power_status switch_batch_blind; do
 		_nv="$(sed -n "s/^${_nk}=//p" "$source" 2>/dev/null | head -n1 | tr -d '\r')"
 		[ -n "$_nv" ] || continue
 		case "$_nk" in
 			wireless_policy)
 				case "$_nv" in same|ignore) ;; *) continue ;; esac
 				;;
-			history_enable|app_stop|native_daemon|chart_show|notify_power_status)
+			history_enable|app_stop|native_daemon|chart_show|notify_power_status|switch_batch_blind)
 				case "$_nv" in 0|1) ;; *) continue ;; esac
 				;;
 			history_interval_sec)

@@ -170,6 +170,12 @@ onMounted(async () => {
           @change="saveField"
         />
         <SwitchCell
+          title="全量盲写停充节点"
+          label="开=对齐 0814：尽量写全列表并每轮重申（兼容最好）；关=只写首个成功节点后重申"
+          :model-value="store.settings.switch_batch_blind !== '0'"
+          @update:model-value="(v) => onSwitch('switch_batch_blind', v)"
+        />
+        <SwitchCell
           title="无线时忽略停充策略"
           label="仅无线供电不触发阈值/温控停充"
           :model-value="wirelessIgnore"

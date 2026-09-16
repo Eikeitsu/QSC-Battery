@@ -204,6 +204,8 @@ qsc_write_switch_list() {
 		route="$(echo "$i" | sed -n 's/,start=.*//g;$p')"
 		_is_mca=0
 		if qsc_is_mca_switch_node "$route"; then
+			# 非 MCA 机型跳过列表里的 handle_state（避免误写/白耗校验）
+			[ "${QSC_MCA:-0}" = "1" ] || continue
 			_is_mca=1
 			qsc_mca_node_ok "$route" 2>/dev/null || [ -e "$route" ] || continue
 		else
@@ -225,11 +227,8 @@ qsc_write_switch_list() {
 					_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
 					_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
 					if [ "$_is_mca" = "1" ]; then
-						# MCA：不 chmod 回滚；无效则跳过，改试后续通用节点（K60U 等假 MCA）
-						if ! qsc_mca_stop_verify; then
-							qsc_mca_mark_ineffective "$route"
-							continue
-						fi
+						# MCA：不 chmod 回滚；写成功即认（电流仅软日志）
+						qsc_mca_stop_verify || true
 					else
 						[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
 						if ! qsc_charge_looks_stopped; then
@@ -309,7 +308,7 @@ qsc_charge_looks_stopped() {
 	return 1
 }
 
-# MCA 停充复核：允许短暂延迟；仍大电流则视为本机 MCA 无效
+# MCA 停充复核：仅作日志；不因短暂大电流判失败（0814 写成功即认）
 qsc_mca_stop_verify() {
 	local _vd
 	_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
@@ -318,21 +317,17 @@ qsc_mca_stop_verify() {
 	if qsc_charge_looks_stopped; then
 		return 0
 	fi
-	# K90 等偶发延迟生效：再等 1s
-	sleep 1
-	qsc_charge_looks_stopped
+	qsc_log_once mca_verify_soft debug "MCA 写入后瞬时仍显示充电中（常见，保持停充写入）"
+	return 0
 }
 
 qsc_mca_mark_ineffective() {
-	local why="${1:-电流仍高}"
-	mkdir -p "$DATADIR" 2>/dev/null
-	touch "$DATADIR/mca_ineffective" 2>/dev/null
-	qsc_log_once mca_ineffective warn \
-		"MCA 写入成功但未真正停充（${why}），本启动周期改试其它节点"
+	# 保留空实现兼容旧调用；不再因单次电流样本拉黑 MCA
+	:
 }
 
 qsc_mca_skip_stop() {
-	[ -f "$DATADIR/mca_ineffective" ]
+	return 1
 }
 
 # 仅重写 data/active_switch；MCA 节点不加 chmod
@@ -433,34 +428,19 @@ qsc_maintain_stop_while_plugged() {
 		return 1
 	}
 
-	# 假停充自愈：标记已超过数秒但电流仍大（K60U 等 MCA 假成功遗留）
-	# → 清停充标记，让主循环重新走完整停充分支（会跳过已判定无效的 MCA）
-	_ts="$(cat "$DATADIR/power_stop_ts" 2>/dev/null | tr -d ' \r\n')"
-	_now="$(date +%s 2>/dev/null | tr -d ' \r\n')"
-	case "$_ts" in ""|*[!0-9]*) _ts=0 ;; esac
-	case "$_now" in ""|*[!0-9]*) _now=0 ;; esac
-	if [ "$_now" -gt 0 ] && [ "$_ts" -gt 0 ] && [ $((_now - _ts)) -ge 8 ]; then
-		if ! qsc_charge_looks_stopped; then
-			qsc_log_once fake_stop warn \
-				"假停充：已标记停充但电流仍高，清除标记并重试停充"
-			rm -f "$DATADIR/power_switch" "$DATADIR/active_switch" \
-				"$DATADIR/power_on" "$DATADIR/power_off" 2>/dev/null
-			qsc_stop_wakelock_release
-			return 1
-		fi
-	fi
-
 	qsc_stop_wakelock_acquire
 	# MCA：系统会改回 handle_state，必须每轮重申
 	if qsc_mca_write stop; then
 		return 0
 	fi
-	# 用户实测 preferred 且标记 reassert 时才重申
+	# preferred（测开关）或 active_switch：对齐 0814，停充期间持续重申，防 OEM 改回
 	qsc_load_device_profile 2>/dev/null || true
-	if [ "${QSC_REASSERT:-0}" = "1" ] && [ -n "$QSC_PREF_PATH" ] && [ -f "$QSC_PREF_PATH" ]; then
+	if [ -n "$QSC_PREF_PATH" ] && [ -f "$QSC_PREF_PATH" ]; then
 		qsc_pref_write stop && return 0
 	fi
-	# 通用节点：停充后静默，不写 active_switch（避免小米 OS2 闪充）
+	if [ -f "$DATADIR/active_switch" ]; then
+		qsc_reaffirm_active_stop && return 0
+	fi
 	return 0
 }
 
@@ -550,12 +530,8 @@ qsc_mca_write() {
 	fi
 
 	if [ "$label" = "stop" ]; then
-		# 硬复核：写入成功 ≠ 真停充
-		if ! qsc_mca_stop_verify; then
-			qsc_mca_mark_ineffective "$path"
-			stop_ok=0
-			return 1
-		fi
+		# 写成功即认（0814）；电流复核仅打日志，不拉黑 MCA
+		qsc_mca_stop_verify || true
 		QSC_MCA=1
 		QSC_MCA_PATH="$path"
 		QSC_MCA_STOP=1
@@ -567,8 +543,6 @@ qsc_mca_write() {
 		log_log=1
 		stop_ok=1
 		qsc_save_active_switch "${path},start=0,stop=1"
-		rm -f "$DATADIR/mca_ineffective" 2>/dev/null
-		qsc_log_once_clear mca_ineffective 2>/dev/null || true
 	else
 		QSC_MCA=1
 		QSC_MCA_PATH="$path"
@@ -614,6 +588,12 @@ qsc_pref_write() {
 qsc_power_stop() {
 	stop_ok=0
 	stop_nodes=""
+	local _batch
+	qsc_load_device_profile 2>/dev/null || true
+	_batch="${QSCV_switch_batch_blind:-}"
+	[ -n "$_batch" ] ||
+		_batch="$(echo "${config_conf:-}" | egrep '^switch_batch_blind=' | sed -n 's/switch_batch_blind=//g;$p')"
+	_batch="$(qsc_clamp_int "${_batch:-1}" 0 1 1)"
 	# MCA 最先：直接 echo 1，不走全量列表（小米17/K90）
 	if qsc_mca_write stop; then
 		return
@@ -622,19 +602,24 @@ qsc_power_stop() {
 		return
 	fi
 	if [ -n "$QSC_USER_SWITCHES" ]; then
-		# 用户显式配置允许策略类节点
-		qsc_write_switch_list stop "$QSC_USER_SWITCHES" verify 1
+		# 用户显式配置：写入成功即认（允许策略类节点）
+		qsc_write_switch_list stop "$QSC_USER_SWITCHES" first 1
 		if [ "$stop_ok" = "1" ]; then
 			stop_nodes="$stop_nodes (user)"
 			return
 		fi
 	fi
-	# 常规开关：写入后校验是否真停充，避免「写成功但无效」导致闪充
-	qsc_write_switch_list stop "$switch_list" verify
+	if [ "$_batch" = "1" ]; then
+		# 0814 基线：存在的节点尽量都写一遍，不做电流硬回滚
+		qsc_write_switch_list stop "$switch_list"
+	else
+		# 优化：只认首个写入成功的节点，后续靠 active_switch 重申
+		qsc_write_switch_list stop "$switch_list" first
+	fi
 	if [ "$stop_ok" = "1" ]; then
 		return
 	fi
-	# 末位兜底：电流墙 / 端口 suspend（仍做校验）
+	# 末位兜底：电流墙 / 端口 suspend（仍做校验，避免误伤快充协商）
 	qsc_write_switch_list stop "$QSC_LAST_RESORT_SWITCHES" verify
 }
 

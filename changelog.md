@@ -4,6 +4,7 @@
 
 ### 新增
 
+- **全量盲写开关** `switch_batch_blind`（默认开）：对齐 0814 全量写节点并在条件满足时每轮重申；关闭则只写首个成功节点后重申。WebUI「更多选项 → 冷门/实验」、APP「进阶策略 → 停充行为」可改
 - **更新通道（正式 / 预发布 / CI）**：APP「更新」与 WebUI「我的」可切换通道；检测统一读 `updates` 分支（`stable` / `prerelease` / `ci`），下载分别为 Pages / GitHub Release / `ci-dist`；可分别检测并更新 **模块 · APP · 守护**；本地高于当前通道时可「切换」安装通道版；CI 可选用 CDN（jsDelivr，默认关；正式/预发布不展示），关 CDN 时检测与下载链接均回退 GitHub raw
 - **通道安装体验**：模块支持写 `install_auto` 后 CLI 无人值守刷入（失败再打开管理器；WebUI 成功后硬刷新）；APP 模块更新进命令行风格安装页；守护按当前 `native_impl`（Rust/C）下载，APP/WebUI 可预拉清单与二进制经 `QSCD_LOCAL_BIN` 安装；守护 **分侧 versionCode**（只升变更一侧）；版本展示 CI 为 `….ci.N`、预发布为 `….pre`；停在预发布/CI 时旁路提示正式版
 - **发版与 CI 产物**：`ci-dist` 分目录 `module/` · `app/` · `qscd/`（仅完整产物）；工作流按路径拆分构建；`versionCode` 跨通道单调递增且按产品增量；发版勾选多产物；Pages / updates 元数据与清单字段对齐
@@ -11,8 +12,7 @@
 
 ### 修复
 
-- **K60U 等假停充**（简介已停充、实际仍在充）：非 MCA 机不再盲扫 `handle_state`（对齐 0814 门禁）；停充复核以电流为准，无效则改试通用节点；假停充逾约 8s 自愈重试
-- **K90U 等 MCA**：列表写 `handle_state` 不再 `chmod`+硬回滚；加强 `soc@0` / `stop_handle_charge` 探测；未插电粘住 `present=1` 时需 VBUS 或类型旁证，不再单信孤立 `Not charging`；放电判定忽略电流符号；Rust `plugged` 与 shell 对齐
+- **停充回归**：以可靠基线收敛——① `Not charging`+|I| 不再误判为放电（否则会否决插电、`charge_eval` 进不去，K60U/K90U 等多机失效）；② 常规节点恢复 **盲写整批**，取消电流硬回滚；③ MCA 写成功即认（不因单次大电流拉黑）；④ 停充条件仍满足时每轮重申；⑤ 未识别 MCA 不盲扫 `handle_state`；⑥ dumpsys `powered:true` 作插电正证据兜底。末位电流墙仍校验；省电/快照等优化保留在不破坏上述语义的前提下
 
 ### 构建
 

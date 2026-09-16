@@ -111,7 +111,7 @@ qsc_conf_scan() {
 		case "$k" in
 			power_stop|power_start|power_stop_time|charge_full|power_reset \
 			|Compatibility_mode|Shut_down|loop_interval_sec \
-			|loop_interval_maintain_sec|switch_verify_sec|wireless_policy \
+			|loop_interval_maintain_sec|switch_verify_sec|switch_batch_blind|wireless_policy \
 			|app_stop|app_stop_list|history_enable|history_interval_sec \
 			|temperature_switch|temperature_switch_stop|temperature_switch_start)
 				eval "QSCV_$k=\$v"

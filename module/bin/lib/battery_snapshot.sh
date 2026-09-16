@@ -70,6 +70,18 @@ qsc_battery_snapshot_read() {
 		QSC_BATTERY_POWERED="powered: true"
 	fi
 
+	# 0814 兼容正证据：sysfs 判未插电时，对可能仍在供电的 status 再问 dumpsys
+	if [ -z "$QSC_BATTERY_POWERED" ]; then
+		case "${QSC_BATTERY_STATUS:-}" in
+			2|4|5)
+				if command -v dumpsys >/dev/null 2>&1 &&
+					dumpsys battery 2>/dev/null | egrep -q 'powered: true'; then
+					QSC_BATTERY_POWERED="powered: true"
+				fi
+				;;
+		esac
+	fi
+
 	if [ -n "$_QSC_SNAP_CAP" ] && [ -n "$QSC_BATTERY_STATUS" ] &&
 		[ -n "$_QSC_SNAP_TEMP" ]; then
 		QSC_BATTERY_LEVEL="$_QSC_SNAP_CAP"

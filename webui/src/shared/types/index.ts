@@ -17,6 +17,7 @@ export type ConfigKey =
   | "loop_interval_sec"
   | "loop_interval_maintain_sec"
   | "switch_verify_sec"
+  | "switch_batch_blind"
   | "wireless_policy"
   | "app_stop"
   | "app_stop_list"
