@@ -183,7 +183,7 @@ qsc_is_policy_switch_node() {
 	return 1
 }
 
-# MCA 节点：0814 靠列表盲写也能停充；现版若走 verify+chmod 会回滚/弄坏权限
+# MCA 节点：直接 raw echo；若走 verify+chmod 易回滚或弄坏权限
 qsc_is_mca_switch_node() {
 	case "$1" in
 		*handle_state*|*stop_handle_charge*) return 0 ;;
@@ -193,7 +193,7 @@ qsc_is_mca_switch_node() {
 
 # 按列表写停充/恢复。
 # stop + first/verify：逐个尝试；verify 时写入后检查是否真停充
-# MCA 节点：raw echo、不做硬回滚（对齐 0814 + 专用 MCA 路径）
+# MCA 节点：raw echo、不做硬回滚（专用路径）
 qsc_write_switch_list() {
 	local mode="$1"
 	local list="$2"
@@ -308,7 +308,7 @@ qsc_charge_looks_stopped() {
 	return 1
 }
 
-# MCA 停充复核：仅作日志；不因短暂大电流判失败（0814 写成功即认）
+# MCA 停充复核：仅作日志；不因短暂大电流判失败（写成功即认）
 qsc_mca_stop_verify() {
 	local _vd
 	_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
@@ -433,7 +433,7 @@ qsc_maintain_stop_while_plugged() {
 	if qsc_mca_write stop; then
 		return 0
 	fi
-	# preferred（测开关）或 active_switch：对齐 0814，停充期间持续重申，防 OEM 改回
+	# preferred（测开关）或 active_switch：停充期间持续重申，防 OEM 改回
 	qsc_load_device_profile 2>/dev/null || true
 	if [ -n "$QSC_PREF_PATH" ] && [ -f "$QSC_PREF_PATH" ]; then
 		qsc_pref_write stop && return 0
@@ -470,7 +470,7 @@ qsc_mca_write() {
 
 	qsc_load_device_profile 2>/dev/null || true
 
-	# 对齐 0814：未识别为 MCA 的机型不抢先盲扫 handle_state
+	# 未识别为 MCA 的机型不抢先盲扫 handle_state
 	# （K60U 等非 MCA 不应走专用路径；有路径残留时仅尝试该路径）
 	if [ "${QSC_MCA:-0}" != "1" ]; then
 		if ! qsc_mca_node_ok "$QSC_MCA_PATH" 2>/dev/null && \
@@ -530,7 +530,7 @@ qsc_mca_write() {
 	fi
 
 	if [ "$label" = "stop" ]; then
-		# 写成功即认（0814）；电流复核仅打日志，不拉黑 MCA
+		# 写成功即认；电流复核仅打日志，不拉黑 MCA
 		qsc_mca_stop_verify || true
 		QSC_MCA=1
 		QSC_MCA_PATH="$path"
@@ -610,7 +610,7 @@ qsc_power_stop() {
 		fi
 	fi
 	if [ "$_batch" = "1" ]; then
-		# 0814 基线：存在的节点尽量都写一遍，不做电流硬回滚
+		# 全量盲写：存在的节点尽量都写一遍，不做电流硬回滚
 		qsc_write_switch_list stop "$switch_list"
 	else
 		# 优化：只认首个写入成功的节点，后续靠 active_switch 重申

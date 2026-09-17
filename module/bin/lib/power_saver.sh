@@ -194,7 +194,7 @@ qsc_ps_plugged() {
 
 # 明显在放电 / 靠电池：戳破 present 假插电。
 # 注意：MCA/K90U 插电充电时常报 Not charging 且 |I| 很大——绝不能据此判放电，
-# 否则会否决 present/VBUS，整轮 charge_eval=0（0814 之后多机停充失效的主因之一）。
+# 否则会否决 present/VBUS，整轮 charge_eval=0（多机停充失效的常见原因）。
 qsc_ps_looks_discharging() {
 	local p cur cur_int st
 	if qsc_ps_read "$PSDIR/battery/status"; then

@@ -126,10 +126,18 @@ fun ConfigScreen(
                             title = "停止充电",
                             chips = ChargePresets.powerStop,
                             selectedId = v("power_stop").ifBlank { null },
-                            onSelect = { setLocal("power_stop", it) },
+                            onSelect = {
+                                setLocal("power_stop", it)
+                                if (it != "100" && v("charge_full") == "1") {
+                                    setLocal("charge_full", "0")
+                                }
+                            },
                             onCustom = {
                                 edit = EditField("停止充电电量", "%", true, 1, { v("power_stop") }) {
                                     setLocal("power_stop", it)
+                                    if (it != "100" && v("charge_full") == "1") {
+                                        setLocal("charge_full", "0")
+                                    }
                                 }
                             },
                         )
@@ -149,14 +157,43 @@ fun ConfigScreen(
                         ChargeListRow(
                             title = "延时停充",
                             value = "${v("power_stop_time").ifBlank { "--" }} 秒",
+                            summary = if (v("charge_full") == "1" && v("power_stop") == "100") {
+                                "充满再停开启时延时不生效"
+                            } else {
+                                null
+                            },
                             onClick = {
                                 edit = EditField("延时停充", "秒", true, 1, { v("power_stop_time") }) {
                                     setLocal("power_stop_time", it)
                                 }
                             },
                         )
-                        ChargeToggleRow("充满再停", v("charge_full") == "1") {
-                            setLocal("charge_full", if (it) "1" else "0")
+                        ChargeToggleRow(
+                            title = "充满再停",
+                            checked = v("charge_full") == "1" && v("power_stop") == "100",
+                            summary = if (v("power_stop") == "100") {
+                                "到 100% 后等涓流再停"
+                            } else {
+                                "需先把停止电量设为 100%"
+                            },
+                            enabled = v("power_stop") == "100",
+                            onCheckedChange = {
+                                if (it && v("power_stop") != "100") return@ChargeToggleRow
+                                setLocal("charge_full", if (it) "1" else "0")
+                            },
+                        )
+                        if (v("charge_full") == "1" && v("power_stop") == "100") {
+                            ChargeChoiceRow(
+                                title = "涓流模式",
+                                chips = ChargePresets.trickleMode,
+                                selectedId = v("charge_full_mode").ifBlank { "auto" },
+                                summary = when (v("charge_full_mode")) {
+                                    "time" -> "满电后再等约 10 分钟（时长仅配置文件可改）"
+                                    "current" -> "电流持续偏低后再停"
+                                    else -> "电流或时间任一满足即停"
+                                },
+                                onSelect = { setLocal("charge_full_mode", it) },
+                            )
                         }
                         ChargeToggleRow("自动拔插", v("power_reset") == "1") {
                             setLocal("power_reset", if (it) "1" else "0")
@@ -218,6 +255,15 @@ fun ConfigScreen(
                             chips = ChargePresets.wireless,
                             selectedId = v("wireless_policy").ifBlank { "same" },
                             onSelect = { setLocal("wireless_policy", it) },
+                        )
+                        ChargeDivider()
+                        ChargeToggleRow(
+                            title = "拔线立刻还原节点",
+                            checked = v("unplug_restore") != "0",
+                            summary = "关=保留停充迟滞，再插上仍停到恢复电量",
+                            onCheckedChange = {
+                                setLocal("unplug_restore", if (it) "1" else "0")
+                            },
                         )
                         ChargeDivider()
                         ChargeToggleRow(

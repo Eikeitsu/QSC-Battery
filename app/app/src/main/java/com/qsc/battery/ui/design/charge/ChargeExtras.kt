@@ -339,6 +339,11 @@ object ChargePresets {
         ChargeChip("auto", "自动"),
         ChargeChip("1", "开"),
     )
+    val trickleMode = listOf(
+        ChargeChip("auto", "自动"),
+        ChargeChip("current", "电流"),
+        ChargeChip("time", "时间"),
+    )
     val nativeImpl = listOf(
         ChargeChip("rust", "Rust 版"),
         ChargeChip("c", "C 版"),

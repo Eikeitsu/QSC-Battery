@@ -175,7 +175,29 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   next.power_stop_time = String(stopTime);
 
   next.charge_full = next.charge_full === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
+  {
+    const mode = String(next.charge_full_mode || "auto");
+    next.charge_full_mode =
+      mode === "time" || mode === "current" || mode === "auto" ? mode : "auto";
+  }
+  if (next.charge_full_mode !== String(input.charge_full_mode || "auto")) mark(true);
+  const fullWait = clampInt(
+    next.charge_full_wait_sec,
+    60,
+    3600,
+    Number(DEFAULTS.charge_full_wait_sec),
+  );
+  if (String(fullWait) !== String(input.charge_full_wait_sec)) mark(true);
+  next.charge_full_wait_sec = String(fullWait);
+  // 充满再停仅在停止电量=100 时有意义；否则强制关掉，避免 UI/行为误导
+  if (next.charge_full === BinaryFlag.On && String(next.power_stop) !== "100") {
+    next.charge_full = BinaryFlag.Off;
+    mark(true);
+  }
   next.power_reset = next.power_reset === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
+  next.unplug_restore =
+    next.unplug_restore === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
+  if (next.unplug_restore !== String(input.unplug_restore || BinaryFlag.On)) mark(true);
   next.Compatibility_mode =
     next.Compatibility_mode === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
   const hold = String(next.stop_hold_wakelock || "auto");

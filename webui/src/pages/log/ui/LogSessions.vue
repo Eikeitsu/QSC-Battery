@@ -35,10 +35,10 @@ function toggle(id: string) {
 }
 
 function toneClass(s: LogSession): string {
-  if (s.hasError) return "tone-err";
-  if (s.open) return "tone-open";
+  if (s.hasError || s.outcome === "failed") return "tone-err";
+  if (s.outcome === "ongoing" || s.open) return "tone-open";
   if (s.hasWarn) return "tone-warn";
-  if (s.id === "orphan") return "tone-mute";
+  if (s.outcome === "misc" || s.id === "orphan") return "tone-mute";
   return "tone-ok";
 }
 

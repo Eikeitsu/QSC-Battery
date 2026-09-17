@@ -56,7 +56,10 @@ app_stop="$(qsc_clamp_int "${app_stop:-0}" 0 1 0)"
 history_enable="$(qsc_clamp_int "${history_enable:-1}" 0 1 1)"
 
 charge_full="${QSCV_charge_full}"
+charge_full_mode="${QSCV_charge_full_mode}"
+charge_full_wait_sec="${QSCV_charge_full_wait_sec}"
 power_reset="${QSCV_power_reset}"
+unplug_restore="${QSCV_unplug_restore}"
 Shut_down="${QSCV_Shut_down}"
 power_stop="${QSCV_power_stop}"
 power_start="${QSCV_power_start}"
@@ -71,7 +74,14 @@ _raw_temp_start="$temperature_switch_start"
 
 # 配置兜底：拒非法/天文数字，避免误伤设备
 charge_full="$(qsc_clamp_int "$charge_full" 0 1 0)"
+case "$charge_full_mode" in
+	time|TIME) charge_full_mode="time" ;;
+	auto|AUTO) charge_full_mode="auto" ;;
+	*) charge_full_mode="current" ;;
+esac
+charge_full_wait_sec="$(qsc_clamp_int "${charge_full_wait_sec:-600}" 60 3600 600)"
 power_reset="$(qsc_clamp_int "$power_reset" 0 1 0)"
+unplug_restore="$(qsc_clamp_int "${unplug_restore:-1}" 0 1 1)"
 Shut_down="$(qsc_clamp_int "$Shut_down" 0 20 0)"
 power_stop="$(qsc_clamp_level_or_off "$power_stop" 100)"
 power_start="$(qsc_clamp_int "$power_start" 1 100 95)"
@@ -227,12 +237,17 @@ fi
 
 qsc_charge_full() {
 	if [ "$charge_full" = "1" -a "$battery_level" = "100" -a "$power_stop" = "100" ]; then
-		now_current="$(qsc_safe_cat "$PSDIR/battery/current_now")"
 		if [ "$battery_status" = "5" ]; then
-			rm -f "$DATADIR/now_c"
+			rm -f "$DATADIR/now_c" "$DATADIR/charge_full_since"
 			qsc_log info "电量$battery_level 触发充满再停功能 当前已充满"
-		else
-			full_log=1
+			return
+		fi
+		full_log=1
+		_cur_ok=0
+		_time_ok=0
+		# 电流判定（current / auto）
+		if [ "$charge_full_mode" = "current" ] || [ "$charge_full_mode" = "auto" ]; then
+			now_current="$(qsc_safe_cat "$PSDIR/battery/current_now")"
 			if [ -n "$now_current" ]; then
 				now_current="$(echo "$now_current" | sed -n 's/-//g;$p')"
 				if [ "$now_current" -lt "100000" ]; then
@@ -240,14 +255,53 @@ qsc_charge_full() {
 				else
 					rm -f "$DATADIR/now_c"
 				fi
-				now_current_n="$(cat "$DATADIR/now_c" | wc -l)"
+				now_current_n="$(wc -l <"$DATADIR/now_c" 2>/dev/null | tr -d ' ')"
+				case "$now_current_n" in ""|*[!0-9]*) now_current_n=0 ;; esac
 				if [ "$now_current_n" -ge "3" ]; then
-					full_log=0
-					rm -f "$DATADIR/now_c"
-					qsc_log debug "电量$battery_level 触发充满再停功能 当前电流$now_current"
+					_cur_ok=1
 				fi
 			fi
+		else
+			rm -f "$DATADIR/now_c"
 		fi
+		# 时间判定（time / auto）；等待秒数来自配置，UI 不暴露（默认 600）
+		if [ "$charge_full_mode" = "time" ] || [ "$charge_full_mode" = "auto" ]; then
+			_now_ts="$(date +%s 2>/dev/null)"
+			case "$_now_ts" in ""|*[!0-9]*) _now_ts=0 ;; esac
+			_since=""
+			qsc_read_node "$DATADIR/charge_full_since" && _since="$QSC_NODE_VAL"
+			case "$_since" in ""|*[!0-9]*) _since=0 ;; esac
+			if [ "$_since" -le 0 ] 2>/dev/null; then
+				echo "$_now_ts" >"$DATADIR/charge_full_since" 2>/dev/null
+				_since="$_now_ts"
+				qsc_log debug "电量$battery_level 充满再停·计时开始，等待 ${charge_full_wait_sec}s"
+			fi
+			_elapsed=$((_now_ts - _since))
+			if [ "$_elapsed" -ge "$charge_full_wait_sec" ] 2>/dev/null; then
+				_time_ok=1
+			fi
+		else
+			rm -f "$DATADIR/charge_full_since"
+		fi
+		case "$charge_full_mode" in
+			auto)
+				if [ "$_cur_ok" = "1" ] || [ "$_time_ok" = "1" ]; then
+					full_log=0
+				fi
+				;;
+			time)
+				[ "$_time_ok" = "1" ] && full_log=0
+				;;
+			*)
+				[ "$_cur_ok" = "1" ] && full_log=0
+				;;
+		esac
+		if [ "$full_log" = "0" ]; then
+			rm -f "$DATADIR/now_c" "$DATADIR/charge_full_since"
+			qsc_log debug "电量$battery_level 充满再停·条件满足 mode=$charge_full_mode"
+		fi
+	else
+		rm -f "$DATADIR/charge_full_since"
 	fi
 }
 
@@ -449,20 +503,9 @@ else
 		rm -f "$DATADIR/now_c" "$DATADIR/power_on"
 		touch "$DATADIR/power_off"
 	fi
-	# 拔掉充电器：没有充电器就无所谓「停充」，此处必须还原节点并清标记。
-	# 之前只有「电量降到恢复阈值以下」才会走 462 行的恢复流程，于是在阈值以上
-	# 拔线后 power_switch 会一直留着，后果有三个：
-	#   1) 模块简介一直停在「⏸️已停充 / 电量降至 X% 后恢复」，跟着的电量温度也不再变；
-	#   2) qsc_ps_can_skip_round 见到 power_switch 就不跳轮，主循环按维持间隔空转，
-	#      省电模式形同失效；
-	#   3) MCA 机型再插上时 status 仍报 Not charging，而 power_switch 还在，
-	#      charge_eval 进不去，停充直接失灵。
-	#
-	# 但「看起来没在供电」远不等于「线拔了」：本模块的停充手段里有端口 suspend
-	# 与电流墙，写下去之后 online 掉 0、status 也可能变 Discharging，和拔线难以
-	# 区分。曾因此在阈值处反复启停（到 100% 停充，下一轮误判拔线又还原，立刻重充）。
-	# 所以这里要 qsc_charger_really_gone 拿到「线确实不在」的证据，
-	# 且连续两轮都这么判定才动手，避免停充瞬间的信号抖动。
+	# 拔掉充电器：默认还原节点并清标记；unplug_restore=0 时保留停充迟滞（再插上仍停到恢复阈值）。
+	# 「看起来没在供电」远不等于「线拔了」：停充写端口 suspend / 电流墙后 online 可能掉 0，
+	# 需 qsc_charger_really_gone 且连续两轮才动手。
 	unplug_ok=0
 	if [ -z "$battery_powered" ] && [ -f "$DATADIR/power_switch" ]; then
 		if qsc_charger_really_gone; then
@@ -480,24 +523,32 @@ else
 	fi
 	if [ "$unplug_ok" = "1" ]; then
 		rm -f "$DATADIR/unplug_streak" 2>/dev/null
-		qsc_power_start
-		if [ "$start_ok" = "1" ]; then
-			rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" \
-				"$DATADIR/battery_switch" "$DATADIR/app_stop_flag" \
-				"$DATADIR/resume_fail_hint"
-			qsc_clear_active_switch
-			qsc_stop_wakelock_release
-			qsc_log info "已拔出充电器，还原充电节点并清除停充状态 [$start_node <- $start_val]"
+		if [ "$unplug_restore" = "0" ]; then
+			# 不清 power_switch / 不还原节点：再插上仍保持停充直到恢复阈值
+			qsc_log info "已拔出充电器，保留停充状态（未还原节点）"
 			type qsc_event_unplug >/dev/null 2>&1 &&
-				qsc_event_unplug "充电器拔出，已还原节点"
+				qsc_event_unplug "充电器拔出，保留停充状态"
 			qsc_log_once_clear unplug_restore
-			qsc_log_once_clear resume_fail
 		else
-			# 还原失败时保留标记，交给恢复流程继续重试，避免节点停在停充态却没人管
-			touch "$DATADIR/resume_fail_hint"
-			qsc_log_once unplug_restore warn "拔出充电器后还原充电节点失败，将持续重试"
-			type qsc_event_warn >/dev/null 2>&1 &&
-				qsc_event_warn "拔线后还原节点失败"
+			qsc_power_start
+			if [ "$start_ok" = "1" ]; then
+				rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" \
+					"$DATADIR/battery_switch" "$DATADIR/app_stop_flag" \
+					"$DATADIR/resume_fail_hint"
+				qsc_clear_active_switch
+				qsc_stop_wakelock_release
+				qsc_log info "已拔出充电器，还原充电节点并清除停充状态 [$start_node <- $start_val]"
+				type qsc_event_unplug >/dev/null 2>&1 &&
+					qsc_event_unplug "充电器拔出，已还原节点"
+				qsc_log_once_clear unplug_restore
+				qsc_log_once_clear resume_fail
+			else
+				# 还原失败时保留标记，交给恢复流程继续重试，避免节点停在停充态却没人管
+				touch "$DATADIR/resume_fail_hint"
+				qsc_log_once unplug_restore warn "拔出充电器后还原充电节点失败，将持续重试"
+				type qsc_event_warn >/dev/null 2>&1 &&
+					qsc_event_warn "拔线后还原节点失败"
+			fi
 		fi
 	fi
 fi

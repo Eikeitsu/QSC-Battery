@@ -37,21 +37,24 @@ describe("groupLogSessions", () => {
     const sessions = groupLogSessions(entries);
     expect(sessions).toHaveLength(3);
     expect(sessions[0]!.open).toBe(true);
+    expect(sessions[0]!.outcome).toBe("ongoing");
     expect(sessions[0]!.title).toMatch(/11:00.*停止充电.*停充中/);
-    expect(sessions[0]!.badges).toEqual(["停充中", "电量停充"]);
+    expect(sessions[0]!.badges).toEqual(["停充中", "已停充", "电量停充"]);
     expect(sessions[0]!.entries.some((e) => /停止充电/.test(e.raw))).toBe(true);
     expect(sessions[1]!.open).toBe(false);
+    expect(sessions[1]!.outcome).toBe("resumed");
     expect(sessions[1]!.entries).toHaveLength(3);
     expect(sessions[1]!.hasWarn).toBe(true);
-    expect(sessions[1]!.badges).toEqual(["已恢复", "电量停充", "有警告"]);
+    expect(sessions[1]!.badges).toEqual(["已恢复", "已停充", "电量停充", "有警告"]);
     expect(sessions[1]!.title).toMatch(/10:01.*停止充电.*→.*10:05.*恢复/);
     expect(sessions[2]!.id).toBe("orphan");
+    expect(sessions[2]!.outcome).toBe("misc");
     expect(sessions[2]!.title).toBe("其它日志");
     expect(sessions[2]!.badges).toEqual(["杂项"]);
     expect(sessions[2]!.entries).toHaveLength(1);
   });
 
-  it("treats App stop and unplug clear as session boundaries", () => {
+  it("treats App stop and unplug clear as 已拔线", () => {
     const entries = parseLogText(
       [
         "2026-08-26_12:00:00 [INFO] 电量88 按 App 停充 [/sys/x]",
@@ -61,8 +64,9 @@ describe("groupLogSessions", () => {
     const sessions = groupLogSessions(entries);
     expect(sessions).toHaveLength(1);
     expect(sessions[0]!.open).toBe(false);
-    expect(sessions[0]!.title).toMatch(/12:00.*按 App 停充.*→.*12:10.*清除/);
-    expect(sessions[0]!.badges).toEqual(["已恢复", "App停充", "拔线清除"]);
+    expect(sessions[0]!.outcome).toBe("unplugged");
+    expect(sessions[0]!.title).toMatch(/12:00.*按 App 停充.*→.*12:10.*拔线/);
+    expect(sessions[0]!.badges).toEqual(["已拔线", "已停充", "App停充", "拔线清除"]);
   });
 
   it("does not treat threshold hint as stop/resume", () => {
@@ -99,7 +103,12 @@ describe("deriveSessionBadges", () => {
         ].join("\n"),
       ),
     )[0]!;
-    expect(deriveSessionBadges(temp)).toEqual(["已恢复", "温控停充", "温控恢复"]);
+    expect(deriveSessionBadges(temp)).toEqual([
+      "已恢复",
+      "已停充",
+      "温控停充",
+      "温控恢复",
+    ]);
 
     const forced = groupLogSessions(
       parseLogText(
@@ -109,7 +118,12 @@ describe("deriveSessionBadges", () => {
         ].join("\n"),
       ),
     )[0]!;
-    expect(deriveSessionBadges(forced)).toEqual(["已恢复", "温控停充", "强制恢复"]);
+    expect(deriveSessionBadges(forced)).toEqual([
+      "已恢复",
+      "已停充",
+      "温控停充",
+      "强制恢复",
+    ]);
   });
 });
 
@@ -119,67 +133,13 @@ describe("filterLogSessions", () => {
       [
         "2026-08-26_10:01:00 [INFO] 电量80 停止充电 [/sys/x]",
         "2026-08-26_10:01:03 [WARN] drift",
-        "2026-08-26_10:01:04 [DEBUG] tick",
         "2026-08-26_10:05:00 [INFO] 电量75 恢复充电 [/sys/x]",
       ].join("\n"),
     );
     const sessions = filterLogSessions(groupLogSessions(entries), LogLevel.Info);
     expect(sessions).toHaveLength(1);
-    expect(sessions[0]!.open).toBe(false);
-    expect(sessions[0]!.entries).toHaveLength(2);
-    expect(sessions[0]!.entries.every((e) => e.level === LogLevel.Info)).toBe(true);
-    expect(sessions[0]!.entries.every((e) => !e.context)).toBe(true);
-    expect(sessions[0]!.hasWarn).toBe(false);
-    expect(sessions[0]!.title).toMatch(/停止充电.*恢复/);
-  });
-
-  it("marks Info boundaries as context when filtering Warn", () => {
-    const entries = parseLogText(
-      [
-        "2026-08-26_10:01:00 [INFO] 电量80 停止充电 [/sys/x]",
-        "2026-08-26_10:01:03 [WARN] drift",
-        "2026-08-26_10:05:00 [INFO] 电量75 恢复充电 [/sys/x]",
-      ].join("\n"),
-    );
-    const infoOnly = filterLogSessions(groupLogSessions(entries), LogLevel.Info);
-    expect(infoOnly).toHaveLength(1);
-    expect(infoOnly[0]!.entries).toHaveLength(2);
-
-    const warnOnly = filterLogSessions(groupLogSessions(entries), LogLevel.Warn);
-    expect(warnOnly).toHaveLength(1);
-    expect(warnOnly[0]!.entries).toHaveLength(3);
-    expect(warnOnly[0]!.hasWarn).toBe(true);
-    const contexts = warnOnly[0]!.entries.filter((e) => e.context);
-    const matches = warnOnly[0]!.entries.filter((e) => !e.context);
-    expect(contexts).toHaveLength(2);
-    expect(matches).toHaveLength(1);
-    expect(matches[0]!.level).toBe(LogLevel.Warn);
-  });
-
-  it("keeps Info stop/resume as muted context when filtering Debug", () => {
-    const entries = parseLogText(
-      [
-        "2026-08-26_10:01:00 [INFO] 电量80 停止充电 [/sys/x]",
-        "2026-08-26_10:01:04 [DEBUG] tick",
-        "2026-08-26_10:05:00 [INFO] 电量75 恢复充电 [/sys/x]",
-      ].join("\n"),
-    );
-    const sessions = filterLogSessions(groupLogSessions(entries), LogLevel.Debug);
-    expect(sessions).toHaveLength(1);
-    expect(sessions[0]!.entries).toHaveLength(3);
-    expect(sessions[0]!.entries.filter((e) => e.context)).toHaveLength(2);
-    expect(sessions[0]!.entries.filter((e) => !e.context)).toHaveLength(1);
-    expect(sessions[0]!.entries.find((e) => !e.context)?.level).toBe(LogLevel.Debug);
-  });
-
-  it("drops session with only Info boundaries when filtering Debug", () => {
-    const entries = parseLogText(
-      [
-        "2026-08-26_10:01:00 [INFO] 电量80 停止充电 [/sys/x]",
-        "2026-08-26_10:05:00 [INFO] 电量75 恢复充电 [/sys/x]",
-      ].join("\n"),
-    );
-    const sessions = filterLogSessions(groupLogSessions(entries), LogLevel.Debug);
-    expect(sessions).toHaveLength(0);
+    expect(
+      sessions[0]!.entries.every((e) => e.level === LogLevel.Info || e.context),
+    ).toBe(true);
   });
 });

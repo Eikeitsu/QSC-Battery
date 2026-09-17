@@ -221,7 +221,7 @@ qsc_refresh_module_description() {
 		inner="电量100%"
 		[ -n "$temp" ] && inner="${inner} ● ${temp}°C"
 		qsc_write_module_description "🔋充满再停" "$inner" \
-			"等待涓流结束（电流持续偏低）后再停充"
+			"等待涓流结束后再停充"
 		return 0
 	fi
 

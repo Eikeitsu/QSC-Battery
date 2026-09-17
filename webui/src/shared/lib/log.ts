@@ -8,6 +8,9 @@ const STOP_RE = /停止充电|按\s*App\s*停充/;
 const RESUME_RE = /恢复充电|清除停充状态/;
 const TS_RE = /^(\d{4}-\d{2}-\d{2})_(\d{2}:\d{2}):\d{2}\s*/;
 
+export type LogSessionOutcome =
+  "ongoing" | "resumed" | "unplugged" | "disabled" | "failed" | "misc";
+
 export interface LogEntry {
   raw: string;
   level: LogLevel;
@@ -21,11 +24,13 @@ export interface LogEntry {
 export interface LogSession {
   id: string;
   title: string;
-  /** 仍在停充、未见恢复 */
+  /** 仍在停充、未见收束（兼容旧字段） */
   open: boolean;
+  /** 会话结果：停充中 / 已恢复 / 已拔线 / 已关闭 / 停充失败 / 杂项 */
+  outcome: LogSessionOutcome;
   hasError: boolean;
   hasWarn: boolean;
-  /** 状态 + 事件标签；首项为 停充中 / 已恢复 / 杂项 */
+  /** 状态 + 事件标签；首项为 outcome 主徽章 */
   badges: string[];
   entries: LogEntry[];
 }
@@ -113,8 +118,10 @@ function briefReason(raw: string): string {
   return shortTitle(raw).slice(0, 48);
 }
 
-function resumeLabel(raw: string): string {
-  return /清除停充/.test(raw) ? "清除" : "恢复";
+function closeTailLabel(raw: string): string {
+  if (/模块已关闭/.test(raw)) return "关闭";
+  if (/清除停充/.test(raw)) return "拔线";
+  return "恢复";
 }
 
 function bumpFlags(session: LogSession, e: LogEntry) {
@@ -122,45 +129,77 @@ function bumpFlags(session: LogSession, e: LogEntry) {
   if (e.level === LogLevel.Warn) session.hasWarn = true;
 }
 
+function detectOutcome(
+  session: Pick<LogSession, "id" | "open" | "entries">,
+): LogSessionOutcome {
+  if (session.id === "orphan") return "misc";
+  if (session.open) {
+    const blob = session.entries.map((e) => e.raw).join("\n");
+    if (/停充节点无效|无可用停充节点|停止充电失败/.test(blob) && !STOP_RE.test(blob)) {
+      return "failed";
+    }
+    return "ongoing";
+  }
+  const close = [...session.entries].reverse().find((e) => RESUME_RE.test(e.raw));
+  const raw = close?.raw || "";
+  if (/模块已关闭/.test(raw)) return "disabled";
+  if (/清除停充|保留停充状态|已拔出充电器/.test(raw)) return "unplugged";
+  if (/恢复充电/.test(raw)) return "resumed";
+  if (/停止充电失败|停充节点无效|无可用停充节点/.test(raw)) return "failed";
+  return "resumed";
+}
+
+const OUTCOME_LABEL: Record<LogSessionOutcome, string> = {
+  ongoing: "停充中",
+  resumed: "已恢复",
+  unplugged: "已拔线",
+  disabled: "已关闭",
+  failed: "停充失败",
+  misc: "杂项",
+};
+
 /** 时间线标题：`10:01 …停止充电 → 10:05 恢复` / `· 停充中` */
 export function formatSessionTitle(
   entries: LogEntry[],
   open: boolean,
   orphan = false,
+  outcome?: LogSessionOutcome,
 ): string {
-  if (orphan) return "其它日志";
+  if (orphan || outcome === "misc") return "其它日志";
   const stop = entries.find((x) => STOP_RE.test(x.raw));
   const resume = entries.find((x) => RESUME_RE.test(x.raw));
   const stopClock = stop ? extractClock(stop.raw) : "";
   const stopBrief = stop ? briefReason(stop.raw) : "停充";
   const head = [stopClock, stopBrief].filter(Boolean).join(" ");
-  if (open || !resume) {
+  const state = outcome ?? (open ? "ongoing" : "resumed");
+  if (state === "ongoing" || !resume) {
     return `${head} · 停充中`;
   }
   const resumeClock = extractClock(resume.raw);
-  const tail = [resumeClock, resumeLabel(resume.raw)].filter(Boolean).join(" ");
+  const tail = [resumeClock, closeTailLabel(resume.raw)].filter(Boolean).join(" ");
   return `${head} → ${tail}`;
 }
 
 /**
- * 会话标签：首项固定为 停充中 / 已恢复 / 杂项，其后按日志事件追加。
- * 不拆会话，只丰富卡片上的可见标签。
+ * 会话标签：首项为 outcome 主状态；成功停充再附「已停充」；其后按事件追加。
  */
 export function deriveSessionBadges(
-  session: Pick<LogSession, "id" | "open" | "hasError" | "hasWarn" | "entries">,
+  session: Pick<
+    LogSession,
+    "id" | "open" | "outcome" | "hasError" | "hasWarn" | "entries"
+  >,
 ): string[] {
-  const badges: string[] = [];
-  if (session.id === "orphan") badges.push("杂项");
-  else if (session.open) badges.push("停充中");
-  else badges.push("已恢复");
+  const outcome = session.outcome || detectOutcome(session);
+  const badges: string[] = [OUTCOME_LABEL[outcome]];
 
-  if (session.id === "orphan") {
+  if (outcome === "misc") {
     if (session.hasError) badges.push("有错误");
     else if (session.hasWarn) badges.push("有警告");
     return badges;
   }
 
   const blob = session.entries.map((e) => e.raw).join("\n");
+  if (STOP_RE.test(blob)) badges.push("已停充");
 
   if (/触发开关温控：停止充电/.test(blob)) badges.push("温控停充");
   else if (/按\s*App\s*停充/.test(blob)) badges.push("App停充");
@@ -170,6 +209,7 @@ export function deriveSessionBadges(
   else if (/清除停充状态/.test(blob)) badges.push("拔线清除");
   else if (/模块已关闭/.test(blob)) badges.push("模块关闭");
   else if (/触发开关温控：恢复充电/.test(blob)) badges.push("温控恢复");
+  else if (/保留停充状态/.test(blob)) badges.push("拔线保留");
 
   if (session.hasError) badges.push("有错误");
   else if (session.hasWarn) badges.push("有警告");
@@ -185,7 +225,14 @@ export function groupLogSessions(entries: LogEntry[]): LogSession[] {
 
   const pushCurrent = () => {
     if (current) {
-      current.title = formatSessionTitle(current.entries, current.open, false);
+      current.outcome = detectOutcome(current);
+      current.open = current.outcome === "ongoing";
+      current.title = formatSessionTitle(
+        current.entries,
+        current.open,
+        false,
+        current.outcome,
+      );
       current.badges = deriveSessionBadges(current);
       sessions.push(current);
       current = null;
@@ -199,6 +246,7 @@ export function groupLogSessions(entries: LogEntry[]): LogSession[] {
         id: `s${sessions.length}-${e.raw.length}`,
         title: "",
         open: true,
+        outcome: "ongoing",
         hasError: false,
         hasWarn: false,
         badges: [],
@@ -227,8 +275,9 @@ export function groupLogSessions(entries: LogEntry[]): LogSession[] {
   if (orphan.length) {
     const orphanSession: LogSession = {
       id: "orphan",
-      title: formatSessionTitle(orphan, false, true),
+      title: formatSessionTitle(orphan, false, true, "misc"),
       open: false,
+      outcome: "misc",
       hasError: orphan.some((x) => x.level === LogLevel.Error),
       hasWarn: orphan.some((x) => x.level === LogLevel.Warn),
       badges: [],

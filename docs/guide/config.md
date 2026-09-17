@@ -50,17 +50,21 @@
 
 ### 行为与通知
 
-| 键                      | 默认             | 含义                     |
-| ----------------------- | ---------------- | ------------------------ |
-| `Compatibility_mode`    | 0                | `1` = 跳过本模块电流控制 |
-| `stop_hold_wakelock`    | auto             | `0` / `1` / `auto`       |
-| `wireless_policy`       | same             | `same` / `ignore`        |
-| `app_stop`              | 0                | 按 App 停充              |
-| `app_stop_list`         | （注释）         | 逗号分隔包名             |
-| `notify_charge_event`   | 0                | 停充/恢复/失败通知       |
-| `notify_charge_kinds`   | stop,resume,fail | 通知种类                 |
-| `notify_quiet_schedule` | （注释）         | 勿扰时段（失败仍通知）   |
-| `notify_power_status`   | 0                | 常显电量/温度/电流通知   |
+| 键                      | 默认             | 含义                              |
+| ----------------------- | ---------------- | --------------------------------- |
+| `Compatibility_mode`    | 0                | `1` = 跳过本模块电流控制          |
+| `unplug_restore`        | 1                | 拔线是否立刻还原节点并清停充标记  |
+| `charge_full`           | 0                | 充满再停（仅停充=100 且电量 100） |
+| `charge_full_mode`      | auto             | `auto` / `current` / `time`       |
+| `charge_full_wait_sec`  | 600              | 时间支路等待秒数（UI 不暴露）     |
+| `stop_hold_wakelock`    | auto             | `0` / `1` / `auto`                |
+| `wireless_policy`       | same             | `same` / `ignore`                 |
+| `app_stop`              | 0                | 按 App 停充                       |
+| `app_stop_list`         | （注释）         | 逗号分隔包名                      |
+| `notify_charge_event`   | 0                | 停充/恢复/失败通知                |
+| `notify_charge_kinds`   | stop,resume,fail | 通知种类                          |
+| `notify_quiet_schedule` | （注释）         | 勿扰时段（失败仍通知）            |
+| `notify_power_status`   | 0                | 常显电量/温度/电流通知            |
 
 ### 省电与守护
 

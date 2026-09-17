@@ -70,7 +70,7 @@ qsc_battery_snapshot_read() {
 		QSC_BATTERY_POWERED="powered: true"
 	fi
 
-	# 0814 兼容正证据：sysfs 判未插电时，对可能仍在供电的 status 再问 dumpsys
+	# sysfs 判未插电时，对可能仍在供电的 status 再问 dumpsys 作正证据
 	if [ -z "$QSC_BATTERY_POWERED" ]; then
 		case "${QSC_BATTERY_STATUS:-}" in
 			2|4|5)

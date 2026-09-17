@@ -75,6 +75,12 @@ async function toggleKind(kind: "stop" | "resume" | "fail", on: boolean) {
       @update:model-value="(v) => onSwitch('power_reset', v)"
     />
     <SwitchCell
+      title="拔线立刻还原节点"
+      label="开=拔线后还原并清除停充标记；关=保留停充迟滞，再插上仍停到恢复电量"
+      :model-value="store.settings.unplug_restore !== '0'"
+      @update:model-value="(v) => onSwitch('unplug_restore', v)"
+    />
+    <SwitchCell
       title="兼容模式"
       label="与其它快充 / 限流模块同装时建议开启"
       :model-value="store.settings.Compatibility_mode === '1'"
