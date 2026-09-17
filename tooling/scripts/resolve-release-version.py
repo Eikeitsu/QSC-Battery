@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import tempfile
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -277,16 +278,23 @@ def self_test() -> None:
 
     assert code_from_ymd_rev(20260916, 1) == 2026091601
     assert code_from_ymd_rev(20260916, 2) == 2026091602
-    # 旧单调码 2026091337 低于当天对齐码时，发版应跳到 …01，与 version 日期对齐
-    assert (
-        allocate_aligned_version_code(20260916, 1, extras=[2026091337], fetch_remote=False)
-        == 2026091601
-    )
-    # 若已知码已高于对齐码，不得回退
-    assert (
-        allocate_aligned_version_code(20260916, 1, extras=[2026091699], fetch_remote=False)
-        == 2026091700
-    )
+    # 隔离空仓库，避免被当前 module.prop / update.json 的 versionCode 污染断言
+    with tempfile.TemporaryDirectory() as tmp:
+        empty = Path(tmp)
+        # 旧单调码 2026091337 低于当天对齐码时，发版应跳到 …01，与 version 日期对齐
+        assert (
+            allocate_aligned_version_code(
+                20260916, 1, repo=empty, extras=[2026091337], fetch_remote=False
+            )
+            == 2026091601
+        )
+        # 若已知码已高于对齐码，不得回退
+        assert (
+            allocate_aligned_version_code(
+                20260916, 1, repo=empty, extras=[2026091699], fetch_remote=False
+            )
+            == 2026091700
+        )
     print("self-test ok")
 
 
