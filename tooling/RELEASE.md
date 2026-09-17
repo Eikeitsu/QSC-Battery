@@ -51,7 +51,7 @@ Actions → **Release Module**（或推送 `v*` tag）：
 
 1. **模块更新只认 `update.json`**。单独发二进制 / APK 时 post 脚本故意不改它，Magisk 管理器和 APP「检查模块更新」不会被骗。
 2. **守护更新只认 `qscd/manifest.json`**。只发 Rust 时保留 Pages 上旧的 C 文件；只发 C 同理。任一套发布都会写入本次 `version`，WebUI 可检出新守护。
-3. **APP 更新只认 `app-update.json`**。只发 APK 前请先提高 `app/app/build.gradle.kts` 的 `versionCode` / `versionName`。
+3. **APP 更新只认 `app-update.json`**。只发 APK 前请先提高 `apps/android/build.gradle.kts` 的 `versionCode` / `versionName`。
 4. 同日只修守护或 APK：版本可用 `20260717.2` 这类后缀；changelog 仍会 promote，但模块 `update.json` 可保持旧版。
 
 工作流步骤：

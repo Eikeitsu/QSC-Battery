@@ -6,17 +6,17 @@ ui_print " 原作者: top大佬 @酷安 "
 ui_print " 维护: 许小墨 @酷安"
 ui_print "********************************"
 
-qsc_abort() {
-	ui_print "! $1"
-	rm -f /data/adb/qsc/install_auto 2>/dev/null
-	if command -v abort >/dev/null 2>&1; then
-		abort "$1"
-	fi
-	exit 1
-}
 
 # 音量键：复用 bin/lib/keys.sh（Magisk 已解压到 MODPATH）
 MODDIR="$MODPATH"
+
+# install fragments（customize.sh 文件名冻结；helpers 需在 common 检查前提供 qsc_abort）
+. "$MODPATH/install/helpers.sh"
+. "$MODPATH/install/migrate.sh"
+. "$MODPATH/install/qscd.sh"
+. "$MODPATH/install/companion.sh"
+. "$MODPATH/install/cli.sh"
+
 if [ -f "$MODPATH/bin/common.sh" ]; then
 	# shellcheck disable=SC1090
 	. "$MODPATH/bin/common.sh"
@@ -36,209 +36,6 @@ if [ -f /data/adb/qsc/install_auto ] || [ "${QSC_NONINTERACTIVE:-}" = "1" ]; the
 	QSC_INSTALL_AUTO=1
 	ui_print "- 无人值守安装：跳过音量键，使用安全默认选项"
 fi
-
-# 纯数字配置项
-qsc_conf_value() {
-	local file="$1"
-	local key="$2"
-	local count value
-	count="$(grep -c "^${key}=" "$file" 2>/dev/null)"
-	[ "$count" = "1" ] || return 1
-	value="$(sed -n "s/^${key}=//p" "$file" | tr -d ' \r\n')"
-	case "$value" in ""|*[!0-9]*) return 1 ;; esac
-	echo "$value"
-}
-
-# 允许 0/1/auto 等简短标记（非纯数字）
-qsc_conf_token() {
-	local file="$1"
-	local key="$2"
-	local count value
-	count="$(grep -c "^${key}=" "$file" 2>/dev/null)"
-	[ "$count" = "1" ] || return 1
-	value="$(sed -n "s/^${key}=//p" "$file" | tr -d ' \r\n')"
-	case "$value" in
-		""|*[!0-9A-Za-z._:-]*) return 1 ;;
-	esac
-	echo "$value"
-}
-
-qsc_merge_config() {
-	local source="$1"
-	local target="$2"
-	local merged="${target}.merge.$$"
-	local default_power_stop default_power_start default_power_stop_time
-	local default_charge_full default_power_reset default_compatibility_mode
-	local default_temperature_switch
-	local default_temperature_stop default_temperature_start
-	local default_stop_hold default_notify
-	local power_stop power_start power_stop_time charge_full power_reset
-	local Compatibility_mode
-	local temperature_switch temperature_stop temperature_start
-	local stop_hold_wakelock notify_charge_event notify_kinds value _kinds
-
-	default_power_stop="$(qsc_conf_value "$target" power_stop)" || return 1
-	default_power_start="$(qsc_conf_value "$target" power_start)" || return 1
-	default_power_stop_time="$(qsc_conf_value "$target" power_stop_time)" || return 1
-	default_charge_full="$(qsc_conf_value "$target" charge_full)" || return 1
-	default_power_reset="$(qsc_conf_value "$target" power_reset)" || return 1
-	default_compatibility_mode="$(qsc_conf_value "$target" Compatibility_mode)" || default_compatibility_mode=0
-	default_temperature_switch="$(qsc_conf_value "$target" temperature_switch)" || return 1
-	default_temperature_stop="$(qsc_conf_value "$target" temperature_switch_stop)" || return 1
-	default_temperature_start="$(qsc_conf_value "$target" temperature_switch_start)" || return 1
-	default_stop_hold="$(qsc_conf_token "$target" stop_hold_wakelock)" || default_stop_hold=auto
-	default_notify="$(qsc_conf_value "$target" notify_charge_event)" || default_notify=0
-	notify_kinds="$(sed -n 's/^notify_charge_kinds=//p' "$target" 2>/dev/null | head -n1 | tr -d ' \r\n')"
-	[ -n "$notify_kinds" ] || notify_kinds="stop,resume,fail"
-
-	power_stop="$default_power_stop"
-	power_start="$default_power_start"
-	power_stop_time="$default_power_stop_time"
-	charge_full="$default_charge_full"
-	power_reset="$default_power_reset"
-	Compatibility_mode="$default_compatibility_mode"
-	temperature_switch="$default_temperature_switch"
-	temperature_stop="$default_temperature_stop"
-	temperature_start="$default_temperature_start"
-	stop_hold_wakelock="$default_stop_hold"
-	notify_charge_event="$default_notify"
-
-	value="$(qsc_conf_value "$source" power_stop)" && [ "$value" -ge 1 -a "$value" -le 110 ] && power_stop="$value"
-	value="$(qsc_conf_value "$source" power_start)" && [ "$value" -ge 0 -a "$value" -le 109 ] && power_start="$value"
-	value="$(qsc_conf_value "$source" power_stop_time)" && [ "$value" -ge 1 -a "$value" -le 3600 ] && power_stop_time="$value"
-	value="$(qsc_conf_value "$source" charge_full)" && [ "$value" -le 1 ] && charge_full="$value"
-	value="$(qsc_conf_value "$source" power_reset)" && [ "$value" -le 1 ] && power_reset="$value"
-	value="$(qsc_conf_value "$source" Compatibility_mode)" && [ "$value" -le 1 ] && Compatibility_mode="$value"
-	value="$(qsc_conf_value "$source" temperature_switch)" && [ "$value" -le 1 ] && temperature_switch="$value"
-	value="$(qsc_conf_value "$source" temperature_switch_stop)" && [ "$value" -le 100 ] && temperature_stop="$value"
-	value="$(qsc_conf_value "$source" temperature_switch_start)" && [ "$value" -le 100 ] && temperature_start="$value"
-	value="$(qsc_conf_token "$source" stop_hold_wakelock)" && case "$value" in 0|1|auto) stop_hold_wakelock="$value" ;; esac
-	value="$(qsc_conf_value "$source" notify_charge_event)" && [ "$value" -le 1 ] && notify_charge_event="$value"
-	# notify_charge_kinds 允许逗号列表
-	_kinds="$(sed -n 's/^notify_charge_kinds=//p' "$source" 2>/dev/null | head -n1 | tr -d ' \r\n')"
-	case "$_kinds" in
-		""|*[^a-z,]*) ;;
-		*)
-			notify_kinds="$_kinds"
-			;;
-	esac
-
-	if [ "$power_stop" != "110" ] && [ "$power_stop" -le "$power_start" ]; then
-		power_stop="$default_power_stop"
-		power_start="$default_power_start"
-		ui_print "- 旧版电量阈值关系无效，已保留新版默认值"
-	fi
-	if [ "$temperature_stop" -le "$temperature_start" ]; then
-		temperature_stop="$default_temperature_stop"
-		temperature_start="$default_temperature_start"
-		ui_print "- 旧版温控阈值关系无效，已保留新版默认值"
-	fi
-
-	cp -f "$target" "$merged" 2>/dev/null || return 1
-	sed -i \
-		-e "s/^power_stop=.*/power_stop=$power_stop/" \
-		-e "s/^power_start=.*/power_start=$power_start/" \
-		-e "s/^power_stop_time=.*/power_stop_time=$power_stop_time/" \
-		-e "s/^charge_full=.*/charge_full=$charge_full/" \
-		-e "s/^power_reset=.*/power_reset=$power_reset/" \
-		-e "s/^Compatibility_mode=.*/Compatibility_mode=$Compatibility_mode/" \
-		-e "s/^stop_hold_wakelock=.*/stop_hold_wakelock=$stop_hold_wakelock/" \
-		-e "s/^notify_charge_event=.*/notify_charge_event=$notify_charge_event/" \
-		-e "s/^notify_charge_kinds=.*/notify_charge_kinds=$notify_kinds/" \
-		-e "s/^temperature_switch=.*/temperature_switch=$temperature_switch/" \
-		-e "s/^temperature_switch_stop=.*/temperature_switch_stop=$temperature_stop/" \
-		-e "s/^temperature_switch_start=.*/temperature_switch_start=$temperature_start/" \
-		"$merged" || {
-		rm -f "$merged"
-		return 1
-	}
-
-	# —— 保留更新策略 ——
-	# 核心策略：从旧配置迁入（停充阈值、通知、无线、App、历史开关等）
-	# 运行/省电旋钮：一律留新版模板默认，避免旧间隔把本版省电优化盖掉
-	# （power_saver、loop_interval_*、switch_verify_sec 不在此列表）
-	_core_migrated=0
-	for _nk in wireless_policy history_enable history_interval_sec \
-		app_stop app_stop_list native_daemon native_impl chart_show \
-		notify_power_status switch_batch_blind unplug_restore \
-		charge_full_mode charge_full_wait_sec; do
-		_nv="$(sed -n "s/^${_nk}=//p" "$source" 2>/dev/null | head -n1 | tr -d '\r')"
-		[ -n "$_nv" ] || continue
-		case "$_nk" in
-			wireless_policy)
-				case "$_nv" in same|ignore) ;; *) continue ;; esac
-				;;
-			history_enable|app_stop|native_daemon|chart_show|notify_power_status|switch_batch_blind|unplug_restore)
-				case "$_nv" in 0|1) ;; *) continue ;; esac
-				;;
-			charge_full_mode)
-				case "$_nv" in current|time|auto) ;; *) continue ;; esac
-				;;
-			charge_full_wait_sec)
-				case "$_nv" in ""|*[!0-9]*) continue ;; esac
-				[ "$_nv" -ge 60 ] 2>/dev/null && [ "$_nv" -le 3600 ] 2>/dev/null || continue
-				;;
-			history_interval_sec)
-				case "$_nv" in ""|*[!0-9]*) continue ;; esac
-				[ "$_nv" -ge 15 ] 2>/dev/null && [ "$_nv" -le 600 ] 2>/dev/null || continue
-				;;
-			native_impl)
-				case "$_nv" in rust|c|off) ;; *) continue ;; esac
-				;;
-			app_stop_list)
-				# 包名列表：过长或含非法字符则跳过，避免写坏 conf
-				case "$_nv" in *[!A-Za-z0-9._,]* ) continue ;; esac
-				;;
-		esac
-		if grep -q "^${_nk}=" "$merged" 2>/dev/null; then
-			sed -i "s|^${_nk}=.*|${_nk}=${_nv}|" "$merged"
-		else
-			echo "${_nk}=${_nv}" >>"$merged"
-		fi
-		_core_migrated=$((_core_migrated + 1))
-	done
-
-	# 明示：省电相关键保持新版（读模板值仅用于提示）
-	_idle_n="$(sed -n 's/^loop_interval_idle_native_sec=//p' "$merged" 2>/dev/null | head -n1 | tr -d ' \r\n')"
-	_idle="$(sed -n 's/^loop_interval_idle_sec=//p' "$merged" 2>/dev/null | head -n1 | tr -d ' \r\n')"
-	ui_print "- 核心停充/通知等配置已保留；省电间隔已用新版默认（idle=${_idle:-?}s native=${_idle_n:-?}s）"
-	[ "$_core_migrated" -gt 0 ] && ui_print "- 另迁移 ${_core_migrated} 项运行偏好（无线/历史/守护选型等）"
-
-	# 迁移用户自定义供电开关与停充时段（多行）；跳过策略类节点以免闪充
-	sed -i -e '/^power_switch=/d' -e '/^power_stop_schedule=/d' -e '/^notify_quiet_schedule=/d' "$merged" 2>/dev/null
-	if grep -q '^power_switch=' "$source" 2>/dev/null; then
-		kept_ps=0
-		skip_ps=0
-		while IFS= read -r _ps_line || [ -n "$_ps_line" ]; do
-			[ -n "$_ps_line" ] || continue
-			case "$_ps_line" in
-				*night_charging*|*cool_mode*|*batt_protect*|*smart_charging*|*adapter_cc_mode*|*step_charging*|*restrict_chg*|*restricted_charging*|*charge_control_*)
-					skip_ps=$((skip_ps + 1))
-					continue
-					;;
-			esac
-			echo "$_ps_line" >>"$merged"
-			kept_ps=$((kept_ps + 1))
-		done <<EOF
-$(grep '^power_switch=' "$source" 2>/dev/null)
-EOF
-		if [ "$kept_ps" -gt 0 ]; then
-			ui_print "- 已迁移自定义 power_switch（${kept_ps} 条）"
-		fi
-		if [ "$skip_ps" -gt 0 ]; then
-			ui_print "- 已跳过 ${skip_ps} 条策略类 power_switch（易导致闪充）"
-		fi
-	fi
-	if grep -q '^power_stop_schedule=' "$source" 2>/dev/null; then
-		grep '^power_stop_schedule=' "$source" >>"$merged" 2>/dev/null
-		ui_print "- 已迁移停充时段 power_stop_schedule"
-	fi
-	if grep -q '^notify_quiet_schedule=' "$source" 2>/dev/null; then
-		grep '^notify_quiet_schedule=' "$source" >>"$merged" 2>/dev/null
-		ui_print "- 已迁移通知勿扰时段"
-	fi
-	mv -f "$merged" "$target"
-}
 
 ui_print "--------------------------------"
 if [ "$QSC_INSTALL_AUTO" = "1" ]; then
@@ -343,52 +140,6 @@ OLD_MODULE_IDS="QuantitativeStopCharging QuantitativeStopCharging_switch"
 OLD_FOUND=0
 OLD_REMOVED_NAMES=""
 
-qsc_old_module_name() {
-	case "$1" in
-		QuantitativeStopCharging) echo "QSC定量停充" ;;
-		QuantitativeStopCharging_switch) echo "QSC定量停充_独立开关版" ;;
-		*) echo "$1" ;;
-	esac
-}
-
-qsc_uninstall_old_module() {
-	local old_id="$1"
-	local old_name base path
-
-	old_name="$(qsc_old_module_name "$old_id")"
-	for base in /data/adb/modules /data/adb/modules_update; do
-		path="$base/$old_id"
-		[ -d "$path" ] || continue
-		# 跳过当前正在安装的新模块目录
-		[ "$path" = "$MODPATH" ] && continue
-
-		OLD_FOUND=1
-		case " $OLD_REMOVED_NAMES " in
-			*" $old_name "*) ;;
-			*) OLD_REMOVED_NAMES="$OLD_REMOVED_NAMES $old_name" ;;
-		esac
-		ui_print "--------------------------------"
-		ui_print " 检测到旧版模块: $old_name"
-		ui_print " 位置: $path"
-		ui_print " 兼容策略: 自动卸载旧版（不迁移配置、不写充电节点）"
-		ui_print " 请安装后重启，并在 WebUI 重新设置阈值"
-
-		if [ -f "$path/uninstall.sh" ]; then
-			ui_print " 正在执行旧版卸载脚本..."
-			sh "$path/uninstall.sh" >/dev/null 2>&1 || true
-		else
-			ui_print " 旧版无 uninstall.sh，直接移除目录"
-		fi
-
-		rm -rf "$path"
-		if [ -d "$path" ]; then
-			touch "$path/remove" 2>/dev/null || true
-			ui_print " 未能立即删除，已标记重启后移除: $old_name"
-		else
-			ui_print " 已卸载旧版模块: $old_name"
-		fi
-	done
-}
 
 ui_print "--------------------------------"
 ui_print " 检查是否已安装旧版模块..."
@@ -423,7 +174,8 @@ if [ "$INSTALL_CURRENT" = "1" ]; then
 	fi
 	ui_print "- 已安装电流控制：config/current.json（默认关闭）"
 else
-	rm -f "$MODPATH/bin/lib/current.sh"
+	rm -f "$MODPATH/bin/lib/current.sh" "$MODPATH/bin/lib/current_limits.sh" \
+		"$MODPATH/bin/lib/current_bypass.sh" "$MODPATH/bin/lib/current_apply.sh"
 	rm -f "$MODPATH/config/current.json"
 	ui_print "- 未安装电流控制：已移除相关脚本与配置"
 fi
@@ -453,116 +205,6 @@ fi
 # 顺序由 config/config.conf 的 native_impl 决定（rust 默认 / c / off）。
 # 本包不带可用候选时，沿用上一版里 WebUI 下载好的守护；两者都没有也不影响
 # 功能——service.sh 会退回定时轮询。
-qscd_conf_pref() {
-	_cf="$MODPATH/config/config.conf"
-	[ -f "$_cf" ] || return 0
-	grep -E '^[[:space:]]*native_impl[[:space:]]*=' "$_cf" 2>/dev/null \
-		| tail -1 | sed 's/^[^=]*=//' | tr -d ' \t\r\n'
-}
-
-qscd_cleanup_candidates() {
-	rm -f "$MODPATH/bin/qscd-arm64" "$MODPATH/bin/qscd-arm" \
-		"$MODPATH/bin/qscdc-arm64" "$MODPATH/bin/qscdc-arm" 2>/dev/null
-}
-
-qscd_try_candidate() {
-	# $1=源文件 $2=实现名（用于提示） $3=来源 $4=版本
-	[ -f "$1" ] || return 1
-	cp -f "$1" "$MODPATH/bin/qscd" 2>/dev/null || return 1
-	chmod 0755 "$MODPATH/bin/qscd" 2>/dev/null
-	if "$MODPATH/bin/qscd" probe >/dev/null 2>&1; then
-		if [ "$3" = "download" ]; then
-			ui_print "- 沿用已下载的守护（$2 版）：未插电时零定时唤醒"
-		else
-			ui_print "- 守护可用（$2 版）：未插电时零定时唤醒"
-		fi
-		case "$2" in
-			Rust|rust) _used_impl=rust ;;
-			C|c) _used_impl=c ;;
-			*) _used_impl="$2" ;;
-		esac
-		echo "$_used_impl" >"$MODPATH/data/native_impl_used" 2>/dev/null
-		echo "$3" >"$MODPATH/data/native_src" 2>/dev/null
-		_version="$4"
-		[ -n "$_version" ] || _version="$(sed -n 's/^version=//p' "$MODPATH/module.prop" 2>/dev/null | head -n1 | tr -d ' \r\n')"
-		[ -n "$_version" ] && echo "$_version" >"$MODPATH/data/native_version" 2>/dev/null
-		case "$_used_impl" in
-			c) [ -n "$_version" ] && echo "$_version" >"$MODPATH/data/native_version_c" 2>/dev/null ;;
-			*) [ -n "$_version" ] && echo "$_version" >"$MODPATH/data/native_version_rust" 2>/dev/null ;;
-		esac
-		return 0
-	fi
-	ui_print "- 守护自检未通过（$2 版）"
-	rm -f "$MODPATH/bin/qscd" 2>/dev/null
-	return 1
-}
-
-install_qscd() {
-	_suffix=""
-	case "$ARCH" in
-		arm64) _suffix="arm64" ;;
-		arm) _suffix="arm" ;;
-	esac
-
-	# 上一版里 WebUI 下载好的守护已由 preserve 带过来，先挪开：
-	# 本包自带候选时优先用自带的，都不可用再拿它兜底。
-	_inherited=""
-	if [ -f "$MODPATH/bin/qscd" ]; then
-		_inherited="$MODPATH/data/.qscd_inherited"
-		mv -f "$MODPATH/bin/qscd" "$_inherited" 2>/dev/null || _inherited=""
-	fi
-	_inherited_impl="$(cat "$MODPATH/data/native_impl_used" 2>/dev/null | tr -d ' \r\n')"
-	_inherited_version="$(cat "$MODPATH/data/native_version" 2>/dev/null | tr -d ' \r\n')"
-	case "$_inherited_impl" in
-		c) _inherited_name="C" ;;
-		*) _inherited_name="Rust" ;;
-	esac
-	rm -f "$MODPATH/bin/qscd" "$MODPATH/data/native_impl_used" \
-		"$MODPATH/data/native_src" "$MODPATH/data/native_version" 2>/dev/null
-
-	if [ -z "$_suffix" ]; then
-		ui_print "- 本机架构($ARCH)无可用守护：使用定时轮询"
-		rm -f "$_inherited" 2>/dev/null
-		qscd_cleanup_candidates
-		return 0
-	fi
-
-	_pref="$(qscd_conf_pref)"
-	case "$_pref" in
-		off)
-			ui_print "- 已按配置禁用守护：使用定时轮询"
-			rm -f "$_inherited" 2>/dev/null
-			qscd_cleanup_candidates
-			return 0
-			;;
-		c) _order="qscdc qscd" ;;
-		*) _order="qscd qscdc" ;;
-	esac
-
-	for _impl in $_order; do
-		case "$_impl" in
-			qscd) _name="Rust" ;;
-			*) _name="C" ;;
-		esac
-		if qscd_try_candidate "$MODPATH/bin/${_impl}-${_suffix}" "$_name" bundled; then
-			rm -f "$_inherited" 2>/dev/null
-			qscd_cleanup_candidates
-			return 0
-		fi
-	done
-
-	if [ -n "$_inherited" ] && [ -f "$_inherited" ]; then
-		if qscd_try_candidate "$_inherited" "$_inherited_name" inherited "$_inherited_version"; then
-			rm -f "$_inherited" 2>/dev/null
-			qscd_cleanup_candidates
-			return 0
-		fi
-		rm -f "$_inherited" 2>/dev/null
-	fi
-
-	qscd_cleanup_candidates
-	qscd_offer_download "$_pref"
-}
 
 # 本包没带守护时，问一次是否现在联网下载。
 # 下载失败（超时 / 无网 / 校验不过）一律只提示，绝不阻断安装：
@@ -660,118 +302,9 @@ install_qscd
 # 	return 1
 # }
 
-install_companion_app() {
-	if [ "$QSC_INSTALL_AUTO" = "1" ]; then
-		ui_print "- 无人值守：跳过伴侣 APP 安装（可在 APP「更新」页安装）"
-		return 0
-	fi
-	ui_print "--------------------------------"
-	ui_print " 伴侣 APP（可选）"
-	ui_print " APP 可不装模块单独使用；装上后才方便控制停充"
-	ui_print " 音量上：现在安装模块内嵌的 APK"
-	ui_print " 音量下：跳过（可在 APP「更新」页安装）"
-	ui_print " 20 秒未选择时跳过"
-	qsc_volume_choice
-	case "$?" in
-		0) ;;
-		*)
-			ui_print "- 已跳过 APP 安装"
-			ui_print "- 发布页: https://eikeitsu.github.io/QSC-Battery/"
-			return 0
-			;;
-	esac
-
-	_bundled_apk=""
-	for _cand in \
-		"$MODPATH/apk/QSC-Battery.apk" \
-		"$MODPATH/QSC-Battery.apk" \
-		"$MODPATH/apk/app-release.apk"; do
-		if [ -f "$_cand" ] && [ -s "$_cand" ]; then
-			_bundled_apk="$_cand"
-			break
-		fi
-	done
-
-	if [ -n "$_bundled_apk" ]; then
-		ui_print "- 正在安装内嵌伴侣 APP..."
-		if pm install -r "$_bundled_apk" >/dev/null 2>&1; then
-			ui_print "- 伴侣 APP 已安装"
-			# 运行期不需要模块目录里的 APK；装进系统后删掉，少占 /data/adb 空间
-			rm -rf "$MODPATH/apk" 2>/dev/null
-			rm -f "$MODPATH/QSC-Battery.apk" 2>/dev/null
-		else
-			ui_print "- APP 安装失败（签名冲突或 pm 不可用）"
-			ui_print "- 可手动安装: $_bundled_apk"
-		fi
-		return 0
-	fi
-
-	ui_print "- 模块包内未找到伴侣 APK，已跳过"
-	ui_print "- 请从发布页安装，或使用已编译的 release/QSC-Battery.apk 重新打包模块"
-
-	# --- 在线下载安装（已停用，保留备查）---
-	# _tmp_json="/data/local/tmp/qsc-app-update.json"
-	# _tmp_apk="/data/local/tmp/QSC-Battery.apk"
-	# rm -f "$_tmp_json" "$_tmp_apk" 2>/dev/null
-	# ui_print "- 正在获取 APP 更新信息..."
-	# if ! qsc_http_get "$APP_UPDATE_JSON" "$_tmp_json"; then
-	# 	ui_print "- 无法下载 app-update.json（网络不通或超时）"
-	# 	ui_print "- 请稍后在浏览器打开发布页安装"
-	# 	return 0
-	# fi
-	# _apk_url="$(sed -n 's/.*"apkUrl"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_tmp_json" | head -n1)"
-	# if [ -z "$_apk_url" ]; then
-	# 	ui_print "- 更新信息缺少 apkUrl，已跳过"
-	# 	rm -f "$_tmp_json" 2>/dev/null
-	# 	return 0
-	# fi
-	# ui_print "- 正在下载伴侣 APP..."
-	# if ! qsc_http_get "$_apk_url" "$_tmp_apk"; then
-	# 	ui_print "- APK 下载失败"
-	# 	rm -f "$_tmp_json" 2>/dev/null
-	# 	return 0
-	# fi
-	# ui_print "- 正在安装伴侣 APP..."
-	# if pm install -r "$_tmp_apk" >/dev/null 2>&1; then
-	# 	ui_print "- 伴侣 APP 已安装"
-	# else
-	# 	ui_print "- APP 安装失败（签名冲突或 pm 不可用）"
-	# 	ui_print "- 文件保留: $_tmp_apk"
-	# 	ui_print "- 可手动安装，或从发布页获取"
-	# fi
-	# rm -f "$_tmp_json" 2>/dev/null
-}
 install_companion_app
 
 # 外部 CLI：仅装到 /data/adb/qsc/bin/qsc（不挂 system，避免暴露 Magisk）
-install_qsc_cli() {
-	ui_print "--------------------------------"
-	ui_print " 命令行 CLI"
-	_abi="$(getprop ro.product.cpu.abi 2>/dev/null)"
-	case "$_abi" in
-		arm64* | *arm64*) _cli_src="$MODPATH/bin/qsc-arm64" ;;
-		*) _cli_src="$MODPATH/bin/qsc-arm" ;;
-	esac
-	mkdir -p /data/adb/qsc/bin 2>/dev/null
-	_installed=0
-	if [ -f "$_cli_src" ] && [ -s "$_cli_src" ]; then
-		cp -f "$_cli_src" /data/adb/qsc/bin/qsc 2>/dev/null && _installed=1
-		cp -f "$_cli_src" "$MODPATH/bin/qsc" 2>/dev/null || true
-	fi
-	if [ "$_installed" != "1" ]; then
-		cat >/data/adb/qsc/bin/qsc <<'QSC_CLI_EOF'
-#!/system/bin/sh
-exec sh "${QSC_MODDIR:-/data/adb/modules/QSC_Battery}/bin/qsc.sh" "$@"
-QSC_CLI_EOF
-		cp -f /data/adb/qsc/bin/qsc "$MODPATH/bin/qsc" 2>/dev/null || true
-		ui_print "- 已安装 shell 版 CLI（包内无原生二进制）"
-	else
-		ui_print "- 已安装原生 CLI"
-	fi
-	chmod 0755 /data/adb/qsc/bin/qsc "$MODPATH/bin/qsc" 2>/dev/null
-	rm -f "$MODPATH/bin/qsc-arm64" "$MODPATH/bin/qsc-arm" 2>/dev/null
-	ui_print "- 用法: /data/adb/qsc/bin/qsc status"
-}
 install_qsc_cli
 
 ui_print "--------------------------------"
@@ -793,9 +326,10 @@ ui_print " Action: 上=刷新 / 下=插电测开关(未插电则诊断) "
 ui_print "--------------------------------"
 
 set_perm_recursive "$MODPATH/bin" root root 0755 0755
-set_perm_recursive "$MODPATH/config" root root 0755 0644
-set_perm_recursive "$MODPATH/data" root root 0755 0777
-[ -d "$MODPATH/assets" ] && set_perm_recursive "$MODPATH/assets" root root 0755 0644
+	set_perm_recursive "$MODPATH/config" root root 0755 0644
+	set_perm_recursive "$MODPATH/data" root root 0755 0777
+	[ -d "$MODPATH/install" ] && set_perm_recursive "$MODPATH/install" root root 0755 0644
+	[ -d "$MODPATH/assets" ] && set_perm_recursive "$MODPATH/assets" root root 0755 0644
 [ -d "$MODPATH/webroot" ] && set_perm_recursive "$MODPATH/webroot" root root 0755 0644
 set_perm "$MODPATH/service.sh" root root 0755
 set_perm "$MODPATH/uninstall.sh" root root 0755

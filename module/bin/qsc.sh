@@ -15,7 +15,7 @@ else
 	exit 1
 fi
 
-# 允许 CLI 改写的单行配置键（与 WebUI/APP 常用项对齐）
+# 允许 CLI 改写的单行配置键（与 apps/webui/APP 常用项对齐）
 QSC_CLI_CONF_KEYS="power_stop power_start power_stop_time charge_full charge_full_mode charge_full_wait_sec power_reset unplug_restore Compatibility_mode Shut_down loop_interval_sec loop_interval_maintain_sec switch_verify_sec switch_batch_blind wireless_policy app_stop app_stop_list history_enable history_interval_sec temperature_switch temperature_switch_stop temperature_switch_start notify_power_status notify_charge_event native_daemon native_impl"
 
 qsc_cli_usage() {

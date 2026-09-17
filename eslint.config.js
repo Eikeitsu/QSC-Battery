@@ -13,7 +13,8 @@ const sharedIgnores = {
     "**/archives/**",
     "**/docs/.vitepress/dist/**",
     "**/docs/.vitepress/cache/**",
-    "webui/public/**",
+    "apps/webui/public/**",
+    "tooling/scripts/dev/**",
     "package-lock.json",
   ],
 };
@@ -24,7 +25,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   ...pluginVue.configs["flat/recommended"],
   {
-    files: ["webui/**/*.{ts,vue}"],
+    files: ["apps/webui/**/*.{ts,vue}"],
     languageOptions: {
       parser: vueParser,
       parserOptions: {
@@ -76,7 +77,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["webui/**/*.ts"],
+    files: ["apps/webui/**/*.ts"],
     languageOptions: {
       parser: tseslint.parser,
     },
@@ -88,8 +89,8 @@ export default tseslint.config(
       "eslint.config.js",
       "stylelint.config.js",
       "commitlint.config.js",
-      "webui/vite.config.ts",
-      "webui/vitest.config.ts",
+      "apps/webui/vite.config.ts",
+      "apps/webui/vitest.config.ts",
     ],
     languageOptions: {
       parser: tseslint.parser,

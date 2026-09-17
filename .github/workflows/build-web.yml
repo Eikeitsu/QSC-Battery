@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, master]
     paths:
-      - "webui/**"
+      - "apps/webui/**"
       - "module/webroot/**"
       - "tooling/scripts/build-web.mjs"
       - "tooling/scripts/publish-web-branch.mjs"
@@ -18,7 +18,7 @@ on:
   pull_request:
     branches: [main, master]
     paths:
-      - "webui/**"
+      - "apps/webui/**"
       - "module/webroot/**"
       - "tooling/scripts/build-web.mjs"
       - "package.json"

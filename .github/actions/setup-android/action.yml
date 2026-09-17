@@ -19,7 +19,7 @@ runs:
 
     - name: Ensure Gradle Wrapper
       shell: bash
-      working-directory: app
+      working-directory: apps/android
       run: |
         chmod +x gradlew
         if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then

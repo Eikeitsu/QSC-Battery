@@ -24,7 +24,7 @@ function log(msg) {
 }
 
 log("vite build…");
-execSync("npx vite build --config webui/vite.config.ts", {
+execSync("npx vite build --config apps/webui/vite.config.ts", {
   cwd: repoRoot,
   stdio: "inherit",
 });

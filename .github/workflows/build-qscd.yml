@@ -7,7 +7,7 @@ on:
   push:
     branches: [main, master]
     paths:
-      - "native/qscd/**"
+      - "native/qscd-rust/**"
       - "native/qscd-c/**"
       - "tooling/scripts/build-native.mjs"
       - "tooling/scripts/build-native-c.mjs"
@@ -21,7 +21,7 @@ on:
   pull_request:
     branches: [main, master]
     paths:
-      - "native/qscd/**"
+      - "native/qscd-rust/**"
       - "native/qscd-c/**"
       - "tooling/scripts/build-native.mjs"
       - "tooling/scripts/build-native-c.mjs"
@@ -73,7 +73,7 @@ jobs:
             else
               files="$(git diff --name-only "$before...$head" || true)"
               echo "$files"
-              echo "$files" | grep -E '^(native/qscd/|tooling/scripts/build-native\.mjs|\.github/actions/build-native/)' >/dev/null && rust=1 || true
+              echo "$files" | grep -E '^(native/qscd-rust/|tooling/scripts/build-native\.mjs|\.github/actions/build-native/)' >/dev/null && rust=1 || true
               echo "$files" | grep -E '^(native/qscd-c/|tooling/scripts/build-native-c\.mjs)' >/dev/null && c=1 || true
               # 共享工具链 / 工作流改动：两侧都编
               echo "$files" | grep -E '^(\.github/actions/setup-ndk-clang/|\.github/workflows/build-qscd\.yml)' >/dev/null && {

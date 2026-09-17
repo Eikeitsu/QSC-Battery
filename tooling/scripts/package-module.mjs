@@ -369,6 +369,10 @@ const requiredZipEntries = [
   "module.prop",
   "hotinstall.sh",
   "bin/lib/hot_update.sh",
+  "bin/lib/charge.sh",
+  "install/helpers.sh",
+  "service.sh",
+  "customize.sh",
 ];
 if (variantOpts.webui) requiredZipEntries.push("webroot/index.html");
 const entries = verifyUnixZip(zipPath, requiredZipEntries);

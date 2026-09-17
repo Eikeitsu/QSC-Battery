@@ -128,6 +128,19 @@ def main() -> int:
     if not args.dry_run:
         text = args.prop.read_text(encoding="utf-8")
         args.prop.write_text(stamp_prop_text(text, version, code), encoding="utf-8")
+        # Keep root package.json version aligned with module display (npm metadata only).
+        try:
+            import subprocess
+
+            sync = _SCRIPTS / "sync-package-version.mjs"
+            if sync.is_file():
+                subprocess.run(
+                    ["node", str(sync)],
+                    cwd=str(repo),
+                    check=False,
+                )
+        except Exception as exc:  # noqa: BLE001
+            print(f"sync-package-version skipped: {exc}", file=sys.stderr)
 
     print(f"version={version}")
     print(f"version_code={code}")

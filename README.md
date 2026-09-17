@@ -1,4 +1,4 @@
-﻿# 充电控制（QSC-Battery）
+# 充电控制（QSC-Battery）
 
 面向 Magisk / KernelSU 的 **充电管理系统**：电量与温度停充、可选电流控制、事件驱动省电、WebUI 与伴侣 APP。
 
@@ -50,12 +50,13 @@
 ## 仓库结构
 
 ```text
-module/     # Magisk 模块本体（含可选 webroot / apk）
-webui/      # WebUI 源码（Vue 3）
-app/        # 伴侣 APP（Compose）
-native/     # qscd Rust / C
-docs/       # VitePress 用户文档 → GitHub Pages
-tooling/    # 构建与发版脚本
+module/          # Magisk 模块本体（含可选 webroot / apk）
+apps/webui/      # WebUI 源码（Vue 3）
+apps/android/    # 伴侣 APP（Compose）
+native/          # qscd-rust / qscd-c / qsc-cli
+docs/            # VitePress 用户文档 → GitHub Pages
+tooling/         # 构建与发版脚本
+ARCHITECTURE.md  # 冻结契约与目录约定
 ```
 
 ## 本地开发

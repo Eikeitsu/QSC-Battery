@@ -26,7 +26,7 @@ mkdirSync(publishDir, { recursive: true });
 cpSync(builtWeb, publishDir, { recursive: true });
 writeFileSync(
   join(publishDir, "README.md"),
-  "# Built WebUI\n\nCI 自动发布：构建后的 webroot。历史提交保留（非 force-push）。\n",
+  "# Built apps/webui\n\nCI 自动发布：构建后的 webroot。历史提交保留（非 force-push）。\n",
 );
 const sha = process.env.GITHUB_SHA || "";
 if (sha) {

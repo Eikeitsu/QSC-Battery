@@ -6,7 +6,7 @@ on:
   push:
     branches: [main, master]
     paths:
-      - "app/**"
+      - "apps/android/**"
       - "tooling/scripts/package-app.mjs"
       - "tooling/scripts/publish-ci-dist.sh"
       - "tooling/scripts/publish-ci-product.sh"
@@ -17,7 +17,7 @@ on:
       - ".github/actions/setup-android/**"
   pull_request:
     paths:
-      - "app/**"
+      - "apps/android/**"
       - "tooling/scripts/package-app.mjs"
       - ".github/workflows/app.yml"
       - ".github/actions/setup-android/**"
@@ -46,18 +46,22 @@ jobs:
 
       - uses: ./.github/actions/setup-node-npm
 
+      - name: Spotless check (ktlint)
+        working-directory: apps/android
+        run: ./gradlew spotlessCheck --stacktrace
+
       - name: Assemble release + debug
-        working-directory: app
+        working-directory: apps/android
         run: |
-          ./gradlew :app:assembleRelease :app:assembleDebug --stacktrace \
+          ./gradlew assembleRelease assembleDebug --stacktrace \
             -PqscVersionName="${{ needs.allocate.outputs.version }}" \
             -PqscVersionCode="${{ needs.allocate.outputs.code }}"
 
       - name: Stage APKs
         run: |
           mkdir -p release
-          cp app/app/build/outputs/apk/release/app-release.apk release/QSC-Battery.apk
-          cp app/app/build/outputs/apk/debug/app-debug.apk release/QSC-Battery-debug.apk
+          cp apps/android/build/outputs/apk/release/app-release.apk release/QSC-Battery.apk
+          cp apps/android/build/outputs/apk/debug/app-debug.apk release/QSC-Battery-debug.apk
           node tooling/scripts/package-app.mjs --skip-build
 
       - uses: actions/upload-artifact@v6

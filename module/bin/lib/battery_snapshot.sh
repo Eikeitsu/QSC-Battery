@@ -164,7 +164,7 @@ qsc_battery_snapshot_record() {
 	fi
 }
 
-# 直接执行本文件时为 WebUI/Action 提供稳定的 KEY=VALUE 接口。
+# 直接执行本文件时为 apps/webui/Action 提供稳定的 KEY=VALUE 接口。
 case "${1:-}" in
 	print) qsc_battery_snapshot_print ;;
 esac

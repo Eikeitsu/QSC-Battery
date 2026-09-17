@@ -1,4 +1,4 @@
-﻿# 构建与发布说明
+# 构建与发布说明
 
 面向维护者。用户文档请看 [`docs/`](../docs/)（VitePress → GitHub Pages）。
 
@@ -7,16 +7,18 @@
 ## 仓库结构
 
 ```text
-webui/                  # WebUI 源码（Vue 3 + Vite + TypeScript）
+apps/webui/             # WebUI 源码（Vue 3 + Vite + TypeScript）
+apps/android/           # 伴侣 APP（Compose，单模块 Gradle）
 module/                 # Magisk 模块本体
   webroot/              # WebUI 构建产物
   apk/                  # 可选内嵌伴侣 APK
-native/qscd/            # 事件守护 Rust
+  install/              # customize 安装片段
+native/qscd-rust/       # 事件守护 Rust
 native/qscd-c/          # 事件守护 C
-app/                    # 伴侣 APP（Compose）
 archives/               # 旧版 WebUI 快照（不打包）
-tooling/scripts/        # 构建脚本
+tooling/scripts/        # 构建脚本（分组说明见 scripts/README.md）
 docs/                   # VitePress 用户文档
+ARCHITECTURE.md         # 冻结契约与目录约定
 ```
 
 ## 本地命令
@@ -24,9 +26,9 @@ docs/                   # VitePress 用户文档
 ```bash
 npm install
 npm run prepare           # 启用 husky（install 后一般会自动跑）
-npm run dev:web           # Vite 开发预览 webui/
+npm run dev:web           # Vite 开发预览 apps/webui/
 npm run build:web         # Vite 构建 → .build/webroot，并同步到 module/webroot
-npm run build:native      # 交叉编译 native/qscd → module/bin/qscd-arm64|arm（缺 cargo/NDK 则跳过）
+npm run build:native      # 交叉编译 native/qscd-rust → module/bin/qscd-arm64|arm（缺 cargo/NDK 则跳过）
 npm run build:native:c    # 交叉编译 native/qscd-c → module/bin/qscdc-arm64|arm（缺 NDK 则跳过）
 npm run package:module    # 打 Magisk zip（webroot 缺失或过期会先 build:web）
 npm run package:module:all # 打 5 个变体包：full / rust / c / sh / lite
@@ -86,7 +88,7 @@ sh 主包没有这个二进制也必须行为一致，阈值判定的唯一真�
 只有一个职责：阻塞在内核 `power_supply` uevent 上，让 shell 主循环在未插电时不必定时唤醒。
 接收超时一次设满剩余时间，整段等待只在截止时刻醒一次——切成固定小段去复查截止时间会让唤醒次数翻十几倍，
 反而比它替代的 `sleep` 更碎，而事件到达是数据就绪即返回，与超时长短无关。
-两套实现（`native/qscd` = Rust + `libc`，`native/qscd-c` = 单文件 C）子命令、退出码、钳位范围逐字对齐，可互换安装。
+两套实现（`native/qscd-rust` = Rust + `libc`，`native/qscd-c` = 单文件 C）子命令、退出码、钳位范围逐字对齐，可互换安装。
 
 - 子命令：`qscd wait-event <最长秒> [最短秒]`（0=有事件或到时，2=不可用）、`qscd probe`（安装自检）、`qscd selftest`（运行期只读诊断）；C 版的 `selftest` 继续用于宿主机纯函数门禁
 - 它**不写任何充电节点、不做停充/恢复决策**；退出非 0 时 `lib/power_saver.sh` 会永久退回 `sleep`，所以最坏结果是退化成定时轮询
@@ -114,7 +116,7 @@ sh 主包没有这个二进制也必须行为一致，阈值判定的唯一真�
 
 ### WebUI 下载守护
 
-- 后端是 `module/bin/qscd_fetch.sh`（`status` / `install <rust|c>` / `use <rust|c>` / `remove`），输出统一 `KEY=VALUE`，前端 `webui/src/shared/api/daemon.ts` 解析
+- 后端是 `module/bin/qscd_fetch.sh`（`status` / `install <rust|c>` / `use <rust|c>` / `remove`），输出统一 `KEY=VALUE`，前端 `apps/webui/src/shared/api/daemon.ts` 解析
 - 二进制与 `manifest.json`（含每个文件的 sha256）由 `post-release-update.sh` 发到 Pages 的 `qscd/` 下，文件名 `qscd-<rust|c>-<arm64|arm>`
 - `install` 会先取 manifest、下载、比对 sha256、`chmod 0755`、跑 `probe`，任一步失败即回滚到原文件；成功后写回 `native_impl`、置 `native_daemon=1` 并重拉 `service.sh`（主循环把"等待器不可用"缓存在内存里，不重启不会生效）
 - 两条工作流的原生构建统一走 `.github/actions/build-native`（装 Rust Android 目标 → `setup-ndk-clang` → 编译 Rust 与 C 两套）；换 NDK 版本或加架构只改这一处
@@ -125,8 +127,8 @@ sh 主包没有这个二进制也必须行为一致，阈值判定的唯一真�
 
 ## Web 构建
 
-- **源码**：`webui/`（Vue 3 + TypeScript + Vant 按需样式；结构见上；样式 `src/styles/`）
-- **Vant**：`unplugin-vue-components` + `VantResolver` 按需打组件与样式；Toast / Dialog 函数 API 的样式在 `webui/src/app/plugins/vant.ts` 手动引入
+- **源码**：`apps/webui/`（Vue 3 + TypeScript + Vant 按需样式；结构见上；样式 `src/styles/`）
+- **Vant**：`unplugin-vue-components` + `VantResolver` 按需打组件与样式；Toast / Dialog 函数 API 的样式在 `apps/webui/src/app/plugins/vant.ts` 手动引入
 - **类型检查**：`npm run typecheck:web`
 - **Lint / 格式化**：见上表；CI 工作流 `Lint` 全量门禁，`Build Web` 仍跑 `npm run lint` + typecheck
 - **一键检查**：`npm run check`
@@ -140,9 +142,9 @@ sh 主包没有这个二进制也必须行为一致，阈值判定的唯一真�
 | 工作流           | 触发                        | 职责                                                                   |
 | ---------------- | --------------------------- | ---------------------------------------------------------------------- |
 | `Lint`           | push / PR                   | ESLint、Stylelint、Markdown、Shellcheck、typecheck、Prettier 等        |
-| `Build Web`      | `webui/**` 等               | Vite 构建 → Artifact + `dist-web`（普通推送，保留历史）                |
+| `Build Web`      | `apps/webui/**` 等               | Vite 构建 → Artifact + `dist-web`（普通推送，保留历史）                |
 | `Build qscd`     | `native/**` 等              | 编守护 → `ci-dist/qscd/` + `updates/ci/qscd/manifest.json`             |
-| `App`            | `app/**` 等                 | 编 APK → `ci-dist/app/` + `updates/ci/app-update.json`                 |
+| `App`            | `apps/android/**` 等                 | 编 APK → `ci-dist/app/` + `updates/ci/app-update.json`                 |
 | `Build Docs`     | `docs/**`                   | 构建并部署 GitHub Pages                                                |
 | `Package Module` | `module/**`；Web 成功后串联 | 拉取最新 APK/qscd/webroot → 打 zip → `ci-dist/module/` + `update.json` |
 | `Release Module` | 手动 / `v*` 标签            | 发版 zip + GitHub Release                                              |

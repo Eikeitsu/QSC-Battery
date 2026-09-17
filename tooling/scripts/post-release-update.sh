@@ -201,7 +201,7 @@ raw = os.environ["RAW"]
 pages = os.environ["PAGES_BASE"]
 apk_name = os.environ["APK_NAME"]
 apk_url = f"{pages}/releases/{apk_name}"
-gradle = pathlib.Path("app/app/build.gradle.kts").read_text(encoding="utf-8")
+gradle = pathlib.Path("apps/android/build.gradle.kts").read_text(encoding="utf-8")
 code_m = re.search(r"versionCode\s*=\s*(\d+)", gradle)
 name_m = re.search(r'versionName\s*=\s*"([^"]+)"', gradle)
 version = name_m.group(1) if name_m else raw

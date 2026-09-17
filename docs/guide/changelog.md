@@ -1,4 +1,4 @@
-﻿# 更新日志
+# 更新日志
 
 ## 2026.09.16
 
@@ -54,7 +54,7 @@
 ### 构建与发版
 
 - APP 独立更新清单 `app-update.json`；发版工作流可分项勾选模块 zip / 守护 / APK
-- CI：停充用例适配 MCA「供电中」简介文案；统一 `checkout@v5` / `setup-node@v5`；抽取 `setup-android`；Vitest 迁至 `webui/test/unit`
+- CI：停充用例适配 MCA「供电中」简介文案；统一 `checkout@v5` / `setup-node@v5`；抽取 `setup-android`；Vitest 迁至 `apps/webui/test/unit`
 
 ## 2026.09.01
 

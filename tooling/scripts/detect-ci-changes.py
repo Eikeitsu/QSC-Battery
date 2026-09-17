@@ -25,7 +25,7 @@ REPO = Path(__file__).resolve().parents[2]
 
 MODULE_PREFIXES = (
     "module/",
-    "webui/",
+    "apps/webui/",
     "native/",
     "tooling/scripts/package-module",
     "tooling/scripts/build-web",

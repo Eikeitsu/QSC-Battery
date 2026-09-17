@@ -39,11 +39,43 @@ const modules = [
     staged: "/data/adb/modules_update/QSC_Battery",
   },
 ];
-const hotSource = readFileSync(modules[0].hot, "utf8");
 
 function read(path) {
   return readFileSync(path, "utf8");
 }
+
+/**
+ * Magisk 入口可能是薄包装；契约检查需要连同同域 source 片段一起看。
+ * 不展开 common.sh（避免拉入整库打乱 requireOrder）。
+ */
+function readShellBundle(entryPath) {
+  const seen = new Set();
+  const chunks = [];
+  const walk = (path) => {
+    const abs = resolve(path);
+    if (seen.has(abs) || !existsSync(abs)) return;
+    seen.add(abs);
+    const text = readFileSync(abs, "utf8");
+    chunks.push(text);
+    const libdir = join(root, "module/bin/lib");
+    const moddir = join(root, "module");
+    for (const line of text.split("\n")) {
+      const m = line.match(/^\s*\.\s+"(\$LIBDIR|\$MODDIR\/bin\/lib|\$MODPATH\/install)\/([^"]+)"/);
+      if (!m) continue;
+      const [, prefix, rel] = m;
+      if (rel.includes("common.sh")) continue;
+      let next;
+      if (prefix === "$LIBDIR" || prefix === "$MODDIR/bin/lib") next = join(libdir, rel);
+      else if (prefix === "$MODPATH/install") next = join(moddir, "install", rel);
+      else continue;
+      walk(next);
+    }
+  };
+  walk(entryPath);
+  return chunks.join("\n");
+}
+
+const hotSource = readShellBundle(modules[0].hot);
 
 function requireText(text, pattern, label) {
   if (!text.includes(pattern)) {
@@ -106,9 +138,9 @@ function simulateHotUpdateContract() {
 }
 
 for (const mod of modules) {
-  const hot = read(mod.hot);
+  const hot = readShellBundle(mod.hot);
   const hotinstall = read(mod.hotinstall);
-  const service = read(mod.service);
+  const service = readShellBundle(mod.service);
   const uninstall = read(mod.uninstall);
   const descriptionWorker = read(mod.descriptionWorker);
   const packageSource = read(mod.package);
@@ -254,42 +286,60 @@ for (const key of ["qscd-c-arm", "qscd-c-arm64", "qscd-rust-arm", "qscd-rust-arm
   }
 }
 
-const defaults = read(join(root, "webui/src/shared/config/defaults.ts"));
+const defaults = read(join(root, "apps/webui/src/shared/config/defaults.ts"));
 const configTemplate = read(join(root, "module/config/config.conf"));
-const customize = read(join(root, "module/customize.sh"));
+const customize = readShellBundle(join(root, "module/customize.sh"));
 const qscdFetch = read(join(root, "module/bin/qscd_fetch.sh"));
-const qscdSource = read(join(root, "native/qscd/src/main.rs"));
+const qscdSource = [
+  "native/qscd-rust/src/main.rs",
+  "native/qscd-rust/src/common.rs",
+  "native/qscd-rust/src/watch.rs",
+  "native/qscd-rust/src/plugged.rs",
+  "native/qscd-rust/src/diagnose.rs",
+]
+  .map((rel) => read(join(root, rel)))
+  .join("\n");
 const qscdCSource = read(join(root, "native/qscd-c/qscd.c"));
-const powerSaver = read(join(root, "module/bin/lib/power_saver.sh"));
+const powerSaver = readShellBundle(join(root, "module/bin/lib/power_saver.sh"));
 const utilSh = read(join(root, "module/bin/lib/util.sh"));
 const status = read(join(root, "module/bin/lib/status.sh"));
-const serviceSource = read(join(root, "module/service.sh"));
-const daemonApi = read(join(root, "webui/src/shared/api/daemon.ts"));
-const daemonCard = read(join(root, "webui/src/pages/config/ui/DaemonCard.vue"));
-const batterySnapshotApi = read(join(root, "webui/src/shared/api/batterySnapshot.ts"));
-const historyApi = read(join(root, "webui/src/shared/api/history.ts"));
-const chart = read(join(root, "webui/src/pages/home/ui/HomeChargeChart.vue"));
-const chargeHistoryStore = read(join(root, "webui/src/stores/chargeHistory.ts"));
-const indexSource = read(join(root, "webui/index.html"));
-const appSource = read(join(root, "webui/src/app/App.vue"));
-const appShell = read(join(root, "webui/src/layouts/AppShell.vue"));
+const serviceSource = readShellBundle(join(root, "module/service.sh"));
+const daemonApi = read(join(root, "apps/webui/src/shared/api/daemon.ts"));
+const daemonCard = read(join(root, "apps/webui/src/pages/config/ui/DaemonCard.vue"));
+const batterySnapshotApi = read(join(root, "apps/webui/src/shared/api/batterySnapshot.ts"));
+const historyApi = read(join(root, "apps/webui/src/shared/api/history.ts"));
+const chart = read(join(root, "apps/webui/src/pages/home/ui/HomeChargeChart.vue"));
+const chargeHistoryStore = read(join(root, "apps/webui/src/stores/chargeHistory.ts"));
+const indexSource = read(join(root, "apps/webui/index.html"));
+const appSource = read(join(root, "apps/webui/src/app/App.vue"));
+const appShell = read(join(root, "apps/webui/src/layouts/AppShell.vue"));
 const appShellComposable = read(
-  join(root, "webui/src/layouts/composables/useAppShell.ts"),
+  join(root, "apps/webui/src/layouts/composables/useAppShell.ts"),
 );
-const baseStyles = read(join(root, "webui/src/styles/base.scss"));
-const appDock = read(join(root, "webui/src/layouts/ui/AppDock.vue"));
-const routes = read(join(root, "webui/src/router/routes.ts"));
-const routeLoaders = read(join(root, "webui/src/router/loaders.ts"));
-const batteryStore = read(join(root, "webui/src/stores/battery.ts"));
-const themeStore = read(join(root, "webui/src/stores/theme.ts"));
-const chromeStyles = read(join(root, "webui/src/styles/chrome.scss"));
-const lazyComponent = read(join(root, "webui/src/shared/lib/lazyComponent.ts"));
-const statusBundle = read(join(root, "webui/src/shared/api/statusBundle.ts"));
-const homePage = read(join(root, "webui/src/pages/home/HomePage.vue"));
-const configPage = read(join(root, "webui/src/pages/config/ConfigPage.vue"));
-const logPage = read(join(root, "webui/src/pages/log/LogPage.vue"));
-const morePage = read(join(root, "webui/src/pages/more/MorePage.vue"));
-const homeTips = read(join(root, "webui/src/pages/home/ui/HomeTips.vue"));
+const baseStyles = read(join(root, "apps/webui/src/styles/base.scss"));
+const appDock = read(join(root, "apps/webui/src/layouts/ui/AppDock.vue"));
+const routes = read(join(root, "apps/webui/src/router/routes.ts"));
+const routeLoaders = read(join(root, "apps/webui/src/router/loaders.ts"));
+const batteryStore = [
+  "apps/webui/src/stores/battery.ts",
+  "apps/webui/src/stores/battery/plans.ts",
+  "apps/webui/src/stores/battery/statusRefresh.ts",
+  "apps/webui/src/stores/battery/statusPolling.ts",
+  "apps/webui/src/stores/battery/configActions.ts",
+  "apps/webui/src/stores/battery/bundleActions.ts",
+  "apps/webui/src/stores/battery/logActions.ts",
+]
+  .map((rel) => read(join(root, rel)))
+  .join("\n");
+const themeStore = read(join(root, "apps/webui/src/stores/theme.ts"));
+const chromeStyles = read(join(root, "apps/webui/src/styles/chrome.scss"));
+const lazyComponent = read(join(root, "apps/webui/src/shared/lib/lazyComponent.ts"));
+const statusBundle = read(join(root, "apps/webui/src/shared/api/statusBundle.ts"));
+const homePage = read(join(root, "apps/webui/src/pages/home/HomePage.vue"));
+const configPage = read(join(root, "apps/webui/src/pages/config/ConfigPage.vue"));
+const logPage = read(join(root, "apps/webui/src/pages/log/LogPage.vue"));
+const morePage = read(join(root, "apps/webui/src/pages/more/MorePage.vue"));
+const homeTips = read(join(root, "apps/webui/src/pages/home/ui/HomeTips.vue"));
 const installGuide = read(join(root, "docs/guide/install.md"));
 const webuiGuide = read(join(root, "docs/guide/webui.md"));
 const configGuide = read(join(root, "docs/guide/config.md"));
@@ -302,9 +352,9 @@ for (const key of configKeys) {
     throw new Error(`config.conf: missing default key ${key}`);
   }
 }
-const store = read(join(root, "webui/src/stores/battery.ts"));
+const storeMigration = read(join(root, "apps/webui/src/stores/battery/configActions.ts"));
 requireText(
-  store,
+  storeMigration,
   "settings[key] = values[key] || DEFAULTS[key]",
   "config migration fallback",
 );
@@ -333,7 +383,7 @@ requireText(status, "if ! mv -f", "description atomic write result");
 requireText(status, "qsc_description_lock_acquire", "description cross-process lock");
 requireText(status, ".description.lock", "description lock path");
 requireText(
-  read(modules[0].hot),
+  readShellBundle(modules[0].hot),
   "qsc_description_lock_acquire",
   "hot update description lock",
 );

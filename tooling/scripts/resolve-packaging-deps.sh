@@ -37,7 +37,7 @@ POLL=20
 
 APP_GLOBS=('app/' 'tooling/scripts/package-app.mjs')
 QSCD_GLOBS=(
-  'native/qscd/'
+  'native/qscd-rust/'
   'native/qscd-c/'
   'tooling/scripts/build-native.mjs'
   'tooling/scripts/build-native-c.mjs'
@@ -46,7 +46,7 @@ QSCD_GLOBS=(
   '.github/workflows/build-qscd.yml'
 )
 WEB_GLOBS=(
-  'webui/'
+  'apps/webui/'
   'module/webroot/'
   'tooling/scripts/build-web.mjs'
   'tooling/scripts/publish-web-branch.mjs'

@@ -70,7 +70,7 @@ jobs:
           REQUIRE_SERVICE_TESTS: "1"
 
       - name: Hot update and release contracts
-        run: npm run test:hot-update && npm run test:stamp-ci && npm run test:version-code && npm run test:release-version
+        run: npm run test:hot-update && npm run test:stamp-ci && npm run test:version-code && npm run test:release-version && node tooling/scripts/check-frozen-contracts.mjs
 
   rust:
     name: Rust (fmt / clippy / test)
@@ -82,11 +82,23 @@ jobs:
         run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
 
       - name: Rust fmt / clippy / test (qscd)
-        working-directory: native/qscd
+        working-directory: native/qscd-rust
         run: |
           cargo fmt --check
           cargo clippy --all-targets -- -D warnings
           cargo test
+
+  kotlin:
+    name: Kotlin (Spotless / ktlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup-android
+
+      - name: Spotless check (ktlint)
+        working-directory: apps/android
+        run: ./gradlew spotlessCheck --stacktrace
 
   c:
     name: C (host selftest)
@@ -105,7 +117,7 @@ jobs:
   lint:
     name: Lint gate
     runs-on: ubuntu-latest
-    needs: [web, shell, rust, c]
+    needs: [web, shell, rust, kotlin, c]
     if: always()
     steps:
       - name: Require all jobs success
@@ -113,8 +125,10 @@ jobs:
           echo "web=${{ needs.web.result }}"
           echo "shell=${{ needs.shell.result }}"
           echo "rust=${{ needs.rust.result }}"
+          echo "kotlin=${{ needs.kotlin.result }}"
           echo "c=${{ needs.c.result }}"
           test "${{ needs.web.result }}" = "success"
           test "${{ needs.shell.result }}" = "success"
           test "${{ needs.rust.result }}" = "success"
+          test "${{ needs.kotlin.result }}" = "success"
           test "${{ needs.c.result }}" = "success"

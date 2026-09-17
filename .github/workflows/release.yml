@@ -249,7 +249,7 @@ jobs:
 
       - name: Build companion release APK
         if: steps.meta.outputs.build_mode != 'promote'
-        working-directory: app
+        working-directory: apps/android
         env:
           RAW: ${{ steps.meta.outputs.raw }}
           CODE: ${{ steps.meta.outputs.version_code }}
@@ -262,11 +262,11 @@ jobs:
             exit 0
           fi
           if [ "$IS_PRE" = "true" ] || [[ "$RAW" == *.pre ]]; then
-            ./gradlew :app:assembleRelease --stacktrace \
+            ./gradlew assembleRelease --stacktrace \
               -PqscVersionName="$RAW" \
               -PqscVersionCode="$CODE"
           else
-            ./gradlew :app:assembleRelease --stacktrace
+            ./gradlew assembleRelease --stacktrace
           fi
           mkdir -p ../release
           cp app/build/outputs/apk/release/app-release.apk ../release/QSC-Battery.apk

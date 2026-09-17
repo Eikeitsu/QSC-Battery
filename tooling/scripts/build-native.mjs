@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 交叉编译 native/qscd（事件等待器）到 Android arm64 / armv7。
+ * 交叉编译 native/qscd-rust（事件等待器）到 Android arm64 / armv7。
  *
  * 依赖：cargo + Android NDK（NDK 的 clang 同时充当链接器）。
  * 本地缺任一依赖时打印跳过并退出 0——模块在没有该二进制时会自动退回定时轮询。
@@ -12,7 +12,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const crateDir = join(repoRoot, "native", "qscd");
+const crateDir = join(repoRoot, "native", "qscd-rust");
 const outDir = join(repoRoot, "module", "bin");
 
 const required = process.env.CI === "true" || process.env.REQUIRE_NATIVE === "1";
@@ -79,7 +79,7 @@ function clangFor(bin, clangPrefix) {
   return null;
 }
 
-if (!existsSync(join(crateDir, "Cargo.toml"))) skip("native/qscd not found");
+if (!existsSync(join(crateDir, "Cargo.toml"))) skip("native/qscd-rust not found");
 if (!hasCargo()) skip("cargo not found");
 
 const ndk = ndkRoot();
