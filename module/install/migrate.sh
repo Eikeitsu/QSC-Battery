@@ -37,7 +37,7 @@ qsc_wipe_incompatible_module() {
 
 	ui_print "--------------------------------"
 	ui_print " 检测到不兼容的旧版模块 (versionCode=${_cut_code:-?})"
-	ui_print " 本版布局变更较大：将强制完整重装（不保留配置与 data）"
+	ui_print " 本版变更较大：将强制完整重装（不保留配置 / data / 外部 qsc）"
 	ui_print " 切断阈值 versionCode=$QSC_LAYOUT_CUTOVER_CODE"
 
 	if [ -f "$_cut_path/uninstall.sh" ]; then
@@ -46,9 +46,14 @@ qsc_wipe_incompatible_module() {
 		sh "$_cut_path/uninstall.sh" >/dev/null 2>&1 || true
 	fi
 	rm -rf "$_cut_path"
+	# 外部工作区一并清空（热更新副本 / 诊断 / 旧 CLI）；install_auto 已在 customize 开头读入内存
+	pkill -f '/data/adb/qsc/hot_update/worker.sh' 2>/dev/null || true
+	pkill -f '/data/adb/qsc/hot_update/verify.sh' 2>/dev/null || true
+	rm -rf /data/adb/qsc 2>/dev/null || true
+	ui_print "- 已清空 /data/adb/qsc"
 	if [ -d "$_cut_path" ]; then
 		touch "$_cut_path/remove" 2>/dev/null || true
-		ui_print "- 未能立即删除，已标记重启后移除"
+		ui_print "- 未能立即删除模块目录，已标记重启后移除"
 	else
 		ui_print "- 已清空旧模块目录"
 	fi

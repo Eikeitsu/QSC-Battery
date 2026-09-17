@@ -100,6 +100,18 @@ export function useUpdateChannelCard() {
         return;
       }
     }
+    const localCode = result.value?.moduleLocalCode ?? 0;
+    if (localCode > 0 && localCode < api.LAYOUT_CUTOVER_CODE) {
+      try {
+        await showConfirmDialog({
+          title: "需完整重装",
+          message:
+            "当前模块布局不兼容本版更新：将清空配置与 data 后按全新安装（无人值守同样生效），完成后请重启并重新设置。",
+        });
+      } catch {
+        return;
+      }
+    }
     actionBusy.value = "module";
     actionError.value = "";
     startProgress({ percent: 20, stage: "binary" });

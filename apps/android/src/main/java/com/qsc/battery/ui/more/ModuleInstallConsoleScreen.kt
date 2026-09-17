@@ -110,6 +110,11 @@ fun ModuleInstallConsoleScreen(
             }
             progress = 1f
             log("# saved ${file.absolutePath} (${file.length()} bytes)")
+            val localCode = container.statusRepository.readModuleProp()?.versionCode ?: 0L
+            if (localCode in 1 until ModulePaths.LAYOUT_CUTOVER_CODE) {
+                log("# layout cutover: local versionCode=$localCode < ${ModulePaths.LAYOUT_CUTOVER_CODE}")
+                log("# will wipe conf/data (unattended still applies); reboot + reconfigure required")
+            }
             log("# enabling unattended defaults (${ModulePaths.INSTALL_AUTO})")
             root.exec("mkdir -p /data/adb/qsc && touch '${ModulePaths.INSTALL_AUTO}'")
             val path = file.absolutePath.replace("'", "'\\''")
@@ -137,7 +142,7 @@ fun ModuleInstallConsoleScreen(
                     }
                 }
                 if (!installed) {
-                    log("# cli failed — opening zip for manager UI")
+                    log("# cli failed — opening zip for manager UI (keep install_auto for customize)")
                     withContext(Dispatchers.Main) {
                         container.moduleInstallRepository.promptOpenModuleZip(file)
                     }
@@ -147,10 +152,13 @@ fun ModuleInstallConsoleScreen(
                     success = true
                 }
             } finally {
-                root.exec(
-                    "([ -f '${ModulePaths.INSTALL_AUTO}' ] && rm -f -- '${ModulePaths.INSTALL_AUTO}'); true " +
-                        ">/dev/null 2>&1",
-                )
+                // CLI 成功 / 彻底失败：清 flag。打开管理器时保留，供稍后 customize 使用。
+                if (installed || !success) {
+                    root.exec(
+                        "([ -f '${ModulePaths.INSTALL_AUTO}' ] && rm -f -- '${ModulePaths.INSTALL_AUTO}'); true " +
+                            ">/dev/null 2>&1",
+                    )
+                }
                 fun silentDeleteZip() {
                     if (!file.isFile) return
                     runCatching { file.delete() }

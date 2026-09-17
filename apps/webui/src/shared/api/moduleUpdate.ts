@@ -13,6 +13,9 @@ export interface LocalModuleInfo {
 /** 与 APP ModulePaths.INSTALL_AUTO 一致：customize.sh 见此文件则跳过音量键 */
 const INSTALL_AUTO = "/data/adb/qsc/install_auto";
 
+/** 与 module/install/migrate.sh QSC_LAYOUT_CUTOVER_CODE 对齐 */
+export const LAYOUT_CUTOVER_CODE = 2026091701;
+
 /** 常见模块管理器包名（CLI 失败时兜底）。 */
 const MANAGER_PACKAGES = [
   "com.rifsxd.ksunext",
@@ -200,6 +203,7 @@ export async function downloadAndOpenModuleInstaller(zipUrl: string): Promise<{
     await enableUnattended();
     const cli = await installModuleCli(zip);
     if (cli.ok) {
+      await clearUnattended();
       silentUnlinkFile(zip);
       return {
         ok: true,
@@ -212,7 +216,7 @@ export async function downloadAndOpenModuleInstaller(zipUrl: string): Promise<{
 
     const opened = await openZipInManager(zip);
     if (opened.ok) {
-      // 管理器可能还要读：延迟静默删
+      // 管理器稍后才跑 customize：保留 install_auto，由 customize 结束时清理
       silentUnlinkFile(zip, 120);
       return {
         ok: true,
@@ -222,6 +226,7 @@ export async function downloadAndOpenModuleInstaller(zipUrl: string): Promise<{
         mode: "manager",
       };
     }
+    await clearUnattended();
     silentUnlinkFile(zip);
     return {
       ok: false,
@@ -230,8 +235,9 @@ export async function downloadAndOpenModuleInstaller(zipUrl: string): Promise<{
       zipPath: zip,
       mode: "",
     };
-  } finally {
+  } catch (e) {
     await clearUnattended();
+    throw e;
   }
 }
 

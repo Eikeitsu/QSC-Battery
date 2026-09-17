@@ -62,11 +62,15 @@ CURRENT_JSON_BACKUP="${TMPDIR:-/data/local/tmp}/qsc-current-json-backup.$$"
 rm -f "$CONFIG_BACKUP" "$CURRENT_JSON_BACKUP"
 
 # 切断线前旧布局 → 清空后按全新安装（不保留旧 conf/data）
+# APP / WebUI 无人值守与 Magisk 管理器走同一 customize，此处统一切断。
 QSC_FORCE_CLEAN_INSTALL=0
 if qsc_wipe_incompatible_module; then
 	QSC_FORCE_CLEAN_INSTALL=1
 	KEEP_CONFIG=0
 	rm -f "$CONFIG_BACKUP" "$CURRENT_JSON_BACKUP"
+	if [ "$QSC_INSTALL_AUTO" = "1" ]; then
+		ui_print "- 无人值守：布局不兼容，已强制完整重装（不保留配置）"
+	fi
 fi
 
 if [ "$QSC_FORCE_CLEAN_INSTALL" != "1" ] && [ -f "$CURRENT_CONF" ] && [ ! -L "$CURRENT_CONF" ]; then
@@ -360,7 +364,9 @@ if [ "$INSTALL_WEBUI" = "1" ] && [ -f "$LIBDIR/hot_update.sh" ]; then
 fi
 
 ui_print "--------------------------------"
-if [ -f "$LIBDIR/hot_update.sh" ]; then
+if [ "$QSC_FORCE_CLEAN_INSTALL" = "1" ]; then
+	ui_print " 强制完整重装完成：请重启设备后重新设置"
+elif [ -f "$LIBDIR/hot_update.sh" ]; then
 	HOT_UPDATE_DESC="[♻️热更新中 | 正在重启服务] 本次更新无需重启；稍后自动显示实时充电状态"
 	# 无「必须重启」路径 → 空参数列表；仅首次/禁用时会要求重启
 	if hot_update_try QSC_Battery; then
