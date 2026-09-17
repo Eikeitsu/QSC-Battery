@@ -38,8 +38,7 @@ object XpPrefs {
         else -> pkg
     }
 
-    fun hasPrimaryScope(scopeList: Collection<String>): Boolean =
-        scopeList.any { it.trim().equals(PRIMARY_SCOPE, ignoreCase = true) }
+    fun hasPrimaryScope(scopeList: Collection<String>): Boolean = scopeList.any { it.trim().equals(PRIMARY_SCOPE, ignoreCase = true) }
 
     /** 仅识别 system；android 不算有效作用域。 */
     fun hasAnyFrameworkScope(scopeList: Collection<String>): Boolean = hasPrimaryScope(scopeList)
