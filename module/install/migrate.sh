@@ -1,7 +1,7 @@
 #!/system/bin/sh
 # old module helpers / one-shot clean reinstall cutover
 
-# 完整重装切断线：已装模块 versionCode 低于此值则卸净并当全新安装。
+# 完整重装切断线：已装模块 versionCode 低于此值则清空 conf/data（当全新安装）。
 # 此后更高 versionCode 走正常保留配置 / 热更新。
 QSC_CLEAN_CUTOVER_CODE=2026091701
 # 兼容旧变量名（热更新脚本可能仍引用）
@@ -19,12 +19,14 @@ qsc_module_version_code() {
 	sed -n 's/^versionCode=//p' "$1" 2>/dev/null | head -n1 | tr -d ' \r'
 }
 
-# 若 /data/adb/modules/QSC_Battery 仍是切断线之前的安装：执行 uninstall 并删除目录。
-# 不碰正在解压的 MODPATH（通常是 modules_update/QSC_Battery）。
-# 返回 0 = 已切断并清空；1 = 无需切断
+# 若 /data/adb/modules/QSC_Battery 仍是切断线之前的安装：删掉该目录 + 外部 qsc，等同全新安装。
+# 切勿跑 uninstall.sh（旧脚本会 rm modules_update）；切勿删 $MODPATH / modules_update
+# （本次解压目录）。只删 modules/ 下的旧壳即可。
+# 返回 0 = 已切断；1 = 无需切断
 qsc_wipe_incompatible_module() {
 	_cut_path="/data/adb/modules/QSC_Battery"
 	[ -d "$_cut_path" ] || return 1
+	# 保护：当前解压目录若就是 modules 下该路径，绝不动（极少见）
 	[ "$_cut_path" = "$MODPATH" ] && return 1
 
 	_cut_code="$(qsc_module_version_code "$_cut_path/module.prop")"
@@ -42,29 +44,55 @@ qsc_wipe_incompatible_module() {
 	ui_print " 变更较大：将强制完整重装（不保留配置 / data / 外部 qsc）"
 	ui_print " 切断阈值 versionCode=$QSC_CLEAN_CUTOVER_CODE"
 
-	if [ -f "$_cut_path/uninstall.sh" ]; then
-		ui_print "- 执行旧模块 uninstall.sh…"
-		# shellcheck disable=SC1090
-		sh "$_cut_path/uninstall.sh" >/dev/null 2>&1 || true
+	# 尽量还原停充节点；不跑 uninstall.sh（会误删 modules_update）
+	if [ -f "$_cut_path/data/power_switch" ] && [ -f "$_cut_path/bin/common.sh" ]; then
+		ui_print "- 尝试还原旧版停充节点…"
+		(
+			MODDIR="$_cut_path"
+			# shellcheck disable=SC1090
+			. "$_cut_path/bin/common.sh" 2>/dev/null || exit 0
+			qsc_restore_switches_from_list 2>/dev/null || true
+			qsc_restore_mca_charge 2>/dev/null || true
+			qsc_stop_wakelock_release 2>/dev/null || true
+			qsc_clear_active_switch 2>/dev/null || true
+		) >/dev/null 2>&1 || true
 	fi
-	rm -rf "$_cut_path"
-	# 外部工作区一并清空；保留/恢复 install_auto，避免无人值守中途丢 flag 导致二次刷入
+
+	# 外部工作区：清热更新/诊断/CLI；保留 install_auto；绝不碰 modules_update
 	_keep_auto=0
 	[ -f /data/adb/qsc/install_auto ] && _keep_auto=1
 	[ "${QSC_INSTALL_AUTO:-0}" = "1" ] && _keep_auto=1
-	pkill -f '/data/adb/qsc/hot_update/worker.sh' 2>/dev/null || true
-	pkill -f '/data/adb/qsc/hot_update/verify.sh' 2>/dev/null || true
-	rm -rf /data/adb/qsc 2>/dev/null || true
+	command -v pkill >/dev/null 2>&1 && {
+		pkill -f '/data/adb/qsc/hot_update/worker.sh' 2>/dev/null || true
+		pkill -f '/data/adb/qsc/hot_update/verify.sh' 2>/dev/null || true
+	}
+	rm -rf \
+		/data/adb/qsc/hot_update \
+		/data/adb/qsc/runtime \
+		/data/adb/.qsc_hot_update_payload \
+		/data/adb/.qsc_hot_update_txn \
+		/data/adb/.qsc_hot_update_verify.sh \
+		/data/adb/.qsc_hot_update.sh \
+		/data/adb/.QSC_Battery.hot_update.lock 2>/dev/null || true
+	rm -f /data/adb/qsc/bin/qsc 2>/dev/null || true
+	rmdir /data/adb/qsc/bin 2>/dev/null || true
+	rmdir /data/adb/qsc 2>/dev/null || true
 	if [ "$_keep_auto" = "1" ]; then
 		mkdir -p /data/adb/qsc 2>/dev/null || true
 		touch /data/adb/qsc/install_auto 2>/dev/null || true
 	fi
-	ui_print "- 已清空 /data/adb/qsc"
+	ui_print "- 已清空外部 qsc 工作区"
+
+	# 只删旧安装目录；管理器稍后会在 modules/ 写 update 标记，重启后用 modules_update 顶替
+	rm -rf "$_cut_path" 2>/dev/null || true
 	if [ -d "$_cut_path" ]; then
-		touch "$_cut_path/remove" 2>/dev/null || true
-		ui_print "- 未能立即删除模块目录，已标记重启后移除"
+		# 删不掉就退化为清 conf/data，仍不碰 modules_update
+		rm -rf "$_cut_path/config" "$_cut_path/data" 2>/dev/null || true
+		mkdir -p "$_cut_path/config" "$_cut_path/data" 2>/dev/null || true
+		rm -f "$_cut_path/update" 2>/dev/null || true
+		ui_print "- 旧模块目录未能删除，已清空 config/data"
 	else
-		ui_print "- 已清空旧模块目录"
+		ui_print "- 已删除旧模块目录（等同全新安装）"
 	fi
 	return 0
 }

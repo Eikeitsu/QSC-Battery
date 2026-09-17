@@ -52,8 +52,12 @@ rm -rf \
 	/data/adb/.qsc_hot_update_txn \
 	/data/adb/.qsc_hot_update_verify.sh \
 	/data/adb/.qsc_hot_update.sh \
-	/data/adb/.QSC_Battery.hot_update.lock \
-	/data/adb/modules_update/QSC_Battery 2>/dev/null
+	/data/adb/.QSC_Battery.hot_update.lock 2>/dev/null
+# 真正卸载时可清残留的 modules_update；若本脚本就在 modules_update 里跑（安装中途误调），绝对不能删。
+case "$MODDIR" in
+	*/modules_update/QSC_Battery|*/modules_update/QSC_Battery/) ;;
+	*) rm -rf /data/adb/modules_update/QSC_Battery 2>/dev/null ;;
+esac
 rm -f /data/adb/qsc/bin/qsc 2>/dev/null
 rmdir /data/adb/qsc/bin 2>/dev/null
 rmdir /data/adb/qsc/runtime/diagnostics 2>/dev/null

@@ -8,7 +8,7 @@
 
 ### 工程
 
-- **不兼容旧版一刀切**：`versionCode=2026091701` 起；升级时若已装模块更低则 uninstall 并删除模块目录与 `/data/adb/qsc`，按全新安装（不保留 conf/data）。此后正常更新/热更新。切断线前禁止热更新。无旧键双读 / compat stub
+- **不兼容旧版一刀切**：`versionCode=2026091701` 起；升级时若已装更低则删除 `modules/QSC_Battery` 与外部 qsc（**不**跑 `uninstall.sh`、**绝不**删 `modules_update`），等同全新安装。此后正常更新/热更新。切断线前禁止热更新
 
 ### 新增
 

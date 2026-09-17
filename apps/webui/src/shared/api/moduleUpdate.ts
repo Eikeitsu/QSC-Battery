@@ -47,8 +47,7 @@ function parseModulePropText(text: string): LocalModuleInfo | null {
 }
 
 export async function readLocalModule(): Promise<LocalModuleInfo | null> {
-  // 强制完整重装后、重启前：新包常在 modules_update，modules 可能已被清空。
-  // 两处都读，取 versionCode 更大的，避免误判「未安装」再次刷入造成循环。
+  // 强制完整重装后、重启前：新包常在 modules_update；同时读两处以取较高 versionCode。
   const r = await exec(
     [
       `A='${PATHS.MODDIR}/module.prop'`,

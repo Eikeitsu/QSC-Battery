@@ -18,7 +18,7 @@ Changing any of the following breaks upgrades for existing installs. Refactor so
 
 Persisted config keys are `snake_case`. Magisk id / APP package / Magisk entry filenames stay frozen.
 
-**Clean reinstall cutover (one-shot):** first post-cutover `versionCode` is `2026091701` (`QSC_CLEAN_CUTOVER_CODE` in [`module/install/migrate.sh`](module/install/migrate.sh)). Installing over an older `QSC_Battery` wipes that module and `/data/adb/qsc`, then proceeds as a fresh install—no config/data keep. Later updates (`versionCode >= cutover`) use normal merge / hot update.
+**Clean reinstall cutover (one-shot):** first post-cutover `versionCode` is `2026091701` (`QSC_CLEAN_CUTOVER_CODE` in [`module/install/migrate.sh`](module/install/migrate.sh)). Installing over an older `QSC_Battery` deletes `/data/adb/modules/QSC_Battery` and external `/data/adb/qsc` (same as a fresh install). Does **not** run `uninstall.sh` and never touches `modules_update` (that path is the live extract during install). Later updates use normal merge / hot update.
 
 Optional CI guard: grep workflows / PR checks should fail if `id=QSC_Battery` or `applicationId = "com.qsc.battery"` drift accidentally.
 
