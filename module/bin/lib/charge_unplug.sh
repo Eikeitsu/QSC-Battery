@@ -7,12 +7,7 @@ qsc_charger_really_gone() {
 		[ -f "$p" ] || continue
 		v="$(cat "$p" 2>/dev/null | tr -d ' \r\n')"
 		if [ "$v" = "1" ]; then
-			# 与插电扫描一致：孤立 present 不够；VBUS/类型旁证才长期保留。
-			# 停充维持中仅在冷却期内允许单信 present，避免 K90U 粘 present 永不拔线。
-			if type qsc_ps_looks_discharging >/dev/null 2>&1 && qsc_ps_looks_discharging; then
-				qsc_log_once unplug_sig debug "$p=1 但明显放电，不据此保留停充"
-				continue
-			fi
+			# 先看 VBUS/类型：停充后电池常报 Discharging，不能用「放电」否决真插电。
 			_has_side=0
 			if type qsc_ps_vbus_live >/dev/null 2>&1 && qsc_ps_vbus_live; then
 				_has_side=1
@@ -22,6 +17,11 @@ qsc_charger_really_gone() {
 			if [ "$_has_side" = "1" ]; then
 				qsc_log_once unplug_sig debug "$p=1 且有 VBUS/类型旁证，判定充电器仍在"
 				return 1
+			fi
+			# 孤立 present：放电时不可信（粘 present）；冷却期内允许暂留。
+			if type qsc_ps_looks_discharging >/dev/null 2>&1 && qsc_ps_looks_discharging; then
+				qsc_log_once unplug_sig debug "$p=1 但明显放电且无旁证，不据此保留停充"
+				continue
 			fi
 			if [ -f "$DATADIR/power_switch" ]; then
 				now="$(date +%s 2>/dev/null)"
@@ -36,23 +36,20 @@ qsc_charger_really_gone() {
 			qsc_log_once unplug_sig debug "忽略孤立 $p=1（无旁证/已过冷却）"
 		fi
 	done
-	# 充电口类型：插着线时报 USB_PD / USB_SDP 等，拔了报 Unknown
+	# 充电口类型：插着线时报 USB_PD / USB_SDP 等，拔了报 Unknown。
+	# 停充维持中电池会放电，类型仍可信，勿用放电否决。
 	for p in "$PSDIR/usb/real_type" "$PSDIR/usb/type"; do
 		[ -f "$p" ] || continue
 		v="$(cat "$p" 2>/dev/null | tr -d ' \r\n')"
 		case "$v" in
 			""|Unknown|UNKNOWN|None|NONE) ;;
 			*)
-				if type qsc_ps_looks_discharging >/dev/null 2>&1 && qsc_ps_looks_discharging; then
-					qsc_log_once unplug_sig debug "$p=$v 但明显放电，不据此保留停充"
-					continue
-				fi
 				qsc_log_once unplug_sig debug "$p=$v，判定充电器仍在"
 				return 1
 				;;
 		esac
 	done
-	# VBUS 还有电压说明线在（输入被 suspend 也不影响）
+	# VBUS 还有电压说明线在（input_suspend 也不掉 VBUS）
 	v="$(cat "$PSDIR/usb/voltage_now" 2>/dev/null | tr -d ' \r\n-')"
 	case "$v" in
 		""|*[!0-9]*) ;;
@@ -60,12 +57,8 @@ qsc_charger_really_gone() {
 			# 单位可能是 µV 或 mV，取 3V 作门槛
 			if [ "$v" -gt 3000000 ] 2>/dev/null || \
 				{ [ "$v" -gt 3000 ] 2>/dev/null && [ "$v" -lt 100000 ] 2>/dev/null; }; then
-				if type qsc_ps_looks_discharging >/dev/null 2>&1 && qsc_ps_looks_discharging; then
-					qsc_log_once unplug_sig debug "usb/voltage_now=$v 但明显放电，不据此保留停充"
-				else
-					qsc_log_once unplug_sig debug "usb/voltage_now=$v，判定充电器仍在"
-					return 1
-				fi
+				qsc_log_once unplug_sig debug "usb/voltage_now=$v，判定充电器仍在"
+				return 1
 			fi
 			;;
 	esac

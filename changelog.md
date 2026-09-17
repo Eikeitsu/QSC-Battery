@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### 修复
+
+- **停充后误判拔线**：K60 等机型 `input_suspend` 停充后电池会报 Discharging，旧逻辑用「明显放电」否决仍有效的 `USB_PD` / VBUS（约 9V），冷却结束后误还原节点。现改为：类型与 VBUS 为强证据不再被放电否决；仅孤立 `present=1` 在放电且无旁证时忽略
+
 ### 工程
 
 - **不兼容旧版一刀切**：`versionCode=2026091701` 起；升级时若已装模块更低则 uninstall 并删除模块目录与 `/data/adb/qsc`，按全新安装（不保留 conf/data）。此后正常更新/热更新。切断线前禁止热更新。无旧键双读 / compat stub

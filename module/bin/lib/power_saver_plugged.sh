@@ -118,8 +118,13 @@ qsc_ps_plugged_scan() {
 	for p in "$PSDIR/usb/present" "$PSDIR/qc_usb/present" \
 		"$PSDIR/wireless/present" "$PSDIR/ac/present"; do
 		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
+			# VBUS/类型优先：停充后会放电，不能先因放电否决真插电
+			if qsc_ps_vbus_live || qsc_ps_type_live; then
+				qsc_ps_dbg ps_present debug "判定已插电：${p##*/}=1（有 VBUS/类型旁证）"
+				return 0
+			fi
 			if qsc_ps_looks_discharging; then
-				qsc_ps_dbg ps_present debug "忽略 ${p##*/}=1：伴随明显放电"
+				qsc_ps_dbg ps_present debug "忽略孤立 ${p##*/}=1：伴随明显放电且无旁证"
 				continue
 			fi
 			if ! qsc_ps_present_corroborated; then
@@ -136,10 +141,7 @@ qsc_ps_plugged_scan() {
 			case "$v" in
 				""|Unknown|UNKNOWN|None|NONE) ;;
 				*)
-					if qsc_ps_looks_discharging; then
-						qsc_ps_dbg ps_type debug "忽略接口类型 $v：伴随明显放电"
-						continue
-					fi
+					# 类型是强证据；停充维持中电池放电属预期，勿否决
 					qsc_ps_dbg ps_type debug "判定已插电：接口类型 $v"
 					return 0
 					;;
@@ -148,12 +150,8 @@ qsc_ps_plugged_scan() {
 	done
 	if qsc_ps_vbus_live; then
 		v="$QSC_PS_VAL"
-		if qsc_ps_looks_discharging; then
-			qsc_ps_dbg ps_voltage debug "忽略 USB 电压 $v：伴随明显放电"
-		else
-			qsc_ps_dbg ps_voltage debug "判定已插电：USB 电压有效（$v）"
-			return 0
-		fi
+		qsc_ps_dbg ps_voltage debug "判定已插电：USB 电压有效（$v）"
+		return 0
 	fi
 	# Charging/Full：一加等机型未插电仍可能报 Charging——无端口证据时不得单信。
 	# Not charging：无端口证据时忽略（K90U 未插电待机也报）。
