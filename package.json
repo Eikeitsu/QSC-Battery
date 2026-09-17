@@ -1,7 +1,7 @@
 {
   "name": "qsc-battery",
   "private": true,
-  "version": "20260916.0.0",
+  "version": "20260917.0.0",
   "type": "module",
   "scripts": {
     "prepare": "husky",

@@ -32,8 +32,11 @@ fun ChargePrimaryButton(
             .height(if (compact) 42.dp else ChargeTheme.dimens.primaryButton)
             .clip(shape)
             .background(
-                if (enabled) ChargeTheme.colors.accent
-                else ChargeTheme.colors.accent.copy(alpha = 0.35f),
+                if (enabled) {
+                    ChargeTheme.colors.accent
+                } else {
+                    ChargeTheme.colors.accent.copy(alpha = 0.35f)
+                },
             )
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -79,8 +82,11 @@ fun ChargeTonalButton(
         modifier = modifier
             .clip(RoundedCornerShape(999.dp))
             .background(
-                if (enabled) ChargeTheme.colors.accent.copy(alpha = 0.16f)
-                else ChargeTheme.colors.stroke.copy(alpha = 0.4f),
+                if (enabled) {
+                    ChargeTheme.colors.accent.copy(alpha = 0.16f)
+                } else {
+                    ChargeTheme.colors.stroke.copy(alpha = 0.4f)
+                },
             )
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),

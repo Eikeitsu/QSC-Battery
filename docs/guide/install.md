@@ -111,4 +111,4 @@ WebUI / 电流控制 / APK 是否安装每次都会再问。
 
 ## 卸载
 
-在模块管理器卸载即可。软关闭不必卸载：WebUI / APP / `qsc.sh off` 写 `data/off_qsc`。
+在模块管理器卸载即可。软关闭不必卸载：WebUI / APP / `qsc.sh off` 写 `data/module_off`。

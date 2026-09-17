@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "cutoverVersionCode": 2026091701,
+  "notes": "Dev-only identifier map for monorepo consistency. Device cutover is wipe-on-install when installed versionCode < cutoverVersionCode (see module/install/migrate.sh). No runtime dual-read.",
+  "configKeys": {
+    "Compatibility_mode": "compatibility_mode",
+    "Shut_down": "shut_down"
+  },
+  "dataMarkers": {
+    "off_qsc": "module_off"
+  },
+  "binScripts": {
+    "list_curr.sh": "list_current.sh",
+    "diag2.sh": "diagnose_extra.sh",
+    "testing.sh": "test_harness.sh"
+  },
+  "libScripts": {
+    "switch_act.sh": "switch_apply.sh"
+  },
+  "toolingScripts": {},
+  "compatStubs": []
+}

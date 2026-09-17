@@ -1,11 +1,11 @@
 package com.qsc.battery.ui.more
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.clickable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -82,8 +82,10 @@ internal fun UpdateChannelSection(
                         text = when (channel) {
                             UpdateChannel.Stable ->
                                 "正式：updates/stable；包地址通常指向 Pages。"
+
                             UpdateChannel.Prerelease ->
                                 "预发布：updates/prerelease → GitHub Release。"
+
                             UpdateChannel.Ci ->
                                 "CI：updates/ci → ci-dist（jsDelivr）产物。"
                         },

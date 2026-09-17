@@ -97,8 +97,8 @@ internal fun ConfigPowerSection(
         ChargeToggleRow("自动拔插", v("power_reset") == "1") {
             setLocal("power_reset", if (it) "1" else "0")
         }
-        ChargeToggleRow("兼容模式", v("Compatibility_mode") == "1") {
-            setLocal("Compatibility_mode", if (it) "1" else "0")
+        ChargeToggleRow("兼容模式", v("compatibility_mode") == "1") {
+            setLocal("compatibility_mode", if (it) "1" else "0")
         }
     }
 }

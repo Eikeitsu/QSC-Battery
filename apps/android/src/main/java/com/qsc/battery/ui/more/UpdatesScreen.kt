@@ -92,6 +92,7 @@ fun UpdatesScreen(
                     val url = r?.moduleRemote?.zipUrl
                     if (!url.isNullOrBlank()) onInstallModule(url)
                 }
+
                 UpdateTarget.App, UpdateTarget.Daemon ->
                     session.updateTarget(switchTarget)
             }

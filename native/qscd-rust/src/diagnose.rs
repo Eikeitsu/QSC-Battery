@@ -1,6 +1,5 @@
 use crate::common::{
-    read_text, BatterySnapshot, PowerState, SnapshotFailure, SnapshotSource, EXIT_OK,
-    EXIT_UNUSABLE,
+    read_text, BatterySnapshot, PowerState, SnapshotFailure, SnapshotSource, EXIT_OK, EXIT_UNUSABLE,
 };
 
 /// `qscd diagnose [--sysfs-root DIR]`：枚举关键电源节点是否可读/是否有缺值，

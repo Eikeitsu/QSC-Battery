@@ -107,8 +107,11 @@ fun ChargeStickyActionBar(
             .fillMaxWidth()
             .background(ChargeTheme.colors.background)
             .then(
-                if (clearSystemNav) Modifier.windowInsetsPadding(WindowInsets.navigationBars)
-                else Modifier,
+                if (clearSystemNav) {
+                    Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+                } else {
+                    Modifier
+                },
             )
             .padding(horizontal = ChargeTheme.dimens.pageHorizontal)
             .padding(top = 10.dp, bottom = 12.dp),

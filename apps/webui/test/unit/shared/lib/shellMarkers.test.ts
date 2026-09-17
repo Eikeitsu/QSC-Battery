@@ -27,7 +27,7 @@ describe("shell helpers still present", () => {
       "module/bin/lib/switch_prelude.sh",
       "module/bin/lib/switch_charge_full.sh",
       "module/bin/lib/switch_eval.sh",
-      "module/bin/lib/switch_act.sh",
+      "module/bin/lib/switch_apply.sh",
     ]
       .map((rel) => readFileSync(join(repoRoot, rel), "utf8"))
       .join("\n");

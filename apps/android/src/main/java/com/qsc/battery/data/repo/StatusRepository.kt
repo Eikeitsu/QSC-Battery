@@ -32,8 +32,7 @@ class StatusRepository(private val root: RootBridge) {
 
     suspend fun readModuleProp(): ModuleProp? {
         val text = root.readFile(ModulePaths.MODULE_PROP) ?: return null
-        fun grab(key: String) =
-            text.lineSequence().firstOrNull { it.startsWith("$key=") }?.substringAfter("=")?.trim().orEmpty()
+        fun grab(key: String) = text.lineSequence().firstOrNull { it.startsWith("$key=") }?.substringAfter("=")?.trim().orEmpty()
         return ModuleProp(
             id = grab("id"),
             name = grab("name"),
@@ -43,9 +42,7 @@ class StatusRepository(private val root: RootBridge) {
         )
     }
 
-    suspend fun setModuleEnabled(enabled: Boolean): Boolean {
-        return if (enabled) root.rm(ModulePaths.OFF_FLAG) else root.touch(ModulePaths.OFF_FLAG)
-    }
+    suspend fun setModuleEnabled(enabled: Boolean): Boolean = if (enabled) root.rm(ModulePaths.MODULE_OFF_FLAG) else root.touch(ModulePaths.MODULE_OFF_FLAG)
 
     private fun inlineStatusCmd(): String = buildString {
         append("MODDIR='${ModulePaths.MODDIR}'; ")
@@ -59,7 +56,7 @@ class StatusRepository(private val root: RootBridge) {
         append("echo plugged=\$(cat /sys/class/power_supply/battery/online 2>/dev/null); ")
         append("fi; ")
         append("printf '__QSC_MODULE_OFF__\\n'; ")
-        append("[ -f '${ModulePaths.OFF_FLAG}' ] || [ -f '${ModulePaths.MODDIR}/disable' ] && echo 1 || echo 0; ")
+        append("[ -f '${ModulePaths.MODULE_OFF_FLAG}' ] || [ -f '${ModulePaths.MODDIR}/disable' ] && echo 1 || echo 0; ")
         append("printf '__QSC_CHARGING_STOPPED__\\n'; ")
         append("[ -f '${ModulePaths.POWER_SWITCH_FLAG}' ] && echo 1 || echo 0; ")
         append("printf '__QSC_DESCRIPTION__\\n'; ")

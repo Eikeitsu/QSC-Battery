@@ -11,7 +11,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * 快捷设置磁贴：需要 Root + 已安装模块时，切换 off_qsc 软开关。
+ * 快捷设置磁贴：需要 Root + 已安装模块时，切换 module_off 软开关。
  * 不常驻后台循环；仅在磁贴可见/点击时执行。
  */
 class ChargeControlTileService : TileService() {
@@ -32,8 +32,8 @@ class ChargeControlTileService : TileService() {
                 }
                 return@launch
             }
-            val off = root.exists(ModulePaths.OFF_FLAG)
-            if (off) root.rm(ModulePaths.OFF_FLAG) else root.touch(ModulePaths.OFF_FLAG)
+            val off = root.exists(ModulePaths.MODULE_OFF_FLAG)
+            if (off) root.rm(ModulePaths.MODULE_OFF_FLAG) else root.touch(ModulePaths.MODULE_OFF_FLAG)
             refresh()
         }
     }
@@ -57,7 +57,7 @@ class ChargeControlTileService : TileService() {
             tile.updateTile()
             return
         }
-        val off = root.exists(ModulePaths.OFF_FLAG)
+        val off = root.exists(ModulePaths.MODULE_OFF_FLAG)
         tile.state = if (off) Tile.STATE_INACTIVE else Tile.STATE_ACTIVE
         tile.subtitle = if (off) "已关闭" else "运行中"
         tile.updateTile()

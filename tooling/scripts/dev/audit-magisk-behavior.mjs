@@ -14,11 +14,38 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+const namingMap = JSON.parse(
+  readFileSync(join(root, "tooling/scripts/dev/naming-map.json"), "utf8"),
+);
+
+function applyNamingMap(text) {
+  let t = text;
+  const pairs = [];
+  for (const [o, n] of Object.entries(namingMap.configKeys || {})) pairs.push([o, n]);
+  for (const [o, n] of Object.entries(namingMap.dataMarkers || {})) {
+    pairs.push([`data/${o}`, `data/${n}`]);
+    pairs.push([o, n]);
+  }
+  for (const [o, n] of Object.entries(namingMap.binScripts || {})) pairs.push([o, n]);
+  for (const [o, n] of Object.entries(namingMap.libScripts || {})) pairs.push([o, n]);
+  pairs.push(["QSCV_Compatibility_mode", "QSCV_compatibility_mode"]);
+  pairs.push(["QSCV_Shut_down", "QSCV_shut_down"]);
+  pairs.push(["OFF_FLAG", "MODULE_OFF_FLAG"]);
+  pairs.sort((a, b) => b[0].length - a[0].length);
+  for (const [o, n] of pairs) t = t.split(o).join(n);
+  return t;
+}
+
 const norm = (s) => s.replace(/\r\n/g, "\n").replace(/\n+$/, "\n");
 const nonempty = (s) =>
   norm(s)
     .split("\n")
     .filter((l) => l !== "" && !l.startsWith("#!"));
+const codeOnly = (s) =>
+  s
+    .split("\n")
+    .filter((l) => !l.trimStart().startsWith("#"))
+    .join("\n");
 
 function gitShow(rev, rel) {
   return execSync(`git show ${rev}:${rel}`, {
@@ -74,12 +101,12 @@ function cmp(label, oldText, neoText) {
 let allOk = true;
 
 {
-  const old = oldBodyAfterCommon("module/bin/qsc_switch.sh");
+  const old = applyNamingMap(oldBodyAfterCommon("module/bin/qsc_switch.sh"));
   const neo = concatLibs([
     "switch_prelude.sh",
     "switch_charge_full.sh",
     "switch_eval.sh",
-    "switch_act.sh",
+    "switch_apply.sh",
   ]);
   allOk &= cmp("qsc_switch nonempty body", old, neo);
 }
@@ -95,9 +122,9 @@ let allOk = true;
       // old monolith body after leading comments
       let i = 0;
       while (i < oldRaw.length && oldRaw[i].startsWith("#")) i++;
-      const old = oldRaw.slice(i).join("\n");
-      const neo = concatLibs(sourced);
-      allOk &= cmp("charge nonempty body", old, neo);
+      const old = codeOnly(applyNamingMap(oldRaw.slice(i).join("\n")));
+      const neo = codeOnly(concatLibs(sourced));
+      allOk &= cmp("charge code-only body", old, neo);
     } catch (e) {
       console.log("SKIP charge vs 4ec4639:", e.message);
     }
@@ -124,7 +151,7 @@ for (const name of ["current.sh", "power_saver.sh", "hot_update.sh"]) {
       console.log(`SKIP ${name}: already split at 4ec4639`);
       continue;
     }
-    const old = oldRaw.slice(i).join("\n");
+    const old = applyNamingMap(oldRaw.slice(i).join("\n"));
     const neo = concatLibs(sourced);
     allOk &= cmp(`${name} nonempty body`, old, neo);
   } catch (e) {
@@ -133,7 +160,7 @@ for (const name of ["current.sh", "power_saver.sh", "hot_update.sh"]) {
 }
 
 for (const entry of ["module/action.sh", "module/uninstall.sh", "module/module.prop"]) {
-  const old = norm(gitShow("4ec4639", entry));
+  const old = applyNamingMap(norm(gitShow("4ec4639", entry)));
   const neo = norm(readFileSync(join(root, entry), "utf8"));
   allOk &= cmp(entry, old, neo);
 }
@@ -151,7 +178,7 @@ for (const entry of ["module/action.sh", "module/uninstall.sh", "module/module.p
   );
   console.log(
     "service_loop return-not-continue:",
-    /return 0/.test(loop) && !/\bcontinue\b/.test(loop) ? "OK" : "CHECK",
+    /return 0/.test(loop) && !/^\s*continue\b/m.test(loop) ? "OK" : "CHECK",
   );
   console.log("service_boot defines?", /qsc_service|MODDIR|BINDIR/.test(boot));
 }

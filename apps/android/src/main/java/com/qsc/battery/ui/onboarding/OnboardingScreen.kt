@@ -273,8 +273,11 @@ private fun StepDots(total: Int, current: Int) {
                     .size(if (i == current) 10.dp else 8.dp)
                     .clip(CircleShape)
                     .background(
-                        if (i == current) ChargeTheme.colors.accent
-                        else ChargeTheme.colors.stroke,
+                        if (i == current) {
+                            ChargeTheme.colors.accent
+                        } else {
+                            ChargeTheme.colors.stroke
+                        },
                     ),
             )
         }

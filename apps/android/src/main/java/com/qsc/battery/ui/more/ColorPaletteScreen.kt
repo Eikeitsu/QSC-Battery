@@ -89,8 +89,11 @@ fun ColorPaletteScreen(
                                 .clip(CircleShape)
                                 .background(Color(c))
                                 .then(
-                                    if (selected) Modifier.border(3.dp, Color.White, CircleShape)
-                                    else Modifier,
+                                    if (selected) {
+                                        Modifier.border(3.dp, Color.White, CircleShape)
+                                    } else {
+                                        Modifier
+                                    },
                                 )
                                 .clickable {
                                     scope.launch { container.settingsRepository.setKeyColor(c.toInt()) }

@@ -178,7 +178,7 @@ if [ "$charge_eval" = "1" ]; then
 	else
 		reset_log=1
 	fi
-	if [ ! -f "$DATADIR/power_on" -a "$off_qsc" != "1" ]; then
+	if [ ! -f "$DATADIR/power_on" -a "$module_off" != "1" ]; then
 		rm -f "$DATADIR/power_off"
 		touch "$DATADIR/power_on"
 		type qsc_event_plug >/dev/null 2>&1 &&
@@ -190,12 +190,12 @@ if [ "$charge_eval" = "1" ]; then
 	fi
 else
 	# 已停充：插电期间单节点重申 + 按需持锁（模块关闭时不维持停充）
-	if [ -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
+	if [ -f "$DATADIR/power_switch" ] && [ "$module_off" != "1" ]; then
 		qsc_maintain_stop_while_plugged
 	else
 		qsc_stop_wakelock_release
 	fi
-	if [ ! -f "$DATADIR/power_off" -a "$off_qsc" != "1" ]; then
+	if [ ! -f "$DATADIR/power_off" -a "$module_off" != "1" ]; then
 		rm -f "$DATADIR/now_c" "$DATADIR/power_on"
 		touch "$DATADIR/power_off"
 	fi

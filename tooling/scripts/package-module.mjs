@@ -36,7 +36,7 @@ const BIN_RELEASE = [
   "qsc_switch.sh",
   "description_worker.sh",
   "list_switch.sh",
-  "list_curr.sh",
+  "list_current.sh",
   "detect_device.sh",
   "diagnose.sh",
   "test_switch.sh",
@@ -44,7 +44,7 @@ const BIN_RELEASE = [
   "qsc_status.sh",
   "qsc.sh",
 ];
-const BIN_DEBUG_EXTRA = ["testing.sh", "diag2.sh"];
+const BIN_DEBUG_EXTRA = ["test_harness.sh", "diagnose_extra.sh"];
 
 const includeDebug = process.argv.includes("--debug");
 
@@ -321,10 +321,10 @@ if (includeDebug) {
   for (const file of BIN_DEBUG_EXTRA) copyFromModule(join("bin", file));
   writeFileSync(
     join(staging, "bin", ".qsc_debug"),
-    "debug tools: testing.sh diag2.sh\n",
+    "debug tools: test_harness.sh diagnose_extra.sh\n",
     "utf8",
   );
-  log("debug package: included testing.sh, diag2.sh");
+  log("debug package: included test_harness.sh, diagnose_extra.sh");
 } else {
   log("release package: diagnose only (no testing/diag2)");
 }

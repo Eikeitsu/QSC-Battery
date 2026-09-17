@@ -64,7 +64,7 @@ qsc_action_refresh() {
 		echo "模块: 核心脚本缺失"
 	elif [ -f "$MODDIR/disable" ]; then
 		echo "模块: 管理器已禁用"
-	elif [ -f "$OFF_FLAG" ]; then
+	elif [ -f "$MODULE_OFF_FLAG" ]; then
 		echo "模块: 软关闭"
 	else
 		echo "模块: 开启"
@@ -107,7 +107,7 @@ qsc_action_refresh() {
 			[ -n "$_why" ] && _why="${_why}+温度" || _why="温度"
 		fi
 		[ -n "$_why" ] && echo "停充态: 是（$_why）" || echo "停充态: 是"
-	elif [ -f "$OFF_FLAG" ] || [ -f "$MODDIR/disable" ]; then
+	elif [ -f "$MODULE_OFF_FLAG" ] || [ -f "$MODDIR/disable" ]; then
 		echo "停充态: —"
 	else
 		echo "停充态: 否"
@@ -125,7 +125,7 @@ qsc_action_refresh() {
 		_ts=$(_conf_get temperature_switch)
 		_tst=$(_conf_get temperature_switch_stop)
 		_tsr=$(_conf_get temperature_switch_start)
-		_cm=$(_conf_get Compatibility_mode)
+		_cm=$(_conf_get compatibility_mode)
 		_wl=$(_conf_get stop_hold_wakelock)
 		echo "停充/复充: ${_ps:-?}% / ${_pt:-?}%"
 		if [ "$_ts" = "1" ]; then
@@ -153,7 +153,7 @@ qsc_action_refresh() {
 
 	battery_level="$_cap"
 	temperature="$_temp_c"
-	[ -f "$OFF_FLAG" ] || [ -f "$MODDIR/disable" ] && off_qsc=1
+	[ -f "$MODULE_OFF_FLAG" ] || [ -f "$MODDIR/disable" ] && module_off=1
 	command -v qsc_refresh_module_description >/dev/null 2>&1 && \
 		qsc_refresh_module_description >/dev/null 2>&1
 

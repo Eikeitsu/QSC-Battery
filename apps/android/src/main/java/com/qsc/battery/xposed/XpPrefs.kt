@@ -17,6 +17,7 @@ object XpPrefs {
     const val ARM_PATH = "/data/system/qsc_xp_arm"
     const val WAKE_PATH = "/data/system/qsc_xp_wake"
     const val ALIVE_PATH = "/data/system/qsc_xp_alive"
+
     /** system_server 在部分机型写 /data/system 会失败；多路径探测注入 */
     val ALIVE_CANDIDATES: List<String> = listOf(
         ALIVE_PATH,
@@ -39,9 +40,7 @@ object XpPrefs {
         else -> pkg
     }
 
-    fun hasPrimaryScope(scopeList: Collection<String>): Boolean =
-        scopeList.any { it.trim().equals(PRIMARY_SCOPE, ignoreCase = true) }
+    fun hasPrimaryScope(scopeList: Collection<String>): Boolean = scopeList.any { it.trim().equals(PRIMARY_SCOPE, ignoreCase = true) }
 
-    fun hasAnyFrameworkScope(scopeList: Collection<String>): Boolean =
-        scopeList.any { it.trim().lowercase() in SYSTEM_SCOPE_PKGS }
+    fun hasAnyFrameworkScope(scopeList: Collection<String>): Boolean = scopeList.any { it.trim().lowercase() in SYSTEM_SCOPE_PKGS }
 }

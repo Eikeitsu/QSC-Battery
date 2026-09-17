@@ -23,8 +23,7 @@ class LogRepository(private val root: RootBridge) {
         }.toList()
     }
 
-    suspend fun clearLog(): Boolean =
-        root.exec(": > '${ModulePaths.LOG_FILE}' 2>/dev/null || rm -f '${ModulePaths.LOG_FILE}'").ok
+    suspend fun clearLog(): Boolean = root.exec(": > '${ModulePaths.LOG_FILE}' 2>/dev/null || rm -f '${ModulePaths.LOG_FILE}'").ok
 
     suspend fun loadEvents(maxLines: Int = 80): List<ChargeEvent> {
         val r = root.exec("tail -n $maxLines '${ModulePaths.CHARGE_EVENTS}' 2>/dev/null")
@@ -33,7 +32,7 @@ class LogRepository(private val root: RootBridge) {
             val m = eventRe.matchEntire(line) ?: return@mapNotNull null
             val (d, t, type, level, temp, detail) = m.destructured
             val ts = runCatching {
-                java.time.LocalDateTime.parse("${d}T${t}")
+                java.time.LocalDateTime.parse("${d}T$t")
                     .atZone(java.time.ZoneId.systemDefault()).toEpochSecond()
             }.getOrDefault(0L)
             ChargeEvent(
@@ -49,8 +48,7 @@ class LogRepository(private val root: RootBridge) {
         }.sortedByDescending { it.ts }.toList()
     }
 
-    suspend fun clearEvents(): Boolean =
-        root.exec(": > '${ModulePaths.CHARGE_EVENTS}' 2>/dev/null || rm -f '${ModulePaths.CHARGE_EVENTS}'").ok
+    suspend fun clearEvents(): Boolean = root.exec(": > '${ModulePaths.CHARGE_EVENTS}' 2>/dev/null || rm -f '${ModulePaths.CHARGE_EVENTS}'").ok
 
     /**
      * 本模块 XP 文件日志：合并多候选路径（system / tmp / cache / 模块镜像）。
@@ -104,6 +102,7 @@ class LogRepository(private val root: RootBridge) {
                 parts[1].startsWith("DEBUG", ignoreCase = true) -> "debug"
                 else -> "info"
             }
+
             else -> "info"
         }
         val display = if (parts.size >= 3) {

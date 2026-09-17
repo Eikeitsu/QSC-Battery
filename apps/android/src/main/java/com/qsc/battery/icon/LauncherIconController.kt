@@ -76,13 +76,13 @@ object LauncherIconController {
         )
     }
 
-    private fun isEffectivelyEnabled(pm: PackageManager, app: Context, name: String): Boolean {
-        return when (pm.getComponentEnabledSetting(ComponentName(app, name))) {
-            PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
-            PackageManager.COMPONENT_ENABLED_STATE_DISABLED -> false
-            // DEFAULT：走清单默认值——仅 Default alias 在清单里 enabled=true
-            else -> name == DEFAULT_ALIAS
-        }
+    private fun isEffectivelyEnabled(pm: PackageManager, app: Context, name: String): Boolean = when (pm.getComponentEnabledSetting(ComponentName(app, name))) {
+        PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
+
+        PackageManager.COMPONENT_ENABLED_STATE_DISABLED -> false
+
+        // DEFAULT：走清单默认值——仅 Default alias 在清单里 enabled=true
+        else -> name == DEFAULT_ALIAS
     }
 
     /**

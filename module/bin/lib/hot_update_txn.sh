@@ -413,6 +413,18 @@ hot_update_request() {
 		return 1
 	}
 
+	# 切断线前旧布局禁止热更新：必须走 Magisk 完整安装（customize 会清空后重装）
+	_cutover="${QSC_LAYOUT_CUTOVER_CODE:-2026091701}"
+	case "$_source_version" in
+		""|*[!0-9]*) ;;
+		*)
+			if [ "$_source_version" -lt "$_cutover" ] 2>/dev/null; then
+				ui_print "- 布局不兼容，需完整重装，已跳过热更新"
+				return 1
+			fi
+			;;
+	esac
+
 	hot_update_write_desc
 
 	export MODULE_HOT_INSTALL_REQUEST="true"

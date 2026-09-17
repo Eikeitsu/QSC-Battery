@@ -49,7 +49,7 @@ fun HomeScreen(
     val conf = ui.conf
     val levelRaw = status.snapshot.level
     val levelPct = levelRaw.toFloatOrNull()?.div(100f)
-    val levelText = if (levelRaw.isBlank()) "--%" else "${levelRaw}%"
+    val levelText = if (levelRaw.isBlank()) "--%" else "$levelRaw%"
     val chargeLabel = batteryStatusLabel(
         status.snapshot.status,
         powered = status.snapshot.powered,
@@ -93,9 +93,11 @@ fun HomeScreen(
         ) {
             when {
                 !ui.bootstrapped -> ChargeMetricSkeleton()
+
                 ui.rootSettled && !status.rootOk -> {
                     ChargeBanner("需要 Root 才能读写模块配置；主题与更新仍可用。", BannerTone.Warn)
                 }
+
                 ui.rootSettled && !status.modulePresent -> {
                     ChargeBanner("未检测到 Magisk 模块。可在「我的 → 更新」下载安装。", BannerTone.Info)
                     ChargeSection(title = "下一步") {
@@ -106,6 +108,7 @@ fun HomeScreen(
                         )
                     }
                 }
+
                 else -> {
                     ChargeHero(
                         levelText = levelText,

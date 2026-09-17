@@ -175,10 +175,10 @@ export function createConfigActions(ctx: ConfigActionsCtx) {
   async function toggleModule(on: boolean): Promise<void> {
     status.moduleOn = on;
     if (on) {
-      await api.exec(`rm -f '${PATHS.OFF_FLAG}'`);
+      await api.exec(`rm -f '${PATHS.MODULE_OFF_FLAG}'`);
       showSuccessToast("模块已开启");
     } else {
-      await api.exec(`touch '${PATHS.OFF_FLAG}'`);
+      await api.exec(`touch '${PATHS.MODULE_OFF_FLAG}'`);
       showToast("模块已关闭");
     }
     await refreshStatus();

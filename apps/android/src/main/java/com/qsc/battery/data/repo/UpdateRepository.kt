@@ -171,44 +171,43 @@ class UpdateRepository(
         url: String,
         fileName: String,
         onProgress: ((Long, Long?) -> Unit)? = null,
-    ): java.io.File =
-        withContext(Dispatchers.IO) {
-            val req = Request.Builder()
-                .url(url)
-                .header("User-Agent", "QSC-Battery-App")
-                .get()
-                .build()
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) error("download failed: HTTP ${resp.code}")
-                val body = resp.body
-                val total = body.contentLength().takeIf { it >= 0L }
-                val out = java.io.File(context.cacheDir, fileName)
-                out.outputStream().use { sink ->
-                    body.byteStream().use { src ->
-                        val buf = ByteArray(DEFAULT_BUFFER_SIZE)
-                        var readTotal = 0L
-                        var lastEmit = -1L
-                        while (true) {
-                            val n = src.read(buf)
-                            if (n < 0) break
-                            sink.write(buf, 0, n)
-                            readTotal += n
-                            val pctStep = if (total != null && total > 0L) {
-                                (readTotal * 100 / total) != lastEmit
-                            } else {
-                                readTotal - lastEmit >= 64 * 1024
-                            }
-                            if (onProgress != null && (pctStep || lastEmit < 0L)) {
-                                lastEmit = if (total != null && total > 0L) readTotal * 100 / total else readTotal
-                                onProgress(readTotal, total)
-                            }
+    ): java.io.File = withContext(Dispatchers.IO) {
+        val req = Request.Builder()
+            .url(url)
+            .header("User-Agent", "QSC-Battery-App")
+            .get()
+            .build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) error("download failed: HTTP ${resp.code}")
+            val body = resp.body
+            val total = body.contentLength().takeIf { it >= 0L }
+            val out = java.io.File(context.cacheDir, fileName)
+            out.outputStream().use { sink ->
+                body.byteStream().use { src ->
+                    val buf = ByteArray(DEFAULT_BUFFER_SIZE)
+                    var readTotal = 0L
+                    var lastEmit = -1L
+                    while (true) {
+                        val n = src.read(buf)
+                        if (n < 0) break
+                        sink.write(buf, 0, n)
+                        readTotal += n
+                        val pctStep = if (total != null && total > 0L) {
+                            (readTotal * 100 / total) != lastEmit
+                        } else {
+                            readTotal - lastEmit >= 64 * 1024
                         }
-                        onProgress?.invoke(readTotal, total)
+                        if (onProgress != null && (pctStep || lastEmit < 0L)) {
+                            lastEmit = if (total != null && total > 0L) readTotal * 100 / total else readTotal
+                            onProgress(readTotal, total)
+                        }
                     }
+                    onProgress?.invoke(readTotal, total)
                 }
-                out
             }
+            out
         }
+    }
 
     fun channelDaemonUrls(channel: UpdateChannel, preferCdn: Boolean = false): Pair<String, String> {
         val manifest = when (channel) {
@@ -218,8 +217,10 @@ class UpdateRepository(
         }
         val pagesFallback = when (channel) {
             UpdateChannel.Stable -> "https://eikeitsu.github.io/QSC-Battery"
+
             // Site root（不含 /qscd）；fetch 会拼 /qscd/<name>。二进制优先走 manifest *Url
             UpdateChannel.Ci -> "https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@ci-dist"
+
             UpdateChannel.Prerelease -> "https://eikeitsu.github.io/QSC-Battery"
         }
         return GithubCdn.toChannelAssetUrl(manifest, preferCdn) to
@@ -322,23 +323,22 @@ class UpdateRepository(
     suspend fun materializeDaemonManifest(
         url: String,
         preferCdn: Boolean = false,
-    ): String =
-        withContext(Dispatchers.IO) {
-            val reachable = metaUrl(url, preferCdn)
-            val req = Request.Builder()
-                .url(reachable)
-                .header("User-Agent", "QSC-Battery-App")
-                .get()
-                .build()
-            val body = client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) error("daemon manifest HTTP ${resp.code}")
-                resp.body.string()
-            }
-            val rewritten = GithubCdn.rewriteManifestBody(body, preferCdn)
-            val dest = "${ModulePaths.DATADIR}/update_manifest.json"
-            writeDataText(dest, rewritten)
-            dest
+    ): String = withContext(Dispatchers.IO) {
+        val reachable = metaUrl(url, preferCdn)
+        val req = Request.Builder()
+            .url(reachable)
+            .header("User-Agent", "QSC-Battery-App")
+            .get()
+            .build()
+        val body = client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) error("daemon manifest HTTP ${resp.code}")
+            resp.body.string()
         }
+        val rewritten = GithubCdn.rewriteManifestBody(body, preferCdn)
+        val dest = "${ModulePaths.DATADIR}/update_manifest.json"
+        writeDataText(dest, rewritten)
+        dest
+    }
 
     private suspend fun writeDataText(dest: String, text: String) {
         val b64 = android.util.Base64.encodeToString(
@@ -355,8 +355,7 @@ class UpdateRepository(
         }
     }
 
-    private fun metaUrl(url: String, preferCdn: Boolean): String =
-        GithubCdn.toChannelAssetUrl(url, preferCdn)
+    private fun metaUrl(url: String, preferCdn: Boolean): String = GithubCdn.toChannelAssetUrl(url, preferCdn)
 
     private fun archSuffix(): String {
         val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
@@ -431,8 +430,7 @@ class UpdateRepository(
         return fetchDaemonJson(fetchUrl, preferCdn).copy(manifestUrl = fetchUrl)
     }
 
-    private fun channelUrl(url: String, preferCdn: Boolean): String =
-        metaUrl(url, preferCdn)
+    private fun channelUrl(url: String, preferCdn: Boolean): String = metaUrl(url, preferCdn)
 
     private fun fetchUpdateJson(url: String, preferCdn: Boolean): RemoteUpdateInfo {
         val req = Request.Builder()

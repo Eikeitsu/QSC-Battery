@@ -191,6 +191,7 @@ class UpdatesSession(
                 // 模块安装改由 ModuleInstallConsoleScreen 展示命令行过程
                 false
             }
+
             UpdateTarget.App -> {
                 val url = r.appRemote?.apkUrl ?: return false
                 if (!canUpdateApp(r)) return false
@@ -213,6 +214,7 @@ class UpdatesSession(
                 }
                 true
             }
+
             UpdateTarget.Daemon -> {
                 if (!canUpdateDaemon(r)) return false
                 val preferCdn = _preferCdn.value
@@ -320,24 +322,18 @@ class UpdatesSession(
     }
 
     companion object {
-        fun canUpdateModule(r: UpdateCheckResult): Boolean =
-            !r.moduleRemote?.zipUrl.isNullOrBlank() &&
-                (r.moduleHasUpdate || r.moduleCanSwitch || r.moduleLocal == null)
+        fun canUpdateModule(r: UpdateCheckResult): Boolean = !r.moduleRemote?.zipUrl.isNullOrBlank() &&
+            (r.moduleHasUpdate || r.moduleCanSwitch || r.moduleLocal == null)
 
-        fun isModuleSwitch(r: UpdateCheckResult): Boolean =
-            r.moduleCanSwitch && !r.moduleHasUpdate && r.moduleLocal != null
+        fun isModuleSwitch(r: UpdateCheckResult): Boolean = r.moduleCanSwitch && !r.moduleHasUpdate && r.moduleLocal != null
 
-        fun canUpdateApp(r: UpdateCheckResult): Boolean =
-            (r.appHasUpdate || r.appCanSwitch) && !r.appRemote?.apkUrl.isNullOrBlank()
+        fun canUpdateApp(r: UpdateCheckResult): Boolean = (r.appHasUpdate || r.appCanSwitch) && !r.appRemote?.apkUrl.isNullOrBlank()
 
-        fun isAppSwitch(r: UpdateCheckResult): Boolean =
-            r.appCanSwitch && !r.appHasUpdate
+        fun isAppSwitch(r: UpdateCheckResult): Boolean = r.appCanSwitch && !r.appHasUpdate
 
-        fun canUpdateDaemon(r: UpdateCheckResult): Boolean =
-            (r.daemonHasUpdate || r.daemonCanSwitch) && r.daemonRemote?.manifestUrl != null
+        fun canUpdateDaemon(r: UpdateCheckResult): Boolean = (r.daemonHasUpdate || r.daemonCanSwitch) && r.daemonRemote?.manifestUrl != null
 
-        fun isDaemonSwitch(r: UpdateCheckResult): Boolean =
-            r.daemonCanSwitch && !r.daemonHasUpdate
+        fun isDaemonSwitch(r: UpdateCheckResult): Boolean = r.daemonCanSwitch && !r.daemonHasUpdate
 
         fun updatableCount(r: UpdateCheckResult): Int {
             var n = 0
@@ -356,14 +352,23 @@ class UpdatesSession(
                 .orEmpty()
             return when (code) {
                 "unsupported_arch" -> "本机架构没有可用的守护文件"
+
                 "manifest_download_failed" -> "取不到守护清单，请检查网络后重试"
+
                 "manifest_invalid_version" -> "远端版本号格式无效，请换通道或稍后重试"
+
                 "manifest_no_entry" -> "清单里没有本机架构的文件"
+
                 "download_failed" -> "守护下载失败，请检查网络后重试"
+
                 "no_sha256_tool" -> "系统缺少校验工具，已放弃安装"
+
                 "sha256_mismatch" -> "文件校验失败，已丢弃"
+
                 "probe_failed" -> "已下载但本机自检未通过，已回滚"
+
                 "bad_impl" -> "参数错误"
+
                 else -> if (code.isNotBlank()) {
                     "守护安装失败（$code）"
                 } else {

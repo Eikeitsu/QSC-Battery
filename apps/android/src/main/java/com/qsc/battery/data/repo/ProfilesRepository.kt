@@ -12,7 +12,10 @@ import kotlinx.serialization.json.put
 import java.time.Instant
 
 class ProfilesRepository(private val root: RootBridge) {
-    private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        prettyPrint = true
+    }
 
     suspend fun listNames(): List<String> {
         val text = root.readFile(ModulePaths.PROFILES) ?: return emptyList()

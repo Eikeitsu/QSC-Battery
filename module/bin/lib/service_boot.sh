@@ -79,8 +79,8 @@ mkdir -p "$DATADIR" "$CONFDIR" "$ASSETDIR"
 
 sleep 1
 
-echo "rm -f \"$OFF_FLAG\"; echo 已打开充电控制" > "$MODDIR/打开充电控制.sh"
-echo "touch \"$OFF_FLAG\"; echo 已关闭充电控制" > "$MODDIR/关闭充电控制.sh"
+echo "rm -f \"$MODULE_OFF_FLAG\"; echo 已打开充电控制" > "$MODDIR/打开充电控制.sh"
+echo "touch \"$MODULE_OFF_FLAG\"; echo 已关闭充电控制" > "$MODDIR/关闭充电控制.sh"
 chmod 0755 "$MODDIR/打开充电控制.sh"
 chmod 0755 "$MODDIR/关闭充电控制.sh"
 rm -f "$MODDIR/打开定量停充.sh" "$MODDIR/关闭定量停充.sh" 2>/dev/null
@@ -156,9 +156,9 @@ qsc_start_switch_scan() {
 
 qsc_start_switch_scan
 # 插电后电流节点探测（未在充则跳过，主循环会重试）
-if [ -f "$BINDIR/list_curr.sh" ]; then
-	chmod 0755 "$BINDIR/list_curr.sh" 2>/dev/null
-	"$BINDIR/list_curr.sh" > /dev/null 2>&1 || true
+if [ -f "$BINDIR/list_current.sh" ]; then
+	chmod 0755 "$BINDIR/list_current.sh" 2>/dev/null
+	"$BINDIR/list_current.sh" > /dev/null 2>&1 || true
 fi
 # 按本机节点生成/刷新 device.profile（MCA 等能力动态启用）
 if [ -f "$BINDIR/detect_device.sh" ]; then

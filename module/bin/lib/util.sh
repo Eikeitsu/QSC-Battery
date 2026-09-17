@@ -111,7 +111,7 @@ qsc_conf_scan() {
 		case "$k" in
 			power_stop|power_start|power_stop_time|charge_full|charge_full_mode \
 			|charge_full_wait_sec|power_reset|unplug_restore \
-			|Compatibility_mode|Shut_down|loop_interval_sec \
+			|compatibility_mode|shut_down|loop_interval_sec \
 			|loop_interval_maintain_sec|switch_verify_sec|switch_batch_blind|wireless_policy \
 			|app_stop|app_stop_list|history_enable|history_interval_sec \
 			|temperature_switch|temperature_switch_stop|temperature_switch_start)

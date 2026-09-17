@@ -98,7 +98,7 @@ qsc_ps_refresh_desc() {
 
 	# 总开关也进指纹：关掉后最迟下一次刷新就显示「已关闭」，不用等满轮
 	off=0
-	if [ -f "$OFF_FLAG" ] || [ -f "$MODDIR/disable" ]; then
+	if [ -f "$MODULE_OFF_FLAG" ] || [ -f "$MODDIR/disable" ]; then
 		off=1
 	fi
 	stopped=0

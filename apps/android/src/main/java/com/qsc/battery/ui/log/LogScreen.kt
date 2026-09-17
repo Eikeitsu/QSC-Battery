@@ -178,50 +178,54 @@ fun LogScreen(container: AppContainer) {
                         repeat(4) { ChargeSkeletonBox(height = 48.dp) }
                     }
                 }
-            } else when (tab) {
-                LogTab.Runtime -> {
-                    val filtered = lines.filter { level.isEmpty() || it.level == level }
-                    if (filtered.isEmpty()) {
-                        item {
-                            Text(
-                                text = "暂无运行日志",
-                                style = ChargeTheme.typography.body,
-                                color = ChargeTheme.colors.muted,
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
-                            )
+            } else {
+                when (tab) {
+                    LogTab.Runtime -> {
+                        val filtered = lines.filter { level.isEmpty() || it.level == level }
+                        if (filtered.isEmpty()) {
+                            item {
+                                Text(
+                                    text = "暂无运行日志",
+                                    style = ChargeTheme.typography.body,
+                                    color = ChargeTheme.colors.muted,
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+                                )
+                            }
+                        } else {
+                            items(filtered) { LogRuntimeRow(it) }
                         }
-                    } else {
-                        items(filtered) { LogRuntimeRow(it) }
                     }
-                }
-                LogTab.Events -> {
-                    if (events.isEmpty()) {
-                        item {
-                            Text(
-                                text = "暂无充电事件",
-                                style = ChargeTheme.typography.body,
-                                color = ChargeTheme.colors.muted,
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
-                            )
+
+                    LogTab.Events -> {
+                        if (events.isEmpty()) {
+                            item {
+                                Text(
+                                    text = "暂无充电事件",
+                                    style = ChargeTheme.typography.body,
+                                    color = ChargeTheme.colors.muted,
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+                                )
+                            }
+                        } else {
+                            items(events.asReversed()) { EventRow(it) }
                         }
-                    } else {
-                        items(events.asReversed()) { EventRow(it) }
                     }
-                }
-                LogTab.Lsp -> {
-                    val filtered = xpLines.filter { level.isEmpty() || it.level == level }
-                    if (filtered.isEmpty()) {
-                        item {
-                            Text(
-                                text = "暂无本模块 XP 日志。启用 LSPosed 并勾选系统框架后重启；" +
-                                    "成功加载会出现 loaded / hooked / alive 等行。",
-                                style = ChargeTheme.typography.body,
-                                color = ChargeTheme.colors.muted,
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
-                            )
+
+                    LogTab.Lsp -> {
+                        val filtered = xpLines.filter { level.isEmpty() || it.level == level }
+                        if (filtered.isEmpty()) {
+                            item {
+                                Text(
+                                    text = "暂无本模块 XP 日志。启用 LSPosed 并勾选系统框架后重启；" +
+                                        "成功加载会出现 loaded / hooked / alive 等行。",
+                                    style = ChargeTheme.typography.body,
+                                    color = ChargeTheme.colors.muted,
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+                                )
+                            }
+                        } else {
+                            items(filtered.asReversed()) { LogRuntimeRow(it) }
                         }
-                    } else {
-                        items(filtered.asReversed()) { LogRuntimeRow(it) }
                     }
                 }
             }

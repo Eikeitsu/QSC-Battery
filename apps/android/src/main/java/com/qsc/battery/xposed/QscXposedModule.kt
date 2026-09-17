@@ -110,12 +110,11 @@ class QscXposedModule : XposedModule() {
             hiField.isAccessible = true
             val hi = hiField.get(service) ?: return@runCatching
             val cls = hi.javaClass
-            fun flag(name: String): Boolean =
-                runCatching {
-                    val f = findField(cls, name) ?: return false
-                    f.isAccessible = true
-                    f.getBoolean(hi)
-                }.getOrDefault(false)
+            fun flag(name: String): Boolean = runCatching {
+                val f = findField(cls, name) ?: return false
+                f.isAccessible = true
+                f.getBoolean(hi)
+            }.getOrDefault(false)
             val plugged = flag("chargerAcOnline") || flag("chargerUsbOnline") ||
                 flag("chargerWirelessOnline") || flag("chargerDockOnline")
             return plugged

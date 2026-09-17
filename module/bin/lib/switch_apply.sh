@@ -1,7 +1,7 @@
 #!/system/bin/sh
 # switch: apply resume / current / description
 
-if [ -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
+if [ -f "$DATADIR/power_switch" ] && [ "$module_off" != "1" ]; then
 	temp_ready=1
 	battery_ready=1
 	app_ready=1
@@ -78,14 +78,14 @@ fi
 
 # 供电开关未停充时，若已安装电流控制组件则应用策略（兼容模式跳过，避免与其它限流模块抢写）
 # 同样只在「该评估充电」时写，避免停充后仍写电流节点与小米充电服务互抢
-Compatibility_mode="${QSCV_Compatibility_mode}"
-[ -n "$Compatibility_mode" ] || Compatibility_mode=0
-if [ -f "$DATADIR/compat_hint" ] && [ "$Compatibility_mode" != "1" ]; then
+compatibility_mode="${QSCV_compatibility_mode}"
+[ -n "$compatibility_mode" ] || compatibility_mode=0
+if [ -f "$DATADIR/compat_hint" ] && [ "$compatibility_mode" != "1" ]; then
 	_ch="$(cat "$DATADIR/compat_hint" 2>/dev/null | tr -d '\r\n')"
 	[ -n "$_ch" ] && qsc_log_once compat_mod warn "检测到其它充电/限流模块($_ch)，建议开启兼容模式"
 fi
-if [ "$charge_eval" = "1" ] && [ ! -f "$DATADIR/power_switch" ] && [ "$off_qsc" != "1" ]; then
-	if [ "$Compatibility_mode" = "1" ]; then
+if [ "$charge_eval" = "1" ] && [ ! -f "$DATADIR/power_switch" ] && [ "$module_off" != "1" ]; then
+	if [ "$compatibility_mode" = "1" ]; then
 		qsc_log_once compat warn "兼容模式开启，已跳过电流控制"
 		rm -f "$DATADIR/current_mode_tag"
 		rm -f "$DATADIR/current_reaffirm_ts" "$DATADIR/current_drift_streak"

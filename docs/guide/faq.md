@@ -3,7 +3,7 @@
 ## 刷入后没有效果？
 
 1. 确认已**重启**
-2. WebUI / APP 中确认模块软开关已打开（无 `data/off_qsc`）
+2. WebUI / APP 中确认模块软开关已打开（无 `data/module_off`）
 3. 看 `data/log.log` 是否有「未找到有效充电控制节点」
 4. MCA 机型（如部分红米）：确认 `data/device.profile` 含 `mca=1` 与路径；停充与恢复建议间隔 ≥ 10
 5. 插电后测开关，或自定义 `power_switch`：

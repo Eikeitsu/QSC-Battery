@@ -60,7 +60,16 @@ CURRENT_JSON="$CURRENT_MODULE/config/current.json"
 CONFIG_BACKUP="${TMPDIR:-/data/local/tmp}/qsc-config-backup.$$"
 CURRENT_JSON_BACKUP="${TMPDIR:-/data/local/tmp}/qsc-current-json-backup.$$"
 rm -f "$CONFIG_BACKUP" "$CURRENT_JSON_BACKUP"
-if [ -f "$CURRENT_CONF" ] && [ ! -L "$CURRENT_CONF" ]; then
+
+# 切断线前旧布局 → 清空后按全新安装（不保留旧 conf/data）
+QSC_FORCE_CLEAN_INSTALL=0
+if qsc_wipe_incompatible_module; then
+	QSC_FORCE_CLEAN_INSTALL=1
+	KEEP_CONFIG=0
+	rm -f "$CONFIG_BACKUP" "$CURRENT_JSON_BACKUP"
+fi
+
+if [ "$QSC_FORCE_CLEAN_INSTALL" != "1" ] && [ -f "$CURRENT_CONF" ] && [ ! -L "$CURRENT_CONF" ]; then
 	CONFIG_SIZE="$(wc -c <"$CURRENT_CONF" 2>/dev/null | tr -d ' ')"
 	case "$CONFIG_SIZE" in ""|*[!0-9]*) CONFIG_SIZE=0 ;; esac
 	if [ "$CONFIG_SIZE" -gt 0 -a "$CONFIG_SIZE" -le 65536 ]; then
@@ -69,7 +78,7 @@ if [ -f "$CURRENT_CONF" ] && [ ! -L "$CURRENT_CONF" ]; then
 		ui_print "- 旧配置大小异常，将使用新版默认配置"
 	fi
 fi
-if [ -f "$CURRENT_JSON" ] && [ ! -L "$CURRENT_JSON" ]; then
+if [ "$QSC_FORCE_CLEAN_INSTALL" != "1" ] && [ -f "$CURRENT_JSON" ] && [ ! -L "$CURRENT_JSON" ]; then
 	cp -f "$CURRENT_JSON" "$CURRENT_JSON_BACKUP" 2>/dev/null || true
 fi
 if [ -f "$CONFIG_BACKUP" ]; then
@@ -187,13 +196,13 @@ detect_summary="$(qsc_detect_and_write_profile)"
 ui_print " $detect_summary"
 ui_print " 已写入 data/device.profile"
 
-# 更新时保留运行数据（list / 历史 / 关闭标记等）
-if [ -f "$LIBDIR/hot_update.sh" ]; then
+# 更新时保留运行数据（list / 历史 / 关闭标记等）；命名切断后旧目录已空，自然跳过
+if [ "$QSC_FORCE_CLEAN_INSTALL" != "1" ] && [ -f "$LIBDIR/hot_update.sh" ]; then
 	# shellcheck disable=SC1090
 	. "$LIBDIR/hot_update.sh"
 	hot_update_preserve_paths "$CURRENT_MODULE" "$MODPATH" \
 		data/list_switch data/list_charge_current data/ch_curr_ctrl_files \
-		data/device.profile data/charge_history.csv data/off_qsc \
+		data/device.profile data/charge_history.csv data/module_off \
 		data/compat_hint data/native_src data/native_version
 	# WebUI 下载来的守护要留住：本包（如主包）可能一个二进制都不带，
 	# 冲掉就等于把用户装好的守护弄没了。自带同实现时下面会用自带的覆盖。

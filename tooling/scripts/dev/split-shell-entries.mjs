@@ -229,7 +229,7 @@ done
       `#!/system/bin/sh\n# switch: stop/start decision\n${sliceJoin(L, afterFull, chargeEvalFi)}`,
     );
     write(
-      join(lib, "switch_act.sh"),
+      join(lib, "switch_apply.sh"),
       `#!/system/bin/sh\n# switch: apply resume / current / description\n${sliceJoin(L, chargeEvalFi + 1, L.length)}`,
     );
     write(
@@ -241,7 +241,7 @@ done
 . "$LIBDIR/switch_prelude.sh"
 . "$LIBDIR/switch_charge_full.sh"
 . "$LIBDIR/switch_eval.sh"
-. "$LIBDIR/switch_act.sh"
+. "$LIBDIR/switch_apply.sh"
 `,
     );
   }

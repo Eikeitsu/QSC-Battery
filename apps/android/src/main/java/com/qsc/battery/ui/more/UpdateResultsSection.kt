@@ -175,10 +175,13 @@ internal fun UpdateResultsSection(
 
     val pageErr = when {
         !r.error.isNullOrBlank() -> r.error
+
         actionErrorTarget == null && !actionError.isNullOrBlank() -> actionError
+
         actionErrorTarget != null &&
             actionErrorTarget != UpdateTarget.Daemon &&
             !actionError.isNullOrBlank() -> actionError
+
         else -> null
     }
     if (!pageErr.isNullOrBlank()) {

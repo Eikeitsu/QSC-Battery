@@ -8,7 +8,8 @@ enum class ColorMode(val value: Int) {
     MONET_SYSTEM(3),
     MONET_LIGHT(4),
     MONET_DARK(5),
-    DARK_AMOLED(6);
+    DARK_AMOLED(6),
+    ;
 
     companion object {
         fun fromValue(value: Int) = entries.find { it.value == value } ?: SYSTEM
@@ -29,7 +30,8 @@ enum class PaletteStyleName(val wire: String) {
     FruitSalad("FruitSalad"),
     Monochrome("Monochrome"),
     Fidelity("Fidelity"),
-    Content("Content");
+    Content("Content"),
+    ;
 
     companion object {
         fun fromWire(s: String?) = entries.find { it.wire.equals(s, true) } ?: TonalSpot

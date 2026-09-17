@@ -41,7 +41,7 @@ export function createBatteryPlans(
     settings.power_reset === BinaryFlag.On ? "已开启" : "已关闭",
   );
   const compatPlan = computed(() =>
-    settings.Compatibility_mode === BinaryFlag.On ? "已开启" : "已关闭",
+    settings.compatibility_mode === BinaryFlag.On ? "已开启" : "已关闭",
   );
 
   return {

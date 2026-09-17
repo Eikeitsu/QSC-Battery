@@ -140,7 +140,7 @@ qsc_current_is_charging() {
 
 # 触发电流节点探测（外部脚本）
 qsc_current_probe_ctrl_files() {
-	local script="${BINDIR:-}/list_curr.sh"
+	local script="${BINDIR:-}/list_current.sh"
 	[ -f "$script" ] || return 1
 	chmod 0755 "$script" 2>/dev/null
 	"$script" >/dev/null 2>&1

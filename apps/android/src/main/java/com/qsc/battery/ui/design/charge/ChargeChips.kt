@@ -101,8 +101,11 @@ fun ChargeSegmented(
                     .weight(1f)
                     .clip(RoundedCornerShape(8.dp))
                     .background(
-                        if (selected) ChargeTheme.colors.surface
-                        else Color.Transparent,
+                        if (selected) {
+                            ChargeTheme.colors.surface
+                        } else {
+                            Color.Transparent
+                        },
                     )
                     .clickable { onSelect(index) }
                     .padding(vertical = 8.dp),

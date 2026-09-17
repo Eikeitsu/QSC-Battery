@@ -403,7 +403,7 @@ export const cases = [
     },
     config: { ...FAST, power_stop: "80", power_start: "75", temperature_switch: "0" },
     node: { initial: "0", stop: "1", start: "0" },
-    data: { off_qsc: "" },
+    data: { module_off: "" },
     expect: {
       node: "0",
       files: { power_switch: false },
@@ -412,7 +412,7 @@ export const cases = [
   },
 
   {
-    // 曾经的严重 bug：停充生效时去关模块，恢复流程被 off_qsc 门禁跳过，
+    // 曾经的严重 bug：停充生效时去关模块，恢复流程被 module_off 门禁跳过，
     // 节点永远停在停充值上，手机再也充不进电
     name: "停充中关掉总开关 → 先还原节点再罢工",
     sysfs: {
@@ -424,7 +424,7 @@ export const cases = [
     },
     config: { ...FAST, power_stop: "80", power_start: "75", temperature_switch: "0" },
     node: { initial: "1", stop: "1", start: "0" },
-    data: { off_qsc: "", power_switch: "", battery_switch: "" },
+    data: { module_off: "", power_switch: "", battery_switch: "" },
     activeSwitch: true,
     expect: {
       node: "0",
@@ -446,7 +446,7 @@ export const cases = [
     config: { ...FAST, power_stop: "80", power_start: "75", temperature_switch: "0" },
     // 节点文件不存在 → 写入被 [ -f ] 跳过 → start_ok 恒为 0
     node: { initial: "1", stop: "1", start: "0", missing: true },
-    data: { off_qsc: "", power_switch: "" },
+    data: { module_off: "", power_switch: "" },
     expect: {
       files: { power_switch: true, resume_fail_hint: true },
       // 这条必须盖过「已关闭」，否则用户永远看不到真正的原因

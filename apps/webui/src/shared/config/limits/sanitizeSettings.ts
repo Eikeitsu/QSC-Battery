@@ -64,8 +64,8 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   next.unplug_restore =
     next.unplug_restore === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
   if (next.unplug_restore !== String(input.unplug_restore || BinaryFlag.On)) mark(true);
-  next.Compatibility_mode =
-    next.Compatibility_mode === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
+  next.compatibility_mode =
+    next.compatibility_mode === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
   const hold = String(next.stop_hold_wakelock || "auto");
   next.stop_hold_wakelock =
     hold === "0" || hold === "1" || hold === "auto" ? hold : "auto";

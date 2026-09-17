@@ -138,9 +138,9 @@ find /sys/ -name '*restrict*_cur*' 2>/dev/null \
 	| sort -u >"${LIST_CHARGE_CURRENT:-$DATADIR/list_charge_current}"
 
 # 电流节点探测（充电时才有可信读数；未在充则保留旧列表）
-if [ -f "${0%/*}/list_curr.sh" ]; then
-	chmod 0755 "${0%/*}/list_curr.sh" 2>/dev/null
-	"${0%/*}/list_curr.sh" >/dev/null 2>&1 || true
+if [ -f "${0%/*}/list_current.sh" ]; then
+	chmod 0755 "${0%/*}/list_current.sh" 2>/dev/null
+	"${0%/*}/list_current.sh" >/dev/null 2>&1 || true
 fi
 
 # 硬编码兜底：常见路径 + MCA（运行时存在才写）；电流墙/端口 suspend 见 charge.sh 末位兜底

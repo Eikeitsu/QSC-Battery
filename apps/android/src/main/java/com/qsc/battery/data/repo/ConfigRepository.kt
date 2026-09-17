@@ -34,7 +34,7 @@ class ConfigRepository(private val root: RootBridge) {
         val r = root.exec(
             "f='${ModulePaths.CONF}'; " +
                 "touch \"\$f\"; " +
-                "sed -i '/^${key}=/d' \"\$f\"; " +
+                "sed -i '/^$key=/d' \"\$f\"; " +
                 "printf '%s=%s\\n' '$key' '$escaped' >> \"\$f\"",
         )
         return r.ok
@@ -64,6 +64,7 @@ class ConfigRepository(private val root: RootBridge) {
             when {
                 line.startsWith("power_stop_schedule=") ->
                     stop += line.substringAfter("=").trim()
+
                 line.startsWith("notify_quiet_schedule=") ->
                     quiet += line.substringAfter("=").trim()
             }
@@ -72,7 +73,7 @@ class ConfigRepository(private val root: RootBridge) {
     }
 
     suspend fun replaceMultilineKey(key: String, lines: List<String>): Boolean {
-        val r = root.exec("sed -i '/^${key}=/d' '${ModulePaths.CONF}'")
+        val r = root.exec("sed -i '/^$key=/d' '${ModulePaths.CONF}'")
         if (!r.ok) return false
         for (line in lines) {
             val escaped = line.replace("'", "'\\''")

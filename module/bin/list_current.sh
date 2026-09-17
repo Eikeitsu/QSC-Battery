@@ -7,7 +7,7 @@
 #   scale=1    → 节点单位为 µA
 #   scale=1000 → 节点单位为 mA（写入时目标µA/1000）
 #
-# 用法：list_curr.sh [force]
+# 用法：list_current.sh [force]
 #   force=1 时跳过「是否在充」检查（调试用）
 
 . "${0%/*}/common.sh"
@@ -134,10 +134,10 @@ qsc_list_curr_emit_line() {
 if [ "$FORCE" != "1" ] && ! qsc_list_curr_is_charging; then
 	if [ -s "$CH_CURR_CTRL" ]; then
 		n="$(wc -l <"$CH_CURR_CTRL" | tr -d ' ')"
-		echo "[QSC] list_curr.sh: 未在充电，保留已有探测结果 ($n 条)" >&2
+		echo "[QSC] list_current.sh: 未在充电，保留已有探测结果 ($n 条)" >&2
 		qsc_log_once curr_skip debug "未在充电，保留已有电流节点列表（$n 条）"
 	else
-		echo "[QSC] list_curr.sh: 未在充电且无历史列表，跳过探测（插电后重试）" >&2
+		echo "[QSC] list_current.sh: 未在充电且无历史列表，跳过探测（插电后重试）" >&2
 		qsc_log_once curr_skip debug "未在充电且无历史电流节点，跳过探测"
 	fi
 	exit 0
@@ -171,7 +171,7 @@ rm -f "$prim" "$aux"
 if [ -s "$tmp_out" ]; then
 	sort -u "$tmp_out" -o "$CH_CURR_CTRL"
 	n="$(wc -l <"$CH_CURR_CTRL" | tr -d ' ')"
-	echo "[QSC] list_curr.sh: 探测到 $n 个电流节点 → $CH_CURR_CTRL" >&2
+	echo "[QSC] list_current.sh: 探测到 $n 个电流节点 → $CH_CURR_CTRL" >&2
 	if [ -n "${LOG_FILE:-}" ]; then
 		qsc_log debug "电流控制：节点探测完成，$n 个节点"
 	fi
@@ -179,7 +179,7 @@ else
 	if [ ! -s "$CH_CURR_CTRL" ]; then
 		: >"$CH_CURR_CTRL"
 	fi
-	echo "[QSC] list_curr.sh: 本轮未找到可用电流节点" >&2
+	echo "[QSC] list_current.sh: 本轮未找到可用电流节点" >&2
 	qsc_log warn "电流控制：本轮未找到可用电流节点（请插电后重试）"
 fi
 rm -f "$tmp_out"

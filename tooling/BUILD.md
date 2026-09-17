@@ -222,7 +222,7 @@ git push origin v2026.07.17.2
 
 **正式包** `QSC-Battery_v<version>.zip`：入口脚本 + `bin/lib/*` + 只读 `diagnose.sh` / `test_switch.sh` + 统一 CLI `qsc.sh`。
 
-**调试包** `QSC-Battery_v<version>-debug.zip`：另含 `testing.sh`、`diag2.sh`，并带 `bin/.qsc_debug`。
+**调试包** `QSC-Battery_v<version>-debug.zip`：另含 `test_harness.sh`、`diagnose_extra.sh`，并带 `bin/.qsc_debug`。
 
 ```bash
 npm run package:module         # 正式包
@@ -231,23 +231,23 @@ npm run package:module:debug   # 调试包（文件名带 -debug）
 
 ### bin 脚本职责
 
-| 路径                      | 职责                               |
-| ------------------------- | ---------------------------------- |
-| `common.sh`               | 路径初始化并加载 `lib/*`           |
-| `lib/util.sh`             | 安全读节点、温度换算               |
-| `lib/keys.sh`             | 音量键选择（安装与 Action）        |
-| `lib/battery_info.sh`     | 电池健康/容量/循环（Action/WebUI） |
-| `lib/profile.sh`          | 本机 MCA 探测与 `device.profile`   |
-| `lib/charge.sh`           | 停充/恢复写入与节点列表            |
-| `lib/jsonc.sh`            | current.json 解析                  |
-| `lib/current.sh`          | 电流控制（可选）                   |
-| `lib/status.sh`           | 动态 module.prop 简介              |
-| `lib/power_saver.sh`      | 自适应轮询间隔与事件等待           |
-| `qscd`                    | 事件唤醒守护（按 ABI 装入）        |
-| `qscd_fetch.sh`           | 守护的下载/切换/删除（WebUI 调用） |
-| `qsc_switch.sh`           | 停充策略主循环                     |
-| `list_switch.sh`          | 扫描本机节点生成列表               |
-| `detect_device.sh`        | 触发 profile 探测                  |
-| `diagnose.sh`             | 只读诊断（正式包）                 |
-| `test_switch.sh`          | 停充开关实测（正式包）             |
-| `testing.sh` / `diag2.sh` | 调试工具（仅 debug 包）            |
+| 路径                                    | 职责                               |
+| --------------------------------------- | ---------------------------------- |
+| `common.sh`                             | 路径初始化并加载 `lib/*`           |
+| `lib/util.sh`                           | 安全读节点、温度换算               |
+| `lib/keys.sh`                           | 音量键选择（安装与 Action）        |
+| `lib/battery_info.sh`                   | 电池健康/容量/循环（Action/WebUI） |
+| `lib/profile.sh`                        | 本机 MCA 探测与 `device.profile`   |
+| `lib/charge.sh`                         | 停充/恢复写入与节点列表            |
+| `lib/jsonc.sh`                          | current.json 解析                  |
+| `lib/current.sh`                        | 电流控制（可选）                   |
+| `lib/status.sh`                         | 动态 module.prop 简介              |
+| `lib/power_saver.sh`                    | 自适应轮询间隔与事件等待           |
+| `qscd`                                  | 事件唤醒守护（按 ABI 装入）        |
+| `qscd_fetch.sh`                         | 守护的下载/切换/删除（WebUI 调用） |
+| `qsc_switch.sh`                         | 停充策略主循环                     |
+| `list_switch.sh`                        | 扫描本机节点生成列表               |
+| `detect_device.sh`                      | 触发 profile 探测                  |
+| `diagnose.sh`                           | 只读诊断（正式包）                 |
+| `test_switch.sh`                        | 停充开关实测（正式包）             |
+| `test_harness.sh` / `diagnose_extra.sh` | 调试工具（仅 debug 包）            |

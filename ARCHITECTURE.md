@@ -16,7 +16,9 @@ Changing any of the following breaks upgrades for existing installs. Refactor so
 | Release asset habit             | `QSC-Battery_v*`                                                                         |
 | Update / Pages URLs             | existing `update.json` / `app-update.json` / Pages channels                              |
 
-Persisted config keys stay `snake_case` (`power_stop`, `off_qsc`, …). Do **not** mass-rename keys or `QSCV_*` env vars.
+Persisted config keys are `snake_case`. Magisk id / APP package / Magisk entry filenames stay frozen.
+
+**Layout cutover (one-shot):** first current-layout `versionCode` is `2026091701` (`QSC_LAYOUT_CUTOVER_CODE` in [`module/install/migrate.sh`](module/install/migrate.sh)). Installing over an older `QSC_Battery` wipes that module (uninstall + delete) and proceeds as a fresh install—no config/data keep, no dual-read of old keys. Later updates (`versionCode >= cutover`) use normal merge / hot update. Historical identifier map (dev-only): [`tooling/scripts/dev/naming-map.json`](tooling/scripts/dev/naming-map.json).
 
 Optional CI guard: grep workflows / PR checks should fail if `id=QSC_Battery` or `applicationId = "com.qsc.battery"` drift accidentally.
 
@@ -71,16 +73,19 @@ flowchart TB
 
 ## Naming conventions
 
-| Area             | Convention                                              |
-| ---------------- | ------------------------------------------------------- |
-| Tooling scripts  | kebab-case (`build-web.mjs`, `package-module.mjs`)      |
-| Vue / TypeScript | PascalCase components, camelCase functions              |
-| Kotlin           | Android official style                                  |
-| Shell helpers    | `qsc_*` function prefix; keep Magisk entry script names |
-| Config keys      | `snake_case` (existing + new)                           |
-| Daemon artifacts | see table below — do not invent parallel names          |
+| Area             | Convention                                                                                   |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| Tooling scripts  | kebab-case for Node/shell (`build-web.mjs`); **Python modules stay snake_case** (importable) |
+| Vue / TypeScript | PascalCase components, camelCase functions                                                   |
+| Kotlin           | Android official style + Compose PascalCase `@Composable`                                    |
+| Shell helpers    | `qsc_*` function prefix; Magisk entry script names frozen                                    |
+| Config keys      | `snake_case`                                                                                 |
+| Data markers     | clear names (`module_off`)                                                                   |
+| Daemon artifacts | see table below — do not invent parallel names                                               |
 
-Enforce conventions on **new / touched** code; avoid one-shot renames of persisted keys or Magisk id.
+Pre-cutover installs are wiped once at Magisk install when `versionCode < 2026091701` (see `qsc_wipe_incompatible_module`). No runtime key dual-read.
+
+Enforce on **new / touched** code; Magisk id / APP package remain frozen.
 
 ## Daemon name mapping
 

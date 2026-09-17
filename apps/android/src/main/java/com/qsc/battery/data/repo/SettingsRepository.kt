@@ -29,6 +29,7 @@ class SettingsRepository(private val context: Context) {
         val dynamicBatteryIcon = booleanPreferencesKey("dynamic_battery_icon")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
         val updateChannel = stringPreferencesKey("update_channel")
+
         /** 仅 CI 通道：updates/ci-dist 走 jsDelivr（默认开） */
         val preferCdn = booleanPreferencesKey("prefer_cdn")
     }
@@ -53,8 +54,7 @@ class SettingsRepository(private val context: Context) {
         UpdateChannel.fromWire(it[Keys.updateChannel])
     }
 
-    suspend fun updateChannel(): UpdateChannel =
-        UpdateChannel.fromWire(context.settingsStore.data.first()[Keys.updateChannel])
+    suspend fun updateChannel(): UpdateChannel = UpdateChannel.fromWire(context.settingsStore.data.first()[Keys.updateChannel])
 
     suspend fun setUpdateChannel(channel: UpdateChannel) {
         context.settingsStore.edit { it[Keys.updateChannel] = channel.wire }
@@ -64,18 +64,15 @@ class SettingsRepository(private val context: Context) {
         it[Keys.preferCdn] ?: false
     }
 
-    suspend fun preferCdn(): Boolean =
-        context.settingsStore.data.first()[Keys.preferCdn] ?: false
+    suspend fun preferCdn(): Boolean = context.settingsStore.data.first()[Keys.preferCdn] ?: false
 
     suspend fun setPreferCdn(enabled: Boolean) {
         context.settingsStore.edit { it[Keys.preferCdn] = enabled }
     }
 
-    suspend fun alternativeIconEnabled(): Boolean =
-        context.settingsStore.data.first()[Keys.alternativeIcon] ?: false
+    suspend fun alternativeIconEnabled(): Boolean = context.settingsStore.data.first()[Keys.alternativeIcon] ?: false
 
-    suspend fun dynamicBatteryIconEnabled(): Boolean =
-        context.settingsStore.data.first()[Keys.dynamicBatteryIcon] ?: false
+    suspend fun dynamicBatteryIconEnabled(): Boolean = context.settingsStore.data.first()[Keys.dynamicBatteryIcon] ?: false
 
     suspend fun setOnboardingDone(done: Boolean) {
         context.settingsStore.edit { it[Keys.onboardingDone] = done }

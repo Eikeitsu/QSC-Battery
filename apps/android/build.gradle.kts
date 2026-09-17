@@ -183,20 +183,22 @@ dependencies {
 
 spotless {
     // Android Kotlin 约定 4 空格；显式覆盖，避免仓库根 .editorconfig(indent=2) 影响
-    val kotlinIndent =
+    val kotlinStyle =
         mapOf(
             "indent_size" to "4",
             "ij_kotlin_imports_layout" to "*,java.**,javax.**,kotlin.**,^",
+            // Compose @Composable 使用 PascalCase 是惯例
+            "ktlint_function_naming_ignore_when_annotated_with" to "Composable",
         )
     kotlin {
         target("src/**/*.kt")
-        ktlint().editorConfigOverride(kotlinIndent)
+        ktlint().editorConfigOverride(kotlinStyle)
         trimTrailingWhitespace()
         endWithNewline()
     }
     kotlinGradle {
         target("*.gradle.kts")
-        ktlint().editorConfigOverride(kotlinIndent)
+        ktlint().editorConfigOverride(kotlinStyle)
         trimTrailingWhitespace()
         endWithNewline()
     }

@@ -7,14 +7,16 @@ object ModulePaths {
     const val CURRENT = "$MODDIR/config/current.json"
     const val PROFILES = "$MODDIR/config/profiles.json"
     const val DATADIR = "$MODDIR/data"
-    const val OFF_FLAG = "$DATADIR/off_qsc"
+    const val MODULE_OFF_FLAG = "$DATADIR/module_off"
     const val LOG_FILE = "$DATADIR/log.log"
     const val CHARGE_EVENTS = "$DATADIR/charge_events.log"
     const val CHARGE_HISTORY = "$DATADIR/charge_history.csv"
+
     /** LSPosed XP 稀疏日志（system_server 多路径写；Root 合并读） */
     const val XP_LOG = "/data/system/qsc_xp.log"
     const val XP_LOG_TMP = "/data/local/tmp/qsc_xp.log"
     const val XP_LOG_CACHE = "/cache/qsc_xp.log"
+
     /** Magisk 侧镜像 / 边沿事件（模块 data，Root 必可读） */
     const val XP_LOG_MODULE = "$DATADIR/xp.log"
     val XP_LOG_CANDIDATES: List<String> = listOf(XP_LOG, XP_LOG_TMP, XP_LOG_CACHE, XP_LOG_MODULE)
@@ -27,6 +29,7 @@ object ModulePaths {
     const val QSCD = "$MODDIR/bin/qscd"
     const val PROFILES_DIR = "$DATADIR/profiles"
     const val HOT_UPDATE_LOCK = "/data/adb/qsc/hot_update/lock"
+
     /** APP CLI 刷模块前 touch；customize.sh 读到则跳过音量键 */
     const val INSTALL_AUTO = "/data/adb/qsc/install_auto"
     const val STATUS_HELPER = "$MODDIR/bin/qsc_status.sh"

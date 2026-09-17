@@ -8,8 +8,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.qsc.battery.ui.design.charge.ChargeChoiceRow
 import com.qsc.battery.ui.design.charge.ChargeChipGroup
+import com.qsc.battery.ui.design.charge.ChargeChoiceRow
 import com.qsc.battery.ui.design.charge.ChargeDivider
 import com.qsc.battery.ui.design.charge.ChargeListRow
 import com.qsc.battery.ui.design.charge.ChargePresets

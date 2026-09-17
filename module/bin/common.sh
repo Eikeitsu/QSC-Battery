@@ -26,7 +26,7 @@ qsc_init_paths() {
 	CH_CURR_CTRL_FILES="$DATADIR/ch_curr_ctrl_files"
 	CH_CURR_WORKING="$DATADIR/ch_curr_working"
 	LOG_FILE="$DATADIR/log.log"
-	OFF_FLAG="$DATADIR/off_qsc"
+	MODULE_OFF_FLAG="$DATADIR/module_off"
 	DEVICE_PROFILE="$DATADIR/device.profile"
 	# 电池输入节点的根。QSC_SYSFS_ROOT 只由测试台设置，为空时展开结果与
 	# 写死绝对路径逐字节相同，线上行为不变。停充候选节点列表不走这个前缀：

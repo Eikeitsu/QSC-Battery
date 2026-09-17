@@ -114,7 +114,7 @@ onMounted(async () => {
       title="检测到其它充电模块"
       :label="`${compatHint} · 建议开启兼容模式`"
       is-link
-      @click="onSwitch('Compatibility_mode', true)"
+      @click="onSwitch('compatibility_mode', true)"
     />
     <SwitchCell
       title="显示充放电曲线"

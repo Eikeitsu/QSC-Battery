@@ -31,8 +31,11 @@ class LogViewModel(
 
     fun setTab(tab: LogTab) {
         _ui.update { it.copy(tab = tab) }
-        if (tab == LogTab.Lsp) refreshXp()
-        else refresh()
+        if (tab == LogTab.Lsp) {
+            refreshXp()
+        } else {
+            refresh()
+        }
     }
 
     fun setLevel(level: String) {

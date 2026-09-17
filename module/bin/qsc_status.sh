@@ -19,7 +19,7 @@ else
 fi
 
 printf '__QSC_MODULE_OFF__\n'
-if [ -f "$DATADIR/off_qsc" ] || [ -f "$MODDIR/disable" ]; then
+if [ -f "$DATADIR/module_off" ] || [ -f "$MODDIR/disable" ]; then
 	echo 1
 else
 	echo 0

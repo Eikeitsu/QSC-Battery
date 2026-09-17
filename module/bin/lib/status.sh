@@ -120,7 +120,7 @@ qsc_write_module_description() {
 }
 
 # 根据运行标志刷新简介。依赖 qsc_switch 已算出的变量（可缺省）。
-# 可选环境：off_qsc battery_level temperature battery_powered
+# 可选环境：module_off battery_level temperature battery_powered
 #           full_log current_mode_tag（或读 data/current_mode_tag）
 qsc_refresh_module_description() {
 	local level temp major inner outer
@@ -138,7 +138,7 @@ qsc_refresh_module_description() {
 		return 0
 	fi
 
-	if [ -f "$MODDIR/disable" ] || [ "${off_qsc:-0}" = "1" ] || [ -f "$OFF_FLAG" ]; then
+	if [ -f "$MODDIR/disable" ] || [ "${module_off:-0}" = "1" ] || [ -f "$MODULE_OFF_FLAG" ]; then
 		qsc_write_module_description "⛔已关闭" "模块未运行" \
 			"打开总开关或移除 disable 后恢复电量/温度停充"
 		return 0

@@ -191,7 +191,7 @@ qsc_write_loop_sleep() {
 	local normal="$1" maintain="$2"
 	normal="$(qsc_clamp_int "${normal:-3}" 2 30 3)"
 	maintain="$(qsc_clamp_int "${maintain:-8}" 3 60 8)"
-	if [ -f "$DATADIR/power_switch" ] && [ ! -f "$OFF_FLAG" ]; then
+	if [ -f "$DATADIR/power_switch" ] && [ ! -f "$MODULE_OFF_FLAG" ]; then
 		qsc_write_loop_sleep_value "$maintain"
 	else
 		qsc_write_loop_sleep_value "$normal"

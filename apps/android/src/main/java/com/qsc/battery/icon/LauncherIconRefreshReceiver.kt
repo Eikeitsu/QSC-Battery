@@ -22,6 +22,7 @@ class LauncherIconRefreshReceiver : BroadcastReceiver() {
             Intent.ACTION_BATTERY_LOW,
             Intent.ACTION_BATTERY_OKAY,
             -> Unit
+
             else -> return
         }
         val app = context.applicationContext

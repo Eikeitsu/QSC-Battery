@@ -57,7 +57,9 @@ fun LifecycleResumePollEffect(
                         }
                     }
                 }
+
                 Lifecycle.Event.ON_PAUSE -> job?.cancel()
+
                 else -> Unit
             }
         }

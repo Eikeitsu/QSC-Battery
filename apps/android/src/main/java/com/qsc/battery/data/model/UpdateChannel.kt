@@ -7,7 +7,6 @@ enum class UpdateChannel(val wire: String, val label: String) {
     ;
 
     companion object {
-        fun fromWire(raw: String?): UpdateChannel =
-            entries.firstOrNull { it.wire == raw } ?: Stable
+        fun fromWire(raw: String?): UpdateChannel = entries.firstOrNull { it.wire == raw } ?: Stable
     }
 }

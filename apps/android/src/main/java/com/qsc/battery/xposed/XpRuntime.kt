@@ -169,25 +169,35 @@ object XpRuntime {
             ?.let { "（$it）" }.orEmpty()
         val detail = when (level) {
             Level.Active -> "③ 框架已注入$fwHint"
+
             Level.Enabled -> when {
                 wrongScope ->
                     "② 仅勾了 android；注入 system_server 需勾「系统框架」包名 system 后重启"
+
                 hasPrimary && viaService ->
                     "② 服务已连接且作用域含 system$fwHint；重启后出现存活标记即③完成"
+
                 hasPrimary ->
                     "作用域已含 system；打开 APP 建立服务连接，重启后完成注入"
+
                 scopedAndroid && viaService ->
                     "① 服务已连接$fwHint；作用域需含系统框架 (system)"
+
                 scopeKnown && viaService ->
                     "① 服务已连接$fwHint，请勾选/请求系统框架 (system)"
+
                 viaService ->
                     "① 服务已连接$fwHint"
+
                 else ->
                     "模块已启用；打开本 APP 以连接 LSPosed 服务"
             }
+
             Level.Framework ->
                 "已检测到 LSPosed，请启用本模块并勾选系统框架 (system)；读作用域不必重启，注入需重启"
+
             Level.ManagerOnly -> "已安装 LSPosed 管理器"
+
             Level.None -> if (hasRoot) "未检测到 LSPosed" else "检测 XP 需 Root；或先安装 LSPosed"
         }
 

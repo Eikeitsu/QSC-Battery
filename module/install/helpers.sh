@@ -43,7 +43,7 @@ qsc_merge_config() {
 	local default_temperature_stop default_temperature_start
 	local default_stop_hold default_notify
 	local power_stop power_start power_stop_time charge_full power_reset
-	local Compatibility_mode
+	local compatibility_mode
 	local temperature_switch temperature_stop temperature_start
 	local stop_hold_wakelock notify_charge_event notify_kinds value _kinds
 
@@ -52,7 +52,7 @@ qsc_merge_config() {
 	default_power_stop_time="$(qsc_conf_value "$target" power_stop_time)" || return 1
 	default_charge_full="$(qsc_conf_value "$target" charge_full)" || return 1
 	default_power_reset="$(qsc_conf_value "$target" power_reset)" || return 1
-	default_compatibility_mode="$(qsc_conf_value "$target" Compatibility_mode)" || default_compatibility_mode=0
+	default_compatibility_mode="$(qsc_conf_value "$target" compatibility_mode)" || default_compatibility_mode=0
 	default_temperature_switch="$(qsc_conf_value "$target" temperature_switch)" || return 1
 	default_temperature_stop="$(qsc_conf_value "$target" temperature_switch_stop)" || return 1
 	default_temperature_start="$(qsc_conf_value "$target" temperature_switch_start)" || return 1
@@ -66,7 +66,7 @@ qsc_merge_config() {
 	power_stop_time="$default_power_stop_time"
 	charge_full="$default_charge_full"
 	power_reset="$default_power_reset"
-	Compatibility_mode="$default_compatibility_mode"
+	compatibility_mode="$default_compatibility_mode"
 	temperature_switch="$default_temperature_switch"
 	temperature_stop="$default_temperature_stop"
 	temperature_start="$default_temperature_start"
@@ -78,7 +78,7 @@ qsc_merge_config() {
 	value="$(qsc_conf_value "$source" power_stop_time)" && [ "$value" -ge 1 -a "$value" -le 3600 ] && power_stop_time="$value"
 	value="$(qsc_conf_value "$source" charge_full)" && [ "$value" -le 1 ] && charge_full="$value"
 	value="$(qsc_conf_value "$source" power_reset)" && [ "$value" -le 1 ] && power_reset="$value"
-	value="$(qsc_conf_value "$source" Compatibility_mode)" && [ "$value" -le 1 ] && Compatibility_mode="$value"
+	value="$(qsc_conf_value "$source" compatibility_mode)" && [ "$value" -le 1 ] && compatibility_mode="$value"
 	value="$(qsc_conf_value "$source" temperature_switch)" && [ "$value" -le 1 ] && temperature_switch="$value"
 	value="$(qsc_conf_value "$source" temperature_switch_stop)" && [ "$value" -le 100 ] && temperature_stop="$value"
 	value="$(qsc_conf_value "$source" temperature_switch_start)" && [ "$value" -le 100 ] && temperature_start="$value"
@@ -111,7 +111,7 @@ qsc_merge_config() {
 		-e "s/^power_stop_time=.*/power_stop_time=$power_stop_time/" \
 		-e "s/^charge_full=.*/charge_full=$charge_full/" \
 		-e "s/^power_reset=.*/power_reset=$power_reset/" \
-		-e "s/^Compatibility_mode=.*/Compatibility_mode=$Compatibility_mode/" \
+		-e "s/^compatibility_mode=.*/compatibility_mode=$compatibility_mode/" \
 		-e "s/^stop_hold_wakelock=.*/stop_hold_wakelock=$stop_hold_wakelock/" \
 		-e "s/^notify_charge_event=.*/notify_charge_event=$notify_charge_event/" \
 		-e "s/^notify_charge_kinds=.*/notify_charge_kinds=$notify_kinds/" \

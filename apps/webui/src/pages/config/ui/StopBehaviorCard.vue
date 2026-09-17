@@ -83,8 +83,8 @@ async function toggleKind(kind: "stop" | "resume" | "fail", on: boolean) {
     <SwitchCell
       title="兼容模式"
       label="与其它快充 / 限流模块同装时建议开启"
-      :model-value="store.settings.Compatibility_mode === '1'"
-      @update:model-value="(v) => onSwitch('Compatibility_mode', v)"
+      :model-value="store.settings.compatibility_mode === '1'"
+      @update:model-value="(v) => onSwitch('compatibility_mode', v)"
     />
     <SwitchCell
       title="停充/恢复通知"

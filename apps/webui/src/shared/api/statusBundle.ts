@@ -65,7 +65,7 @@ export async function loadStatusBundle(): Promise<{
     `MODDIR='${PATHS.MODDIR}'; . '${PATHS.MODDIR}/bin/common.sh' 2>/dev/null || exit 1; ` +
       `printf '__QSC_SNAPSHOT__\\n'; qsc_battery_snapshot_print; ` +
       `printf '__QSC_MODULE_OFF__\\n'; ` +
-      `[ -f '${PATHS.OFF_FLAG}' ] || [ -f '${PATHS.MODDIR}/disable' ] && echo 1 || echo 0; ` +
+      `[ -f '${PATHS.MODULE_OFF_FLAG}' ] || [ -f '${PATHS.MODDIR}/disable' ] && echo 1 || echo 0; ` +
       `printf '__QSC_CHARGING_STOPPED__\\n'; ` +
       `[ -f '${PATHS.DATADIR}/power_switch' ] && echo 1 || echo 0; ` +
       `printf '__QSC_DESCRIPTION__\\n'; ` +

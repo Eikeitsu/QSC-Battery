@@ -97,8 +97,11 @@ fun ConfigScreen(
                     ChargeSkeletonBox(height = 120.dp)
                     ChargeSkeletonBox(height = 80.dp)
                 }
+
                 !rootOk -> ChargeBanner("需要 Root 才能修改配置", BannerTone.Warn)
+
                 !moduleOk -> ChargeBanner("模块未安装", BannerTone.Warn)
+
                 !advancedOnly -> {
                     ConfigPowerSection(v = ::v, setLocal = ::setLocal, onEdit = { edit = it })
                     ConfigTempSection(v = ::v, setLocal = ::setLocal, onEdit = { edit = it })
@@ -110,6 +113,7 @@ fun ConfigScreen(
                         )
                     }
                 }
+
                 else -> {
                     ConfigAdvancedSections(
                         vm = vm,

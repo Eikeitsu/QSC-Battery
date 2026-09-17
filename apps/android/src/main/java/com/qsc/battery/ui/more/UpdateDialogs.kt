@@ -46,8 +46,10 @@ internal fun UpdateSwitchConfirmDialog(
                 when (target) {
                     UpdateTarget.Daemon ->
                         "本地守护高于当前通道，将热切换为通道版本（${r?.daemonRemote?.version ?: "--"}）。"
+
                     UpdateTarget.Module ->
                         "本地模块高于当前通道，将刷入通道包（${r?.moduleRemote?.version ?: "--"}），需在模块管理器中确认。"
+
                     UpdateTarget.App ->
                         "本地 APP 高于当前通道。系统通常拒绝降级安装，若失败请先卸载再装通道版（${r?.appRemote?.version ?: "--"}）。"
                 },

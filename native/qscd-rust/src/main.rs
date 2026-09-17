@@ -252,8 +252,8 @@ mod tests {
         contains, is_power_supply_event, normalize_temp, parse_secs, wait_event, BatterySnapshot,
         PowerState, SnapshotFailure, SnapshotSource, EXIT_NO_HIT, EXIT_OK, EXIT_UNUSABLE,
     };
-    use crate::watch::{parse_watch_args, Thresholds};
     use crate::pkgs_running;
+    use crate::watch::{parse_watch_args, Thresholds};
 
     const TEST_MATCH: &[u8] = b"SUBSYSTEM=power_supply";
 

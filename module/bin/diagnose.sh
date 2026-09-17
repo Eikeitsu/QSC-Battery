@@ -168,7 +168,7 @@ else
   echo "  最近开关实测: 无（请插电后执行 bin/test_switch.sh）" >> "$OUT"
 fi
 if [ -n "$CONF" ] && [ -f "$CONF" ]; then
-  echo "  Compatibility_mode=$(grep '^Compatibility_mode=' "$CONF" 2>/dev/null | sed 's/.*=//' | tr -d '\r')" >> "$OUT"
+  echo "  compatibility_mode=$(grep '^compatibility_mode=' "$CONF" 2>/dev/null | sed 's/.*=//' | tr -d '\r')" >> "$OUT"
 fi
 # 充电状态判定：MCA 机型 battery/status 可能插电充电时也报 Not charging，
 # 主循环靠 online 兜底判供电，这里把两边原始值都打出来便于对照
@@ -231,7 +231,7 @@ if [ -s "$_ctrl" ]; then
     echo "    $line" >> "$OUT"
   done <"$_ctrl"
 else
-  echo "  电流节点探测: 无（请插电充电后自动探测，或手动执行 bin/list_curr.sh）" >> "$OUT"
+  echo "  电流节点探测: 无（请插电充电后自动探测，或手动执行 bin/list_current.sh）" >> "$OUT"
 fi
 _work="${CH_CURR_WORKING:-$DATADIR/ch_curr_working}"
 if [ -s "$_work" ]; then

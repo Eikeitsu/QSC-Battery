@@ -292,7 +292,7 @@ qsc_ps_next_sleep() {
 		return 0
 	fi
 	# 维持停充：按维持间隔
-	if [ -f "$DATADIR/power_switch" ] && [ ! -f "$OFF_FLAG" ]; then
+	if [ -f "$DATADIR/power_switch" ] && [ ! -f "$MODULE_OFF_FLAG" ]; then
 		QSC_PS_WAIT_FALLBACK="${QSC_PS_MAINTAIN:-8}"
 		echo "${QSC_PS_MAINTAIN:-8}"
 		return 0

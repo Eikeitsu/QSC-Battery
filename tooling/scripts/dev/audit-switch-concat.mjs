@@ -36,7 +36,7 @@ const old = stripEntry(
     maxBuffer: 8e6,
   }),
 );
-const neo = ["switch_prelude", "switch_charge_full", "switch_eval", "switch_act"]
+const neo = ["switch_prelude", "switch_charge_full", "switch_eval", "switch_apply"]
   .map((n) => stripLib(readFileSync(join(root, "module/bin/lib", `${n}.sh`), "utf8")))
   .join("")
   .replace(/\n+$/, "\n");

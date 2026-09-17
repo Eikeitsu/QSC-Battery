@@ -60,7 +60,7 @@ charge_full_mode="${QSCV_charge_full_mode}"
 charge_full_wait_sec="${QSCV_charge_full_wait_sec}"
 power_reset="${QSCV_power_reset}"
 unplug_restore="${QSCV_unplug_restore}"
-Shut_down="${QSCV_Shut_down}"
+shut_down="${QSCV_shut_down}"
 power_stop="${QSCV_power_stop}"
 power_start="${QSCV_power_start}"
 temperature_switch="${QSCV_temperature_switch}"
@@ -82,7 +82,7 @@ esac
 charge_full_wait_sec="$(qsc_clamp_int "${charge_full_wait_sec:-600}" 60 3600 600)"
 power_reset="$(qsc_clamp_int "$power_reset" 0 1 0)"
 unplug_restore="$(qsc_clamp_int "${unplug_restore:-1}" 0 1 1)"
-Shut_down="$(qsc_clamp_int "$Shut_down" 0 20 0)"
+shut_down="$(qsc_clamp_int "$shut_down" 0 20 0)"
 power_stop="$(qsc_clamp_level_or_off "$power_stop" 100)"
 power_start="$(qsc_clamp_int "$power_start" 1 100 95)"
 if [ "$power_stop" -le 100 ] 2>/dev/null && [ "$power_stop" -le "$power_start" ] 2>/dev/null; then
@@ -108,7 +108,7 @@ fi
 if [ "$temperature_switch_stop" != "$_raw_temp_stop" ] || [ "$temperature_switch_start" != "$_raw_temp_start" ]; then
 	qsc_log_once cfg_temp warn "温控阈值已纠正 ${_raw_temp_stop}/${_raw_temp_start} → 停充${temperature_switch_stop}°C 恢复${temperature_switch_start}°C"
 fi
-off_qsc=0
+module_off=0
 # 低电量安全线：低于它就忽略温控与按 App 停充，强制恢复充电。
 # 故意不做成配置项——安全底线不应该能被关掉。
 QSC_EMERGENCY_LEVEL=20
@@ -163,8 +163,8 @@ if [ ! -n "$temperature" ]; then
 	exit 0
 fi
 
-if [ -f "$OFF_FLAG" -o -f "$MODDIR/disable" ]; then
-	off_qsc=1
+if [ -f "$MODULE_OFF_FLAG" -o -f "$MODDIR/disable" ]; then
+	module_off=1
 	qsc_log_once mod_off warn "充电控制已关闭，跳过停充与电流控制"
 	power_stop="110"
 	power_start="105"
@@ -215,11 +215,11 @@ if [ ! -f "$DATADIR/.orphan_checked" ] && type qsc_orphan_stop_check >/dev/null 
 fi
 
 # 关掉总开关时先把充电节点还原，再罢工。
-# 停充生效期间去关模块，原先会直接跳过 484 行那段恢复流程（它有 off_qsc 门禁），
+# 停充生效期间去关模块，原先会直接跳过 484 行那段恢复流程（它有 module_off 门禁），
 # 节点就永远停在停充值上：手机再也充不进电，而模块简介显示「已关闭 / 模块未运行」，
 # 没人会怀疑到模块头上。放在 qsc_build_switch_list 之后，是因为 qsc_power_start
 # 要用它算出的 switch_list 与 QSC_USER_SWITCHES。
-if [ "$off_qsc" = "1" ] && [ -f "$DATADIR/power_switch" ]; then
+if [ "$module_off" = "1" ] && [ -f "$DATADIR/power_switch" ]; then
 	qsc_power_start
 	if [ "$start_ok" = "1" ]; then
 		rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" \

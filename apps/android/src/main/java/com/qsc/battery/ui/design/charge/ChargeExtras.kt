@@ -59,10 +59,8 @@ fun ChargeTopBar(
     subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    /**
-     * 顶栏节奏：状态栏 → 标题区 → 与正文的明确空隙。
-     * 空隙与页面同色，不是分割线；用来建立层级，避免标题贴内容。
-     */
+    // 顶栏节奏：状态栏 → 标题区 → 与正文的明确空隙。
+    // 空隙与页面同色，不是分割线；用来建立层级，避免标题贴内容。
     // 透明顶栏：让 ChargeScaffold 左上角氛围渐变连贯穿过标题区，避免白条切断
     Column(
         modifier = modifier
@@ -177,8 +175,11 @@ fun ChargeChipGroup(
                 modifier = Modifier
                     .clip(RoundedCornerShape(999.dp))
                     .background(
-                        if (selected) ChargeTheme.colors.accent.copy(alpha = 0.14f)
-                        else ChargeTheme.colors.surfaceStrong,
+                        if (selected) {
+                            ChargeTheme.colors.accent.copy(alpha = 0.14f)
+                        } else {
+                            ChargeTheme.colors.surfaceStrong
+                        },
                     )
                     .border(
                         width = 1.dp,
@@ -229,7 +230,13 @@ fun ChargeChoiceRow(
         val all = if (onCustom != null) chips + ChargeChip("__custom__", customLabel) else chips
         ChargeChipGroup(
             chips = all,
-            selectedId = if (chips.any { it.id == selectedId }) selectedId else if (onCustom != null) "__custom__" else selectedId,
+            selectedId = if (chips.any { it.id == selectedId }) {
+                selectedId
+            } else if (onCustom != null) {
+                "__custom__"
+            } else {
+                selectedId
+            },
             onSelect = { id ->
                 if (id == "__custom__") onCustom?.invoke() else onSelect(id)
             },
@@ -375,10 +382,15 @@ fun batteryStatusLabel(
     if (stopped) return "已停充"
     return when (raw.trim().lowercase()) {
         "charging", "2" -> if (powered) "充电中" else "未充电"
+
         "full", "5" -> if (powered) "已充满" else "未充电"
+
         "discharging", "3" -> "未充电"
+
         "not charging", "not_charging", "4" -> if (powered) "供电中" else "未充电"
+
         "unknown", "1", "" -> if (powered) "已插电" else "未知"
+
         else -> when {
             powered -> raw.ifBlank { "已插电" }
             else -> "未充电"
@@ -407,11 +419,16 @@ fun isActivelyCharging(statusRaw: String, powered: Boolean, stopped: Boolean): B
     if (stopped || !powered) return false
     return when (statusRaw.trim().lowercase()) {
         "3", "discharging" -> false
+
         "charging", "2" -> true
+
         "full", "5" -> true
+
         // MCA 插电常报 Not charging：文案走「供电中」，不要标成「充电中」动效
         "not charging", "not_charging", "4" -> false
+
         "unknown", "1", "" -> true
+
         else -> true
     }
 }

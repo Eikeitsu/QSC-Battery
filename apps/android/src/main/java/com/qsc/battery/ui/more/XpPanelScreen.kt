@@ -55,14 +55,19 @@ fun XpPanelScreen(
 
     val banner = when {
         status == null -> null
+
         status.frameworkAlive ->
             "③ 已注入 system_server。qscd 正常时「未武装」是预期；守护不可用时才会武装边沿唤醒。" to BannerTone.Ok
+
         status.scopeHintWrong ->
             "仅勾了 android 不够。请勾选「系统框架」包名 system（注入 system_server），再重启。" to BannerTone.Warn
+
         status.hasPrimaryScope && status.serviceBound ->
             "② 已含 system。请重启一次以完成③注入（出现存活标记）。" to BannerTone.Info
+
         status.serviceBound ->
             "① 服务已连接。请请求或勾选系统框架 (system)，再重启。" to BannerTone.Warn
+
         else ->
             "请先在 LSPosed 启用本模块，再打开本页连接服务。" to BannerTone.Warn
     }
@@ -106,10 +111,13 @@ fun XpPanelScreen(
                     summary = when {
                         status?.hasPrimaryScope == true ->
                             "已含 ${XpPrefs.scopeLabel(XpPrefs.PRIMARY_SCOPE)}"
+
                         status?.scopeHintWrong == true ->
                             "仅有 android；应改为 system"
+
                         status?.scopeKnown == true ->
                             "未含 system"
+
                         else -> "未知"
                     },
                     value = when {

@@ -95,8 +95,11 @@ fun AppearanceScreen(
                                 .height(72.dp)
                                 .clip(RoundedCornerShape(ChargeTheme.dimens.radiusMd))
                                 .background(
-                                    if (selected) ChargeTheme.colors.accent.copy(alpha = 0.12f)
-                                    else ChargeTheme.colors.surface,
+                                    if (selected) {
+                                        ChargeTheme.colors.accent.copy(alpha = 0.12f)
+                                    } else {
+                                        ChargeTheme.colors.surface
+                                    },
                                 )
                                 .border(
                                     width = if (selected) 2.dp else 1.dp,

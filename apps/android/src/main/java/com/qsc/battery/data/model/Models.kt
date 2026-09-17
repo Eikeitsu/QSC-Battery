@@ -34,7 +34,7 @@ object ConfigKeys {
     val ALL = listOf(
         "power_stop", "power_start", "power_stop_time", "charge_full",
         "charge_full_mode", "charge_full_wait_sec", "power_reset", "unplug_restore",
-        "Compatibility_mode", "stop_hold_wakelock", "notify_charge_event", "notify_charge_kinds",
+        "compatibility_mode", "stop_hold_wakelock", "notify_charge_event", "notify_charge_kinds",
         "notify_power_status", "temperature_switch", "temperature_switch_stop",
         "temperature_switch_start", "loop_interval_sec", "loop_interval_maintain_sec",
         "switch_verify_sec", "switch_batch_blind", "wireless_policy", "app_stop", "app_stop_list",
@@ -53,7 +53,7 @@ object ConfigKeys {
         "charge_full_wait_sec" to "600",
         "power_reset" to "0",
         "unplug_restore" to "1",
-        "Compatibility_mode" to "0",
+        "compatibility_mode" to "0",
         "stop_hold_wakelock" to "auto",
         "notify_charge_event" to "0",
         "notify_charge_kinds" to "stop,resume,fail",

@@ -81,8 +81,9 @@ object XpServiceHolder : XposedServiceHelper.OnServiceListener {
     fun runningTargetNames(svc: XposedService? = service): List<String> {
         val s = svc ?: return emptyList()
         return runCatching {
-            if (s.apiVersion < 102) emptyList()
-            else {
+            if (s.apiVersion < 102) {
+                emptyList()
+            } else {
                 s.runningTargets.mapNotNull { t ->
                     runCatching { t.processName }.getOrNull()?.takeIf { it.isNotBlank() }
                 }
@@ -90,8 +91,7 @@ object XpServiceHolder : XposedServiceHelper.OnServiceListener {
         }.getOrDefault(emptyList())
     }
 
-    fun remotePrefs(svc: XposedService? = service): SharedPreferences? =
-        runCatching { svc?.getRemotePreferences(XpPrefs.REMOTE_GROUP) }.getOrNull()
+    fun remotePrefs(svc: XposedService? = service): SharedPreferences? = runCatching { svc?.getRemotePreferences(XpPrefs.REMOTE_GROUP) }.getOrNull()
 
     /**
      * 请求系统框架作用域（虚拟包名 `system` → system_server）。

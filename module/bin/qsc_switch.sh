@@ -5,4 +5,4 @@
 . "$LIBDIR/switch_prelude.sh"
 . "$LIBDIR/switch_charge_full.sh"
 . "$LIBDIR/switch_eval.sh"
-. "$LIBDIR/switch_act.sh"
+. "$LIBDIR/switch_apply.sh"

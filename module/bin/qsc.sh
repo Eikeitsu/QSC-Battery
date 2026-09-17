@@ -16,7 +16,7 @@ else
 fi
 
 # 允许 CLI 改写的单行配置键（与 apps/webui/APP 常用项对齐）
-QSC_CLI_CONF_KEYS="power_stop power_start power_stop_time charge_full charge_full_mode charge_full_wait_sec power_reset unplug_restore Compatibility_mode Shut_down loop_interval_sec loop_interval_maintain_sec switch_verify_sec switch_batch_blind wireless_policy app_stop app_stop_list history_enable history_interval_sec temperature_switch temperature_switch_stop temperature_switch_start notify_power_status notify_charge_event native_daemon native_impl"
+QSC_CLI_CONF_KEYS="power_stop power_start power_stop_time charge_full charge_full_mode charge_full_wait_sec power_reset unplug_restore compatibility_mode shut_down loop_interval_sec loop_interval_maintain_sec switch_verify_sec switch_batch_blind wireless_policy app_stop app_stop_list history_enable history_interval_sec temperature_switch temperature_switch_stop temperature_switch_start notify_power_status notify_charge_event native_daemon native_impl"
 
 qsc_cli_usage() {
 	cat <<EOF
@@ -27,8 +27,8 @@ QSC-Battery CLI
 
 命令:
   status [--raw]          电池/模块状态（默认人类可读；--raw 为 APP 分段格式）
-  on                      开启充电控制（删除 data/off_qsc）
-  off                     关闭充电控制（写入 data/off_qsc，不卸载模块）
+  on                      开启充电控制（删除 data/module_off）
+  off                     关闭充电控制（写入 data/module_off，不卸载模块）
   toggle                  切换 on/off
   config list             列出可读写配置键及当前值
   config get <键>         读取配置
@@ -60,7 +60,7 @@ qsc_cli_version() {
 }
 
 qsc_cli_is_on() {
-	[ ! -f "$OFF_FLAG" ] && [ ! -f "$MODDIR/disable" ]
+	[ ! -f "$MODULE_OFF_FLAG" ] && [ ! -f "$MODDIR/disable" ]
 }
 
 qsc_cli_snap_kv() {
@@ -85,7 +85,7 @@ qsc_cli_status_human() {
 	st="$(qsc_cli_snap_kv status "$snap")"
 	plugged="$(qsc_cli_snap_kv powered "$snap")"
 	[ -z "$plugged" ] && plugged="$(qsc_cli_snap_kv plugged "$snap")"
-	if [ -f "$OFF_FLAG" ] || [ -f "$MODDIR/disable" ]; then off=1; else off=0; fi
+	if [ -f "$MODULE_OFF_FLAG" ] || [ -f "$MODDIR/disable" ]; then off=1; else off=0; fi
 	if [ -f "$DATADIR/power_switch" ]; then stopped=1; else stopped=0; fi
 	ver="$(grep '^version=' "$MODDIR/module.prop" 2>/dev/null | cut -d= -f2-)"
 	curr="$(cat /sys/class/power_supply/battery/current_now 2>/dev/null | tr -d ' \r\n')"
@@ -213,21 +213,21 @@ case "$cmd" in
 		esac
 		;;
 	on)
-		rm -f "$OFF_FLAG"
+		rm -f "$MODULE_OFF_FLAG"
 		echo "已开启充电控制"
 		;;
 	off)
 		mkdir -p "$DATADIR"
-		: >"$OFF_FLAG"
+		: >"$MODULE_OFF_FLAG"
 		echo "已关闭充电控制（软开关；模块仍安装）"
 		;;
 	toggle)
 		if qsc_cli_is_on; then
 			mkdir -p "$DATADIR"
-			: >"$OFF_FLAG"
+			: >"$MODULE_OFF_FLAG"
 			echo "已关闭充电控制"
 		else
-			rm -f "$OFF_FLAG"
+			rm -f "$MODULE_OFF_FLAG"
 			echo "已开启充电控制"
 		fi
 		;;

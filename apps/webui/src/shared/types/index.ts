@@ -9,7 +9,7 @@ export type ConfigKey =
   | "charge_full_wait_sec"
   | "power_reset"
   | "unplug_restore"
-  | "Compatibility_mode"
+  | "compatibility_mode"
   | "stop_hold_wakelock"
   | "notify_charge_event"
   | "notify_charge_kinds"

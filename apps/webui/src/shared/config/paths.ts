@@ -12,7 +12,7 @@ export const PATHS = {
   TEST_SWITCH: `${ROOT}/bin/test_switch.sh`,
   TEST_SWITCH_BG: `${ROOT}/bin/test_switch_bg.sh`,
   DATADIR: `${ROOT}/data`,
-  OFF_FLAG: `${ROOT}/data/off_qsc`,
+  MODULE_OFF_FLAG: `${ROOT}/data/module_off`,
   LOG_FILE: `${ROOT}/data/log.log`,
   LIST_SWITCH: `${ROOT}/data/list_switch`,
   DEVICE_PROFILE: `${ROOT}/data/device.profile`,
