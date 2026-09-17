@@ -111,8 +111,8 @@ fun ModuleInstallConsoleScreen(
             progress = 1f
             log("# saved ${file.absolutePath} (${file.length()} bytes)")
             val localCode = container.statusRepository.readModuleProp()?.versionCode ?: 0L
-            if (localCode in 1 until ModulePaths.LAYOUT_CUTOVER_CODE) {
-                log("# layout cutover: local versionCode=$localCode < ${ModulePaths.LAYOUT_CUTOVER_CODE}")
+            if (localCode in 1 until ModulePaths.CLEAN_CUTOVER_CODE) {
+                log("# clean cutover: local versionCode=$localCode < ${ModulePaths.CLEAN_CUTOVER_CODE}")
                 log("# will wipe conf/data (unattended still applies); reboot + reconfigure required")
             }
             log("# enabling unattended defaults (${ModulePaths.INSTALL_AUTO})")
@@ -135,9 +135,20 @@ fun ModuleInstallConsoleScreen(
                     if (r.out.isNotBlank()) r.out.lineSequence().forEach { log(it) }
                     if (r.err.isNotBlank()) r.err.lineSequence().forEach { log("! $it") }
                     log("# exit=${r.code}")
-                    if (r.ok) {
+                    val out = (r.out + "\n" + r.err)
+                    val customizeStarted = out.contains("充电控制 (QSC-Battery)")
+                    val ok = r.ok ||
+                        Regex("\\bSuccess\\b", RegexOption.IGNORE_CASE).containsMatchIn(out) ||
+                        out.contains("强制完整重装完成") ||
+                        out.contains("热更新将重启充电控制服务")
+                    if (ok) {
                         installed = true
                         log("# ok: installer accepted module")
+                        break
+                    }
+                    // 已进入本模块 customize：勿再换安装器重跑
+                    if (customizeStarted) {
+                        log("# customize already ran — stop trying other installers")
                         break
                     }
                 }

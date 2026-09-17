@@ -101,12 +101,12 @@ export function useUpdateChannelCard() {
       }
     }
     const localCode = result.value?.moduleLocalCode ?? 0;
-    if (localCode > 0 && localCode < api.LAYOUT_CUTOVER_CODE) {
+    if (localCode > 0 && localCode < api.CLEAN_CUTOVER_CODE) {
       try {
         await showConfirmDialog({
           title: "需完整重装",
           message:
-            "当前模块布局不兼容本版更新：将清空配置与 data 后按全新安装（无人值守同样生效），完成后请重启并重新设置。",
+            "当前安装与本版不兼容：将清空配置与 data 后按全新安装（无人值守同样生效），完成后请重启并重新设置。",
         });
       } catch {
         return;

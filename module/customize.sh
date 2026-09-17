@@ -61,7 +61,7 @@ CONFIG_BACKUP="${TMPDIR:-/data/local/tmp}/qsc-config-backup.$$"
 CURRENT_JSON_BACKUP="${TMPDIR:-/data/local/tmp}/qsc-current-json-backup.$$"
 rm -f "$CONFIG_BACKUP" "$CURRENT_JSON_BACKUP"
 
-# 切断线前旧布局 → 清空后按全新安装（不保留旧 conf/data）
+# 切断线前旧版 → 清空后按全新安装（不保留旧 conf/data）
 # APP / WebUI 无人值守与 Magisk 管理器走同一 customize，此处统一切断。
 QSC_FORCE_CLEAN_INSTALL=0
 if qsc_wipe_incompatible_module; then
@@ -69,7 +69,7 @@ if qsc_wipe_incompatible_module; then
 	KEEP_CONFIG=0
 	rm -f "$CONFIG_BACKUP" "$CURRENT_JSON_BACKUP"
 	if [ "$QSC_INSTALL_AUTO" = "1" ]; then
-		ui_print "- 无人值守：布局不兼容，已强制完整重装（不保留配置）"
+		ui_print "- 无人值守：与旧版不兼容，已强制完整重装（不保留配置）"
 	fi
 fi
 

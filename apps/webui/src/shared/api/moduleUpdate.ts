@@ -13,8 +13,10 @@ export interface LocalModuleInfo {
 /** 与 APP ModulePaths.INSTALL_AUTO 一致：customize.sh 见此文件则跳过音量键 */
 const INSTALL_AUTO = "/data/adb/qsc/install_auto";
 
-/** 与 module/install/migrate.sh QSC_LAYOUT_CUTOVER_CODE 对齐 */
-export const LAYOUT_CUTOVER_CODE = 2026091701;
+/** 与 module/install/migrate.sh QSC_CLEAN_CUTOVER_CODE 对齐 */
+export const CLEAN_CUTOVER_CODE = 2026091701;
+/** @deprecated 使用 CLEAN_CUTOVER_CODE */
+export const LAYOUT_CUTOVER_CODE = CLEAN_CUTOVER_CODE;
 
 /** 常见模块管理器包名（CLI 失败时兜底）。 */
 const MANAGER_PACKAGES = [
@@ -29,15 +31,12 @@ const MANAGER_PACKAGES = [
 
 const INSTALL_TIMEOUT_MS = 300_000;
 
-export async function readLocalModule(): Promise<LocalModuleInfo | null> {
-  const r = await exec(
-    `grep -E '^(version|versionCode)=' '${PATHS.MODDIR}/module.prop' 2>/dev/null`,
-    8_000,
-  );
-  if (r.errno !== 0 && !r.stdout) return null;
+const MODULES_UPDATE = `/data/adb/modules_update/${APP.moduleId}`;
+
+function parseModulePropText(text: string): LocalModuleInfo | null {
   let version = "";
   let versionCode = 0;
-  for (const line of (r.stdout || "").split("\n")) {
+  for (const line of text.split(/\r?\n/)) {
     const v = line.match(/^version=(.*)$/);
     if (v) version = (v[1] || "").trim();
     const c = line.match(/^versionCode=(.*)$/);
@@ -45,6 +44,38 @@ export async function readLocalModule(): Promise<LocalModuleInfo | null> {
   }
   if (!version && !versionCode) return null;
   return { version, versionCode };
+}
+
+export async function readLocalModule(): Promise<LocalModuleInfo | null> {
+  // 强制完整重装后、重启前：新包常在 modules_update，modules 可能已被清空。
+  // 两处都读，取 versionCode 更大的，避免误判「未安装」再次刷入造成循环。
+  const r = await exec(
+    [
+      `A='${PATHS.MODDIR}/module.prop'`,
+      `B='${MODULES_UPDATE}/module.prop'`,
+      `out=''`,
+      `for f in "$A" "$B"; do`,
+      `  [ -f "$f" ] || continue`,
+      `  t=$(grep -E '^(version|versionCode)=' "$f" 2>/dev/null || true)`,
+      `  [ -n "$t" ] || continue`,
+      `  c=$(printf '%s\\n' "$t" | sed -n 's/^versionCode=//p' | head -n1 | tr -d ' \\r')`,
+      `  case "$c" in ''|*[!0-9]*) c=0 ;; esac`,
+      `  printf 'CODE=%s\\n%s\\n--\\n' "$c" "$t"`,
+      `done`,
+    ].join("\n"),
+    8_000,
+  );
+  const raw = r.stdout || "";
+  if (!raw.trim()) return null;
+  let best: LocalModuleInfo | null = null;
+  for (const block of raw.split("--\n")) {
+    const codeLine = block.match(/^CODE=(\d+)/m);
+    const info = parseModulePropText(block);
+    if (!info) continue;
+    if (codeLine) info.versionCode = Number(codeLine[1]) || info.versionCode;
+    if (!best || info.versionCode >= best.versionCode) best = info;
+  }
+  return best;
 }
 
 function shellQuote(s: string): string {
@@ -114,7 +145,7 @@ async function clearUnattended(): Promise<void> {
   silentUnlinkFile(INSTALL_AUTO);
 }
 
-/** Root CLI 刷入；任一成功即返回 */
+/** Root CLI 刷入；任一成功即返回。customize 已跑过则不再试下一个安装器，避免循环刷入。 */
 async function installModuleCli(zip: string): Promise<{ ok: boolean; detail: string }> {
   const path = zip.replace(/'/g, "");
   const attempts = [
@@ -133,13 +164,18 @@ async function installModuleCli(zip: string): Promise<{ ok: boolean; detail: str
     const out = `${r.stdout || ""}\n${r.stderr || ""}`.trim();
     if (out) logs.push(out);
     logs.push(`# exit=${r.errno}`);
-    // 与 APP RootBridge 一致：优先看 errno；部分环境成功输出含 Success
-    if (
+    const customizeStarted = /充电控制 \(QSC-Battery\)/.test(out);
+    const ok =
       r.errno === 0 ||
       /\bSuccess\b/i.test(out) ||
-      /installed successfully/i.test(out)
-    ) {
+      /installed successfully/i.test(out) ||
+      /强制完整重装完成|热更新将重启充电控制服务/.test(out);
+    if (ok) {
       return { ok: true, detail: logs.join("\n") };
+    }
+    // 已进入本模块 customize：勿再换安装器重跑一遍
+    if (customizeStarted) {
+      return { ok: false, detail: logs.join("\n") };
     }
   }
   return { ok: false, detail: logs.join("\n") };

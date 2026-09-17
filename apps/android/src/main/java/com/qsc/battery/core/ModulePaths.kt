@@ -34,10 +34,13 @@ object ModulePaths {
     const val INSTALL_AUTO = "/data/adb/qsc/install_auto"
 
     /**
-     * 与 module/install/migrate.sh 的 QSC_LAYOUT_CUTOVER_CODE 对齐。
+     * 与 module/install/migrate.sh 的 QSC_CLEAN_CUTOVER_CODE 对齐。
      * 本地 versionCode 低于此值时刷入会强制清空 conf/data。
      */
-    const val LAYOUT_CUTOVER_CODE = 2026091701L
+    const val CLEAN_CUTOVER_CODE = 2026091701L
+
+    @Deprecated("Use CLEAN_CUTOVER_CODE")
+    const val LAYOUT_CUTOVER_CODE = CLEAN_CUTOVER_CODE
 
     const val STATUS_HELPER = "$MODDIR/bin/qsc_status.sh"
 }

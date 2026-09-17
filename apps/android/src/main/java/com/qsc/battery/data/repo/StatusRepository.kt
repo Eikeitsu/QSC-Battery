@@ -31,15 +31,25 @@ class StatusRepository(private val root: RootBridge) {
     }
 
     suspend fun readModuleProp(): ModuleProp? {
-        val text = root.readFile(ModulePaths.MODULE_PROP) ?: return null
-        fun grab(key: String) = text.lineSequence().firstOrNull { it.startsWith("$key=") }?.substringAfter("=")?.trim().orEmpty()
-        return ModuleProp(
-            id = grab("id"),
-            name = grab("name"),
-            version = grab("version"),
-            versionCode = grab("versionCode").toLongOrNull() ?: 0L,
-            description = grab("description"),
+        // 强制完整重装后、重启前新包可能只在 modules_update
+        val texts = listOf(
+            root.readFile(ModulePaths.MODULE_PROP),
+            root.readFile("/data/adb/modules_update/${ModulePaths.MODULE_ID}/module.prop"),
         )
+        var best: ModuleProp? = null
+        for (text in texts) {
+            if (text.isNullOrBlank()) continue
+            fun grab(key: String) = text.lineSequence().firstOrNull { it.startsWith("$key=") }?.substringAfter("=")?.trim().orEmpty()
+            val prop = ModuleProp(
+                id = grab("id"),
+                name = grab("name"),
+                version = grab("version"),
+                versionCode = grab("versionCode").toLongOrNull() ?: 0L,
+                description = grab("description"),
+            )
+            if (best == null || prop.versionCode >= best.versionCode) best = prop
+        }
+        return best
     }
 
     suspend fun setModuleEnabled(enabled: Boolean): Boolean = if (enabled) root.rm(ModulePaths.MODULE_OFF_FLAG) else root.touch(ModulePaths.MODULE_OFF_FLAG)

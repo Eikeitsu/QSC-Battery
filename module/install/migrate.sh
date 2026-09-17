@@ -1,9 +1,11 @@
 #!/system/bin/sh
-# old module helpers / one-shot incompatible-layout cutover
+# old module helpers / one-shot clean reinstall cutover
 
-# 当前布局首版 versionCode：已装模块若低于此值，安装时强制卸净并当全新安装。
-# 此后任意更高 versionCode 的更新都走正常保留配置 / 热更新，不会再次切断。
-QSC_LAYOUT_CUTOVER_CODE=2026091701
+# 完整重装切断线：已装模块 versionCode 低于此值则卸净并当全新安装。
+# 此后更高 versionCode 走正常保留配置 / 热更新。
+QSC_CLEAN_CUTOVER_CODE=2026091701
+# 兼容旧变量名（热更新脚本可能仍引用）
+QSC_LAYOUT_CUTOVER_CODE="$QSC_CLEAN_CUTOVER_CODE"
 
 qsc_old_module_name() {
 	case "$1" in
@@ -31,14 +33,14 @@ qsc_wipe_incompatible_module() {
 			# 无有效 versionCode 也视为切断线前残留
 			;;
 		*)
-			[ "$_cut_code" -ge "$QSC_LAYOUT_CUTOVER_CODE" ] 2>/dev/null && return 1
+			[ "$_cut_code" -ge "$QSC_CLEAN_CUTOVER_CODE" ] 2>/dev/null && return 1
 			;;
 	esac
 
 	ui_print "--------------------------------"
 	ui_print " 检测到不兼容的旧版模块 (versionCode=${_cut_code:-?})"
-	ui_print " 本版变更较大：将强制完整重装（不保留配置 / data / 外部 qsc）"
-	ui_print " 切断阈值 versionCode=$QSC_LAYOUT_CUTOVER_CODE"
+	ui_print " 变更较大：将强制完整重装（不保留配置 / data / 外部 qsc）"
+	ui_print " 切断阈值 versionCode=$QSC_CLEAN_CUTOVER_CODE"
 
 	if [ -f "$_cut_path/uninstall.sh" ]; then
 		ui_print "- 执行旧模块 uninstall.sh…"
@@ -46,10 +48,17 @@ qsc_wipe_incompatible_module() {
 		sh "$_cut_path/uninstall.sh" >/dev/null 2>&1 || true
 	fi
 	rm -rf "$_cut_path"
-	# 外部工作区一并清空（热更新副本 / 诊断 / 旧 CLI）；install_auto 已在 customize 开头读入内存
+	# 外部工作区一并清空；保留/恢复 install_auto，避免无人值守中途丢 flag 导致二次刷入
+	_keep_auto=0
+	[ -f /data/adb/qsc/install_auto ] && _keep_auto=1
+	[ "${QSC_INSTALL_AUTO:-0}" = "1" ] && _keep_auto=1
 	pkill -f '/data/adb/qsc/hot_update/worker.sh' 2>/dev/null || true
 	pkill -f '/data/adb/qsc/hot_update/verify.sh' 2>/dev/null || true
 	rm -rf /data/adb/qsc 2>/dev/null || true
+	if [ "$_keep_auto" = "1" ]; then
+		mkdir -p /data/adb/qsc 2>/dev/null || true
+		touch /data/adb/qsc/install_auto 2>/dev/null || true
+	fi
 	ui_print "- 已清空 /data/adb/qsc"
 	if [ -d "$_cut_path" ]; then
 		touch "$_cut_path/remove" 2>/dev/null || true

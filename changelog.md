@@ -4,7 +4,7 @@
 
 ### 工程
 
-- **布局不兼容升级一刀切**：`versionCode=2026091701` 起为当前布局首版；升级时若已装模块 `versionCode` 更低则执行 uninstall 并删除模块目录，按全新安装（不保留 conf/data）。此后正常更新/热更新。切断线前安装禁止热更新。无旧键双读 / compat stub
+- **不兼容旧版一刀切**：`versionCode=2026091701` 起；升级时若已装模块更低则 uninstall 并删除模块目录与 `/data/adb/qsc`，按全新安装（不保留 conf/data）。此后正常更新/热更新。切断线前禁止热更新。无旧键双读 / compat stub
 
 ### 新增
 
