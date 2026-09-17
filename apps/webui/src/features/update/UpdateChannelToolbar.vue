@@ -1,9 +1,5 @@
 <script setup lang="ts">
-import {
-  UPDATE_CHANNELS,
-  UPDATE_CHANNEL_LABEL,
-  type UpdateChannel,
-} from "@/shared";
+import { UPDATE_CHANNELS, UPDATE_CHANNEL_LABEL, type UpdateChannel } from "@/shared";
 
 defineProps<{
   channel: UpdateChannel;
@@ -55,8 +51,8 @@ const emit = defineEmits<{
     <div class="cdn-text">
       <p class="cdn-title">使用 CDN</p>
       <p class="cdn-desc">
-        开启后 CI 元数据/产物走 jsDelivr（有缓存，刚发版若检不到可关闭或稍后再试）；关闭则走 GitHub
-        raw
+        开启后 CI 元数据/产物走
+        jsDelivr（有缓存，刚发版若检不到可关闭或稍后再试）；关闭则走 GitHub raw
       </p>
     </div>
     <van-switch
@@ -77,5 +73,5 @@ const emit = defineEmits<{
 </template>
 
 <style scoped lang="scss">
-@use "./update-channel.scss";
+@use "./update-channel";
 </style>

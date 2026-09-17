@@ -20,7 +20,10 @@ if (!verLine) {
   process.exit(1);
 }
 
-const parts = verLine.split(".").map((p) => p.replace(/\D/g, "")).filter(Boolean);
+const parts = verLine
+  .split(".")
+  .map((p) => p.replace(/\D/g, ""))
+  .filter(Boolean);
 let mapped;
 if (parts.length >= 3) {
   const y = parts[0].padStart(4, "0");

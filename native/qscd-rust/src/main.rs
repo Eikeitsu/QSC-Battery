@@ -39,9 +39,9 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use common::{
-    BatterySnapshot, EXIT_NO_HIT, EXIT_OK, EXIT_UNUSABLE, PowerState, SnapshotFailure,
-    SnapshotSource, UeventSocket, WAIT_FLOOR_DEFAULT, WAIT_MAX_CAP, WAIT_MAX_DEFAULT, parse_secs,
-    wait_event,
+    parse_secs, wait_event, BatterySnapshot, PowerState, SnapshotFailure, SnapshotSource,
+    UeventSocket, EXIT_NO_HIT, EXIT_OK, EXIT_UNUSABLE, WAIT_FLOOR_DEFAULT, WAIT_MAX_CAP,
+    WAIT_MAX_DEFAULT,
 };
 use diagnose::diagnose;
 use plugged::plugged;
@@ -249,10 +249,10 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use crate::common::{
-        BatterySnapshot, EXIT_NO_HIT, EXIT_OK, EXIT_UNUSABLE, PowerState, SnapshotFailure,
-        SnapshotSource, contains, is_power_supply_event, normalize_temp, parse_secs, wait_event,
+        contains, is_power_supply_event, normalize_temp, parse_secs, wait_event, BatterySnapshot,
+        PowerState, SnapshotFailure, SnapshotSource, EXIT_NO_HIT, EXIT_OK, EXIT_UNUSABLE,
     };
-    use crate::watch::{Thresholds, parse_watch_args};
+    use crate::watch::{parse_watch_args, Thresholds};
     use crate::pkgs_running;
 
     const TEST_MATCH: &[u8] = b"SUBSYSTEM=power_supply";

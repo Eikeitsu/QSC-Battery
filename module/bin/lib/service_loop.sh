@@ -1,5 +1,7 @@
 #!/system/bin/sh
-# service: one loop iteration body
+# service: one loop iteration (defined as function so `return` replaces sourced `continue`)
+
+qsc_service_loop_once() {
 	QSC_SERVICE_LOOP_COUNT=$((QSC_SERVICE_LOOP_COUNT + 1))
 	qsc_hot_finalize_maybe
 	# 省电快路径：未插电且未维持停充时，本轮只读几个 online 节点就睡，
@@ -53,7 +55,7 @@
 			_wait_rc="$?"
 			qsc_runtime_trace "H1" "wait_exit" "$_wait_rc"
 			# endregion
-			continue
+			return 0
 		fi
 		[ "$_now" -gt 0 ] 2>/dev/null && QSC_PS_LAST_FULL="$_now"
 		# 满轮会自己改简介，快路径的缓存指纹随之失效
@@ -100,3 +102,4 @@
 	_wait_rc="$?"
 	qsc_runtime_trace "H1" "wait_exit" "$_wait_rc"
 	# endregion
+}

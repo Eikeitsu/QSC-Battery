@@ -18,5 +18,5 @@ defineProps<{
 </template>
 
 <style scoped lang="scss">
-@use "./update-channel.scss";
+@use "./update-channel";
 </style>

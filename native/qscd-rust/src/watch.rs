@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
 use crate::common::{
-    BatterySnapshot, EXIT_OK, EXIT_UNUSABLE, RECV_BUF, RECV_MIN_TIMEOUT, UeventSocket,
-    WAIT_FLOOR_DEFAULT, WAIT_MAX_CAP, WAIT_MAX_DEFAULT, parse_secs,
+    parse_secs, BatterySnapshot, UeventSocket, EXIT_OK, EXIT_UNUSABLE, RECV_BUF,
+    RECV_MIN_TIMEOUT, WAIT_FLOOR_DEFAULT, WAIT_MAX_CAP, WAIT_MAX_DEFAULT,
 };
 
 /// watch 的阈值参数。None = 该项不参与判断

@@ -19,7 +19,7 @@ const moduleRoot = join(repoRoot, "module");
 const staging = join(repoRoot, ".build", "staging");
 const releaseDir = join(repoRoot, "release");
 const builtWebDir = join(repoRoot, ".build", "webroot");
-const webSrcDir = join(repoRoot, "webui");
+const webSrcDir = join(repoRoot, "apps", "webui");
 
 const ROOT_FILES = [
   "module.prop",
@@ -282,6 +282,8 @@ mkdirSync(join(staging, "bin"), { recursive: true });
 for (const file of ROOT_FILES) copyFromModule(file);
 copyDirFromModule("META-INF");
 copyDirFromModule("config");
+// customize.sh sources install/*.sh；拆分后必须打进 zip，否则 Magisk 安装会 abort
+copyDirFromModule("install");
 normalizeCurrentJsonInStaging();
 for (const file of BIN_RELEASE) copyFromModule(join("bin", file));
 for (const file of libFiles) copyFromModule(join("bin", "lib", file));

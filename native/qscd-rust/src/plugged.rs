@@ -1,4 +1,4 @@
-use crate::common::{EXIT_NO_HIT, EXIT_OK, PowerState};
+use crate::common::{PowerState, EXIT_NO_HIT, EXIT_OK};
 
 /// `qscd plugged [--sysfs-root DIR]`：exit 0=插电，1=未插，2=不可读
 pub(crate) fn plugged(root: &str) -> u8 {

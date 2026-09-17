@@ -15,10 +15,17 @@ function linesOf(path) {
 }
 function write(path, content) {
   writeFileSync(path, content.endsWith("\n") ? content : `${content}\n`, "utf8");
-  console.log(`wrote ${path.slice(root.length + 1)} (~${content.split("\n").length} lines)`);
+  console.log(
+    `wrote ${path.slice(root.length + 1)} (~${content.split("\n").length} lines)`,
+  );
 }
 function sliceJoin(lines, start1, end1) {
-  return lines.slice(start1 - 1, end1).join("\n").replace(/\n+$/, "") + "\n";
+  return (
+    lines
+      .slice(start1 - 1, end1)
+      .join("\n")
+      .replace(/\n+$/, "") + "\n"
+  );
 }
 function find1(lines, pred, from = 0) {
   for (let i = from; i < lines.length; i++) {
@@ -77,10 +84,22 @@ write(
   join(installDir, "helpers.sh"),
   `#!/system/bin/sh\n# install helpers\n${sliceJoin(L, abortAt, abortEnd)}${sliceJoin(L, confValAt, mergeEnd)}`,
 );
-write(join(installDir, "migrate.sh"), `#!/system/bin/sh\n# old module helpers\n${sliceJoin(L, oldNameAt, uninstallEnd)}`);
-write(join(installDir, "qscd.sh"), `#!/system/bin/sh\n# qscd install helpers\n${sliceJoin(L, qscdPrefAt, installQscdEnd)}`);
-write(join(installDir, "companion.sh"), `#!/system/bin/sh\n# companion APK\n${sliceJoin(L, companionAt, companionEnd)}`);
-write(join(installDir, "cli.sh"), `#!/system/bin/sh\n# CLI install\n${sliceJoin(L, cliAt, cliEnd)}`);
+write(
+  join(installDir, "migrate.sh"),
+  `#!/system/bin/sh\n# old module helpers\n${sliceJoin(L, oldNameAt, uninstallEnd)}`,
+);
+write(
+  join(installDir, "qscd.sh"),
+  `#!/system/bin/sh\n# qscd install helpers\n${sliceJoin(L, qscdPrefAt, installQscdEnd)}`,
+);
+write(
+  join(installDir, "companion.sh"),
+  `#!/system/bin/sh\n# companion APK\n${sliceJoin(L, companionAt, companionEnd)}`,
+);
+write(
+  join(installDir, "cli.sh"),
+  `#!/system/bin/sh\n# CLI install\n${sliceJoin(L, cliAt, cliEnd)}`,
+);
 
 const drop = [
   [abortAt, abortEnd],

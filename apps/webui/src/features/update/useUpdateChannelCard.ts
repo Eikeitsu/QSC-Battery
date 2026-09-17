@@ -193,7 +193,8 @@ export function useUpdateChannelCard() {
     startProgress({ percent: 5, stage: "prepare" });
     try {
       const st = await api.loadDaemonStatus().catch(() => null);
-      const impl = st?.impl === "c" ? "c" : result.value?.daemonImpl === "c" ? "c" : "rust";
+      const impl =
+        st?.impl === "c" ? "c" : result.value?.daemonImpl === "c" ? "c" : "rust";
       const r = await api.installDaemon(impl, {
         manifestUrl: d.manifestUrl,
         pagesBase: d.baseUrl,

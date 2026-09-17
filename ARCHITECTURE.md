@@ -6,15 +6,15 @@ Engineering map for contributors. **Frozen runtime contracts** must not change w
 
 Changing any of the following breaks upgrades for existing installs. Refactor source layout, build wiring, and file splits instead.
 
-| Contract | Value / path |
-| --- | --- |
-| Magisk module id | `QSC_Battery` |
-| Install path | `/data/adb/modules/QSC_Battery` |
-| Magisk entry filenames | `module.prop`, `service.sh`, `customize.sh`, `uninstall.sh`, `action.sh`, `META-INF/...` |
-| Runtime layout | `config/config.conf`, `data/*`, `bin/*`, `webroot/` |
-| Android applicationId / package | `com.qsc.battery` |
-| Release asset habit | `QSC-Battery_v*` |
-| Update / Pages URLs | existing `update.json` / `app-update.json` / Pages channels |
+| Contract                        | Value / path                                                                             |
+| ------------------------------- | ---------------------------------------------------------------------------------------- |
+| Magisk module id                | `QSC_Battery`                                                                            |
+| Install path                    | `/data/adb/modules/QSC_Battery`                                                          |
+| Magisk entry filenames          | `module.prop`, `service.sh`, `customize.sh`, `uninstall.sh`, `action.sh`, `META-INF/...` |
+| Runtime layout                  | `config/config.conf`, `data/*`, `bin/*`, `webroot/`                                      |
+| Android applicationId / package | `com.qsc.battery`                                                                        |
+| Release asset habit             | `QSC-Battery_v*`                                                                         |
+| Update / Pages URLs             | existing `update.json` / `app-update.json` / Pages channels                              |
 
 Persisted config keys stay `snake_case` (`power_stop`, `off_qsc`, …). Do **not** mass-rename keys or `QSCV_*` env vars.
 
@@ -71,24 +71,24 @@ flowchart TB
 
 ## Naming conventions
 
-| Area | Convention |
-| --- | --- |
-| Tooling scripts | kebab-case (`build-web.mjs`, `package-module.mjs`) |
-| Vue / TypeScript | PascalCase components, camelCase functions |
-| Kotlin | Android official style |
-| Shell helpers | `qsc_*` function prefix; keep Magisk entry script names |
-| Config keys | `snake_case` (existing + new) |
-| Daemon artifacts | see table below — do not invent parallel names |
+| Area             | Convention                                              |
+| ---------------- | ------------------------------------------------------- |
+| Tooling scripts  | kebab-case (`build-web.mjs`, `package-module.mjs`)      |
+| Vue / TypeScript | PascalCase components, camelCase functions              |
+| Kotlin           | Android official style                                  |
+| Shell helpers    | `qsc_*` function prefix; keep Magisk entry script names |
+| Config keys      | `snake_case` (existing + new)                           |
+| Daemon artifacts | see table below — do not invent parallel names          |
 
 Enforce conventions on **new / touched** code; avoid one-shot renames of persisted keys or Magisk id.
 
 ## Daemon name mapping
 
-| Role | Source directory | On-module binary habit | CI / release asset habit |
-| --- | --- | --- | --- |
-| Rust waiter | `native/qscd-rust/` | `qscd-arm64`, `qscd-arm` (active symlink/copy `qscd`) | `qscd-rust-*` / rust channel assets |
-| C waiter | `native/qscd-c/` | `qscdc-arm64`, `qscdc-arm` (active `qscdc`) | `qscd-c-*` / c channel assets |
-| Shell fallback | (module scripts) | no separate daemon bin | `native=sh` / lite packaging |
+| Role           | Source directory    | On-module binary habit                                | CI / release asset habit            |
+| -------------- | ------------------- | ----------------------------------------------------- | ----------------------------------- |
+| Rust waiter    | `native/qscd-rust/` | `qscd-arm64`, `qscd-arm` (active symlink/copy `qscd`) | `qscd-rust-*` / rust channel assets |
+| C waiter       | `native/qscd-c/`    | `qscdc-arm64`, `qscdc-arm` (active `qscdc`)           | `qscd-c-*` / c channel assets       |
+| Shell fallback | (module scripts)    | no separate daemon bin                                | `native=sh` / lite packaging        |
 
 Rust and C implementations share CLI surface and exit codes; Magisk install may offer either. WebUI / APP talk to module helpers (`qscd_fetch.sh`), not to crate paths.
 
@@ -109,11 +109,11 @@ Prefer business source files under ~500 lines (harder ceiling ~800). Generated a
 
 ## Where to start
 
-| Want… | Go to… |
-| --- | --- |
-| Magisk install / boot loop | `module/customize.sh`, `module/service.sh` |
-| Stop-charge / current / saver | `module/bin/qsc_switch.sh`, `module/bin/lib/` |
-| WebUI | `apps/webui/` |
-| Companion APP | `apps/android/` |
-| qscd build | `native/qscd-rust/`, `native/qscd-c/`, `tooling/scripts/build-native*.mjs` |
-| Release / CI | `tooling/RELEASE.md`, `.github/workflows/` |
+| Want…                         | Go to…                                                                     |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| Magisk install / boot loop    | `module/customize.sh`, `module/service.sh`                                 |
+| Stop-charge / current / saver | `module/bin/qsc_switch.sh`, `module/bin/lib/`                              |
+| WebUI                         | `apps/webui/`                                                              |
+| Companion APP                 | `apps/android/`                                                            |
+| qscd build                    | `native/qscd-rust/`, `native/qscd-c/`, `tooling/scripts/build-native*.mjs` |
+| Release / CI                  | `tooling/RELEASE.md`, `.github/workflows/`                                 |

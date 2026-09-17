@@ -50,7 +50,9 @@ const emit = defineEmits<{
           说明
         </button>
         <van-button
-          v-if="result.module?.zipUrl && (result.moduleHasUpdate || result.moduleCanSwitch)"
+          v-if="
+            result.module?.zipUrl && (result.moduleHasUpdate || result.moduleCanSwitch)
+          "
           size="mini"
           type="primary"
           round
@@ -119,7 +121,10 @@ const emit = defineEmits<{
       </div>
       <p class="ver">
         {{
-          versionLine(result.appMissing ? "" : result.appLocalVersion, result.app?.version)
+          versionLine(
+            result.appMissing ? "" : result.appLocalVersion,
+            result.app?.version,
+          )
         }}
       </p>
     </div>
@@ -178,5 +183,5 @@ const emit = defineEmits<{
 </template>
 
 <style scoped lang="scss">
-@use "./update-channel.scss";
+@use "./update-channel";
 </style>

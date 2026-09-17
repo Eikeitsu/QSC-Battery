@@ -19,7 +19,9 @@ const emit = defineEmits<{
   </div>
 
   <div
-    v-if="result?.stableModuleNewer || result?.stableAppNewer || result?.stableDaemonNewer"
+    v-if="
+      result?.stableModuleNewer || result?.stableAppNewer || result?.stableDaemonNewer
+    "
     class="notice"
   >
     <p>
@@ -27,7 +29,9 @@ const emit = defineEmits<{
       <template v-if="result.stableModuleNewer">
         · 模块 {{ result.stableModuleNewer.version }}
       </template>
-      <template v-if="result.stableAppNewer"> · APP {{ result.stableAppNewer.version }} </template>
+      <template v-if="result.stableAppNewer">
+        · APP {{ result.stableAppNewer.version }}
+      </template>
       <template v-if="result.stableDaemonNewer">
         · 守护 {{ result.stableDaemonNewer.version }}
       </template>
@@ -56,5 +60,5 @@ const emit = defineEmits<{
 </template>
 
 <style scoped lang="scss">
-@use "./update-channel.scss";
+@use "./update-channel";
 </style>

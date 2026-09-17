@@ -60,7 +60,9 @@ function readShellBundle(entryPath) {
     const libdir = join(root, "module/bin/lib");
     const moddir = join(root, "module");
     for (const line of text.split("\n")) {
-      const m = line.match(/^\s*\.\s+"(\$LIBDIR|\$MODDIR\/bin\/lib|\$MODPATH\/install)\/([^"]+)"/);
+      const m = line.match(
+        /^\s*\.\s+"(\$LIBDIR|\$MODDIR\/bin\/lib|\$MODPATH\/install)\/([^"]+)"/,
+      );
       if (!m) continue;
       const [, prefix, rel] = m;
       if (rel.includes("common.sh")) continue;
@@ -306,7 +308,9 @@ const status = read(join(root, "module/bin/lib/status.sh"));
 const serviceSource = readShellBundle(join(root, "module/service.sh"));
 const daemonApi = read(join(root, "apps/webui/src/shared/api/daemon.ts"));
 const daemonCard = read(join(root, "apps/webui/src/pages/config/ui/DaemonCard.vue"));
-const batterySnapshotApi = read(join(root, "apps/webui/src/shared/api/batterySnapshot.ts"));
+const batterySnapshotApi = read(
+  join(root, "apps/webui/src/shared/api/batterySnapshot.ts"),
+);
 const historyApi = read(join(root, "apps/webui/src/shared/api/history.ts"));
 const chart = read(join(root, "apps/webui/src/pages/home/ui/HomeChargeChart.vue"));
 const chargeHistoryStore = read(join(root, "apps/webui/src/stores/chargeHistory.ts"));

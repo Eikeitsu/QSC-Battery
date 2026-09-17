@@ -142,9 +142,9 @@ sh 主包没有这个二进制也必须行为一致，阈值判定的唯一真�
 | 工作流           | 触发                        | 职责                                                                   |
 | ---------------- | --------------------------- | ---------------------------------------------------------------------- |
 | `Lint`           | push / PR                   | ESLint、Stylelint、Markdown、Shellcheck、typecheck、Prettier 等        |
-| `Build Web`      | `apps/webui/**` 等               | Vite 构建 → Artifact + `dist-web`（普通推送，保留历史）                |
+| `Build Web`      | `apps/webui/**` 等          | Vite 构建 → Artifact + `dist-web`（普通推送，保留历史）                |
 | `Build qscd`     | `native/**` 等              | 编守护 → `ci-dist/qscd/` + `updates/ci/qscd/manifest.json`             |
-| `App`            | `apps/android/**` 等                 | 编 APK → `ci-dist/app/` + `updates/ci/app-update.json`                 |
+| `App`            | `apps/android/**` 等        | 编 APK → `ci-dist/app/` + `updates/ci/app-update.json`                 |
 | `Build Docs`     | `docs/**`                   | 构建并部署 GitHub Pages                                                |
 | `Package Module` | `module/**`；Web 成功后串联 | 拉取最新 APK/qscd/webroot → 打 zip → `ci-dist/module/` + `update.json` |
 | `Release Module` | 手动 / `v*` 标签            | 发版 zip + GitHub Release                                              |

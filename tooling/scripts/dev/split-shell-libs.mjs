@@ -22,7 +22,12 @@ function write(path, content) {
 }
 
 function sliceJoin(lines, start1, end1) {
-  return lines.slice(start1 - 1, end1).join("\n").replace(/\n+$/, "") + "\n";
+  return (
+    lines
+      .slice(start1 - 1, end1)
+      .join("\n")
+      .replace(/\n+$/, "") + "\n"
+  );
 }
 
 function alreadySplit(path, marker) {
@@ -37,11 +42,26 @@ function alreadySplit(path, marker) {
     console.log("skip charge.sh (already split)");
   } else {
     const L = linesOf(p);
-    write(join(lib, "charge_nodes.sh"), `#!/system/bin/sh\n# charge: switch node lists\n${sliceJoin(L, 3, 90)}`);
-    write(join(lib, "charge_write.sh"), `#!/system/bin/sh\n# charge: write / switch list helpers\n${sliceJoin(L, 92, 453)}`);
-    write(join(lib, "charge_mca.sh"), `#!/system/bin/sh\n# charge: MCA / preferred / power stop-start-reset\n${sliceJoin(L, 455, 705)}`);
-    write(join(lib, "charge_unplug.sh"), `#!/system/bin/sh\n# charge: unplug detect / orphan stop\n${sliceJoin(L, 707, 825)}`);
-    write(join(lib, "charge_restore.sh"), `#!/system/bin/sh\n# charge: restore switches / MCA charge\n${sliceJoin(L, 827, L.length)}`);
+    write(
+      join(lib, "charge_nodes.sh"),
+      `#!/system/bin/sh\n# charge: switch node lists\n${sliceJoin(L, 3, 90)}`,
+    );
+    write(
+      join(lib, "charge_write.sh"),
+      `#!/system/bin/sh\n# charge: write / switch list helpers\n${sliceJoin(L, 92, 453)}`,
+    );
+    write(
+      join(lib, "charge_mca.sh"),
+      `#!/system/bin/sh\n# charge: MCA / preferred / power stop-start-reset\n${sliceJoin(L, 455, 705)}`,
+    );
+    write(
+      join(lib, "charge_unplug.sh"),
+      `#!/system/bin/sh\n# charge: unplug detect / orphan stop\n${sliceJoin(L, 707, 825)}`,
+    );
+    write(
+      join(lib, "charge_restore.sh"),
+      `#!/system/bin/sh\n# charge: restore switches / MCA charge\n${sliceJoin(L, 827, L.length)}`,
+    );
     write(
       p,
       `#!/system/bin/sh
@@ -66,9 +86,18 @@ function alreadySplit(path, marker) {
     const L = linesOf(p);
     // Drop duplicate shebang from fragment bodies when present
     const limits = sliceJoin(L, 1, 398).replace(/^#!\/system\/bin\/sh\n/, "");
-    write(join(lib, "current_limits.sh"), `#!/system/bin/sh\n# current: probe / limits / node build\n${limits}`);
-    write(join(lib, "current_bypass.sh"), `#!/system/bin/sh\n# current: hardware bypass\n${sliceJoin(L, 399, 460)}`);
-    write(join(lib, "current_apply.sh"), `#!/system/bin/sh\n# current: decide / write / apply\n${sliceJoin(L, 461, L.length)}`);
+    write(
+      join(lib, "current_limits.sh"),
+      `#!/system/bin/sh\n# current: probe / limits / node build\n${limits}`,
+    );
+    write(
+      join(lib, "current_bypass.sh"),
+      `#!/system/bin/sh\n# current: hardware bypass\n${sliceJoin(L, 399, 460)}`,
+    );
+    write(
+      join(lib, "current_apply.sh"),
+      `#!/system/bin/sh\n# current: decide / write / apply\n${sliceJoin(L, 461, L.length)}`,
+    );
     write(
       p,
       `#!/system/bin/sh
@@ -91,10 +120,22 @@ function alreadySplit(path, marker) {
     const L = linesOf(p);
     // 1-177 prelude+conf; 178-360 plugged; 361-514 decide/refresh; 515-end idle/native wait
     const head = sliceJoin(L, 1, 177).replace(/^#!\/system\/bin\/sh\n/, "");
-    write(join(lib, "power_saver_core.sh"), `#!/system/bin/sh\n# power_saver: conf / logging helpers\n${head}`);
-    write(join(lib, "power_saver_plugged.sh"), `#!/system/bin/sh\n# power_saver: plugged detection\n${sliceJoin(L, 178, 360)}`);
-    write(join(lib, "power_saver_decide.sh"), `#!/system/bin/sh\n# power_saver: skip / description\n${sliceJoin(L, 361, 514)}`);
-    write(join(lib, "power_saver_idle.sh"), `#!/system/bin/sh\n# power_saver: idle / native wait\n${sliceJoin(L, 515, L.length)}`);
+    write(
+      join(lib, "power_saver_core.sh"),
+      `#!/system/bin/sh\n# power_saver: conf / logging helpers\n${head}`,
+    );
+    write(
+      join(lib, "power_saver_plugged.sh"),
+      `#!/system/bin/sh\n# power_saver: plugged detection\n${sliceJoin(L, 178, 360)}`,
+    );
+    write(
+      join(lib, "power_saver_decide.sh"),
+      `#!/system/bin/sh\n# power_saver: skip / description\n${sliceJoin(L, 361, 514)}`,
+    );
+    write(
+      join(lib, "power_saver_idle.sh"),
+      `#!/system/bin/sh\n# power_saver: idle / native wait\n${sliceJoin(L, 515, L.length)}`,
+    );
     write(
       p,
       `#!/system/bin/sh
@@ -121,8 +162,14 @@ function alreadySplit(path, marker) {
     if (finalizeAt < 0) finalizeAt = Math.floor(L.length * 0.7);
     const mid = Math.max(2, finalizeAt); // 0-based
     const head = sliceJoin(L, 1, mid).replace(/^#!\/system\/bin\/sh\n/, "");
-    write(join(lib, "hot_update_txn.sh"), `#!/system/bin/sh\n# hot_update: transaction / apply\n${head}`);
-    write(join(lib, "hot_update_verify.sh"), `#!/system/bin/sh\n# hot_update: finalize / verify\n${sliceJoin(L, mid + 1, L.length)}`);
+    write(
+      join(lib, "hot_update_txn.sh"),
+      `#!/system/bin/sh\n# hot_update: transaction / apply\n${head}`,
+    );
+    write(
+      join(lib, "hot_update_verify.sh"),
+      `#!/system/bin/sh\n# hot_update: finalize / verify\n${sliceJoin(L, mid + 1, L.length)}`,
+    );
     write(
       p,
       `#!/system/bin/sh

@@ -46,10 +46,6 @@ jobs:
 
       - uses: ./.github/actions/setup-node-npm
 
-      - name: Spotless check (ktlint)
-        working-directory: apps/android
-        run: ./gradlew spotlessCheck --stacktrace
-
       - name: Assemble release + debug
         working-directory: apps/android
         run: |

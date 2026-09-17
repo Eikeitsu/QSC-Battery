@@ -3,6 +3,7 @@
 MODDIR=${0%/*}
 . "$MODDIR/bin/common.sh"
 . "$LIBDIR/service_boot.sh"
+. "$LIBDIR/service_loop.sh"
 while true ; do
-	. "$LIBDIR/service_loop.sh"
+	qsc_service_loop_once
 done

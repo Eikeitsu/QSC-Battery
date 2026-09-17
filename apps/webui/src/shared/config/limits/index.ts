@@ -1,10 +1,5 @@
 export { LIMITS } from "./constants";
-export {
-  clampInt,
-  clampLevelOrOff,
-  clampUa,
-  type SanitizeResult,
-} from "./clamp";
+export { clampInt, clampLevelOrOff, clampUa, type SanitizeResult } from "./clamp";
 export {
   PKG_RE,
   SCHED_RE,

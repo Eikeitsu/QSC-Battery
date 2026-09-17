@@ -81,5 +81,5 @@ const {
 </template>
 
 <style scoped lang="scss">
-@use "@/features/update/update-channel.scss";
+@use "@/features/update/update-channel";
 </style>

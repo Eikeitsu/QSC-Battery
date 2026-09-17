@@ -18,13 +18,16 @@ Kotlin + Jetpack Compose。配置 / 状态 / 更新 / 主题；**不挂后台保
 推送 `apps/android/` 或手动触发 **App** 工作流。模块 zip 可内嵌 `apk/QSC-Battery.apk`。Release 使用仓库固定密钥，保证可覆盖安装。
 
 ```bash
-# 本地格式 / 检查（Spotless + ktlint）
+# 本地格式 / 检查（Spotless + ktlint；需 JDK）
 cd apps/android
 ./gradlew spotlessApply   # 写回
-./gradlew spotlessCheck   # CI 同款
+./gradlew spotlessCheck   # 与 Lint 工作流 kotlin job 同款
 
-npm run package:app -- --skip-build   # 只刷新 app-update.json
+npm run format:kotlin     # 仓库根目录，同上 spotlessApply
+npm run lint:kotlin       # 仓库根目录，同上 spotlessCheck
 ```
+
+Kotlin 缩进为 **4 空格**，由本目录 `apps/android/.editorconfig` 指定（覆盖仓库根 `.editorconfig` 的 2 空格），Spotless `ktlint()` 会读取该文件。CI 仅在 **Lint** 工作流的 `Kotlin (Spotless / ktlint)` job 跑 `spotlessCheck`；**App** 工作流只负责构建 APK。
 
 ## 更新通道
 
