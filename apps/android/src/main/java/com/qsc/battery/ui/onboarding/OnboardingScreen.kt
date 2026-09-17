@@ -218,7 +218,7 @@ fun OnboardingScreen(
                     )
                     ChargeBanner(
                         text = "为什么可选：事件守护不可用时，由系统框架在插拔边沿写唤醒标记，缩短 Magisk 轮询。\n" +
-                            "不写充电节点。请启用本模块，作用域勾选「系统框架」(system) 后重启。",
+                            "不写充电节点。请启用本模块，作用域只勾选「系统框架」(system) 后重启。",
                     )
                     val status = xp
                     StatusBlock(

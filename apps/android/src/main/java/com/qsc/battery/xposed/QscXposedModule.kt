@@ -3,6 +3,7 @@ package com.qsc.battery.xposed
 import android.util.Log
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
+import io.github.libxposed.api.XposedModuleInterface.HotReloadingParam
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.SystemServerStartingParam
 import java.io.File
@@ -37,6 +38,15 @@ class QscXposedModule : XposedModule() {
     override fun onSystemServerStarting(param: SystemServerStartingParam) {
         writeAliveOnce()
         hookBatteryService(param.classLoader)
+    }
+
+    /**
+     * 本模块只注入 system_server；框架热重载对该进程通常不可用/不可靠。
+     * 显式拒绝，避免 APK 更新后误以为 hooks 已生效（仍需重启）。
+     */
+    override fun onHotReloading(param: HotReloadingParam): Boolean {
+        xpLog(Log.INFO, "refuse hot reload (system_server); reboot required")
+        return false
     }
 
     private fun hookBatteryService(loader: ClassLoader) {

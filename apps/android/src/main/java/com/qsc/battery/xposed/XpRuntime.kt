@@ -295,7 +295,7 @@ object XpRuntime {
                 ).use { c ->
                     scoped = false
                     while (c.moveToNext()) {
-                        if (c.getString(0)?.trim()?.lowercase() in XpPrefs.SYSTEM_SCOPE_PKGS) {
+                        if (c.getString(0)?.trim().equals(XpPrefs.PRIMARY_SCOPE, ignoreCase = true)) {
                             scoped = true
                             break
                         }

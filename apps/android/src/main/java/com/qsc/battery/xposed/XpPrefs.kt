@@ -27,20 +27,20 @@ object XpPrefs {
     )
 
     /**
-     * 现代 libxposed：system_server 用虚拟包名 **`system`**（官方 API 文档）。
-     * `android` 仍可勾，但其组件多跑在 `:ui` 等进程，**不能单独代替** system_server。
-     * 参考同为 API 102 的模块 scope.list：先写 system，再写 android。
+     * 现代 libxposed：system_server 用虚拟包名 **`system`**（官方 API）。
+     * 只需勾选「系统框架」；不需要「Android系统」(android)。
      */
     const val PRIMARY_SCOPE = "system"
-    val SYSTEM_SCOPE_PKGS = setOf(PRIMARY_SCOPE, "android")
 
     fun scopeLabel(pkg: String): String = when (pkg.trim().lowercase()) {
         "system" -> "系统框架 (system) · system_server"
-        "android" -> "Android系统 (android) · 非 system_server"
+        "android" -> "Android系统 (android) · 非 system_server，请去掉"
         else -> pkg
     }
 
-    fun hasPrimaryScope(scopeList: Collection<String>): Boolean = scopeList.any { it.trim().equals(PRIMARY_SCOPE, ignoreCase = true) }
+    fun hasPrimaryScope(scopeList: Collection<String>): Boolean =
+        scopeList.any { it.trim().equals(PRIMARY_SCOPE, ignoreCase = true) }
 
-    fun hasAnyFrameworkScope(scopeList: Collection<String>): Boolean = scopeList.any { it.trim().lowercase() in SYSTEM_SCOPE_PKGS }
+    /** 仅识别 system；android 不算有效作用域。 */
+    fun hasAnyFrameworkScope(scopeList: Collection<String>): Boolean = hasPrimaryScope(scopeList)
 }

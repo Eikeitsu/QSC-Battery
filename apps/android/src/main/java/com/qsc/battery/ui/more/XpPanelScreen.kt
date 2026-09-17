@@ -141,8 +141,8 @@ fun XpPanelScreen(
             ChargeSection(title = "作用域") {
                 ChargeListRow(
                     title = "推荐",
-                    summary = "现代 libxposed：勾选「系统框架」包名 system 才能注入 system_server。" +
-                        "「Android系统」包名 android 是另一进程，不能单独代替。",
+                    summary = "只需勾选「系统框架」包名 system（注入 system_server）。" +
+                        "不要勾「Android系统」(android)。",
                 )
                 ChargeDivider()
                 val scopes = status?.scopeList.orEmpty()
@@ -154,8 +154,8 @@ fun XpPanelScreen(
                         val primary = pkg.trim().equals(XpPrefs.PRIMARY_SCOPE, ignoreCase = true)
                         ChargeListRow(
                             title = XpPrefs.scopeLabel(pkg),
-                            summary = if (primary) "推荐 · 对应 system_server" else "可选，不能代替 system",
-                            value = if (primary) "推荐" else null,
+                            summary = if (primary) "必需 · 对应 system_server" else "无效，请在 LSPosed 去掉",
+                            value = if (primary) "OK" else "去掉",
                         )
                     }
                 }

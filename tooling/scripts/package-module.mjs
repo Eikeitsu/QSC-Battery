@@ -40,9 +40,11 @@ const BIN_RELEASE = [
   "detect_device.sh",
   "diagnose.sh",
   "test_switch.sh",
+  "test_switch_bg.sh",
   "qscd_fetch.sh",
   "qsc_status.sh",
   "qsc.sh",
+  "learn_stats.sh",
 ];
 const BIN_DEBUG_EXTRA = ["test_harness.sh", "diagnose_extra.sh"];
 
