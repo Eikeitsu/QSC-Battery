@@ -26,6 +26,7 @@ export type ConfigKey =
   | "app_stop_list"
   | "history_enable"
   | "history_interval_sec"
+  | "description_enable"
   | "power_saver"
   | "loop_interval_idle_sec"
   | "loop_interval_idle_native_sec"

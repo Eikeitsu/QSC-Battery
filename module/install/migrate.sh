@@ -23,6 +23,41 @@ qsc_module_version_code() {
 # 切勿跑 uninstall.sh（旧脚本会 rm modules_update）；切勿删 $MODPATH / modules_update
 # （本次解压目录）。只删 modules/ 下的旧壳即可。
 # 返回 0 = 已切断；1 = 无需切断
+
+# 删目录前先停旧常驻进程，否则会继续往壳目录 module.prop 写「核心脚本丢失」。
+qsc_cutover_stop_old_runtime() {
+	_root="$1"
+	_pid=""
+	_i=0
+	[ -n "$_root" ] && [ -d "$_root" ] || return 0
+	for _pf in \
+		"$_root/data/description_worker.pid" \
+		"$_root/data/service_heartbeat_pid" \
+		"$_root/data/service_pid"; do
+		_pid="$(cat "$_pf" 2>/dev/null | tr -d ' \r\n')"
+		case "$_pid" in
+			""|*[!0-9]*) continue ;;
+			*)
+				kill "$_pid" 2>/dev/null || true
+				_i=0
+				while kill -0 "$_pid" 2>/dev/null && [ "$_i" -lt 5 ]; do
+					sleep 1
+					_i=$((_i + 1))
+				done
+				kill -9 "$_pid" 2>/dev/null || true
+				;;
+		esac
+	done
+	command -v pkill >/dev/null 2>&1 && {
+		pkill -f "$_root/bin/description_worker.sh" 2>/dev/null || true
+		pkill -f "$_root/bin/qsc_switch.sh" 2>/dev/null || true
+		pkill -f "$_root/service.sh" 2>/dev/null || true
+		pkill -f "$_root/bin/qscd" 2>/dev/null || true
+		pkill -f "$_root/bin/qscd-rust" 2>/dev/null || true
+		pkill -f "$_root/bin/qscd-c" 2>/dev/null || true
+	}
+}
+
 qsc_wipe_incompatible_module() {
 	_cut_path="/data/adb/modules/QSC_Battery"
 	[ -d "$_cut_path" ] || return 1
@@ -57,6 +92,9 @@ qsc_wipe_incompatible_module() {
 			qsc_clear_active_switch 2>/dev/null || true
 		) >/dev/null 2>&1 || true
 	fi
+
+	ui_print "- 停止旧版常驻进程（服务 / 简介 / 守护）…"
+	qsc_cutover_stop_old_runtime "$_cut_path"
 
 	# 外部工作区：清热更新/诊断/CLI；保留 install_auto；绝不碰 modules_update
 	_keep_auto=0

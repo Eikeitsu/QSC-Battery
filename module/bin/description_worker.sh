@@ -79,6 +79,12 @@ worker_refresh() {
 		worker_state 125
 		return 125
 	fi
+	if type qsc_description_enabled >/dev/null 2>&1 && ! qsc_description_enabled; then
+		type qsc_description_restore_static >/dev/null 2>&1 &&
+			qsc_description_restore_static
+		worker_state 0
+		exit 0
+	fi
 	if ! worker_service_ready; then
 		worker_state 126
 		return 0

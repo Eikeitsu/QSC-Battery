@@ -370,8 +370,10 @@ if [ -f "$DATADIR/hot_update_fallback_reboot" ]; then
 	qsc_write_module_description "⚠️热更新未完成" "请重启设备完成更新" \
 		"服务接管未确认，已保留标准更新流程"
 elif [ -f "$DATADIR/hot_update_at" ]; then
+	if qsc_description_enabled 2>/dev/null; then
 		qsc_write_module_description "♻️更新中" "服务已重启" \
 			"本次更新无需重启；正在读取实时充电状态"
+	fi
 	rm -f "$DATADIR/hot_update_at"
 	# 不要等设备探测、兼容模块扫描和全量节点扫描完成后才刷新简介。
 	# 这些任务可能较慢，先用当前电量/温度/供电状态覆盖临时的「更新中」。
@@ -380,8 +382,11 @@ elif [ -f "$DATADIR/hot_update_at" ]; then
 		qsc_ps_now
 		qsc_ps_refresh_desc "${QSC_PS_NOW:-0}"
 	fi
-else
+elif qsc_description_enabled 2>/dev/null; then
 	qsc_write_module_description "🔎启动中" "服务已拉起" "$DESC_INTRO"
+else
+	type qsc_description_restore_static >/dev/null 2>&1 &&
+		qsc_description_restore_static
 fi
 
 # 简介刷新 worker 要在所有可能阻塞的初始化任务之前启动。
@@ -410,6 +415,12 @@ qsc_start_description_worker() {
 	# 用 sh 显式解释，不能把执行权限当成 worker 是否存在的判断条件。
 	# 某些热更新器解压新文件时会暂时丢失 0755；这不应让简介刷新静默失效。
 	[ -f "$BINDIR/description_worker.sh" ] || return 0
+	if ! qsc_description_enabled 2>/dev/null; then
+		qsc_stop_description_worker
+		type qsc_description_restore_static >/dev/null 2>&1 &&
+			qsc_description_restore_static
+		return 0
+	fi
 	qsc_stop_description_worker
 	if command -v setsid >/dev/null 2>&1; then
 		setsid sh "$BINDIR/description_worker.sh" "$$" \

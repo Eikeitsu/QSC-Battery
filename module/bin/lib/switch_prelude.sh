@@ -54,6 +54,7 @@ app_stop="${QSCV_app_stop}"
 app_stop_list="${QSCV_app_stop_list}"
 app_stop="$(qsc_clamp_int "${app_stop:-0}" 0 1 0)"
 history_enable="$(qsc_clamp_int "${history_enable:-1}" 0 1 1)"
+description_enable="$(qsc_clamp_int "${QSCV_description_enable:-1}" 0 1 1)"
 
 charge_full="${QSCV_charge_full}"
 charge_full_mode="${QSCV_charge_full_mode}"

@@ -14,6 +14,27 @@ qsc_service_loop_once() {
 		qsc_runtime_trace "H1" "loop_enter" "$QSC_SERVICE_LOOP_COUNT:$_now"
 		# endregion
 		qsc_service_heartbeat
+		# 动态简介开关变化：即时停/启 worker，关则写入专用静态文案。
+		if type qsc_description_enabled >/dev/null 2>&1; then
+			if qsc_description_enabled; then
+				_desc_pid="$(cat "$DATADIR/description_worker.pid" 2>/dev/null | tr -d ' \r\n')"
+				case "$_desc_pid" in
+					""|*[!0-9]*)
+						type qsc_start_description_worker >/dev/null 2>&1 &&
+							qsc_start_description_worker
+						;;
+					*)
+						kill -0 "$_desc_pid" 2>/dev/null || {
+							type qsc_start_description_worker >/dev/null 2>&1 &&
+								qsc_start_description_worker
+						}
+						;;
+				esac
+			else
+				type qsc_stop_description_worker >/dev/null 2>&1 &&
+					qsc_stop_description_worker
+			fi
+		fi
 		# 即使本轮准备跳过 qsc_switch，也要用当前供电状态刷新模块简介。
 		if type qsc_ps_refresh_desc >/dev/null 2>&1; then
 			qsc_ps_refresh_desc "$_now"

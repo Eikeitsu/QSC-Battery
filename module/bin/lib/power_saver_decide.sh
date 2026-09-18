@@ -33,6 +33,11 @@ qsc_ps_refresh_desc() {
 	local now="${1:-0}"
 	local lv temp digits off plugged stopped sig p
 	[ -f "$DATADIR/hot_update_fallback_reboot" ] && return 0
+	if ! qsc_description_enabled 2>/dev/null; then
+		type qsc_description_restore_static >/dev/null 2>&1 &&
+			qsc_description_restore_static
+		return 0
+	fi
 	type qsc_refresh_module_description >/dev/null 2>&1 || return 0
 	if [ "$now" -gt 0 ] 2>/dev/null \
 		&& [ "$((now - QSC_PS_DESC_TS))" -lt "$QSC_PS_DESC_MIN_GAP" ] 2>/dev/null; then

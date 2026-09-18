@@ -4,6 +4,27 @@
 # emoji 后无空格；方括号内 | 两侧加空格；子状态分隔统一用 ●（两侧加空格）
 
 DESC_INTRO="电量/温度停充；电流控制为安装时可选。配置：config/config.conf，日志：data/log.log。"
+# 关闭动态简介时的专用固定文案（不用「启动中」等动态默认句）
+DESC_STATIC="电量/温度停充；电流控制为安装时可选。配置：config/config.conf，日志：data/log.log。"
+
+# description_enable：1=动态简介（默认）；0=写入 DESC_STATIC 固定文案，停 worker，少写盘。
+qsc_description_enabled() {
+	local v
+	v="${description_enable:-${QSCV_description_enable:-}}"
+	if [ -z "$v" ] && [ -n "${CONFDIR:-}" ] && [ -f "$CONFDIR/config.conf" ]; then
+		v="$(sed -n 's/^description_enable=//p' "$CONFDIR/config.conf" 2>/dev/null | head -n1 | tr -d ' \r')"
+	fi
+	case "$v" in
+		0) return 1 ;;
+		*) return 0 ;;
+	esac
+}
+
+qsc_description_restore_static() {
+	# 只改 description=，不动 version 等其它字段
+	type qsc_write_module_description >/dev/null 2>&1 || return 0
+	qsc_write_module_description "充电控制" "" "${DESC_STATIC:-$DESC_INTRO}"
+}
 
 # $1=大状态  $2=括号内子状态（可空）  $3=括号外说明（必填，可空则回退 DESC_INTRO）
 # 结果写入 QSC_DESC 而不是 echo：本函数每轮都会被调用，命令替换会白 fork 一次
@@ -125,6 +146,11 @@ qsc_write_module_description() {
 qsc_refresh_module_description() {
 	local level temp major inner outer
 	local cur_tag cur_mode stop_bits
+
+	if ! qsc_description_enabled; then
+		qsc_description_restore_static
+		return 0
+	fi
 
 	level="${battery_level:-}"
 	temp="${temperature:-}"

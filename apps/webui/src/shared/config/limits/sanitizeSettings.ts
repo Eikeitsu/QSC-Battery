@@ -162,6 +162,11 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   if (String(histI) !== String(input.history_interval_sec)) mark(true);
   next.history_interval_sec = String(histI);
 
+  next.description_enable =
+    next.description_enable === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
+  if (next.description_enable !== String(input.description_enable || BinaryFlag.On))
+    mark(true);
+
   next.power_saver = next.power_saver === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
   if (next.power_saver !== String(input.power_saver || BinaryFlag.On)) mark(true);
   const idleI = clampInt(

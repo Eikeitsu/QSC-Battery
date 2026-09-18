@@ -136,6 +136,7 @@ qsc_ps_load_conf() {
 			loop_interval_sec) QSC_PS_LOOP="$v" ;;
 			loop_interval_maintain_sec) QSC_PS_MAINTAIN="$v" ;;
 			native_daemon) QSC_PS_NATIVE="$v" ;;
+			description_enable) QSCV_description_enable="$v" ;;
 		esac
 	done <"$CONF"
 
@@ -154,6 +155,8 @@ qsc_ps_load_conf() {
 	QSC_PS_LOOP="$(qsc_clamp_int "$QSC_PS_LOOP" 2 60 3)"
 	QSC_PS_MAINTAIN="$(qsc_clamp_int "$QSC_PS_MAINTAIN" 3 60 8)"
 	QSC_PS_NATIVE="$(qsc_clamp_int "$QSC_PS_NATIVE" 0 1 1)"
+	QSCV_description_enable="$(qsc_clamp_int "${QSCV_description_enable:-1}" 0 1 1)"
+	description_enable="$QSCV_description_enable"
 
 	# 只在配置真的更新过时刷哨兵：否则每个 qsc_switch.sh 进程都会写一次，
 	# 插电时就变成每轮一次无谓写盘

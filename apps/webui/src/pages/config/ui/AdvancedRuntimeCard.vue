@@ -59,6 +59,12 @@ onMounted(async () => {
       :model-value="store.settings.power_saver !== '0'"
       @update:model-value="(v) => onSwitch('power_saver', v)"
     />
+    <SwitchCell
+      title="动态简介"
+      label="关后列表固定为「充电控制」产品文案，停简介 worker，少写 module.prop；略省电"
+      :model-value="store.settings.description_enable !== '0'"
+      @update:model-value="(v) => onSwitch('description_enable', v)"
+    />
     <template v-if="store.settings.power_saver !== '0'">
       <van-field
         v-model="store.settings.loop_interval_idle_sec"

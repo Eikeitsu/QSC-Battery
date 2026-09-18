@@ -114,7 +114,9 @@ qsc_conf_scan() {
 			|compatibility_mode|shut_down|loop_interval_sec \
 			|loop_interval_maintain_sec|switch_verify_sec|switch_batch_blind|wireless_policy \
 			|app_stop|app_stop_list|history_enable|history_interval_sec \
-			|temperature_switch|temperature_switch_stop|temperature_switch_start)
+			|temperature_switch|temperature_switch_stop|temperature_switch_start \
+			|description_enable|chart_show|notify_power_status|notify_charge_event \
+			|native_daemon|native_impl|power_saver)
 				eval "QSCV_$k=\$v"
 				;;
 		esac

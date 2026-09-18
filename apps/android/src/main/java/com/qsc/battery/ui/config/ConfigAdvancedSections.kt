@@ -138,6 +138,9 @@ internal fun ConfigAdvancedSections(
         ChargeToggleRow("省电模式", v("power_saver") == "1") {
             setLocal("power_saver", if (it) "1" else "0")
         }
+        ChargeToggleRow("动态简介", v("description_enable") != "0") {
+            setLocal("description_enable", if (it) "1" else "0")
+        }
         ChargeToggleRow("记录充放电历史", v("history_enable") == "1") {
             setLocal("history_enable", if (it) "1" else "0")
         }
