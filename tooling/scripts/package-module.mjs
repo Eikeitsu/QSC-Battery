@@ -343,12 +343,21 @@ function embedCompanionApk() {
   }
   const candidates = [
     join(releaseDir, "QSC-Battery.apk"),
-    join(repoRoot, "app", "app", "build", "outputs", "apk", "release", "app-release.apk"),
+    join(
+      repoRoot,
+      "apps",
+      "android",
+      "build",
+      "outputs",
+      "apk",
+      "release",
+      "app-release.apk",
+    ),
   ];
   const apk = candidates.find((p) => existsSync(p));
   if (!apk) {
     const msg =
-      "companion apk: missing (expected release/QSC-Battery.apk or app release APK)";
+      "companion apk: missing (expected release/QSC-Battery.apk or apps/android release APK)";
     if (process.env.REQUIRE_COMPANION_APK === "1") {
       throw new Error(`${msg} — build the companion app first`);
     }

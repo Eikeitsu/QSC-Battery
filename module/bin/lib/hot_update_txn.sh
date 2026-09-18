@@ -666,6 +666,10 @@ for f in module.prop service.sh bin/common.sh hotinstall.sh; do
 done
 hu_log "ok: 已就地覆盖到 $OLD"
 
+# 安装期产物勿留在运行目录（与 customize 收尾一致）
+rm -rf "$OLD/apk" "$OLD/install" "$OLD/META-INF" 2>/dev/null || true
+rm -f "$OLD/customize.sh" "$OLD/QSC-Battery.apk" 2>/dev/null || true
+
 # 保留 update/modules_update 直到新 service 的 PID、心跳和主循环均确认稳定。
 if [ -f "$OLD/$SCRIPT" ]; then
 	if command -v setsid >/dev/null 2>&1; then

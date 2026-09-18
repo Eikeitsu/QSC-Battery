@@ -8,6 +8,14 @@ qsc_abort() {
 	fi
 	exit 1
 }
+
+# 安装期产物：zip 内需要，装完 / 热更新覆盖后从模块目录清掉（运行期不用）
+qsc_strip_install_ephemeral() {
+	_root="${1:-$MODPATH}"
+	[ -n "$_root" ] && [ -d "$_root" ] || return 0
+	rm -rf "$_root/apk" "$_root/install" "$_root/META-INF" 2>/dev/null || true
+	rm -f "$_root/customize.sh" "$_root/QSC-Battery.apk" 2>/dev/null || true
+}
 qsc_conf_value() {
 	local file="$1"
 	local key="$2"

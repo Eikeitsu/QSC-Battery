@@ -339,15 +339,13 @@ ui_print " Action: 上=刷新 / 下=插电测开关(未插电则诊断) "
 ui_print "--------------------------------"
 
 set_perm_recursive "$MODPATH/bin" root root 0755 0755
-	set_perm_recursive "$MODPATH/config" root root 0755 0644
-	set_perm_recursive "$MODPATH/data" root root 0755 0777
-	[ -d "$MODPATH/install" ] && set_perm_recursive "$MODPATH/install" root root 0755 0644
-	[ -d "$MODPATH/assets" ] && set_perm_recursive "$MODPATH/assets" root root 0755 0644
+set_perm_recursive "$MODPATH/config" root root 0755 0644
+set_perm_recursive "$MODPATH/data" root root 0755 0777
+[ -d "$MODPATH/assets" ] && set_perm_recursive "$MODPATH/assets" root root 0755 0644
 [ -d "$MODPATH/webroot" ] && set_perm_recursive "$MODPATH/webroot" root root 0755 0644
 set_perm "$MODPATH/service.sh" root root 0755
 set_perm "$MODPATH/uninstall.sh" root root 0755
 set_perm "$MODPATH/action.sh" root root 0755
-set_perm "$MODPATH/customize.sh" root root 0755
 set_perm "$MODPATH/hotinstall.sh" root root 0755
 [ -f "$MODPATH/bin/qscd" ] && set_perm "$MODPATH/bin/qscd" root root 0755
 [ -f "$MODPATH/bin/qscd_fetch.sh" ] && set_perm "$MODPATH/bin/qscd_fetch.sh" root root 0755
@@ -376,4 +374,6 @@ else
 	ui_print " 安装完成，请重启设备 "
 fi
 rm -f /data/adb/qsc/install_auto 2>/dev/null
+# 最后再清：zip 仍含 customize/install/apk，模块目录运行期不需要
+qsc_strip_install_ephemeral "$MODPATH"
 ui_print "********************************"

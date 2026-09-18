@@ -36,12 +36,9 @@ install_companion_app() {
 		ui_print "- 正在安装内嵌伴侣 APP..."
 		if pm install -r "$_bundled_apk" >/dev/null 2>&1; then
 			ui_print "- 伴侣 APP 已安装"
-			# 运行期不需要模块目录里的 APK；装进系统后删掉，少占 /data/adb 空间
-			rm -rf "$MODPATH/apk" 2>/dev/null
-			rm -f "$MODPATH/QSC-Battery.apk" 2>/dev/null
 		else
 			ui_print "- APP 安装失败（签名冲突或 pm 不可用）"
-			ui_print "- 可手动安装: $_bundled_apk"
+			ui_print "- 发布页安装或跳过均可；模块目录不会保留 APK"
 		fi
 		return 0
 	fi

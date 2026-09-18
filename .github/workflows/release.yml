@@ -258,7 +258,7 @@ jobs:
         run: |
           if [ "$WANT_APK" != "true" ] && [ "${{ steps.meta.outputs.publish_zips }}" != "true" ]; then
             echo "skip APK (not in publish scope for zip embedding)"
-            mkdir -p ../release
+            mkdir -p "$GITHUB_WORKSPACE/release"
             exit 0
           fi
           if [ "$IS_PRE" = "true" ] || [[ "$RAW" == *.pre ]]; then
@@ -268,8 +268,8 @@ jobs:
           else
             ./gradlew assembleRelease --stacktrace
           fi
-          mkdir -p ../release
-          cp app/build/outputs/apk/release/app-release.apk ../release/QSC-Battery.apk
+          mkdir -p "$GITHUB_WORKSPACE/release"
+          cp build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/release/QSC-Battery.apk"
 
       - name: Build all module zips (full / rust / c / sh / lite)
         if: steps.meta.outputs.build_mode != 'promote'
