@@ -73,8 +73,7 @@ class SettingsRepository(private val context: Context) {
         context.settingsStore.edit { it[Keys.preferCdn] = enabled }
     }
 
-    suspend fun startupUpdateSnooze(): String =
-        context.settingsStore.data.first()[Keys.startupUpdateSnooze].orEmpty()
+    suspend fun startupUpdateSnooze(): String = context.settingsStore.data.first()[Keys.startupUpdateSnooze].orEmpty()
 
     suspend fun setStartupUpdateSnooze(fingerprint: String) {
         context.settingsStore.edit { it[Keys.startupUpdateSnooze] = fingerprint }
