@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
 import { showToast } from "vant";
+import ChipGroup from "@/shared/ui/ChipGroup.vue";
 import PresetValue from "@/shared/ui/PresetValue.vue";
 import SectionHead from "@/shared/ui/SectionHead.vue";
 import SwitchCell from "@/shared/ui/SwitchCell.vue";
@@ -17,10 +18,10 @@ const chargeFullOn = computed(
   () => store.settings.charge_full === "1" && stopIsFull.value,
 );
 
-const modeOptions = [
-  { name: "自动", value: "auto" },
-  { name: "电流", value: "current" },
-  { name: "时间", value: "time" },
+const modeChipOptions = [
+  { id: "auto", l: "自动" },
+  { id: "current", l: "电流" },
+  { id: "time", l: "时间" },
 ];
 
 const modeHint = computed(() => {
@@ -51,9 +52,10 @@ async function onChargeFull(on: boolean) {
   await onSwitch("charge_full", on);
 }
 
-async function onModeChange(v: string) {
+async function onModeChange(v: string | number) {
+  const mode = String(v);
   store.settings.charge_full_mode =
-    v === "time" || v === "current" || v === "auto" ? v : "auto";
+    mode === "time" || mode === "current" || mode === "auto" ? mode : "auto";
   await store.saveSettings();
 }
 
@@ -120,24 +122,15 @@ watch(stopIsFull, async (ok) => {
       @update:model-value="onChargeFull"
     />
     <template v-if="chargeFullOn">
-      <van-cell title="涓流模式" :label="modeHint">
-        <template #value>
-          <van-radio-group
-            :model-value="store.settings.charge_full_mode || 'auto'"
-            direction="horizontal"
-            @update:model-value="onModeChange"
-          >
-            <van-radio
-              v-for="opt in modeOptions"
-              :key="opt.value"
-              :name="opt.value"
-              icon-size="16px"
-            >
-              {{ opt.name }}
-            </van-radio>
-          </van-radio-group>
-        </template>
-      </van-cell>
+      <div class="trickle-block">
+        <div class="trickle-title">涓流模式</div>
+        <p class="field-hint">{{ modeHint }}</p>
+        <ChipGroup
+          :options="modeChipOptions"
+          :model-value="store.settings.charge_full_mode || 'auto'"
+          @update:model-value="onModeChange"
+        />
+      </div>
     </template>
   </ThemedCard>
 </template>
@@ -155,5 +148,16 @@ watch(stopIsFull, async (ok) => {
   color: var(--qsc-text-3);
   line-height: 1.4;
   padding: 0 var(--qsc-cell-pad-x, 4px);
+}
+
+.trickle-block {
+  padding: 4px var(--qsc-cell-pad-x, 16px) 4px;
+}
+
+.trickle-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--qsc-text);
+  margin-bottom: 2px;
 }
 </style>

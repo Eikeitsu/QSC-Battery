@@ -32,6 +32,9 @@ class SettingsRepository(private val context: Context) {
 
         /** 仅 CI 通道：updates/ci-dist 走 jsDelivr（默认开） */
         val preferCdn = booleanPreferencesKey("prefer_cdn")
+
+        /** 启动更新弹窗「稍后」：同一批远端 versionCode 不再弹 */
+        val startupUpdateSnooze = stringPreferencesKey("startup_update_snooze")
     }
 
     val settings: Flow<ThemeSettings> = context.settingsStore.data.map { prefs ->
@@ -68,6 +71,13 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setPreferCdn(enabled: Boolean) {
         context.settingsStore.edit { it[Keys.preferCdn] = enabled }
+    }
+
+    suspend fun startupUpdateSnooze(): String =
+        context.settingsStore.data.first()[Keys.startupUpdateSnooze].orEmpty()
+
+    suspend fun setStartupUpdateSnooze(fingerprint: String) {
+        context.settingsStore.edit { it[Keys.startupUpdateSnooze] = fingerprint }
     }
 
     suspend fun alternativeIconEnabled(): Boolean = context.settingsStore.data.first()[Keys.alternativeIcon] ?: false

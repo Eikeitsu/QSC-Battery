@@ -132,7 +132,7 @@ class UpdateRepository(
             appRemote.versionCode < appCode
 
         val daemonHasUpdate = daemonRemoteDisplay != null &&
-            daemonRemoteCode > 0L &&
+            daemonLocalCode > 0L &&
             daemonRemoteCode > daemonLocalCode
         val daemonCanSwitch = daemonRemoteDisplay != null &&
             daemonRemoteDisplay.manifestUrl != null &&
