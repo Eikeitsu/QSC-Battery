@@ -253,7 +253,6 @@ jobs:
         env:
           RAW: ${{ steps.meta.outputs.raw }}
           CODE: ${{ steps.meta.outputs.version_code }}
-          IS_PRE: ${{ steps.meta.outputs.prerelease }}
           WANT_APK: ${{ steps.meta.outputs.publish_apk }}
         run: |
           if [ "$WANT_APK" != "true" ] && [ "${{ steps.meta.outputs.publish_zips }}" != "true" ]; then
@@ -261,13 +260,10 @@ jobs:
             mkdir -p "$GITHUB_WORKSPACE/release"
             exit 0
           fi
-          if [ "$IS_PRE" = "true" ] || [[ "$RAW" == *.pre ]]; then
-            ./gradlew assembleRelease --stacktrace \
-              -PqscVersionName="$RAW" \
-              -PqscVersionCode="$CODE"
-          else
-            ./gradlew assembleRelease --stacktrace
-          fi
+          # 正式 / 预发布都必须写入展示版与 versionCode，否则会落成 gradle 默认值
+          ./gradlew assembleRelease --stacktrace \
+            -PqscVersionName="$RAW" \
+            -PqscVersionCode="$CODE"
           mkdir -p "$GITHUB_WORKSPACE/release"
           cp build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/release/QSC-Battery.apk"
 

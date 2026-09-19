@@ -24,11 +24,11 @@ android {
         minSdk = 26
         // 运行行为仍按 35；compileSdk 37 仅为满足 Compose BOM 依赖的 AAR metadata
         targetSdk = 35
-        // CI / 预发布可通过 -PqscVersionName / -PqscVersionCode 覆盖展示名与检测码
+        // CI / 发版通过 -PqscVersionName / -PqscVersionCode 覆盖；本地默认与模块日期版对齐
         val qscVersionName = providers.gradleProperty("qscVersionName")
         val qscVersionCode = providers.gradleProperty("qscVersionCode")
-        versionName = qscVersionName.orNull ?: "0.3.1"
-        versionCode = qscVersionCode.orNull?.toIntOrNull() ?: 2026091201
+        versionName = qscVersionName.orNull ?: "2026.09.18"
+        versionCode = qscVersionCode.orNull?.toIntOrNull() ?: 2026091801
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }

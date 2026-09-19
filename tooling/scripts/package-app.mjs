@@ -27,8 +27,15 @@ function log(msg) {
 
 function readGradleVersion() {
   const gradle = readFileSync(join(appRoot, "build.gradle.kts"), "utf8");
-  const code = gradle.match(/versionCode\s*=\s*(\d+)/)?.[1] || "0";
-  const name = gradle.match(/versionName\s*=\s*"([^"]+)"/)?.[1] || "0.0.0";
+  // 优先取 ?: 后的默认字面量；兼容直接赋值
+  const code =
+    gradle.match(/versionCode\s*=\s*[^\n]*?:\s*(\d+)/)?.[1] ||
+    gradle.match(/versionCode\s*=\s*(\d+)/)?.[1] ||
+    "0";
+  const name =
+    gradle.match(/versionName\s*=\s*[^\n]*?:\s*"([^"]+)"/)?.[1] ||
+    gradle.match(/versionName\s*=\s*"([^"]+)"/)?.[1] ||
+    "0.0.0";
   return { versionCode: Number(code), version: name };
 }
 

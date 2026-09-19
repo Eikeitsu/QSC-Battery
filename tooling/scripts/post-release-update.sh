@@ -195,19 +195,15 @@ if [ "$PUBLISH_APK" = "true" ]; then
   find docs/public/releases -maxdepth 1 -type f -name 'QSC-Battery_v*.apk' ! -name "$APK_NAME" -print -delete || true
   cp release/QSC-Battery.apk "docs/public/releases/${APK_NAME}"
   RAW="$RAW" CODE="$CODE" PAGES_BASE="$PAGES_BASE" APK_NAME="$APK_NAME" python3 - <<'PY'
-import json, os, pathlib, re
+import json, os, pathlib
 
 raw = os.environ["RAW"]
+code = int(os.environ["CODE"])
 pages = os.environ["PAGES_BASE"]
 apk_name = os.environ["APK_NAME"]
 apk_url = f"{pages}/releases/{apk_name}"
-gradle = pathlib.Path("apps/android/build.gradle.kts").read_text(encoding="utf-8")
-code_m = re.search(r"versionCode\s*=\s*(\d+)", gradle)
-name_m = re.search(r'versionName\s*=\s*"([^"]+)"', gradle)
-version = name_m.group(1) if name_m else raw
-code = int(code_m.group(1)) if code_m else int(os.environ.get("CODE", "0"))
 data = {
-    "version": version,
+    "version": raw,
     "versionCode": code,
     "apkUrl": apk_url,
     "changelog": f"{pages}/changelog.md",
