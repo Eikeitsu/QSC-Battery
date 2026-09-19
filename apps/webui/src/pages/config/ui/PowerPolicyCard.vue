@@ -4,12 +4,21 @@ import SectionHead from "@/shared/ui/SectionHead.vue";
 import SwitchCell from "@/shared/ui/SwitchCell.vue";
 import ThemedCard from "@/shared/ui/ThemedCard.vue";
 import ScheduleEditor from "@/shared/ui/ScheduleEditor.vue";
+import ConfigBlock from "./ConfigBlock.vue";
 import { useConfigFormContext } from "@/composables";
 
 const { store, onSwitch, saveNightSchedule } = useConfigFormContext();
 
 async function persist() {
   await store.saveSettings(false);
+}
+
+async function onNightSaver(on: boolean) {
+  await onSwitch("night_saver", on);
+  if (on && !store.nightSchedule.length) {
+    store.nightSchedule = ["23:00-07:00"];
+    await saveNightSchedule(false);
+  }
 }
 
 const profile = computed({
@@ -63,12 +72,22 @@ const customOpen = computed(() => store.settings.power_profile === "custom");
     />
     <SwitchCell
       title="夜间省电"
-      label="命中时段进入深驻停（DeepPark）"
+      label="命中时段进入深驻停（DeepPark）；支持跨天"
       :model-value="store.settings.night_saver === '1'"
-      @update:model-value="(v) => onSwitch('night_saver', v)"
+      @update:model-value="onNightSaver"
     />
     <template v-if="store.settings.night_saver === '1'">
-      <ScheduleEditor v-model="store.nightSchedule" @change="saveNightSchedule" />
+      <ConfigBlock
+        label="夜间时段"
+        hint="支持跨天，例如 23:00-07:00；开启时若无时段会写入该默认值"
+      >
+        <ScheduleEditor
+          v-model="store.nightSchedule"
+          add-title="添加夜间时段"
+          edit-title="编辑夜间时段"
+          @change="saveNightSchedule"
+        />
+      </ConfigBlock>
     </template>
     <SwitchCell
       title="深睡"

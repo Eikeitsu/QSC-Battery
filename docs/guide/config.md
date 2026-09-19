@@ -74,22 +74,22 @@
 
 未插电为**事件驱动驻停**（qscd 阻塞在插拔 uevent），不是杀进程，也不是绝对「零耗电」。
 
-| 键                              | 默认     | 含义                                                               |
-| ------------------------------- | -------- | ------------------------------------------------------------------ |
-| `power_saver`                   | 1        | 省电总开关                                                         |
-| `power_profile`                 | balanced | `balanced` / `aggressive` / `custom`                               |
-| `screen_off_saver`              | 1        | 息屏加强                                                           |
-| `night_saver`                   | 0        | 夜间省电                                                           |
-| `night_schedule`                | （注释） | 多行 `HH:MM-HH:MM`                                                 |
-| `deep_idle_enable`              | 1        | 深睡（息屏持续或夜间）                                             |
-| `deep_after_sec`                | 600      | 息屏多久后深睡                                                     |
-| `deep_idle_sec`                 | 900      | 深睡未插电兜底秒数                                                 |
-| `deep_full_gap_sec`             | 7200     | 深睡强制满轮间隔                                                   |
-| `heartbeat_sec`                 | 180      | 心跳写盘间隔                                                       |
-| `loop_interval_*`               | 见模板   | 自定义档可调；插电近阈值不受 DeepPark 放松                         |
-| `native_daemon` / `native_impl` | 1 / rust | 事件守护                                                           |
-| `description_enable`            | 1        | 动态简介                                                           |
-| `stop_hold_wakelock`            | auto     | 停充持锁：`auto`=魅族/MCA 仅息屏·夜间持锁；`1`=持续持锁（挡 Doze） |
+| 键                              | 默认        | 含义                                                               |
+| ------------------------------- | ----------- | ------------------------------------------------------------------ |
+| `power_saver`                   | 1           | 省电总开关                                                         |
+| `power_profile`                 | balanced    | `balanced` / `aggressive` / `custom`                               |
+| `screen_off_saver`              | 1           | 息屏加强                                                           |
+| `night_saver`                   | 0           | 夜间省电                                                           |
+| `night_schedule`                | 23:00-07:00 | 多行 `HH:MM-HH:MM`；**支持跨天**；`night_saver=0` 时不生效         |
+| `deep_idle_enable`              | 1           | 深睡（息屏持续或夜间）                                             |
+| `deep_after_sec`                | 600         | 息屏多久后深睡                                                     |
+| `deep_idle_sec`                 | 900         | 深睡未插电兜底秒数                                                 |
+| `deep_full_gap_sec`             | 7200        | 深睡强制满轮间隔                                                   |
+| `heartbeat_sec`                 | 180         | 心跳写盘间隔                                                       |
+| `loop_interval_*`               | 见模板      | 自定义档可调；插电近阈值不受 DeepPark 放松                         |
+| `native_daemon` / `native_impl` | 1 / rust    | 事件守护                                                           |
+| `description_enable`            | 1           | 动态简介                                                           |
+| `stop_hold_wakelock`            | auto        | 停充持锁：`auto`=魅族/MCA 仅息屏·夜间持锁；`1`=持续持锁（挡 Doze） |
 
 守护实际版本写在 `data/native_version`（安装/下载时更新，只读状态，不是手改项）。
 

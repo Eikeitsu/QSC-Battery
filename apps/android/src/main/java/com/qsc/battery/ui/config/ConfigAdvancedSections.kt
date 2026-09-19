@@ -27,6 +27,7 @@ internal fun ConfigAdvancedSections(
     setLocal: (String, String) -> Unit,
     notifyKinds: Set<String>,
     onEdit: (ConfigEditField) -> Unit,
+    onEditNightSchedules: () -> Unit = {},
 ) {
     val current = ui.current
     val stopSchedules = ui.stopSchedules
@@ -68,6 +69,18 @@ internal fun ConfigAdvancedSections(
         }
         ChargeToggleRow("夜间省电", v("night_saver") == "1") {
             setLocal("night_saver", if (it) "1" else "0")
+            if (it) vm.ensureDefaultNightSchedule()
+        }
+        if (v("night_saver") == "1") {
+            ChargeListRow(
+                title = "夜间时段",
+                summary = if (nightSchedules.isEmpty()) {
+                    "未配置（点此添加，支持跨天）"
+                } else {
+                    nightSchedules.joinToString("；")
+                },
+                onClick = { onEditNightSchedules() },
+            )
         }
         ChargeToggleRow("深睡", v("deep_idle_enable") != "0") {
             setLocal("deep_idle_enable", if (it) "1" else "0")
@@ -75,10 +88,6 @@ internal fun ConfigAdvancedSections(
         ChargeToggleRow("动态简介", v("description_enable") != "0") {
             setLocal("description_enable", if (it) "1" else "0")
         }
-        ChargeListRow(
-            title = "夜间时段",
-            summary = if (nightSchedules.isEmpty()) "未配置（请用 WebUI 编辑）" else nightSchedules.joinToString("；"),
-        )
         listOf(
             Triple("未插电间隔", "loop_interval_idle_sec", "秒"),
             Triple("未插电·有守护", "loop_interval_idle_native_sec", "秒"),

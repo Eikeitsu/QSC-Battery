@@ -43,6 +43,7 @@ fun ConfigScreen(
     val vm: ConfigViewModel = viewModel(factory = factory)
     val ui by vm.ui.collectAsStateWithLifecycle()
     var edit by remember { mutableStateOf<ConfigEditField?>(null) }
+    var editNight by remember { mutableStateOf(false) }
 
     fun v(key: String) = vm.v(key)
     fun setLocal(key: String, value: String) = vm.setLocal(key, value)
@@ -122,6 +123,7 @@ fun ConfigScreen(
                         setLocal = ::setLocal,
                         notifyKinds = notifyKinds,
                         onEdit = { edit = it },
+                        onEditNightSchedules = { editNight = true },
                     )
                 }
             }
@@ -149,6 +151,18 @@ fun ConfigScreen(
             onConfirm = {
                 field.set(it)
                 edit = null
+            },
+        )
+    }
+
+    if (editNight) {
+        ChargeScheduleSheet(
+            title = "夜间时段",
+            ranges = ui.nightSchedules,
+            onDismiss = { editNight = false },
+            onSave = {
+                vm.saveNightSchedules(it)
+                editNight = false
             },
         )
     }

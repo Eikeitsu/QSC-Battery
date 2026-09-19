@@ -53,8 +53,15 @@ const {
         @update:model-value="(id) => setCurrentLevel('bypass_temp', id)"
       />
       <div class="block-label">旁路时段</div>
-      <ScheduleEditor v-model="store.current.bypass_schedule" @change="saveSchedule" />
-      <p class="field-hint">电量 / 温度 / 时段任一满足即开旁路；支持跨天</p>
+      <ScheduleEditor
+        v-model="store.current.bypass_schedule"
+        add-title="添加旁路时段"
+        edit-title="编辑旁路时段"
+        @change="saveSchedule"
+      />
+      <p class="field-hint">
+        电量 / 温度 / 时段任一满足即开旁路；支持跨天（如 22:00-08:00）
+      </p>
       <van-field
         v-model.number="store.current.safety_temp_max"
         type="digit"

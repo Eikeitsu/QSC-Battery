@@ -79,12 +79,44 @@ class ConfigViewModel(
             val st = _ui.value
             val okConf = container.configRepository.setConfValues(st.conf)
             val okCur = container.configRepository.saveCurrent(st.current)
-            val msg = if (okConf && okCur) {
+            val okNight = if (advancedOnly) {
+                container.configRepository.replaceMultilineKey("night_schedule", st.nightSchedules)
+            } else {
+                true
+            }
+            val msg = if (okConf && okCur && okNight) {
                 if (advancedOnly) "已保存" else "已保存，下一轮循环生效"
             } else {
                 "保存失败"
             }
             _ui.update { it.copy(lastSaveMessage = msg) }
+        }
+    }
+
+    fun setNightSchedules(lines: List<String>) {
+        _ui.update { it.copy(nightSchedules = lines) }
+    }
+
+    fun saveNightSchedules(lines: List<String>) {
+        viewModelScope.launch {
+            val normalized = lines.mapNotNull { normalizeScheduleRange(it) }
+            val ok = container.configRepository.replaceMultilineKey("night_schedule", normalized)
+            _ui.update {
+                it.copy(
+                    nightSchedules = normalized,
+                    lastSaveMessage = if (ok) "夜间时段已保存" else "夜间时段保存失败",
+                )
+            }
+        }
+    }
+
+    /** 打开夜间省电且无时段时写入默认跨天窗口 */
+    fun ensureDefaultNightSchedule() {
+        if (_ui.value.nightSchedules.isNotEmpty()) return
+        val def = listOf("23:00-07:00")
+        _ui.update { it.copy(nightSchedules = def) }
+        viewModelScope.launch {
+            container.configRepository.replaceMultilineKey("night_schedule", def)
         }
     }
 

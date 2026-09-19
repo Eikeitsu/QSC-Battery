@@ -9,8 +9,8 @@ const props = withDefaults(
   }>(),
   {
     modelValue: () => [],
-    addTitle: "添加旁路时段",
-    editTitle: "编辑旁路时段",
+    addTitle: "添加时段",
+    editTitle: "编辑时段",
   },
 );
 
