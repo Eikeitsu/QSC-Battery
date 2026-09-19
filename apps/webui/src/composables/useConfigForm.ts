@@ -148,16 +148,16 @@ export function useConfigForm() {
     await store.saveCurrent();
   }
 
-  async function savePowerStopSchedule() {
-    await store.savePowerStopSchedule();
+  async function savePowerStopSchedule(toast = true) {
+    await store.savePowerStopSchedule(toast);
   }
 
-  async function saveNotifyQuietSchedule() {
-    await store.saveNotifyQuietSchedule();
+  async function saveNotifyQuietSchedule(toast = true) {
+    await store.saveNotifyQuietSchedule(toast);
   }
 
-  async function saveNightSchedule() {
-    await store.saveNightSchedule();
+  async function saveNightSchedule(toast = true) {
+    await store.saveNightSchedule(toast);
   }
 
   const powerSwitchText = computed({
