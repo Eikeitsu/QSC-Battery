@@ -358,9 +358,7 @@ const confTemplates = [
   ["notify.conf", notifyTemplate],
 ];
 for (const key of configKeys) {
-  const hit = confTemplates.find(([, body]) =>
-    new RegExp(`^#?${key}=`, "m").test(body),
-  );
+  const hit = confTemplates.find(([, body]) => new RegExp(`^#?${key}=`, "m").test(body));
   const migrated = customize.includes(key);
   if (!hit && !migrated) {
     throw new Error(`config templates: missing default key ${key}`);
