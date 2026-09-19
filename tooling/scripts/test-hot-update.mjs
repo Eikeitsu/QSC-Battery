@@ -290,6 +290,8 @@ for (const key of ["qscd-c-arm", "qscd-c-arm64", "qscd-rust-arm", "qscd-rust-arm
 
 const defaults = read(join(root, "apps/webui/src/shared/config/defaults.ts"));
 const configTemplate = read(join(root, "module/config/config.conf"));
+const powerTemplate = read(join(root, "module/config/power.conf"));
+const notifyTemplate = read(join(root, "module/config/notify.conf"));
 const customize = readShellBundle(join(root, "module/customize.sh"));
 const qscdFetch = read(join(root, "module/bin/qscd_fetch.sh"));
 const qscdSource = [
@@ -349,11 +351,19 @@ const webuiGuide = read(join(root, "docs/guide/webui.md"));
 const configGuide = read(join(root, "docs/guide/config.md"));
 const keysBlock = defaults.match(/CONFIG_KEYS:[\s\S]*?\n\] as const;/)?.[0] || "";
 const configKeys = [...keysBlock.matchAll(/^\s+"([^"]+)",$/gm)].map((match) => match[1]);
+// 键已拆到 config.conf / power.conf / notify.conf；任一模版有默认值，或 customize 迁移提到即可
+const confTemplates = [
+  ["config.conf", configTemplate],
+  ["power.conf", powerTemplate],
+  ["notify.conf", notifyTemplate],
+];
 for (const key of configKeys) {
-  const inTemplate = new RegExp(`^#?${key}=`, "m").test(configTemplate);
+  const hit = confTemplates.find(([, body]) =>
+    new RegExp(`^#?${key}=`, "m").test(body),
+  );
   const migrated = customize.includes(key);
-  if (!inTemplate && !migrated) {
-    throw new Error(`config.conf: missing default key ${key}`);
+  if (!hit && !migrated) {
+    throw new Error(`config templates: missing default key ${key}`);
   }
 }
 const storeMigration = read(join(root, "apps/webui/src/stores/battery/configActions.ts"));

@@ -43,7 +43,9 @@ object ConfigKeys {
     )
 
     val NOTIFY = listOf(
-        "notify_charge_event", "notify_charge_kinds", "notify_power_status",
+        "notify_charge_event",
+        "notify_charge_kinds",
+        "notify_power_status",
     )
 
     val ALL = listOf(

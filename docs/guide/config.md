@@ -91,6 +91,8 @@
 | `description_enable`            | 1        | 动态简介                                                           |
 | `stop_hold_wakelock`            | auto     | 停充持锁：`auto`=魅族/MCA 仅息屏·夜间持锁；`1`=持续持锁（挡 Doze） |
 
+守护实际版本写在 `data/native_version`（安装/下载时更新，只读状态，不是手改项）。
+
 档位：`balanced`≈现网；`aggressive` 拉长 idle/心跳并强制静态简介；`custom` 用手调秒数。
 
 ---

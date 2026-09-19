@@ -54,6 +54,7 @@ internal fun ConfigAdvancedSections(
                         setLocal("loop_interval_idle_native_sec", "900")
                         setLocal("heartbeat_sec", "600")
                     }
+
                     "balanced" -> {
                         setLocal("loop_interval_idle_native_sec", "600")
                         setLocal("heartbeat_sec", "180")
