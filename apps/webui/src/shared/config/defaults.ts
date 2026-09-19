@@ -57,7 +57,7 @@ export const DEFAULTS: Settings = {
   temperature_switch_stop: "60",
   temperature_switch_start: "50",
   loop_interval_sec: "3",
-  loop_interval_maintain_sec: "8",
+  loop_interval_maintain_sec: "30",
   switch_verify_sec: "1",
   switch_batch_blind: BinaryFlag.On,
   wireless_policy: "same",

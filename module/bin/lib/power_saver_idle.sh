@@ -104,7 +104,7 @@ qsc_ps_native_exec() {
 
 # 交给守护等待。支持 watch 时把阈值一起交下去：充电中「离阈值还远」的
 # uevent 由它自己吞掉，不再每轮叫醒 shell；插拔与跨阈值仍立即返回。
-# 未插电或正在维持停充时不传阈值 —— 那两种场景任何电池事件都该让 shell 复算。
+# 未插电 / 停充维持：只关心插拔（哨兵 --temp-stop 999），不把电流温度噪声当事件。
 qsc_ps_native_wait() {
 	local secs="$1" floor="$2" rc error_file
 	error_file="$DATADIR/qscd_wait_error.$$"
@@ -115,16 +115,39 @@ qsc_ps_native_wait() {
 			qsc_runtime_trace "H3" "native_wait_enter" "$QSC_PS_NATIVE_MODE:$secs:$floor"
 		# endregion
 		if [ ! -f "$DATADIR/power_switch" ] && qsc_ps_plugged; then
+			# 插电充电：按阈值过滤，远离停充点的 uevent 由守护吞掉
 			qsc_ps_native_exec "$secs" "$BINDIR/qscd" watch --max "$secs" --floor "$floor" \
 				--stop "${QSC_PS_STOP:-101}" --near "${QSC_PS_NEAR:-3}" \
 				--temp-stop "${QSC_PS_TEMP_STOP:-999}" > /dev/null 2>"$error_file"
 			rc="$?"
 		else
+			# 未插电 / 停充维持：旧逻辑不传阈值 → watch 退化为「任意 power_supply
+			# 事件都返回」。充满拔线后电流/电压/温度 uevent 仍很密，会整夜叫醒
+			# shell、打断 Doze。传哨兵温控阈值让 Thresholds 非空，只在插拔变化
+			# 或 --max 到期时返回（手机不会到 996°C）。
 			qsc_ps_native_exec "$secs" "$BINDIR/qscd" watch --max "$secs" --floor "$floor" \
-				> /dev/null 2>"$error_file"
+				--temp-stop 999 > /dev/null 2>"$error_file"
 			rc="$?"
 		fi
 	else
+		# C 版只有 wait-event（无法过滤）。未插电若照用，效果同上：电池噪声
+		# 整夜唤醒。改为直接走外层 sleep，插电仍用 wait-event 保响应。
+		if ! qsc_ps_plugged && [ ! -f "$DATADIR/power_switch" ]; then
+			QSC_PS_NATIVE_MODE=sleep-idle
+			QSC_PS_NATIVE_ERROR=idle_no_watch
+			# region agent log
+			type qsc_runtime_trace >/dev/null 2>&1 &&
+				qsc_runtime_trace "H3" "native_wait_enter" "$QSC_PS_NATIVE_MODE:$secs:$floor"
+			# endregion
+			sleep "$secs"
+			rc=0
+			rm -f "$error_file" 2>/dev/null
+			# region agent log
+			type qsc_runtime_trace >/dev/null 2>&1 &&
+				qsc_runtime_trace "H3" "native_wait_exit" "$QSC_PS_NATIVE_MODE:$rc"
+			# endregion
+			return 0
+		fi
 		QSC_PS_NATIVE_MODE=wait-event
 		# region agent log
 		type qsc_runtime_trace >/dev/null 2>&1 &&
@@ -285,16 +308,26 @@ qsc_ps_wait() {
 # 本轮结束后应睡多久
 # 参数: 电量 停充电量 是否插电(1/0) [温度 停充温度]
 qsc_ps_next_sleep() {
-	local level="$1" stop="$2" plugged="$3" temp="$4" temp_stop="$5" _pl
+	local level="$1" stop="$2" plugged="$3" temp="$4" temp_stop="$5" _pl _m
 	if [ "${QSC_PS_ENABLE:-1}" != "1" ]; then
 		QSC_PS_WAIT_FALLBACK="${QSC_PS_LOOP:-3}"
 		echo "${QSC_PS_LOOP:-3}"
 		return 0
 	fi
-	# 维持停充：按维持间隔
+	# 维持停充：已持内核 wakelock 时，魅族等可拉长轮询（持锁防深睡改回）。
+	# MCA 即使持锁仍会被系统改回 handle_state，必须按 maintain 间隔重申，不能拉到 300s。
 	if [ -f "$DATADIR/power_switch" ] && [ ! -f "$MODULE_OFF_FLAG" ]; then
-		QSC_PS_WAIT_FALLBACK="${QSC_PS_MAINTAIN:-8}"
-		echo "${QSC_PS_MAINTAIN:-8}"
+		_m="${QSC_PS_MAINTAIN:-30}"
+		if [ -f "$DATADIR/wakelock_held" ]; then
+			if type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca; then
+				:
+			else
+				_m=300
+				[ "${QSC_PS_MAINTAIN:-0}" -gt 60 ] 2>/dev/null && _m="$QSC_PS_MAINTAIN"
+			fi
+		fi
+		QSC_PS_WAIT_FALLBACK="$_m"
+		echo "$_m"
 		return 0
 	fi
 	if [ "$plugged" != "1" ]; then

@@ -109,7 +109,7 @@ qsc_ps_load_conf() {
 	QSC_PS_TEMP_STOP=999
 	QSC_PS_NEAR=3
 	QSC_PS_LOOP=3
-	QSC_PS_MAINTAIN=8
+	QSC_PS_MAINTAIN=30
 	QSC_PS_NATIVE=1
 
 	QSC_PS_CONF_LOADED=1
@@ -153,7 +153,7 @@ qsc_ps_load_conf() {
 	[ "$QSC_PS_TEMP_ON" = "1" ] || QSC_PS_TEMP_STOP=999
 	QSC_PS_NEAR="$(qsc_clamp_int "$QSC_PS_NEAR" 1 20 3)"
 	QSC_PS_LOOP="$(qsc_clamp_int "$QSC_PS_LOOP" 2 60 3)"
-	QSC_PS_MAINTAIN="$(qsc_clamp_int "$QSC_PS_MAINTAIN" 3 60 8)"
+	QSC_PS_MAINTAIN="$(qsc_clamp_int "$QSC_PS_MAINTAIN" 3 600 30)"
 	QSC_PS_NATIVE="$(qsc_clamp_int "$QSC_PS_NATIVE" 0 1 1)"
 	QSCV_description_enable="$(qsc_clamp_int "${QSCV_description_enable:-1}" 0 1 1)"
 	description_enable="$QSCV_description_enable"

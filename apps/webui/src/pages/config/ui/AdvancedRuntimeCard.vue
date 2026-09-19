@@ -163,7 +163,7 @@ onMounted(async () => {
           v-model="store.settings.loop_interval_maintain_sec"
           type="digit"
           label="停充维持间隔"
-          placeholder="3–60"
+          placeholder="3–600"
           input-align="right"
           @change="saveField"
         />

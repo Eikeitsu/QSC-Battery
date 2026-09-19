@@ -317,6 +317,16 @@ qsc_stop_wakelock_release() {
 	return 0
 }
 
+# 本机是否走 MCA（需周期性重申 handle_state；持锁不能代替重申）
+qsc_device_is_mca() {
+	[ "$(qsc_profile_get mca 2>/dev/null)" = "1" ] && return 0
+	[ -f /sys/devices/platform/soc/soc:mca_business_charger/handle_state ] && return 0
+	[ -f /sys/devices/platform/soc/soc:mca_charger/handle_state ] && return 0
+	[ -e /sys/devices/platform/soc@0/soc:mca_charger/handle_state ] && return 0
+	[ -e /sys/devices/platform/soc@0/mca_charger/handle_state ] && return 0
+	return 1
+}
+
 # 插电且处于停充态：仅 MCA/preferred 持续重申（非 MCA 停充成功后不再写节点，避免小米 OS2 闪充）
 qsc_maintain_stop_while_plugged() {
 	local online _ts _now

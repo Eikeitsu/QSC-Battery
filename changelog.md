@@ -21,6 +21,8 @@
 
 ### 修复
 
+- **过夜插电停充耗电偏高**：`stop_hold_wakelock=auto` 在魅族或 MCA 机持锁时，旧逻辑仍约 8s 跑满轮。现非 MCA 持锁维持约 300s；MCA 仍按 `loop_interval_maintain_sec`（默认 30）重申，避免 `handle_state` 被改回后长时间回充。
+- **充满拔线后待机仍异常掉电**：未插电时 qscd `watch` 未传阈值，退化为任意 `power_supply` uevent 都叫醒主循环（电流/电压/温度噪声），整夜无法 Doze。现未插电 / 停充维持仅响应插拔或超时；无 `watch` 的 C 版未插电改为纯 sleep。
 - **APP 版本号卡住 0.3.1 并反复提示更新**：正式版发版未向 Gradle 传入 `qscVersionName` / `qscVersionCode`，APK 一直用默认值，而远端清单已升号。现正式/预发布均写入发版号；默认值改为日期版对齐。
 - **停充后误判拔线**（K60 等）：`input_suspend` 停充后电池常报 Discharging，旧逻辑误还原节点。现以充电类型与 VBUS 为强证据，不再被假放电否决。
 - **强制升级后简介显示「核心脚本丢失」**：切断前先停止旧服务与简介进程，避免未重启时旧进程写入异常简介。

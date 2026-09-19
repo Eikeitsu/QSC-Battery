@@ -62,7 +62,7 @@ object ConfigKeys {
         "temperature_switch_stop" to "60",
         "temperature_switch_start" to "50",
         "loop_interval_sec" to "3",
-        "loop_interval_maintain_sec" to "8",
+        "loop_interval_maintain_sec" to "30",
         "switch_verify_sec" to "1",
         "switch_batch_blind" to "1",
         "wireless_policy" to "same",

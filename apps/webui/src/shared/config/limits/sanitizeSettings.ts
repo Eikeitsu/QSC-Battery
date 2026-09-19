@@ -121,7 +121,7 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   const loopM = clampInt(
     next.loop_interval_maintain_sec,
     3,
-    60,
+    600,
     Number(DEFAULTS.loop_interval_maintain_sec),
   );
   if (String(loopM) !== String(input.loop_interval_maintain_sec)) mark(true);

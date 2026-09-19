@@ -190,8 +190,16 @@ qsc_history_sample() {
 qsc_write_loop_sleep() {
 	local normal="$1" maintain="$2"
 	normal="$(qsc_clamp_int "${normal:-3}" 2 30 3)"
-	maintain="$(qsc_clamp_int "${maintain:-8}" 3 60 8)"
+	maintain="$(qsc_clamp_int "${maintain:-30}" 3 600 30)"
 	if [ -f "$DATADIR/power_switch" ] && [ ! -f "$MODULE_OFF_FLAG" ]; then
+		# 与 qsc_ps_next_sleep 一致：非 MCA 持锁可拉长；MCA 必须按 maintain 重申
+		if [ -f "$DATADIR/wakelock_held" ]; then
+			if ! type qsc_device_is_mca >/dev/null 2>&1 || ! qsc_device_is_mca; then
+				maintain=300
+				[ "${2:-0}" -gt 60 ] 2>/dev/null && maintain="$2"
+				maintain="$(qsc_clamp_int "$maintain" 60 600 300)"
+			fi
+		fi
 		qsc_write_loop_sleep_value "$maintain"
 	else
 		qsc_write_loop_sleep_value "$normal"
@@ -201,7 +209,7 @@ qsc_write_loop_sleep() {
 # 值未变则不写盘（主循环每轮都写会白白产生数万次/天的小写入）
 qsc_write_loop_sleep_value() {
 	local v="$1" old
-	v="$(qsc_clamp_int "${v:-3}" 2 300 3)"
+	v="$(qsc_clamp_int "${v:-3}" 2 600 3)"
 	old="$(cat "$DATADIR/loop_sleep" 2>/dev/null | tr -d ' \r\n')"
 	[ "$old" = "$v" ] && return 0
 	echo "$v" >"$DATADIR/loop_sleep" 2>/dev/null

@@ -47,13 +47,19 @@
 
 ## 待机很耗电？模块在后台干嘛？
 
-默认 `power_saver=1` + 可选 qscd：未插电会**跳过**整轮停充脚本，有守护时靠 uevent 睡到插拔。请确认：
+默认 `power_saver=1` + 可选 qscd：未插电会**跳过**整轮停充脚本，有守护时靠 uevent 睡到**插拔**（不是每一次电量/电流抖动）。请确认：
 
 - 未关 `power_saver` / `native_daemon`
 - 守护自检通过（WebUI 守护卡片）
 - 未开常显功耗通知（`notify_power_status`）
 
-仍有余量（简介 worker 与主循环重叠、心跳、满轮间隔等），日常已接近「事件驱动 + 偶发满轮」。可关「动态简介」再省一点。详见 [功能介绍 · 省电](/guide/features)。
+**充满拔线后过夜仍掉电很快**（例如 100%→约 90%）：旧版未插电 watch 不带阈值，等价于「任意电池 uevent 都叫醒 shell」，电流/电压/温度事件很密，Doze 进不去。现未插电 / 停充维持只响应插拔或超时兜底。
+
+**过夜插电且已停充**时另一条费电路径：`stop_hold_wakelock=auto` 会在魅族或检测到 MCA 时持内核 wakelock；旧版仍约 8 秒跑满轮。现非 MCA 持锁维持约 300 秒；MCA 仍按默认约 30 秒重申（持锁不能代替写回 `handle_state`）。K60 等通用节点机在 `auto` 下通常不持锁。仍觉得掉电快可在 WebUI 将「停充持锁」改为关（可能深睡后回充）。
+
+可查：`cat /data/adb/modules/QSC_Battery/data/wakelock_held` 与 `cat /sys/power/wake_lock`（含 `qsc_stop_chg` 即在持锁）。
+
+仍有余量（简介 worker、心跳、满轮间隔等），可关「动态简介」再省一点。详见 [功能介绍 · 省电](/guide/features)。
 
 曲线采样默认只在**插电**时写 `charge_history.csv`；放电段靠系统 batterystats 补图，待机对该文件零写入。关曲线会连带停采样。
 
