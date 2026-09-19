@@ -20,6 +20,8 @@ qsc_init_paths() {
 	DATADIR="$MODDIR/data"
 	ASSETDIR="$MODDIR/assets"
 	CONF="$CONFDIR/config.conf"
+	POWER_CONF="$CONFDIR/power.conf"
+	NOTIFY_CONF="$CONFDIR/notify.conf"
 	CURRENT_CONF="$CONFDIR/current.json"
 	LIST_SWITCH="$DATADIR/list_switch"
 	LIST_CHARGE_CURRENT="$DATADIR/list_charge_current"
@@ -56,9 +58,13 @@ fi
 . "$LIBDIR/status.sh"
 . "$LIBDIR/jsonc.sh"
 . "$LIBDIR/history.sh"
+[ -f "$LIBDIR/conf_migrate.sh" ] && . "$LIBDIR/conf_migrate.sh"
 [ -f "$LIBDIR/event_log.sh" ] && . "$LIBDIR/event_log.sh"
 [ -f "$LIBDIR/health.sh" ] && . "$LIBDIR/health.sh"
 [ -f "$LIBDIR/power_saver.sh" ] && . "$LIBDIR/power_saver.sh"
 [ -f "$LIBDIR/battery_snapshot.sh" ] && . "$LIBDIR/battery_snapshot.sh"
 # 电流控制为可选组件，安装时未选择则无此文件
 [ -f "$LIBDIR/current.sh" ] && . "$LIBDIR/current.sh"
+
+# 升级兼容：旧键从 config.conf 迁到 power.conf / notify.conf（幂等）
+type qsc_conf_migrate_split >/dev/null 2>&1 && qsc_conf_migrate_split

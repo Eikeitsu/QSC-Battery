@@ -19,6 +19,7 @@ data class ConfigUiState(
     val daemonStatus: String = "",
     val stopSchedules: List<String> = emptyList(),
     val quietSchedules: List<String> = emptyList(),
+    val nightSchedules: List<String> = emptyList(),
     val lastSaveMessage: String? = null,
     val lastDaemonMessage: String? = null,
 )
@@ -52,7 +53,7 @@ class ConfigViewModel(
             val conf = container.configRepository.loadConf()
             val current = container.configRepository.loadCurrent()
             val daemonStatus = container.daemonRepository.status()
-            val (stop, quiet) = container.configRepository.loadSchedules()
+            val (stop, quiet, night) = container.configRepository.loadSchedules()
             _ui.update {
                 it.copy(
                     rootOk = rootOk,
@@ -62,6 +63,7 @@ class ConfigViewModel(
                     daemonStatus = daemonStatus,
                     stopSchedules = stop,
                     quietSchedules = quiet,
+                    nightSchedules = night,
                     ready = true,
                 )
             }

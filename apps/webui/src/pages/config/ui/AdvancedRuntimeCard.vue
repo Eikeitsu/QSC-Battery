@@ -51,70 +51,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <SectionHead title="更多选项" hint="省电与曲线采样常用；其余冷门能力默认收起" />
+  <SectionHead
+    title="更多选项"
+    hint="曲线采样常用；省电请到「省电策略」；其余冷门默认收起"
+  />
   <ThemedCard>
-    <SwitchCell
-      title="省电模式"
-      label="按场景切换轮询间隔，明显降低待机耗电；关闭则全程用最短间隔"
-      :model-value="store.settings.power_saver !== '0'"
-      @update:model-value="(v) => onSwitch('power_saver', v)"
-    />
-    <SwitchCell
-      title="动态简介"
-      label="关后列表固定为「充电控制」产品文案，停简介 worker，少写 module.prop；略省电"
-      :model-value="store.settings.description_enable !== '0'"
-      @update:model-value="(v) => onSwitch('description_enable', v)"
-    />
-    <template v-if="store.settings.power_saver !== '0'">
-      <van-field
-        v-model="store.settings.loop_interval_idle_sec"
-        type="digit"
-        label="未插电间隔(秒)"
-        placeholder="3–300，越大越省电"
-        input-align="right"
-        @change="saveField"
-      />
-      <van-field
-        v-model="store.settings.loop_interval_idle_native_sec"
-        type="digit"
-        label="未插电间隔·有守护(秒)"
-        placeholder="0–300，0=不放大"
-        input-align="right"
-        @change="saveField"
-      />
-      <van-field
-        v-model="store.settings.loop_interval_plugged_sec"
-        type="digit"
-        label="插电间隔(秒)"
-        placeholder="2–120，离阈值远时"
-        input-align="right"
-        @change="saveField"
-      />
-      <van-field
-        v-model="store.settings.loop_interval_plugged_native_sec"
-        type="digit"
-        label="插电间隔·有守护(秒)"
-        placeholder="0–300，0=不放大"
-        input-align="right"
-        @change="saveField"
-      />
-      <van-field
-        v-model="store.settings.loop_interval_near_window"
-        type="digit"
-        label="临近阈值窗口(%)"
-        placeholder="1–20，窗口内用最短间隔"
-        input-align="right"
-        @change="saveField"
-      />
-      <p class="warn">
-        装了事件唤醒守护时改用「未插电间隔·有守护」：插电由内核事件立刻叫醒，间隔不再决定插电响应速度，
-        代价是模块简介刷新与停充恢复判定最慢等这么久。没有守护时仍按「未插电间隔」，
-        此时最多延迟这么久才会发现插上了充电器。「插电间隔·有守护」只对 Rust 版守护有效：
-        充电中离阈值还远的那段由它按阈值过滤事件，跨阈值或拔线仍立即返回；电量进入停充阈值前
-        {{ store.settings.loop_interval_near_window || 3 }}% 后自动切回
-        {{ store.settings.loop_interval_sec || 3 }} 秒轮询，不影响停充准确度。
-      </p>
-    </template>
     <van-cell
       v-if="compatHint"
       title="检测到其它充电模块"
@@ -149,24 +90,8 @@ onMounted(async () => {
     <van-collapse v-model="nicheOpen" accordion>
       <van-collapse-item name="niche" title="冷门 / 实验（一般不用）">
         <p class="warn">
-          下列项面向排障或特殊机型。日常请优先用电量/温控停充与电流控制里的游戏限流。
+          下列项面向排障或特殊机型。日常请优先用电量/温控停充；间隔请到「省电策略」。
         </p>
-        <van-field
-          v-model="store.settings.loop_interval_sec"
-          type="digit"
-          label="循环间隔(秒)"
-          placeholder="2–30"
-          input-align="right"
-          @change="saveField"
-        />
-        <van-field
-          v-model="store.settings.loop_interval_maintain_sec"
-          type="digit"
-          label="停充维持间隔"
-          placeholder="3–600"
-          input-align="right"
-          @change="saveField"
-        />
         <van-field
           v-model="store.settings.switch_verify_sec"
           type="digit"

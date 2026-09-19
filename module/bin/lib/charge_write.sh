@@ -268,8 +268,18 @@ qsc_reaffirm_active_stop() {
 # 停充且仍插电时可选持有内核 wakelock，避免深睡后节点被改回 → 回充亮屏死循环（魅族等）
 QSC_WAKELOCK_NAME="qsc_stop_chg"
 qsc_stop_wakelock_wanted() {
-	local mode brand manufacturer
-	mode="$(echo "$config_conf" | egrep '^stop_hold_wakelock=' | sed -n 's/stop_hold_wakelock=//g;$p')"
+	local mode brand manufacturer f
+	mode=""
+	if [ -n "${config_conf:-}" ]; then
+		mode="$(echo "$config_conf" | egrep '^stop_hold_wakelock=' | sed -n 's/stop_hold_wakelock=//g;$p')"
+	fi
+	if [ -z "$mode" ]; then
+		for f in "${POWER_CONF:-}" "$CONF"; do
+			[ -n "$f" ] && [ -f "$f" ] || continue
+			mode="$(sed -n 's/^stop_hold_wakelock=//p' "$f" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+			[ -n "$mode" ] && break
+		done
+	fi
 	[ -n "$mode" ] || mode="auto"
 	case "$mode" in
 		1|on|true) return 0 ;;
@@ -294,8 +304,36 @@ qsc_stop_wakelock_wanted() {
 }
 
 qsc_stop_wakelock_acquire() {
+	local mode _f
 	[ -f /sys/power/wake_lock ] || return 1
 	qsc_stop_wakelock_wanted || return 1
+	# auto：仅息屏/夜间持锁（深睡回充风险在息屏）；亮屏释放，避免日用一直挡 Doze。
+	# 强制开(1)仍持续持锁。探测失败当作亮屏（少持锁）；宁可不挡 Doze，靠 maintain 重申。
+	mode=""
+	if [ -n "${config_conf:-}" ]; then
+		mode="$(echo "$config_conf" | egrep '^stop_hold_wakelock=' | sed -n 's/stop_hold_wakelock=//g;$p')"
+	fi
+	[ -n "$mode" ] || mode="${QSCV_stop_hold_wakelock:-}"
+	if [ -z "$mode" ]; then
+		for _f in "${POWER_CONF:-}" "$CONF"; do
+			[ -n "$_f" ] && [ -f "$_f" ] || continue
+			mode="$(sed -n 's/^stop_hold_wakelock=//p' "$_f" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+			[ -n "$mode" ] && break
+		done
+	fi
+	[ -n "$mode" ] || mode="auto"
+	case "$mode" in
+		1|on|true) ;;
+		auto|*)
+			type qsc_ps_now >/dev/null 2>&1 && qsc_ps_now
+			if type qsc_ps_wakelock_screen_wants_hold >/dev/null 2>&1; then
+				if ! qsc_ps_wakelock_screen_wants_hold; then
+					qsc_stop_wakelock_release
+					return 1
+				fi
+			fi
+			;;
+	esac
 	if [ ! -f "$DATADIR/wakelock_held" ]; then
 		echo "$QSC_WAKELOCK_NAME" > /sys/power/wake_lock 2>/dev/null || return 1
 		touch "$DATADIR/wakelock_held" 2>/dev/null
@@ -349,7 +387,11 @@ qsc_maintain_stop_while_plugged() {
 		return 1
 	}
 
-	qsc_stop_wakelock_acquire
+	# 按场景决定持锁或释放（auto 亮屏会释放）
+	if ! qsc_stop_wakelock_acquire; then
+		# 未持锁或已释放：确保标志与内核一致
+		:
+	fi
 	# MCA：系统会改回 handle_state，必须每轮重申
 	if qsc_mca_write stop; then
 		return 0

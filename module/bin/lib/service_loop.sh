@@ -14,9 +14,18 @@ qsc_service_loop_once() {
 		qsc_runtime_trace "H1" "loop_enter" "$QSC_SERVICE_LOOP_COUNT:$_now"
 		# endregion
 		qsc_service_heartbeat
+		# 策略刷新（息屏/夜间）要在简介 worker 判断前做
+		type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
 		# 动态简介开关变化：即时停/启 worker，关则写入专用静态文案。
 		if type qsc_description_enabled >/dev/null 2>&1; then
+			_desc_want=0
 			if qsc_description_enabled; then
+				_desc_want=1
+			fi
+			if type qsc_ps_desc_suppressed >/dev/null 2>&1 && qsc_ps_desc_suppressed; then
+				_desc_want=0
+			fi
+			if [ "$_desc_want" = "1" ]; then
 				_desc_pid="$(cat "$DATADIR/description_worker.pid" 2>/dev/null | tr -d ' \r\n')"
 				case "$_desc_pid" in
 					""|*[!0-9]*)

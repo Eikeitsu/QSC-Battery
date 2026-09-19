@@ -1,30 +1,42 @@
 import { CURRENT_DEFAULTS } from "@/shared/config/defaults";
 import { BinaryFlag } from "@/shared/config/enums";
+import { confFileForKey } from "@/shared/config/confFiles";
 import { PATHS } from "@/shared/config/paths";
 import { sanitizeCurrentConfig, sanitizePowerStopSchedule } from "@/shared/config/limits";
 import type { CurrentConfig, Settings } from "@/shared/types";
 import { exec } from "./ksu";
 import type { DeviceProfileExport } from "./deviceProfile";
 
+function confPathForKey(key: string): string {
+  const kind = confFileForKey(key);
+  if (kind === "power") return PATHS.POWER_CONF;
+  if (kind === "notify") return PATHS.NOTIFY_CONF;
+  return PATHS.CONF;
+}
+
 export async function getConf(key: string): Promise<string> {
+  const path = confPathForKey(key);
   const result = await exec(
-    `grep '^${key}=' '${PATHS.CONF}' 2>/dev/null | tail -1 | cut -d= -f2-`,
+    `grep '^${key}=' '${path}' 2>/dev/null | tail -1 | cut -d= -f2-`,
   );
   return result.stdout.trim();
 }
 
-/** 一次读取配置，避免启动时为每个键单独发起一条 shell 请求。 */
+/** 一次读取三个 conf，合并键（后读的同名键覆盖——通常不会重叠） */
 export async function loadConfigValues(
   keys: readonly string[],
 ): Promise<Record<string, string>> {
   const wanted = new Set(keys);
-  const result = await exec(`cat '${PATHS.CONF}' 2>/dev/null`);
   const values: Record<string, string> = {};
-  for (const line of result.stdout.split(/\r?\n/)) {
-    const index = line.indexOf("=");
-    if (index <= 0) continue;
-    const key = line.slice(0, index);
-    if (wanted.has(key)) values[key] = line.slice(index + 1).trim();
+  const files = [PATHS.CONF, PATHS.POWER_CONF, PATHS.NOTIFY_CONF];
+  for (const file of files) {
+    const result = await exec(`cat '${file}' 2>/dev/null`);
+    for (const line of result.stdout.split(/\r?\n/)) {
+      const index = line.indexOf("=");
+      if (index <= 0) continue;
+      const key = line.slice(0, index);
+      if (wanted.has(key)) values[key] = line.slice(index + 1).trim();
+    }
   }
   return values;
 }
@@ -32,8 +44,9 @@ export async function loadConfigValues(
 export async function setConf(key: string, value: string | number): Promise<void> {
   const safeKey = String(key).replace(/[^a-zA-Z0-9_]/g, "");
   const safeVal = String(value).replace(/[^0-9A-Za-z._:,-]/g, "");
+  const path = confPathForKey(safeKey);
   await exec(
-    `sed -i '/^${safeKey}=/d' '${PATHS.CONF}' 2>/dev/null; echo '${safeKey}=${safeVal}' >> '${PATHS.CONF}'`,
+    `mkdir -p '${PATHS.MODDIR}/config' 2>/dev/null; touch '${path}'; sed -i '/^${safeKey}=/d' '${path}' 2>/dev/null; echo '${safeKey}=${safeVal}' >> '${path}'`,
   );
 }
 
@@ -139,7 +152,9 @@ export async function savePowerStopSchedule(ranges: string[]): Promise<boolean> 
 }
 
 export async function loadNotifyQuietSchedule(): Promise<string[]> {
-  const result = await exec(`grep '^notify_quiet_schedule=' '${PATHS.CONF}' 2>/dev/null`);
+  const result = await exec(
+    `grep '^notify_quiet_schedule=' '${PATHS.NOTIFY_CONF}' 2>/dev/null`,
+  );
   const raw = result.stdout
     .split(/\r?\n/)
     .map((l) =>
@@ -159,9 +174,41 @@ export async function saveNotifyQuietSchedule(ranges: string[]): Promise<boolean
   const payload = lines.join("\n");
   const b64 = btoa(unescape(encodeURIComponent(payload)));
   const script = [
-    `sed -i '/^notify_quiet_schedule=/d' '${PATHS.CONF}' 2>/dev/null`,
+    `mkdir -p '${PATHS.MODDIR}/config'; touch '${PATHS.NOTIFY_CONF}'`,
+    `sed -i '/^notify_quiet_schedule=/d' '${PATHS.NOTIFY_CONF}' 2>/dev/null`,
     payload
-      ? `echo '${b64}' | base64 -d >> '${PATHS.CONF}' 2>/dev/null || echo '${b64}' | base64 --decode >> '${PATHS.CONF}'`
+      ? `echo '${b64}' | base64 -d >> '${PATHS.NOTIFY_CONF}' 2>/dev/null || echo '${b64}' | base64 --decode >> '${PATHS.NOTIFY_CONF}'`
+      : `true`,
+  ].join("; ");
+  const result = await exec(script);
+  return result.errno === 0;
+}
+
+export async function loadNightSchedule(): Promise<string[]> {
+  const result = await exec(`grep '^night_schedule=' '${PATHS.POWER_CONF}' 2>/dev/null`);
+  const raw = result.stdout
+    .split(/\r?\n/)
+    .map((l) =>
+      l
+        .replace(/^night_schedule=/, "")
+        .replace(/^\[/, "")
+        .replace(/\]$/, "")
+        .trim(),
+    )
+    .filter(Boolean);
+  return sanitizePowerStopSchedule(raw);
+}
+
+export async function saveNightSchedule(ranges: string[]): Promise<boolean> {
+  const list = sanitizePowerStopSchedule(ranges);
+  const lines = list.map((r) => `night_schedule=${r}`);
+  const payload = lines.join("\n");
+  const b64 = btoa(unescape(encodeURIComponent(payload)));
+  const script = [
+    `mkdir -p '${PATHS.MODDIR}/config'; touch '${PATHS.POWER_CONF}'`,
+    `sed -i '/^night_schedule=/d' '${PATHS.POWER_CONF}' 2>/dev/null`,
+    payload
+      ? `echo '${b64}' | base64 -d >> '${PATHS.POWER_CONF}' 2>/dev/null || echo '${b64}' | base64 --decode >> '${PATHS.POWER_CONF}'`
       : `true`,
   ].join("; ");
   const result = await exec(script);

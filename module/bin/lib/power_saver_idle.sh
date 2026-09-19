@@ -20,9 +20,16 @@ qsc_ps_native_ready() {
 qsc_ps_idle_secs() {
 	QSC_PS_IDLE_EFF="${QSC_PS_IDLE:-30}"
 	QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
-	qsc_ps_native_ready || return 0
+	qsc_ps_native_ready || {
+		type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
+		[ -n "${QSC_PS_IDLE_EFF:-}" ] && QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+		return 0
+	}
 	[ "${QSC_PS_IDLE_NATIVE:-0}" -gt "$QSC_PS_IDLE_EFF" ] 2>/dev/null \
 		&& QSC_PS_IDLE_EFF="$QSC_PS_IDLE_NATIVE"
+	# 档位 / 息屏 / 夜间 DeepPark 可再放大（仅未插电）
+	type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
+	QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
 	return 0
 }
 
@@ -314,16 +321,21 @@ qsc_ps_next_sleep() {
 		echo "${QSC_PS_LOOP:-3}"
 		return 0
 	fi
-	# 维持停充：已持内核 wakelock 时，魅族等可拉长轮询（持锁防深睡改回）。
-	# MCA 即使持锁仍会被系统改回 handle_state，必须按 maintain 间隔重申，不能拉到 300s。
+	# 维持停充：按场景拉长（MCA 除外）；持锁与否由 wakelock 策略单独决定
 	if [ -f "$DATADIR/power_switch" ] && [ ! -f "$MODULE_OFF_FLAG" ]; then
-		_m="${QSC_PS_MAINTAIN:-30}"
-		if [ -f "$DATADIR/wakelock_held" ]; then
-			if type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca; then
-				:
-			else
-				_m=300
-				[ "${QSC_PS_MAINTAIN:-0}" -gt 60 ] 2>/dev/null && _m="$QSC_PS_MAINTAIN"
+		if type qsc_ps_maintain_secs >/dev/null 2>&1; then
+			type qsc_ps_now >/dev/null 2>&1 && qsc_ps_now
+			qsc_ps_maintain_secs
+			_m="${QSC_PS_MAINTAIN_EFF:-${QSC_PS_MAINTAIN:-30}}"
+		else
+			_m="${QSC_PS_MAINTAIN:-30}"
+			if [ -f "$DATADIR/wakelock_held" ]; then
+				if type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca; then
+					:
+				else
+					_m=300
+					[ "${QSC_PS_MAINTAIN:-0}" -gt 60 ] 2>/dev/null && _m="$QSC_PS_MAINTAIN"
+				fi
 			fi
 		fi
 		QSC_PS_WAIT_FALLBACK="$_m"

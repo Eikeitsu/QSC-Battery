@@ -192,8 +192,13 @@ qsc_write_loop_sleep() {
 	normal="$(qsc_clamp_int "${normal:-3}" 2 30 3)"
 	maintain="$(qsc_clamp_int "${maintain:-30}" 3 600 30)"
 	if [ -f "$DATADIR/power_switch" ] && [ ! -f "$MODULE_OFF_FLAG" ]; then
-		# 与 qsc_ps_next_sleep 一致：非 MCA 持锁可拉长；MCA 必须按 maintain 重申
-		if [ -f "$DATADIR/wakelock_held" ]; then
+		if type qsc_ps_maintain_secs >/dev/null 2>&1; then
+			# 确保有单调时钟供息屏计时
+			type qsc_ps_now >/dev/null 2>&1 && qsc_ps_now
+			qsc_ps_maintain_secs
+			maintain="${QSC_PS_MAINTAIN_EFF:-$maintain}"
+			maintain="$(qsc_clamp_int "$maintain" 3 600 30)"
+		elif [ -f "$DATADIR/wakelock_held" ]; then
 			if ! type qsc_device_is_mca >/dev/null 2>&1 || ! qsc_device_is_mca; then
 				maintain=300
 				[ "${2:-0}" -gt 60 ] 2>/dev/null && maintain="$2"

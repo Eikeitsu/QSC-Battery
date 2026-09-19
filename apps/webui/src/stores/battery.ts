@@ -26,6 +26,8 @@ export const useAppStore = defineStore("app", () => {
   const powerStopSchedule = ref<string[]>([]);
   /** 通知勿扰时段 */
   const notifyQuietSchedule = ref<string[]>([]);
+  /** 夜间省电时段 */
+  const nightSchedule = ref<string[]>([]);
   const currentFeature = ref(false);
   const bridgeOk = ref(false);
   const deviceName = ref("加载中…");
@@ -66,6 +68,7 @@ export const useAppStore = defineStore("app", () => {
     powerSwitches,
     powerStopSchedule,
     notifyQuietSchedule,
+    nightSchedule,
     currentFeature,
     deviceName,
     status,
@@ -124,6 +127,7 @@ export const useAppStore = defineStore("app", () => {
     powerSwitches,
     powerStopSchedule,
     notifyQuietSchedule,
+    nightSchedule,
     currentFeature,
     bridgeOk,
     deviceName,

@@ -88,22 +88,34 @@ qsc_ps_read() {
 	[ -n "$QSC_PS_VAL" ]
 }
 
-# 仅在 config.conf 变化时重新解析（内建循环，无 fork）。
-# 判断「变过没有」用内建 test -nt 比哨兵文件：原先的 stat 走命令替换，
-# 未插电快路径里这是每轮唯一固定的两个 fork（每小时约 240 次白唤醒 CPU）。
+# 解析 power.conf（省电键）+ config.conf（停充/温控阈值，供 watch 使用）
+# 哨兵：.power_conf_seen / .conf_seen（阈值变化也要重载）
 qsc_ps_load_conf() {
-	local seen="$DATADIR/.conf_seen"
-	if [ "$QSC_PS_CONF_LOADED" = "1" ] && [ -f "$seen" ] \
-		&& [ ! "$CONF" -nt "$seen" ]; then
-		return 0
+	local seen_p="$DATADIR/.power_conf_seen"
+	local seen_c="$DATADIR/.conf_seen"
+	local power="${POWER_CONF:-$CONFDIR/power.conf}"
+	local conf="${CONF:-}"
+	local line k v
+	local need=0
+
+	if [ "$QSC_PS_CONF_LOADED" != "1" ]; then
+		need=1
+	elif [ -f "$power" ] && [ -f "$seen_p" ] && [ "$power" -nt "$seen_p" ]; then
+		need=1
+	elif [ -f "$conf" ] && [ -f "$seen_c" ] && [ "$conf" -nt "$seen_c" ]; then
+		need=1
+	elif [ -f "$power" ] && [ ! -f "$seen_p" ]; then
+		need=1
+	elif [ -f "$conf" ] && [ ! -f "$seen_c" ]; then
+		need=1
 	fi
+	[ "$need" = "1" ] || return 0
 
 	QSC_PS_ENABLE=1
-	QSC_PS_IDLE=30
-	QSC_PS_IDLE_NATIVE=120
-	QSC_PS_PLUGGED=10
-	QSC_PS_PLUGGED_NATIVE=60
-	# 101 / 999 = 该项不参与 watch 的判断
+	QSC_PS_IDLE=90
+	QSC_PS_IDLE_NATIVE=600
+	QSC_PS_PLUGGED=15
+	QSC_PS_PLUGGED_NATIVE=90
 	QSC_PS_STOP=101
 	QSC_PS_TEMP_ON=1
 	QSC_PS_TEMP_STOP=999
@@ -111,42 +123,85 @@ qsc_ps_load_conf() {
 	QSC_PS_LOOP=3
 	QSC_PS_MAINTAIN=30
 	QSC_PS_NATIVE=1
+	QSC_PS_PROFILE=balanced
+	QSC_PS_SCREEN_OFF_SAVER=1
+	QSC_PS_NIGHT_SAVER=0
+	QSC_PS_DEEP_ENABLE=1
+	QSC_PS_DEEP_AFTER=600
+	QSC_PS_DEEP_IDLE=900
+	QSC_PS_DEEP_FULL_GAP=7200
+	QSC_PS_HB_SEC=180
+	QSC_PS_SCREEN_DUMPSYS=0
+	QSC_PS_IDLE_NATIVE_SET=0
+	QSC_PS_HB_SET=0
+	QSC_PS_FULL_MAX_GAP=1800
 
 	QSC_PS_CONF_LOADED=1
-	[ -f "$CONF" ] || return 0
-	local line k v
-	while IFS= read -r line || [ -n "$line" ]; do
-		case "$line" in
-			\#*|"") continue ;;
-			*=*) ;;
-			*) continue ;;
-		esac
-		k="${line%%=*}"
-		v="${line#*=}"
-		case "$k" in
-			power_saver) QSC_PS_ENABLE="$v" ;;
-			loop_interval_idle_sec) QSC_PS_IDLE="$v" ;;
-			loop_interval_idle_native_sec) QSC_PS_IDLE_NATIVE="$v" ;;
-			loop_interval_plugged_sec) QSC_PS_PLUGGED="$v" ;;
-			loop_interval_plugged_native_sec) QSC_PS_PLUGGED_NATIVE="$v" ;;
-			power_stop) QSC_PS_STOP="$v" ;;
-			temperature_switch) QSC_PS_TEMP_ON="$v" ;;
-			temperature_switch_stop) QSC_PS_TEMP_STOP="$v" ;;
-			loop_interval_near_window) QSC_PS_NEAR="$v" ;;
-			loop_interval_sec) QSC_PS_LOOP="$v" ;;
-			loop_interval_maintain_sec) QSC_PS_MAINTAIN="$v" ;;
-			native_daemon) QSC_PS_NATIVE="$v" ;;
-			description_enable) QSCV_description_enable="$v" ;;
-		esac
-	done <"$CONF"
+
+	# 1) power.conf
+	if [ -f "$power" ]; then
+		while IFS= read -r line || [ -n "$line" ]; do
+			case "$line" in
+				\#*|"") continue ;;
+				*=*) ;;
+				*) continue ;;
+			esac
+			k="${line%%=*}"
+			v="${line#*=}"
+			case "$k" in
+				power_saver) QSC_PS_ENABLE="$v" ;;
+				power_profile) QSC_PS_PROFILE="$v" ;;
+				screen_off_saver) QSC_PS_SCREEN_OFF_SAVER="$v" ;;
+				night_saver) QSC_PS_NIGHT_SAVER="$v" ;;
+				deep_idle_enable) QSC_PS_DEEP_ENABLE="$v" ;;
+				deep_after_sec) QSC_PS_DEEP_AFTER="$v" ;;
+				deep_idle_sec) QSC_PS_DEEP_IDLE="$v" ;;
+				deep_full_gap_sec) QSC_PS_DEEP_FULL_GAP="$v" ;;
+				heartbeat_sec) QSC_PS_HB_SEC="$v"; QSC_PS_HB_SET=1 ;;
+				screen_probe_dumpsys) QSC_PS_SCREEN_DUMPSYS="$v" ;;
+				loop_interval_idle_sec) QSC_PS_IDLE="$v" ;;
+				loop_interval_idle_native_sec) QSC_PS_IDLE_NATIVE="$v"; QSC_PS_IDLE_NATIVE_SET=1 ;;
+				loop_interval_plugged_sec) QSC_PS_PLUGGED="$v" ;;
+				loop_interval_plugged_native_sec) QSC_PS_PLUGGED_NATIVE="$v" ;;
+				loop_interval_near_window) QSC_PS_NEAR="$v" ;;
+				loop_interval_sec) QSC_PS_LOOP="$v" ;;
+				loop_interval_maintain_sec) QSC_PS_MAINTAIN="$v" ;;
+				native_daemon) QSC_PS_NATIVE="$v" ;;
+				description_enable) QSCV_description_enable="$v" ;;
+				stop_hold_wakelock) QSCV_stop_hold_wakelock="$v" ;;
+				native_impl) QSCV_native_impl="$v" ;;
+			esac
+		done <"$power"
+	fi
+
+	# 2) config.conf：仅阈值（watch 需要）
+	if [ -f "$conf" ]; then
+		while IFS= read -r line || [ -n "$line" ]; do
+			case "$line" in
+				\#*|"") continue ;;
+				*=*) ;;
+				*) continue ;;
+			esac
+			k="${line%%=*}"
+			v="${line#*=}"
+			case "$k" in
+				power_stop) QSC_PS_STOP="$v" ;;
+				temperature_switch) QSC_PS_TEMP_ON="$v" ;;
+				temperature_switch_stop) QSC_PS_TEMP_STOP="$v" ;;
+			esac
+		done <"$conf"
+	fi
+
+	case "$QSC_PS_PROFILE" in
+		balanced|aggressive|custom) ;;
+		*) QSC_PS_PROFILE=balanced ;;
+	esac
 
 	QSC_PS_ENABLE="$(qsc_clamp_int "$QSC_PS_ENABLE" 0 1 1)"
 	QSC_PS_IDLE="$(qsc_clamp_int "$QSC_PS_IDLE" 3 300 90)"
-	# uevent 可靠时允许更长兜底；默认 600，上限 900
 	QSC_PS_IDLE_NATIVE="$(qsc_clamp_int "$QSC_PS_IDLE_NATIVE" 0 900 600)"
 	QSC_PS_PLUGGED="$(qsc_clamp_int "$QSC_PS_PLUGGED" 2 120 15)"
 	QSC_PS_PLUGGED_NATIVE="$(qsc_clamp_int "$QSC_PS_PLUGGED_NATIVE" 0 300 90)"
-	# 停充阈值只做形状校验：>100 是「关闭电量停充」的既有约定，原样传给 watch
 	QSC_PS_STOP="$(qsc_clamp_int "$QSC_PS_STOP" 1 255 101)"
 	QSC_PS_TEMP_ON="$(qsc_clamp_int "$QSC_PS_TEMP_ON" 0 1 1)"
 	QSC_PS_TEMP_STOP="$(qsc_clamp_int "$QSC_PS_TEMP_STOP" 25 70 60)"
@@ -155,13 +210,29 @@ qsc_ps_load_conf() {
 	QSC_PS_LOOP="$(qsc_clamp_int "$QSC_PS_LOOP" 2 60 3)"
 	QSC_PS_MAINTAIN="$(qsc_clamp_int "$QSC_PS_MAINTAIN" 3 600 30)"
 	QSC_PS_NATIVE="$(qsc_clamp_int "$QSC_PS_NATIVE" 0 1 1)"
+	QSC_PS_SCREEN_OFF_SAVER="$(qsc_clamp_int "$QSC_PS_SCREEN_OFF_SAVER" 0 1 1)"
+	QSC_PS_NIGHT_SAVER="$(qsc_clamp_int "$QSC_PS_NIGHT_SAVER" 0 1 0)"
+	QSC_PS_DEEP_ENABLE="$(qsc_clamp_int "$QSC_PS_DEEP_ENABLE" 0 1 1)"
+	QSC_PS_DEEP_AFTER="$(qsc_clamp_int "$QSC_PS_DEEP_AFTER" 60 7200 600)"
+	QSC_PS_DEEP_IDLE="$(qsc_clamp_int "$QSC_PS_DEEP_IDLE" 60 900 900)"
+	QSC_PS_DEEP_FULL_GAP="$(qsc_clamp_int "$QSC_PS_DEEP_FULL_GAP" 600 14400 7200)"
+	QSC_PS_HB_SEC="$(qsc_clamp_int "$QSC_PS_HB_SEC" 60 900 180)"
+	QSC_PS_SCREEN_DUMPSYS="$(qsc_clamp_int "$QSC_PS_SCREEN_DUMPSYS" 0 1 0)"
 	QSCV_description_enable="$(qsc_clamp_int "${QSCV_description_enable:-1}" 0 1 1)"
 	description_enable="$QSCV_description_enable"
 
-	# 只在配置真的更新过时刷哨兵：否则每个 qsc_switch.sh 进程都会写一次，
-	# 插电时就变成每轮一次无谓写盘
-	if [ ! -f "$seen" ] || [ "$CONF" -nt "$seen" ]; then
-		: >"$seen" 2>/dev/null
+	type qsc_ps_apply_profile_defaults >/dev/null 2>&1 &&
+		qsc_ps_apply_profile_defaults
+
+	if [ -f "$power" ]; then
+		if [ ! -f "$seen_p" ] || [ "$power" -nt "$seen_p" ]; then
+			: >"$seen_p" 2>/dev/null
+		fi
+	fi
+	if [ -f "$conf" ]; then
+		if [ ! -f "$seen_c" ] || [ "$conf" -nt "$seen_c" ]; then
+			: >"$seen_c" 2>/dev/null
+		fi
 	fi
 	return 0
 }

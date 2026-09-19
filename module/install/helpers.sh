@@ -49,11 +49,10 @@ qsc_merge_config() {
 	local default_charge_full default_power_reset default_compatibility_mode
 	local default_temperature_switch
 	local default_temperature_stop default_temperature_start
-	local default_stop_hold default_notify
 	local power_stop power_start power_stop_time charge_full power_reset
 	local compatibility_mode
 	local temperature_switch temperature_stop temperature_start
-	local stop_hold_wakelock notify_charge_event notify_kinds value _kinds
+	local value
 
 	default_power_stop="$(qsc_conf_value "$target" power_stop)" || return 1
 	default_power_start="$(qsc_conf_value "$target" power_start)" || return 1
@@ -64,10 +63,6 @@ qsc_merge_config() {
 	default_temperature_switch="$(qsc_conf_value "$target" temperature_switch)" || return 1
 	default_temperature_stop="$(qsc_conf_value "$target" temperature_switch_stop)" || return 1
 	default_temperature_start="$(qsc_conf_value "$target" temperature_switch_start)" || return 1
-	default_stop_hold="$(qsc_conf_token "$target" stop_hold_wakelock)" || default_stop_hold=auto
-	default_notify="$(qsc_conf_value "$target" notify_charge_event)" || default_notify=0
-	notify_kinds="$(sed -n 's/^notify_charge_kinds=//p' "$target" 2>/dev/null | head -n1 | tr -d ' \r\n')"
-	[ -n "$notify_kinds" ] || notify_kinds="stop,resume,fail"
 
 	power_stop="$default_power_stop"
 	power_start="$default_power_start"
@@ -78,8 +73,6 @@ qsc_merge_config() {
 	temperature_switch="$default_temperature_switch"
 	temperature_stop="$default_temperature_stop"
 	temperature_start="$default_temperature_start"
-	stop_hold_wakelock="$default_stop_hold"
-	notify_charge_event="$default_notify"
 
 	value="$(qsc_conf_value "$source" power_stop)" && [ "$value" -ge 1 -a "$value" -le 110 ] && power_stop="$value"
 	value="$(qsc_conf_value "$source" power_start)" && [ "$value" -ge 0 -a "$value" -le 109 ] && power_start="$value"
@@ -90,16 +83,6 @@ qsc_merge_config() {
 	value="$(qsc_conf_value "$source" temperature_switch)" && [ "$value" -le 1 ] && temperature_switch="$value"
 	value="$(qsc_conf_value "$source" temperature_switch_stop)" && [ "$value" -le 100 ] && temperature_stop="$value"
 	value="$(qsc_conf_value "$source" temperature_switch_start)" && [ "$value" -le 100 ] && temperature_start="$value"
-	value="$(qsc_conf_token "$source" stop_hold_wakelock)" && case "$value" in 0|1|auto) stop_hold_wakelock="$value" ;; esac
-	value="$(qsc_conf_value "$source" notify_charge_event)" && [ "$value" -le 1 ] && notify_charge_event="$value"
-	# notify_charge_kinds 允许逗号列表
-	_kinds="$(sed -n 's/^notify_charge_kinds=//p' "$source" 2>/dev/null | head -n1 | tr -d ' \r\n')"
-	case "$_kinds" in
-		""|*[^a-z,]*) ;;
-		*)
-			notify_kinds="$_kinds"
-			;;
-	esac
 
 	if [ "$power_stop" != "110" ] && [ "$power_stop" -le "$power_start" ]; then
 		power_stop="$default_power_stop"
@@ -120,9 +103,6 @@ qsc_merge_config() {
 		-e "s/^charge_full=.*/charge_full=$charge_full/" \
 		-e "s/^power_reset=.*/power_reset=$power_reset/" \
 		-e "s/^compatibility_mode=.*/compatibility_mode=$compatibility_mode/" \
-		-e "s/^stop_hold_wakelock=.*/stop_hold_wakelock=$stop_hold_wakelock/" \
-		-e "s/^notify_charge_event=.*/notify_charge_event=$notify_charge_event/" \
-		-e "s/^notify_charge_kinds=.*/notify_charge_kinds=$notify_kinds/" \
 		-e "s/^temperature_switch=.*/temperature_switch=$temperature_switch/" \
 		-e "s/^temperature_switch_stop=.*/temperature_switch_stop=$temperature_stop/" \
 		-e "s/^temperature_switch_start=.*/temperature_switch_start=$temperature_start/" \
@@ -132,21 +112,19 @@ qsc_merge_config() {
 	}
 
 	# —— 保留更新策略 ——
-	# 核心策略：从旧配置迁入（停充阈值、通知、无线、App、历史开关等）
-	# 运行/省电旋钮：一律留新版模板默认，避免旧间隔把本版省电优化盖掉
-	# （power_saver、loop_interval_*、switch_verify_sec 不在此列表）
+	# 核心策略：从旧配置迁入（停充相关）；省电/通知键由 qsc_merge_side_confs 处理
 	_core_migrated=0
 	for _nk in wireless_policy history_enable history_interval_sec \
-		app_stop app_stop_list native_daemon native_impl chart_show \
-		notify_power_status switch_batch_blind unplug_restore \
-		charge_full_mode charge_full_wait_sec description_enable; do
+		app_stop app_stop_list chart_show \
+		switch_batch_blind unplug_restore \
+		charge_full_mode charge_full_wait_sec; do
 		_nv="$(sed -n "s/^${_nk}=//p" "$source" 2>/dev/null | head -n1 | tr -d '\r')"
 		[ -n "$_nv" ] || continue
 		case "$_nk" in
 			wireless_policy)
 				case "$_nv" in same|ignore) ;; *) continue ;; esac
 				;;
-			history_enable|app_stop|native_daemon|chart_show|notify_power_status|switch_batch_blind|unplug_restore|description_enable)
+			history_enable|app_stop|chart_show|switch_batch_blind|unplug_restore)
 				case "$_nv" in 0|1) ;; *) continue ;; esac
 				;;
 			charge_full_mode)
@@ -160,11 +138,7 @@ qsc_merge_config() {
 				case "$_nv" in ""|*[!0-9]*) continue ;; esac
 				[ "$_nv" -ge 15 ] 2>/dev/null && [ "$_nv" -le 600 ] 2>/dev/null || continue
 				;;
-			native_impl)
-				case "$_nv" in rust|c|off) ;; *) continue ;; esac
-				;;
 			app_stop_list)
-				# 包名列表：过长或含非法字符则跳过，避免写坏 conf
 				case "$_nv" in *[!A-Za-z0-9._,]* ) continue ;; esac
 				;;
 		esac
@@ -176,14 +150,14 @@ qsc_merge_config() {
 		_core_migrated=$((_core_migrated + 1))
 	done
 
-	# 明示：省电相关键保持新版（读模板值仅用于提示）
-	_idle_n="$(sed -n 's/^loop_interval_idle_native_sec=//p' "$merged" 2>/dev/null | head -n1 | tr -d ' \r\n')"
-	_idle="$(sed -n 's/^loop_interval_idle_sec=//p' "$merged" 2>/dev/null | head -n1 | tr -d ' \r\n')"
-	ui_print "- 核心停充/通知等配置已保留；省电间隔已用新版默认（idle=${_idle:-?}s native=${_idle_n:-?}s）"
-	[ "$_core_migrated" -gt 0 ] && ui_print "- 另迁移 ${_core_migrated} 项运行偏好（无线/历史/守护选型等）"
+	ui_print "- 核心停充配置已保留；省电默认见 power.conf"
+	[ "$_core_migrated" -gt 0 ] && ui_print "- 另迁移 ${_core_migrated} 项运行偏好"
 
 	# 迁移用户自定义供电开关与停充时段（多行）；跳过策略类节点以免闪充
-	sed -i -e '/^power_switch=/d' -e '/^power_stop_schedule=/d' -e '/^notify_quiet_schedule=/d' "$merged" 2>/dev/null
+	sed -i -e '/^power_switch=/d' -e '/^power_stop_schedule=/d' -e '/^notify_quiet_schedule=/d' \
+		-e '/^night_schedule=/d' -e '/^stop_hold_wakelock=/d' \
+		-e '/^notify_charge_event=/d' -e '/^notify_charge_kinds=/d' -e '/^notify_power_status=/d' \
+		"$merged" 2>/dev/null
 	if grep -q '^power_switch=' "$source" 2>/dev/null; then
 		kept_ps=0
 		skip_ps=0
@@ -211,9 +185,44 @@ EOF
 		grep '^power_stop_schedule=' "$source" >>"$merged" 2>/dev/null
 		ui_print "- 已迁移停充时段 power_stop_schedule"
 	fi
-	if grep -q '^notify_quiet_schedule=' "$source" 2>/dev/null; then
-		grep '^notify_quiet_schedule=' "$source" >>"$merged" 2>/dev/null
-		ui_print "- 已迁移通知勿扰时段"
-	fi
 	mv -f "$merged" "$target"
+}
+
+# 把旧 config.conf / 旧 side conf 中的省电与通知键写入新模板
+qsc_merge_side_confs() {
+	local source="$1" root="$2"
+	local power="$root/config/power.conf"
+	local notify="$root/config/notify.conf"
+	local old_power="${source%.conf}.power.conf"
+	local k v
+	[ -f "$power" ] || return 0
+	[ -f "$notify" ] || return 0
+	[ -f "$source" ] || return 0
+
+	# 持锁 / 简介 / 守护：从旧主 conf 或旧 power 迁入（不迁 loop 间隔，保留新版省电默认）
+	for k in stop_hold_wakelock description_enable native_daemon native_impl; do
+		v="$(sed -n "s/^${k}=//p" "$source" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+		[ -n "$v" ] || continue
+		if grep -q "^${k}=" "$power" 2>/dev/null; then
+			sed -i "s|^${k}=.*|${k}=${v}|" "$power"
+		else
+			echo "${k}=${v}" >>"$power"
+		fi
+	done
+
+	for k in notify_charge_event notify_charge_kinds notify_power_status; do
+		v="$(sed -n "s/^${k}=//p" "$source" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+		[ -n "$v" ] || continue
+		if grep -q "^${k}=" "$notify" 2>/dev/null; then
+			sed -i "s|^${k}=.*|${k}=${v}|" "$notify"
+		else
+			echo "${k}=${v}" >>"$notify"
+		fi
+	done
+	if grep -q '^notify_quiet_schedule=' "$source" 2>/dev/null; then
+		sed -i '/^notify_quiet_schedule=/d' "$notify" 2>/dev/null
+		grep '^notify_quiet_schedule=' "$source" >>"$notify" 2>/dev/null
+		ui_print "- 已迁移通知勿扰时段到 notify.conf"
+	fi
+	ui_print "- 省电/通知侧配置已写入 power.conf / notify.conf"
 }

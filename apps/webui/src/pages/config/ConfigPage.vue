@@ -14,6 +14,11 @@ provideConfigForm();
 
 const navItems = [
   {
+    name: SubRouteName.ConfigPower,
+    title: "省电策略",
+    label: "档位、息屏/夜间/深睡、未插电驻停",
+  },
+  {
     name: SubRouteName.ConfigSwitches,
     title: "供电开关与排障",
     label: "首选 / 自定义开关 / 测开关与缓存",
@@ -21,7 +26,7 @@ const navItems = [
   {
     name: SubRouteName.ConfigRuntime,
     title: "运行与采样",
-    label: "省电间隔、图表、电流高级路径、冷门选项",
+    label: "图表、兼容、电流高级路径、冷门选项",
   },
   {
     name: SubRouteName.ConfigDaemon,

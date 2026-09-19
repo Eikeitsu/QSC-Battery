@@ -11,6 +11,7 @@ export const TAB_PAGES = {
 export const SUB_PAGES = {
   [SubRouteName.ConfigSwitches]: () => import("@/pages/config/ConfigSwitchesPage.vue"),
   [SubRouteName.ConfigRuntime]: () => import("@/pages/config/ConfigRuntimePage.vue"),
+  [SubRouteName.ConfigPower]: () => import("@/pages/config/ConfigPowerPolicyPage.vue"),
   [SubRouteName.ConfigDaemon]: () => import("@/pages/config/ConfigDaemonPage.vue"),
   [SubRouteName.MoreDevice]: () => import("@/pages/more/MoreDevicePage.vue"),
   [SubRouteName.MoreTools]: () => import("@/pages/more/MoreToolsPage.vue"),

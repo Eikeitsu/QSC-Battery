@@ -91,11 +91,11 @@ qsc_cat_node() {
 
 QSC_CR="$(printf '\r')"
 
-# 一次遍历 config.conf，把白名单键写成 QSCV_<key>（全内建，无 fork）。
+# 一次遍历多个 conf，把白名单键写成 QSCV_<key>（全内建，无 fork）。
 # 多行键（power_switch / *_schedule）不在此处理，仍由各自逻辑 grep。
-qsc_conf_scan() {
-	local line k v
-	[ -f "$CONF" ] || return 1
+qsc_conf_scan_file() {
+	local file="$1" line k v
+	[ -f "$file" ] || return 1
 	while IFS= read -r line || [ -n "$line" ]; do
 		case "$line" in
 			\#*|"") continue ;;
@@ -104,7 +104,6 @@ qsc_conf_scan() {
 		esac
 		k="${line%%=*}"
 		v="${line#*=}"
-		# 容忍 Windows 编辑器留下的 CR
 		case "$v" in
 			*"$QSC_CR") v="${v%"$QSC_CR"}" ;;
 		esac
@@ -116,11 +115,19 @@ qsc_conf_scan() {
 			|app_stop|app_stop_list|history_enable|history_interval_sec \
 			|temperature_switch|temperature_switch_stop|temperature_switch_start \
 			|description_enable|chart_show|notify_power_status|notify_charge_event \
-			|native_daemon|native_impl|power_saver)
+			|native_daemon|native_impl|power_saver|power_profile|stop_hold_wakelock \
+			|screen_off_saver|night_saver|deep_idle_enable|heartbeat_sec)
 				eval "QSCV_$k=\$v"
 				;;
 		esac
-	done <"$CONF"
+	done <"$file"
+	return 0
+}
+
+qsc_conf_scan() {
+	qsc_conf_scan_file "$CONF"
+	[ -n "${POWER_CONF:-}" ] && qsc_conf_scan_file "$POWER_CONF"
+	[ -n "${NOTIFY_CONF:-}" ] && qsc_conf_scan_file "$NOTIFY_CONF"
 	return 0
 }
 
@@ -298,9 +305,18 @@ _qsc_log_write() {
 
 # 系统通知：notify_charge_event=1 时发送；失败静默
 # $1=tag(qsc_stop|qsc_resume|qsc_fail)  $2=标题  $3=正文
+qsc_notify_conf() {
+	if [ -n "${NOTIFY_CONF:-}" ] && [ -f "$NOTIFY_CONF" ]; then
+		echo "$NOTIFY_CONF"
+	else
+		echo "$CONF"
+	fi
+}
+
 qsc_notify_quiet_now() {
-	local range start end line any=0
-	[ -f "$CONF" ] || return 1
+	local range start end line any=0 nconf
+	nconf="$(qsc_notify_conf)"
+	[ -f "$nconf" ] || return 1
 	while IFS= read -r line || [ -n "$line" ]; do
 		range="$(printf '%s' "$line" | sed 's/^notify_quiet_schedule=//;s/^\[//;s/\]$//' | tr -d ' \r\n')"
 		[ -n "$range" ] || continue
@@ -316,14 +332,15 @@ qsc_notify_quiet_now() {
 				;;
 		esac
 	done <<EOF
-$(grep '^notify_quiet_schedule=' "$CONF" 2>/dev/null)
+$(grep '^notify_quiet_schedule=' "$nconf" 2>/dev/null)
 EOF
 	return 1
 }
 
 qsc_notify_kind_allowed() {
-	local tag="$1" kinds need
-	kinds="$(sed -n 's/^notify_charge_kinds=//p' "$CONF" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+	local tag="$1" kinds need nconf
+	nconf="$(qsc_notify_conf)"
+	kinds="$(sed -n 's/^notify_charge_kinds=//p' "$nconf" 2>/dev/null | head -n1 | tr -d ' \r\n')"
 	[ -n "$kinds" ] || kinds="stop,resume,fail"
 	case "$tag" in
 		qsc_stop) need=stop ;;
@@ -338,10 +355,11 @@ qsc_notify_kind_allowed() {
 }
 
 qsc_notify() {
-	local tag="$1" title="$2" body="$3" en
+	local tag="$1" title="$2" body="$3" en nconf
 	[ -n "$tag" ] && [ -n "$body" ] || return 0
-	[ -f "$CONF" ] || return 0
-	en="$(sed -n 's/^notify_charge_event=//p' "$CONF" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+	nconf="$(qsc_notify_conf)"
+	[ -f "$nconf" ] || return 0
+	en="$(sed -n 's/^notify_charge_event=//p' "$nconf" 2>/dev/null | head -n1 | tr -d ' \r\n')"
 	[ "$en" = "1" ] || return 0
 	qsc_notify_kind_allowed "$tag" || return 0
 	# 勿扰时段内不发（失败通知仍发，避免用户错过异常）
@@ -373,9 +391,10 @@ qsc_notify_cancel() {
 # 配置 notify_power_status=1 开启；同文案会节流，避免每轮狂刷。
 qsc_notify_power_status() {
 	local en level temp ua ma abs_ua body title prev now force="$1"
-	local batt_status flow _last
-	[ -f "$CONF" ] || return 0
-	en="$(sed -n 's/^notify_power_status=//p' "$CONF" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+	local batt_status flow _last nconf
+	nconf="$(qsc_notify_conf)"
+	[ -f "$nconf" ] || return 0
+	en="$(sed -n 's/^notify_power_status=//p' "$nconf" 2>/dev/null | head -n1 | tr -d ' \r\n')"
 	if [ "$en" != "1" ]; then
 		if [ -f "$DATADIR/power_status_notify_on" ]; then
 			qsc_notify_cancel qsc_power

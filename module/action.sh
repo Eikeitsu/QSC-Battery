@@ -117,9 +117,13 @@ qsc_action_refresh() {
 	[ -f "$MODDIR/webroot/index.html" ] || echo "WebUI: 未安装"
 
 	_conf_get() {
-		sed -n "s/^$1=//p" "$CONF" 2>/dev/null | head -n1 | tr -d ' \r'
+		local v
+		v="$(sed -n "s/^$1=//p" "$CONF" 2>/dev/null | head -n1 | tr -d ' \r')"
+		[ -n "$v" ] && { echo "$v"; return 0; }
+		[ -n "${POWER_CONF:-}" ] && [ -f "$POWER_CONF" ] &&
+			sed -n "s/^$1=//p" "$POWER_CONF" 2>/dev/null | head -n1 | tr -d ' \r'
 	}
-	if [ -f "$CONF" ]; then
+	if [ -f "$CONF" ] || [ -f "${POWER_CONF:-}" ]; then
 		_ps=$(_conf_get power_stop)
 		_pt=$(_conf_get power_start)
 		_ts=$(_conf_get temperature_switch)

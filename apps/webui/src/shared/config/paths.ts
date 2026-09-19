@@ -5,6 +5,8 @@ const ROOT = `/data/adb/modules/${APP.moduleId}`;
 export const PATHS = {
   MODDIR: ROOT,
   CONF: `${ROOT}/config/config.conf`,
+  POWER_CONF: `${ROOT}/config/power.conf`,
+  NOTIFY_CONF: `${ROOT}/config/notify.conf`,
   CURRENT_CONF: `${ROOT}/config/current.json`,
   PROFILES: `${ROOT}/config/profiles.json`,
   CURRENT_LIB: `${ROOT}/bin/lib/current.sh`,

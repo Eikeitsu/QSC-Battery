@@ -21,6 +21,7 @@ export type ConfigActionsCtx = {
   powerSwitches: Ref<string[]>;
   powerStopSchedule: Ref<string[]>;
   notifyQuietSchedule: Ref<string[]>;
+  nightSchedule: Ref<string[]>;
   currentFeature: Ref<boolean>;
   deviceName: Ref<string>;
   status: { moduleOn: boolean };
@@ -34,6 +35,7 @@ export function createConfigActions(ctx: ConfigActionsCtx) {
     powerSwitches,
     powerStopSchedule,
     notifyQuietSchedule,
+    nightSchedule,
     currentFeature,
     deviceName,
     status,
@@ -50,11 +52,12 @@ export function createConfigActions(ctx: ConfigActionsCtx) {
   }
 
   async function loadConfig(): Promise<void> {
-    const [values, switches, stopSchedule, quietSchedule] = await Promise.all([
+    const [values, switches, stopSchedule, quietSchedule, night] = await Promise.all([
       api.loadConfigValues(CONFIG_KEYS),
       api.loadPowerSwitches(),
       api.loadPowerStopSchedule(),
       api.loadNotifyQuietSchedule(),
+      api.loadNightSchedule(),
     ]);
     CONFIG_KEYS.forEach((key) => {
       settings[key] = values[key] || DEFAULTS[key];
@@ -62,6 +65,7 @@ export function createConfigActions(ctx: ConfigActionsCtx) {
     powerSwitches.value = switches;
     powerStopSchedule.value = stopSchedule;
     notifyQuietSchedule.value = quietSchedule;
+    nightSchedule.value = night;
   }
 
   async function loadCurrentConfig(): Promise<void> {
@@ -117,6 +121,11 @@ export function createConfigActions(ctx: ConfigActionsCtx) {
       showToast("通知勿扰时段保存失败");
       return false;
     }
+    const nightOk = await api.saveNightSchedule(nightSchedule.value);
+    if (!nightOk) {
+      showToast("夜间省电时段保存失败");
+      return false;
+    }
     if (toast) {
       if (result.fixed) showToast("已自动修正超范围配置并保存");
       else showSuccessToast("配置已保存");
@@ -143,6 +152,17 @@ export function createConfigActions(ctx: ConfigActionsCtx) {
     }
     notifyQuietSchedule.value = await api.loadNotifyQuietSchedule();
     if (toast) showSuccessToast("勿扰时段已保存");
+    return true;
+  }
+
+  async function saveNightSchedule(toast = true): Promise<boolean> {
+    const ok = await api.saveNightSchedule(nightSchedule.value);
+    if (!ok) {
+      showToast("夜间省电时段保存失败");
+      return false;
+    }
+    nightSchedule.value = await api.loadNightSchedule();
+    if (toast) showSuccessToast("夜间时段已保存");
     return true;
   }
 
@@ -192,9 +212,11 @@ export function createConfigActions(ctx: ConfigActionsCtx) {
     powerSwitches.value = [];
     powerStopSchedule.value = [];
     notifyQuietSchedule.value = [];
+    nightSchedule.value = [];
     await api.savePowerSwitches([]);
     await api.savePowerStopSchedule([]);
     await api.saveNotifyQuietSchedule([]);
+    await api.saveNightSchedule([]);
     if (currentFeature.value) {
       Object.assign(current, { ...CURRENT_DEFAULTS });
       const saved = await api.saveCurrentJsonc(current);
@@ -211,6 +233,7 @@ export function createConfigActions(ctx: ConfigActionsCtx) {
     saveSettings,
     savePowerStopSchedule,
     saveNotifyQuietSchedule,
+    saveNightSchedule,
     savePowerSwitchText,
     saveCurrent,
     toggleModule,

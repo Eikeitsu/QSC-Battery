@@ -169,6 +169,41 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
 
   next.power_saver = next.power_saver === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
   if (next.power_saver !== String(input.power_saver || BinaryFlag.On)) mark(true);
+  {
+    const p = String(next.power_profile || "balanced");
+    next.power_profile =
+      p === "aggressive" || p === "custom" || p === "balanced" ? p : "balanced";
+    if (next.power_profile !== String(input.power_profile || "balanced")) mark(true);
+  }
+  next.screen_off_saver =
+    next.screen_off_saver === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
+  next.night_saver = next.night_saver === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
+  next.deep_idle_enable =
+    next.deep_idle_enable === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
+  next.screen_probe_dumpsys =
+    next.screen_probe_dumpsys === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
+  const deepAfter = clampInt(
+    next.deep_after_sec,
+    60,
+    7200,
+    Number(DEFAULTS.deep_after_sec),
+  );
+  if (String(deepAfter) !== String(input.deep_after_sec)) mark(true);
+  next.deep_after_sec = String(deepAfter);
+  const deepIdle = clampInt(next.deep_idle_sec, 60, 900, Number(DEFAULTS.deep_idle_sec));
+  if (String(deepIdle) !== String(input.deep_idle_sec)) mark(true);
+  next.deep_idle_sec = String(deepIdle);
+  const deepGap = clampInt(
+    next.deep_full_gap_sec,
+    600,
+    14400,
+    Number(DEFAULTS.deep_full_gap_sec),
+  );
+  if (String(deepGap) !== String(input.deep_full_gap_sec)) mark(true);
+  next.deep_full_gap_sec = String(deepGap);
+  const hb = clampInt(next.heartbeat_sec, 60, 900, Number(DEFAULTS.heartbeat_sec));
+  if (String(hb) !== String(input.heartbeat_sec)) mark(true);
+  next.heartbeat_sec = String(hb);
   const idleI = clampInt(
     next.loop_interval_idle_sec,
     3,

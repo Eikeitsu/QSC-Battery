@@ -4,6 +4,7 @@ import { TabName } from "./enums";
 export const SubRouteName = {
   ConfigSwitches: "config-switches",
   ConfigRuntime: "config-runtime",
+  ConfigPower: "config-power",
   ConfigDaemon: "config-daemon",
   MoreDevice: "more-device",
   MoreTools: "more-tools",
@@ -25,6 +26,10 @@ export const SUB_ROUTE_META: Record<SubRouteName, SubRouteMeta> = {
   [SubRouteName.ConfigRuntime]: {
     parentTab: TabName.Config,
     title: "运行与采样",
+  },
+  [SubRouteName.ConfigPower]: {
+    parentTab: TabName.Config,
+    title: "省电策略",
   },
   [SubRouteName.ConfigDaemon]: {
     parentTab: TabName.Config,

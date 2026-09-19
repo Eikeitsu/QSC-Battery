@@ -174,6 +174,7 @@ cp "$MODPATH/module.prop" "$MODPATH/t_module"
 mkdir -p "$MODPATH/bin" "$MODPATH/config" "$MODPATH/data" "$MODPATH/webroot"
 if [ "$KEEP_CONFIG" = "1" ]; then
 	qsc_merge_config "$CONFIG_BACKUP" "$MODPATH/config/config.conf" || qsc_abort "安全迁移原有配置失败，已取消更新"
+	qsc_merge_side_confs "$CONFIG_BACKUP" "$MODPATH"
 	ui_print "- 配置迁移完成（核心保留 + 新版省电默认）"
 fi
 rm -f "$CONFIG_BACKUP"
@@ -215,7 +216,7 @@ fi
 
 # 事件唤醒守护：包里可能自带 Rust 版（qscd-*）、C 版（qscdc-*）、两套或一套都没有
 # （主包）。按 ABI 取候选并逐个现场自检，第一个通过的装成 bin/qscd。
-# 顺序由 config/config.conf 的 native_impl 决定（rust 默认 / c / off）。
+# 顺序由 config/power.conf 的 native_impl 决定（rust 默认 / c / off）。
 # 本包不带可用候选时，沿用上一版里 WebUI 下载好的守护；两者都没有也不影响
 # 功能——service.sh 会退回定时轮询。
 
@@ -332,7 +333,7 @@ if [ "$INSTALL_WEBUI" = "1" ]; then
 else
 	ui_print " 本次未安装 WebUI，可直接编辑配置文件 "
 fi
-ui_print " 配置: config/config.conf "
+ui_print " 配置: config/config.conf · power.conf · notify.conf "
 [ "$INSTALL_CURRENT" = "1" ] && ui_print " 电流控制: config/current.json "
 ui_print " 日志: data/log.log "
 ui_print " Action: 上=刷新 / 下=插电测开关(未插电则诊断) "

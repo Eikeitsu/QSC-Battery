@@ -36,24 +36,41 @@ qsc_service_exit() {
 trap qsc_service_exit 0 1 2 3 15
 
 qsc_start_heartbeat_loop() {
-	local parent="$1" file="$2"
+	local parent="$1" file="$2" hb_sec
 	# 心跳只给热更新/简介 worker 探活；写盘间隔不必到秒级。
-	# 过密会在待机时持续拉起 shell（原先 5s）。
+	# 过密会在待机时持续拉起 shell（原先 5s）。间隔可读 power.conf。
+	hb_sec=180
+	if [ -f "${POWER_CONF:-}" ]; then
+		_h="$(sed -n 's/^heartbeat_sec=//p' "$POWER_CONF" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+		case "$_h" in ""|*[!0-9]*) ;; *) hb_sec="$_h" ;; esac
+	fi
+	case "$hb_sec" in ""|*[!0-9]*) hb_sec=180 ;; esac
+	[ "$hb_sec" -lt 60 ] 2>/dev/null && hb_sec=60
+	[ "$hb_sec" -gt 900 ] 2>/dev/null && hb_sec=900
 	_hb_loop='
 		parent="$1"
 		file="$2"
+		hb_sec="$3"
 		while kill -0 "$parent" 2>/dev/null; do
 			now="$(date +%s 2>/dev/null)"
 			case "$now" in ""|*[!0-9]*) now=0 ;; esac
 			printf "%s\n" "$now" >"$file" 2>/dev/null
-			sleep 180
+			# 运行中若 power.conf 改了心跳，下一轮生效
+			if [ -f "'"${POWER_CONF:-}"'" ]; then
+				n="$(sed -n "s/^heartbeat_sec=//p" "'"${POWER_CONF:-}"'" 2>/dev/null | head -n1 | tr -d " \\r\\n")"
+				case "$n" in ""|*[!0-9]*) ;; *) hb_sec="$n" ;; esac
+			fi
+			case "$hb_sec" in ""|*[!0-9]*) hb_sec=180 ;; esac
+			[ "$hb_sec" -lt 60 ] 2>/dev/null && hb_sec=60
+			[ "$hb_sec" -gt 900 ] 2>/dev/null && hb_sec=900
+			sleep "$hb_sec"
 		done
 	'
 	if command -v setsid >/dev/null 2>&1; then
-		setsid sh -c "$_hb_loop" sh "$parent" "$file" \
+		setsid sh -c "$_hb_loop" sh "$parent" "$file" "$hb_sec" \
 			</dev/null >/dev/null 2>&1 &
 	else
-		nohup sh -c "$_hb_loop" sh "$parent" "$file" \
+		nohup sh -c "$_hb_loop" sh "$parent" "$file" "$hb_sec" \
 			</dev/null >/dev/null 2>&1 &
 	fi
 	QSC_HEARTBEAT_PID=$!
@@ -322,21 +339,24 @@ qsc_runtime_trace() {
 # endregion
 qsc_runtime_trace "H0" "service_start" "$$"
 qsc_service_heartbeat() {
-	local now pending
+	local now pending hb_gap
 	now="${QSC_PS_NOW:-$(date +%s 2>/dev/null)}"
 	case "$now" in ""|*[!0-9]*) return 0 ;; esac
-	# loop_count 每轮都写：热更新 verifier 要尽快看到 loops>0，不能等 180s 心跳门闩
+	# loop_count 每轮都写：热更新 verifier 要尽快看到 loops>0，不能等心跳门闩
 	printf '%s\n' "$QSC_SERVICE_LOOP_COUNT" >"$DATADIR/service_loop_count" 2>/dev/null
-	# 与独立心跳进程一致：约 180s 写一次，避免近阈值短循环时每几秒刷盘
+	hb_gap="${QSC_PS_HB_SEC:-180}"
+	case "$hb_gap" in ""|*[!0-9]*) hb_gap=180 ;; esac
+	[ "$hb_gap" -lt 60 ] 2>/dev/null && hb_gap=60
 	if [ "$QSC_SERVICE_HEARTBEAT_LAST" -eq 0 ] ||
-		[ "$((now - QSC_SERVICE_HEARTBEAT_LAST))" -ge 180 ] 2>/dev/null; then
+		[ "$((now - QSC_SERVICE_HEARTBEAT_LAST))" -ge "$hb_gap" ] 2>/dev/null; then
 		printf '%s\n' "$now" >"$DATADIR/service_heartbeat" 2>/dev/null
 		printf 'timestamp=%s\nloops=%s\nfull_rounds=%s\nnative_wakes=%s\nwake_reason=%s\n' \
 			"$now" "$QSC_SERVICE_LOOP_COUNT" "$QSC_SERVICE_FULL_ROUNDS" \
 			"${QSC_PS_WAKE_COUNT:-0}" "${QSC_PS_LAST_WAKE_REASON:-}" \
 			>"$DATADIR/service_metrics.tmp" 2>/dev/null &&
 			mv -f "$DATADIR/service_metrics.tmp" "$DATADIR/service_metrics" 2>/dev/null
-		printf 'pid=%s\nstarted_at=%s\nstate=running\n' "$$" "$QSC_SERVICE_BOOT_AT" \
+		printf 'pid=%s\nstarted_at=%s\nstate=running\nmode=%s\n' \
+			"$$" "$QSC_SERVICE_BOOT_AT" "${QSC_PS_MODE:-}" \
 			>"$DATADIR/service_start.state.tmp" 2>/dev/null &&
 			mv -f "$DATADIR/service_start.state.tmp" "$DATADIR/service_start.state" 2>/dev/null
 		if qsc_debug_enabled; then

@@ -3,16 +3,21 @@
 # 格式：[大状态 | 子状态] 括号外说明
 # emoji 后无空格；方括号内 | 两侧加空格；子状态分隔统一用 ●（两侧加空格）
 
-DESC_INTRO="电量/温度停充；电流控制为安装时可选。配置：config/config.conf，日志：data/log.log。"
+DESC_INTRO="电量/温度停充；电流控制为安装时可选。配置：config/*.conf，日志：data/log.log。"
 # 关闭动态简介时的专用固定文案（不用「启动中」等动态默认句）
-DESC_STATIC="电量/温度停充；电流控制为安装时可选。配置：config/config.conf，日志：data/log.log。"
+DESC_STATIC="电量/温度停充；电流控制为安装时可选。配置：config/*.conf，日志：data/log.log。"
 
 # description_enable：1=动态简介（默认）；0=写入 DESC_STATIC 固定文案，停 worker，少写盘。
+# 键在 power.conf（旧机可能仍在 config.conf）。
 qsc_description_enabled() {
-	local v
+	local v f
 	v="${description_enable:-${QSCV_description_enable:-}}"
-	if [ -z "$v" ] && [ -n "${CONFDIR:-}" ] && [ -f "$CONFDIR/config.conf" ]; then
-		v="$(sed -n 's/^description_enable=//p' "$CONFDIR/config.conf" 2>/dev/null | head -n1 | tr -d ' \r')"
+	if [ -z "$v" ] && [ -n "${CONFDIR:-}" ]; then
+		for f in "$CONFDIR/power.conf" "$CONFDIR/config.conf"; do
+			[ -f "$f" ] || continue
+			v="$(sed -n 's/^description_enable=//p' "$f" 2>/dev/null | head -n1 | tr -d ' \r')"
+			[ -n "$v" ] && break
+		done
 	fi
 	case "$v" in
 		0) return 1 ;;

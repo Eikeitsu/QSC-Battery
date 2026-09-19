@@ -4,6 +4,8 @@ object ModulePaths {
     const val MODULE_ID = "QSC_Battery"
     const val MODDIR = "/data/adb/modules/$MODULE_ID"
     const val CONF = "$MODDIR/config/config.conf"
+    const val POWER_CONF = "$MODDIR/config/power.conf"
+    const val NOTIFY_CONF = "$MODDIR/config/notify.conf"
     const val CURRENT = "$MODDIR/config/current.json"
     const val PROFILES = "$MODDIR/config/profiles.json"
     const val DATADIR = "$MODDIR/data"

@@ -31,6 +31,21 @@ data class ModuleProp(
 )
 
 object ConfigKeys {
+    val POWER = listOf(
+        "power_saver", "power_profile", "screen_off_saver", "night_saver",
+        "deep_idle_enable", "deep_after_sec", "deep_idle_sec", "deep_full_gap_sec",
+        "heartbeat_sec", "screen_probe_dumpsys",
+        "loop_interval_sec", "loop_interval_maintain_sec",
+        "loop_interval_idle_sec", "loop_interval_idle_native_sec",
+        "loop_interval_plugged_sec", "loop_interval_plugged_native_sec",
+        "loop_interval_near_window", "native_daemon", "native_impl",
+        "description_enable", "stop_hold_wakelock",
+    )
+
+    val NOTIFY = listOf(
+        "notify_charge_event", "notify_charge_kinds", "notify_power_status",
+    )
+
     val ALL = listOf(
         "power_stop", "power_start", "power_stop_time", "charge_full",
         "charge_full_mode", "charge_full_wait_sec", "power_reset", "unplug_restore",
@@ -39,6 +54,9 @@ object ConfigKeys {
         "temperature_switch_start", "loop_interval_sec", "loop_interval_maintain_sec",
         "switch_verify_sec", "switch_batch_blind", "wireless_policy", "app_stop", "app_stop_list",
         "history_enable", "history_interval_sec", "description_enable", "power_saver",
+        "power_profile", "screen_off_saver", "night_saver", "deep_idle_enable",
+        "deep_after_sec", "deep_idle_sec", "deep_full_gap_sec", "heartbeat_sec",
+        "screen_probe_dumpsys",
         "loop_interval_idle_sec", "loop_interval_idle_native_sec",
         "loop_interval_plugged_sec", "loop_interval_plugged_native_sec",
         "loop_interval_near_window", "native_daemon", "native_impl", "chart_show",
@@ -72,6 +90,15 @@ object ConfigKeys {
         "history_interval_sec" to "60",
         "description_enable" to "1",
         "power_saver" to "1",
+        "power_profile" to "balanced",
+        "screen_off_saver" to "1",
+        "night_saver" to "0",
+        "deep_idle_enable" to "1",
+        "deep_after_sec" to "600",
+        "deep_idle_sec" to "900",
+        "deep_full_gap_sec" to "7200",
+        "heartbeat_sec" to "180",
+        "screen_probe_dumpsys" to "0",
         "loop_interval_idle_sec" to "90",
         "loop_interval_idle_native_sec" to "600",
         "loop_interval_plugged_sec" to "15",

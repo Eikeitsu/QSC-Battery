@@ -1,7 +1,8 @@
 #!/system/bin/sh
 # qscd install helpers
 qscd_conf_pref() {
-	_cf="$MODPATH/config/config.conf"
+	_cf="$MODPATH/config/power.conf"
+	[ -f "$_cf" ] || _cf="$MODPATH/config/config.conf"
 	[ -f "$_cf" ] || return 0
 	grep -E '^[[:space:]]*native_impl[[:space:]]*=' "$_cf" 2>/dev/null \
 		| tail -1 | sed 's/^[^=]*=//' | tr -d ' \t\r\n'

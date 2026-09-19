@@ -178,5 +178,5 @@ qsc_ps_plugged_scan() {
 
 # 未插电且无停充维持时可跳过整轮；仍按 QSC_PS_FULL_MAX_GAP 定期跑满轮，
 # 保证曲线采样、简介刷新、配置纠正不会长期停摆。
-# 日用待机：30 分钟强制满轮（有 qscd 时插拔仍即时唤醒；再拉长会让简介/配置纠正偏钝）。
+# 默认 30 分钟；DeepPark / aggressive 档由 power_policy 改写。
 QSC_PS_FULL_MAX_GAP=1800

@@ -156,6 +156,10 @@ export function useConfigForm() {
     await store.saveNotifyQuietSchedule();
   }
 
+  async function saveNightSchedule() {
+    await store.saveNightSchedule();
+  }
+
   const powerSwitchText = computed({
     get: () => (store.powerSwitches || []).join("\n"),
     set: (v: string) => {
@@ -193,6 +197,7 @@ export function useConfigForm() {
     saveSchedule,
     savePowerStopSchedule,
     saveNotifyQuietSchedule,
+    saveNightSchedule,
     savePowerSwitches,
   };
 }

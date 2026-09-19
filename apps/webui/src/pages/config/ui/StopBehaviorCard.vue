@@ -50,7 +50,10 @@ async function toggleKind(kind: "stop" | "resume" | "fail", on: boolean) {
 <template>
   <SectionHead title="停充行为" hint="持锁、拔插、兼容与系统通知" />
   <ThemedCard>
-    <van-cell title="停充持锁" label="息屏深睡改回节点时建议开或自动（魅族/MCA）">
+    <van-cell
+      title="停充持锁"
+      label="自动：仅息屏/夜间持锁，亮屏释放以利 Doze；强制开会持续挡深睡（魅族/MCA）"
+    >
       <template #value>
         <van-radio-group
           :model-value="store.settings.stop_hold_wakelock"

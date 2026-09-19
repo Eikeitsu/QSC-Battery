@@ -104,6 +104,10 @@ worker_refresh() {
 
 worker_sleep_secs() {
 	local s
+	if type qsc_ps_desc_suppressed >/dev/null 2>&1 && qsc_ps_desc_suppressed; then
+		printf '%s\n' "900"
+		return 0
+	fi
 	if type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged; then
 		s="$REFRESH_PLUGGED"
 	else
@@ -111,6 +115,7 @@ worker_sleep_secs() {
 		case "$s" in ""|*[!0-9]*|0) s="$REFRESH_IDLE" ;; esac
 		[ "$s" -lt 180 ] 2>/dev/null && s=180
 		[ "$s" -gt 900 ] 2>/dev/null && s=900
+		[ "${QSC_PS_DEEP:-0}" = "1" ] && s=900
 	fi
 	printf '%s\n' "$s"
 }

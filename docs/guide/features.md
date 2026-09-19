@@ -23,7 +23,7 @@
 - **兼容模式**：跳过本模块电流控制，只保留电量/温度停充，便于与其它限流模块共存
 - **充满再停** `charge_full`：仅停止电量=100 且当前 100% 时生效；`charge_full_mode=auto|current|time`（时间默认 10 分钟，改 `charge_full_wait_sec`）
 - **拔线还原** `unplug_restore`（默认开）：关则保留停充节点与标记，再插上仍停到恢复电量
-- **停充持锁** `stop_hold_wakelock`：`0` / `1` / `auto`（魅族 / MCA 等）
+- **停充持锁** `stop_hold_wakelock`：`0` / `1` / `auto`（魅族/MCA：息屏·夜间才持锁，亮屏释放）
 - **全量盲写** `switch_batch_blind`（默认开）：`1`=全量写节点并每轮重申；`0`=首成功后仅重申
 
 写入优先级大致为：用户 `power_switch` → MCA → preferred → 自动扫描 → 末位兜底。详见 [配置说明](/guide/config)。

@@ -1,7 +1,7 @@
 #!/system/bin/sh
 # power_saver: skip / description
 qsc_ps_can_skip_round() {
-	local now last
+	local now last gap
 	[ "${QSC_PS_ENABLE:-1}" = "1" ] || return 1
 	# 模块关闭时也别空转，但仍要走满轮以刷新简介
 	[ -f "$DATADIR/power_switch" ] && return 1
@@ -9,7 +9,9 @@ qsc_ps_can_skip_round() {
 
 	now="${1:-0}"
 	last="${QSC_PS_LAST_FULL:-0}"
-	if [ "$now" -gt 0 ] 2>/dev/null && [ "$((now - last))" -ge "$QSC_PS_FULL_MAX_GAP" ] 2>/dev/null; then
+	gap="${QSC_PS_FULL_MAX_GAP:-1800}"
+	case "$gap" in ""|*[!0-9]*) gap=1800 ;; esac
+	if [ "$now" -gt 0 ] 2>/dev/null && [ "$((now - last))" -ge "$gap" ] 2>/dev/null; then
 		return 1
 	fi
 	return 0
@@ -33,6 +35,11 @@ qsc_ps_refresh_desc() {
 	local now="${1:-0}"
 	local lv temp digits off plugged stopped sig p
 	[ -f "$DATADIR/hot_update_fallback_reboot" ] && return 0
+	if type qsc_ps_desc_suppressed >/dev/null 2>&1 && qsc_ps_desc_suppressed; then
+		type qsc_description_restore_static >/dev/null 2>&1 &&
+			qsc_description_restore_static
+		return 0
+	fi
 	if ! qsc_description_enabled 2>/dev/null; then
 		type qsc_description_restore_static >/dev/null 2>&1 &&
 			qsc_description_restore_static

@@ -8,6 +8,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.qsc.battery.ui.design.charge.ChargeChip
 import com.qsc.battery.ui.design.charge.ChargeChipGroup
 import com.qsc.battery.ui.design.charge.ChargeChoiceRow
 import com.qsc.battery.ui.design.charge.ChargeDivider
@@ -30,14 +31,87 @@ internal fun ConfigAdvancedSections(
     val current = ui.current
     val stopSchedules = ui.stopSchedules
     val quietSchedules = ui.quietSchedules
+    val nightSchedules = ui.nightSchedules
     val daemonStatus = ui.daemonStatus
+
+    ChargeSection(title = "省电策略") {
+        ChargeToggleRow("省电模式", v("power_saver") != "0") {
+            setLocal("power_saver", if (it) "1" else "0")
+        }
+        ChargeChoiceRow(
+            title = "档位",
+            chips = listOf(
+                ChargeChip("balanced", "均衡"),
+                ChargeChip("aggressive", "强力"),
+                ChargeChip("custom", "自定义"),
+            ),
+            selectedId = v("power_profile").ifBlank { "balanced" },
+            summary = "强力过夜更省；自定义可调秒数",
+            onSelect = {
+                setLocal("power_profile", it)
+                when (it) {
+                    "aggressive" -> {
+                        setLocal("loop_interval_idle_native_sec", "900")
+                        setLocal("heartbeat_sec", "600")
+                    }
+                    "balanced" -> {
+                        setLocal("loop_interval_idle_native_sec", "600")
+                        setLocal("heartbeat_sec", "180")
+                    }
+                }
+            },
+        )
+        ChargeDivider()
+        ChargeToggleRow("息屏加强", v("screen_off_saver") != "0") {
+            setLocal("screen_off_saver", if (it) "1" else "0")
+        }
+        ChargeToggleRow("夜间省电", v("night_saver") == "1") {
+            setLocal("night_saver", if (it) "1" else "0")
+        }
+        ChargeToggleRow("深睡", v("deep_idle_enable") != "0") {
+            setLocal("deep_idle_enable", if (it) "1" else "0")
+        }
+        ChargeToggleRow("动态简介", v("description_enable") != "0") {
+            setLocal("description_enable", if (it) "1" else "0")
+        }
+        ChargeListRow(
+            title = "夜间时段",
+            summary = if (nightSchedules.isEmpty()) "未配置（请用 WebUI 编辑）" else nightSchedules.joinToString("；"),
+        )
+        listOf(
+            Triple("未插电间隔", "loop_interval_idle_sec", "秒"),
+            Triple("未插电·有守护", "loop_interval_idle_native_sec", "秒"),
+            Triple("插电远阈值", "loop_interval_plugged_sec", "秒"),
+            Triple("插电·有守护", "loop_interval_plugged_native_sec", "秒"),
+            Triple("近阈值间隔", "loop_interval_sec", "秒"),
+            Triple("维持间隔", "loop_interval_maintain_sec", "秒"),
+            Triple("近窗口", "loop_interval_near_window", "%"),
+            Triple("深睡等待", "deep_after_sec", "秒"),
+            Triple("深睡 idle", "deep_idle_sec", "秒"),
+            Triple("心跳", "heartbeat_sec", "秒"),
+        ).forEach { (title, key, unit) ->
+            ChargeListRow(
+                title = title,
+                value = "${v(key).ifBlank { "--" }} $unit",
+                onClick = {
+                    onEdit(ConfigEditField(title, unit, true, 1, { v(key) }) { setLocal(key, it) })
+                },
+            )
+        }
+        Text(
+            text = "未插电由插拔事件唤醒；无守护时延迟约等于未插电/深睡 idle。非绝对零耗电。",
+            style = ChargeTheme.typography.caption,
+            color = ChargeTheme.colors.muted,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    }
 
     ChargeSection(title = "停充行为") {
         ChargeChoiceRow(
             title = "停充后保持唤醒锁",
             chips = ChargePresets.wakeLock,
             selectedId = v("stop_hold_wakelock").ifBlank { "auto" },
-            summary = "自动：仅在需要时持锁，减少发热",
+            summary = "自动：仅息屏/夜间持锁，亮屏释放；强制开会持续挡 Doze",
             onSelect = { setLocal("stop_hold_wakelock", it) },
         )
         ChargeDivider()
@@ -134,33 +208,12 @@ internal fun ConfigAdvancedSections(
         )
     }
 
-    ChargeSection(title = "循环与省电") {
-        ChargeToggleRow("省电模式", v("power_saver") == "1") {
-            setLocal("power_saver", if (it) "1" else "0")
-        }
-        ChargeToggleRow("动态简介", v("description_enable") != "0") {
-            setLocal("description_enable", if (it) "1" else "0")
-        }
+    ChargeSection(title = "采样与曲线") {
         ChargeToggleRow("记录充放电历史", v("history_enable") == "1") {
             setLocal("history_enable", if (it) "1" else "0")
         }
         ChargeToggleRow("首页显示曲线（WebUI）", v("chart_show") == "1") {
             setLocal("chart_show", if (it) "1" else "0")
-        }
-        listOf(
-            Triple("近阈值间隔", "loop_interval_sec", "秒"),
-            Triple("维持间隔", "loop_interval_maintain_sec", "秒"),
-            Triple("未插电间隔", "loop_interval_idle_sec", "秒"),
-            Triple("插电远阈值", "loop_interval_plugged_sec", "秒"),
-            Triple("近窗口", "loop_interval_near_window", "%"),
-        ).forEach { (title, key, unit) ->
-            ChargeListRow(
-                title = title,
-                value = "${v(key).ifBlank { "--" }} $unit",
-                onClick = {
-                    onEdit(ConfigEditField(title, unit, true, 1, { v(key) }) { setLocal(key, it) })
-                },
-            )
         }
     }
 
