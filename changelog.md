@@ -8,6 +8,7 @@
 - **配置拆分**：省电键迁入 `power.conf`，通知迁入 `notify.conf`；旧 `config.conf` 启动时自动迁移。
 - **停充维持 × 息屏/夜间**：非 MCA 息屏约 180s、夜间/深睡约 300s；MCA 仍按 `loop_interval_maintain_sec` 重申。
 - **夜间时段**：模板默认 `23:00-07:00`（跨天）；WebUI/APP 可编辑；开启「夜间省电」且无时段时自动写入该默认。
+- **简介按需刷新**：检测到 Magisk/KSU/APatch/MMRL 等管理器在前台时勤刷电量；无人看列表时几乎不更新电量（停充/插拔等状态仍即时写）。内置含 Alpha / Kitsune、KSU Next / SukiSU / ReSukiSU、APatch Next / FolkPatch、WebUI X 等活跃分支；可选 `desc_viewer_pkgs` 追加包名。
 
 ### 优化
 

@@ -90,6 +90,7 @@ qsc_service_loop_once() {
 		[ "$_now" -gt 0 ] 2>/dev/null && QSC_PS_LAST_FULL="$_now"
 		# 满轮会自己改简介，快路径的缓存指纹随之失效
 		QSC_PS_DESC_SIG=""
+		QSC_PS_DESC_STATE_SIG=""
 	fi
 
 	QSC_SERVICE_FULL_ROUNDS=$((QSC_SERVICE_FULL_ROUNDS + 1))

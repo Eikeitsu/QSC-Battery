@@ -4,7 +4,8 @@
 # 参数：父 service.sh 的 PID。worker 不依赖父 shell 中已经 source 的函数，
 # 每次启动都重新加载当前模块文件，热更新后由新 service 接管新 worker。
 #
-# 未插电时拉长周期，避免与主循环重复刷简介；插电仍用较短间隔。
+# 有人打开 Magisk/KSU/APatch/MMRL 等管理器（前台）时勤刷；
+# 无人看列表时不写电量，仅周期性复检是否打开管理器。
 MODDIR=${0%/*}
 MODDIR=${MODDIR%/*}
 PARENT_PID="${1:-0}"
@@ -12,9 +13,10 @@ PARENT_PID="${1:-0}"
 
 WORKER_PID_FILE="$DATADIR/description_worker.pid"
 WORKER_LOCK="$DATADIR/.description_worker.lock"
-# 插电：2 分钟；未插电：5 分钟（与 DESC_MIN_GAP / idle 对齐，不过分迟钝）
-REFRESH_PLUGGED=120
-REFRESH_IDLE=300
+# 管理器在看：插电 30s / 未插电 45s；空闲仅复检 180s
+REFRESH_VIEWING_PLUGGED=30
+REFRESH_VIEWING=45
+REFRESH_IDLE_CHECK=180
 
 case "$PARENT_PID" in
 	""|*[!0-9]*) PARENT_PID=0 ;;
@@ -67,11 +69,27 @@ worker_state() {
 	local rc="$1" now
 	now="$(date +%s 2>/dev/null)"
 	case "$now" in ""|*[!0-9]*) now=0 ;; esac
-	printf 'pid=%s\nparent=%s\nlast_refresh=%s\nrc=%s\n' \
-		"$$" "$PARENT_PID" "$now" "$rc" \
+	printf 'pid=%s\nparent=%s\nlast_refresh=%s\nrc=%s\nviewer=%s\n' \
+		"$$" "$PARENT_PID" "$now" "$rc" "${QSC_MANAGER_VIEWER_WAS:-0}" \
 		>"$DATADIR/description_worker.state.tmp" 2>/dev/null &&
 		mv -f "$DATADIR/description_worker.state.tmp" \
 			"$DATADIR/description_worker.state" 2>/dev/null
+}
+
+# 返回 0=本轮应写简介；1=仅复检、跳过写电量
+worker_should_refresh() {
+	if type qsc_ps_desc_suppressed >/dev/null 2>&1 && qsc_ps_desc_suppressed; then
+		return 0
+	fi
+	if ! type qsc_manager_viewer_poll >/dev/null 2>&1; then
+		return 0
+	fi
+	if qsc_manager_viewer_poll; then
+		# 上升沿：强制绕过 MIN_GAP，立刻对齐电量
+		[ "${QSC_MANAGER_VIEWER_RISING:-0}" = "1" ] && QSC_PS_DESC_FORCE=1
+		return 0
+	fi
+	return 1
 }
 
 worker_refresh() {
@@ -96,8 +114,20 @@ worker_refresh() {
 	fi
 	qsc_ps_load_conf
 	qsc_ps_now
+	if type qsc_ps_policy_refresh >/dev/null 2>&1; then
+		qsc_ps_policy_refresh
+	fi
+	if ! worker_should_refresh; then
+		worker_state 0
+		return 0
+	fi
+	# 观看中：缩短最小写盘间隔
+	if [ "${QSC_MANAGER_VIEWER_WAS:-0}" = "1" ]; then
+		QSC_PS_DESC_MIN_GAP=30
+	fi
 	qsc_ps_refresh_desc "${QSC_PS_NOW:-0}"
 	_rc="$?"
+	QSC_PS_DESC_FORCE=0
 	worker_state "$_rc"
 	return "$_rc"
 }
@@ -108,20 +138,21 @@ worker_sleep_secs() {
 		printf '%s\n' "900"
 		return 0
 	fi
-	if type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged; then
-		s="$REFRESH_PLUGGED"
-	else
-		s="${QSC_PS_IDLE_NATIVE:-$REFRESH_IDLE}"
-		case "$s" in ""|*[!0-9]*|0) s="$REFRESH_IDLE" ;; esac
-		[ "$s" -lt 180 ] 2>/dev/null && s=180
-		[ "$s" -gt 900 ] 2>/dev/null && s=900
-		[ "${QSC_PS_DEEP:-0}" = "1" ] && s=900
+	if [ "${QSC_MANAGER_VIEWER_WAS:-0}" = "1" ]; then
+		if type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged; then
+			s="$REFRESH_VIEWING_PLUGGED"
+		else
+			s="$REFRESH_VIEWING"
+		fi
+		printf '%s\n' "$s"
+		return 0
 	fi
-	printf '%s\n' "$s"
+	# 无人看：只复检管理器是否打开
+	printf '%s\n' "$REFRESH_IDLE_CHECK"
 }
 
-# 热更新/启动后：服务未就绪时短间隔重试，避免一次失败就睡到 2–5 分钟。
-# 就绪后按插电状态选长周期，省电。
+# 热更新/启动后：服务未就绪时短间隔重试。
+# 就绪后：有人看勤刷，无人看长睡复检。
 while worker_parent_alive; do
 	worker_refresh
 	if worker_service_ready; then

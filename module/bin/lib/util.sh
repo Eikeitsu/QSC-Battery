@@ -116,7 +116,7 @@ qsc_conf_scan_file() {
 			|temperature_switch|temperature_switch_stop|temperature_switch_start \
 			|description_enable|chart_show|notify_power_status|notify_charge_event \
 			|native_daemon|native_impl|power_saver|power_profile|stop_hold_wakelock \
-			|screen_off_saver|night_saver|deep_idle_enable|heartbeat_sec)
+			|screen_off_saver|night_saver|deep_idle_enable|heartbeat_sec|desc_viewer_pkgs)
 				eval "QSCV_$k=\$v"
 				;;
 		esac

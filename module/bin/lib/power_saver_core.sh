@@ -170,6 +170,7 @@ qsc_ps_load_conf() {
 				description_enable) QSCV_description_enable="$v" ;;
 				stop_hold_wakelock) QSCV_stop_hold_wakelock="$v" ;;
 				native_impl) QSCV_native_impl="$v" ;;
+				desc_viewer_pkgs) QSCV_desc_viewer_pkgs="$v" ;;
 			esac
 		done <"$power"
 	fi

@@ -89,7 +89,10 @@
 | `loop_interval_*`               | 见模板      | 自定义档可调；插电近阈值不受 DeepPark 放松                         |
 | `native_daemon` / `native_impl` | 1 / rust    | 事件守护                                                           |
 | `description_enable`            | 1           | 动态简介                                                           |
+| `desc_viewer_pkgs`              | （空）      | 逗号追加管理器包名；Magisk 会尽量从 `requester` 自动识别随机包名     |
 | `stop_hold_wakelock`            | auto        | 停充持锁：`auto`=魅族/MCA 仅息屏·夜间持锁；`1`=持续持锁（挡 Doze） |
+
+动态简介默认**按需刷新**：仅当模块管理器在前台时勤刷电量；无人看列表时可不更新电量数字（打开管理器会立即对齐）。停充/复充/关模块等状态变化仍会写入。关 `description_enable` 则固定文案并停 worker。
 
 守护实际版本写在 `data/native_version`（安装/下载时更新，只读状态，不是手改项）。
 

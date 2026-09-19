@@ -18,15 +18,24 @@ export const CLEAN_CUTOVER_CODE = 2026091701;
 /** @deprecated 使用 CLEAN_CUTOVER_CODE */
 export const LAYOUT_CUTOVER_CODE = CLEAN_CUTOVER_CODE;
 
-/** 常见模块管理器包名（CLI 失败时兜底）。 */
+/** 常见模块管理器包名（CLI 失败时兜底；与 module manager_viewers.sh 对齐）。 */
 const MANAGER_PACKAGES = [
+  "com.topjohnwu.magisk",
+  "io.github.vvb2060.magisk",
+  "io.github.huskydg.magisk",
   "com.rifsxd.ksunext",
   "me.weishu.kernelsu",
   "com.tiann.kernelsu",
-  "com.topjohnwu.magisk",
-  "io.github.vvb2060.magisk",
-  "me.bmax.apatch",
   "com.sukisu.ultra",
+  "com.resukisu.resukisu",
+  "me.bmax.apatch",
+  "me.garfieldhan.apatch.next",
+  "me.yuki.folk",
+  "com.dergoogler.mmrl",
+  "com.dergoogler.mmrl.wx",
+  "com.dergoogler.mmrl.ksuwebui",
+  "io.github.a13e300.ksuwebui",
+  "com.yujincheng1994.wx",
 ] as const;
 
 const INSTALL_TIMEOUT_MS = 300_000;

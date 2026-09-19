@@ -58,6 +58,7 @@ fi
 . "$LIBDIR/status.sh"
 . "$LIBDIR/jsonc.sh"
 . "$LIBDIR/history.sh"
+[ -f "$LIBDIR/manager_viewers.sh" ] && . "$LIBDIR/manager_viewers.sh"
 [ -f "$LIBDIR/conf_migrate.sh" ] && . "$LIBDIR/conf_migrate.sh"
 [ -f "$LIBDIR/event_log.sh" ] && . "$LIBDIR/event_log.sh"
 [ -f "$LIBDIR/health.sh" ] && . "$LIBDIR/health.sh"

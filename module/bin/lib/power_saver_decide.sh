@@ -23,17 +23,18 @@ qsc_ps_can_skip_round() {
 # 优先复用统一电池快照，只有 sysfs 不完整时才走 dumpsys 兜底；仅在显示值变化时
 # 真正改写 module.prop。温度待机时会在两三度间来回抖，只靠「值变了就写」会变成
 # 每 30 秒改一次 prop，所以再压一道最小间隔：省电的关键是别唤醒 CPU、别乱写盘。
+# 无人打开模块管理器时：跳过纯电量/温度更新，仅状态突变才写；观看中缩短间隔。
 QSC_PS_DESC_SIG=""
+QSC_PS_DESC_STATE_SIG=""
 QSC_PS_DESC_TS=0
-# 简介是用户可见的运行状态，最长允许按省电策略等待；真正没有变化时
-# qsc_ps_refresh_desc 仍会被指纹短路，不会产生重复 module.prop 写入。
-# 未插电待机：5 分钟内同一指纹不写盘（再拉长对省电收益很小，简介会显得卡住）。
+# 默认 5 分钟；管理器前台时临时压到约 45s；上升沿可设 QSC_PS_DESC_FORCE=1 绕过
 QSC_PS_DESC_MIN_GAP=300
+QSC_PS_DESC_FORCE=0
 
 # 参数: 当前单调秒（service.sh 已经读过 /proc/uptime，不再重复读）
 qsc_ps_refresh_desc() {
 	local now="${1:-0}"
-	local lv temp digits off plugged stopped sig p
+	local lv temp digits off plugged stopped sig state_sig p viewer=0 gap
 	[ -f "$DATADIR/hot_update_fallback_reboot" ] && return 0
 	if type qsc_ps_desc_suppressed >/dev/null 2>&1 && qsc_ps_desc_suppressed; then
 		type qsc_description_restore_static >/dev/null 2>&1 &&
@@ -46,14 +47,41 @@ qsc_ps_refresh_desc() {
 		return 0
 	fi
 	type qsc_refresh_module_description >/dev/null 2>&1 || return 0
-	if [ "$now" -gt 0 ] 2>/dev/null \
-		&& [ "$((now - QSC_PS_DESC_TS))" -lt "$QSC_PS_DESC_MIN_GAP" ] 2>/dev/null; then
+
+	off=0
+	if [ -f "$MODULE_OFF_FLAG" ] || [ -f "$MODDIR/disable" ]; then
+		off=1
+	fi
+	stopped=0
+	[ -f "$DATADIR/power_switch" ] && stopped=1
+	plugged=0
+	if type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged; then
+		plugged=1
+	fi
+	state_sig="${off}:${plugged}:${stopped}"
+
+	if type qsc_manager_viewer_active >/dev/null 2>&1 && qsc_manager_viewer_active; then
+		viewer=1
+	fi
+
+	# 无人看模块列表：仅状态类变化才继续；纯电量/温度抖动跳过（不停充满轮仍会写简介）
+	if [ "$viewer" != "1" ]; then
+		if [ -n "${QSC_PS_DESC_STATE_SIG:-}" ] &&
+			[ "$state_sig" = "$QSC_PS_DESC_STATE_SIG" ]; then
+			return 0
+		fi
+	fi
+
+	gap="${QSC_PS_DESC_MIN_GAP:-300}"
+	[ "$viewer" = "1" ] && [ "$gap" -gt 60 ] 2>/dev/null && gap=45
+	if [ "${QSC_PS_DESC_FORCE:-0}" != "1" ] &&
+		[ "$now" -gt 0 ] 2>/dev/null &&
+		[ "$((now - QSC_PS_DESC_TS))" -lt "$gap" ] 2>/dev/null; then
 		return 0
 	fi
 
 	lv=""
 	temp=""
-	plugged=0
 	if type qsc_battery_snapshot_read >/dev/null 2>&1; then
 		# 与 qsc_switch.sh / WebUI 共用同一套 sysfs→dumpsys 兜底，
 		# 避免「首次能读到，后续快路径却读不到」导致简介停在热更新后的数值。
@@ -108,16 +136,12 @@ qsc_ps_refresh_desc() {
 		qsc_ps_plugged && plugged=1
 	fi
 
-	# 总开关也进指纹：关掉后最迟下一次刷新就显示「已关闭」，不用等满轮
-	off=0
-	if [ -f "$MODULE_OFF_FLAG" ] || [ -f "$MODDIR/disable" ]; then
-		off=1
-	fi
-	stopped=0
-	[ -f "$DATADIR/power_switch" ] && stopped=1
-
-	sig="${off}:${plugged}:${stopped}:${lv}:${temp}"
-	[ "$sig" = "$QSC_PS_DESC_SIG" ] && return 0
+	state_sig="${off}:${plugged}:${stopped}"
+	sig="${state_sig}:${lv}:${temp}"
+	[ "$sig" = "$QSC_PS_DESC_SIG" ] && {
+		QSC_PS_DESC_STATE_SIG="$state_sig"
+		return 0
+	}
 
 	# 该函数也由 service.sh 在满轮前调用，不能假定一定是未插电。
 	battery_level="$lv"
@@ -130,8 +154,10 @@ qsc_ps_refresh_desc() {
 	_desc_rc="$?"
 	if [ "$_desc_rc" -eq 0 ]; then
 		QSC_PS_DESC_SIG="$sig"
+		QSC_PS_DESC_STATE_SIG="$state_sig"
 		QSC_PS_DESC_TS="$now"
 		QSC_PS_DESC_WRITES=$((QSC_PS_DESC_WRITES + 1))
+		QSC_PS_DESC_FORCE=0
 	else
 		# 写入失败不能把失败的指纹缓存起来，否则同一电量/温度下
 		# 后续轮次不会重试，module.prop 会永久停在旧值。
@@ -148,7 +174,7 @@ qsc_ps_refresh_desc() {
 	type qsc_runtime_trace >/dev/null 2>&1 &&
 		qsc_runtime_trace "H7" "description_file" "$_desc_file_match:$lv"
 	type qsc_runtime_trace >/dev/null 2>&1 &&
-		qsc_runtime_trace "H4" "description_refresh" "$_desc_rc:$lv:$temp:$plugged:$stopped"
+		qsc_runtime_trace "H4" "description_refresh" "$_desc_rc:$lv:$temp:$plugged:$stopped:v$viewer"
 	return "$_desc_rc"
 	# endregion
 }
