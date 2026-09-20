@@ -354,7 +354,7 @@ qsc_ps_park_session_end() {
 	QSC_PS_PARK_SINCE=0
 }
 
-# 在 policy_refresh 末尾调用：边沿日志 + 驻停段总结
+# 在 policy_refresh 末尾调用：边沿日志 + 驻停段总结 + 简介 worker 门禁
 qsc_ps_policy_edge_log() {
 	local prev="${QSC_PS_MODE_WAS:-}" cur="${QSC_PS_MODE:-}"
 	local tier new_park=0 zh
@@ -386,6 +386,11 @@ qsc_ps_policy_edge_log() {
 	if [ "$new_park" = "1" ]; then
 		if [ "${QSC_PS_PARK_ACTIVE:-0}" != "1" ]; then
 			qsc_ps_park_session_begin "$tier"
+			# 进入息屏加强/深睡：停简介 worker，少一个常驻 shell
+			type qsc_stop_description_worker >/dev/null 2>&1 &&
+				qsc_stop_description_worker
+			type qsc_description_restore_static >/dev/null 2>&1 &&
+				qsc_description_restore_static
 		elif [ -n "$tier" ] && [ "$tier" != "${QSC_PS_PARK_LABEL:-}" ]; then
 			zh="$(qsc_ps_park_label_zh "$tier")"
 			qsc_log info "驻停加深为${zh}"
@@ -394,10 +399,44 @@ qsc_ps_policy_edge_log() {
 	else
 		if [ "${QSC_PS_PARK_ACTIVE:-0}" = "1" ]; then
 			qsc_ps_park_session_end
+			# 离开驻停：若仍开动态简介则拉回 worker
+			if type qsc_description_enabled >/dev/null 2>&1 &&
+				qsc_description_enabled; then
+				type qsc_start_description_worker >/dev/null 2>&1 &&
+					qsc_start_description_worker
+			fi
 		fi
 	fi
 
 	QSC_PS_MODE_WAS="$cur"
+}
+
+# 深睡粘滞：跳过息屏 sysfs 探测，沿用 deep idle。
+# 每隔 QSC_PS_DEEP_STICKY_MAX（默认 2）次 lean 醒做一次全量场景刷新，以便亮屏退出。
+# 返回 0=已粘滞处理；1=需走全量 policy_refresh
+qsc_ps_policy_try_deep_sticky() {
+	local max="${QSC_PS_DEEP_STICKY_MAX:-2}" n
+	case "${QSC_PS_MODE_WAS:-}" in
+		deep) ;;
+		*) return 1 ;;
+	esac
+	[ "${QSC_PS_CONF_RELOADED:-0}" = "1" ] && return 1
+	case "$max" in ""|*[!0-9]*) max=2 ;; esac
+	[ "$max" -lt 1 ] 2>/dev/null && max=1
+	n=$((${QSC_PS_DEEP_STICKY_N:-0} + 1))
+	QSC_PS_DEEP_STICKY_N="$n"
+	if [ $((n % (max + 1))) -eq 0 ] 2>/dev/null; then
+		return 1
+	fi
+	QSC_PS_MODE=deep
+	QSC_PS_DEEP=1
+	QSC_PS_SCREEN_OFF=1
+	QSC_PS_DESC_FORCE_STATIC=1
+	QSC_PS_IDLE_EFF="${QSC_PS_DEEP_IDLE:-900}"
+	QSC_PS_FULL_MAX_GAP="${QSC_PS_DEEP_FULL_GAP:-7200}"
+	QSC_PS_HB_SEC="$(qsc_clamp_int "${QSC_PS_HB_SEC:-180}" 180 900 600)"
+	QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+	return 0
 }
 
 qsc_ps_policy_refresh() {
@@ -413,6 +452,15 @@ qsc_ps_policy_refresh() {
 	if type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged; then
 		plugged=1
 	fi
+
+	# 未插电深睡粘滞：不读亮度，直接再睡
+	if [ "$plugged" != "1" ] &&
+		[ ! -f "$DATADIR/power_switch" ] &&
+		type qsc_ps_policy_try_deep_sticky >/dev/null 2>&1 &&
+		qsc_ps_policy_try_deep_sticky; then
+		return 0
+	fi
+	QSC_PS_DEEP_STICKY_N=0
 
 	# 先刷新场景，再分支（停充维持也要息屏信息）
 	qsc_ps_policy_scene

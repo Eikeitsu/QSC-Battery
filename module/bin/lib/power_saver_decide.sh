@@ -7,13 +7,9 @@ qsc_ps_can_skip_round() {
 	[ -f "$DATADIR/power_switch" ] && return 1
 	qsc_ps_plugged && return 1
 
-	now="${1:-0}"
-	last="${QSC_PS_LAST_FULL:-0}"
-	gap="${QSC_PS_FULL_MAX_GAP:-1800}"
-	case "$gap" in ""|*[!0-9]*) gap=1800 ;; esac
-	if [ "$now" -gt 0 ] 2>/dev/null && [ "$((now - last))" -ge "$gap" ] 2>/dev/null; then
-		return 1
-	fi
+	# 未插电：不再用 FULL_MAX_GAP 强行满轮（简介已由 worker/XP；停充逻辑无事可做）
+	# 仅当显式要求（QSC_PS_FORCE_FULL=1）才走满轮。
+	[ "${QSC_PS_FORCE_FULL:-0}" = "1" ] && return 1
 	return 0
 }
 

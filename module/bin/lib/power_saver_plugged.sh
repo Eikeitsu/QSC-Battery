@@ -176,7 +176,6 @@ qsc_ps_plugged_scan() {
 	return 1
 }
 
-# 未插电且无停充维持时可跳过整轮；仍按 QSC_PS_FULL_MAX_GAP 定期跑满轮，
-# 保证曲线采样、简介刷新、配置纠正不会长期停摆。
-# 默认 30 分钟；DeepPark / aggressive 档由 power_policy 改写。
+# 未插电且无停充维持时可跳过整轮；简介由 worker/XP，不再靠 FULL_MAX_GAP 强行满轮。
+# （变量仍保留，深睡路径可能写入，仅作兼容/诊断。）
 QSC_PS_FULL_MAX_GAP=1800

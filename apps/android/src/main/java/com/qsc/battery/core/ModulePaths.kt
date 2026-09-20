@@ -10,6 +10,7 @@ object ModulePaths {
     const val PROFILES = "$MODDIR/config/profiles.json"
     const val DATADIR = "$MODDIR/data"
     const val MODULE_OFF_FLAG = "$DATADIR/module_off"
+
     /** App/WebUI 保存配置后 touch；服务 lean 醒时强制重载 conf */
     const val CONF_RELOAD_REQ = "$DATADIR/conf_reload_req"
     const val LOG_FILE = "$DATADIR/log.log"

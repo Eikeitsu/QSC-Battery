@@ -159,6 +159,7 @@ class QscXposedModule : XposedModule() {
             val short = when {
                 it is ClassNotFoundException || it.message?.contains("Didn't find class") == true ->
                     "class missing (ok on modern Android)"
+
                 else -> it.message?.take(120) ?: it.javaClass.simpleName
             }
             xpLog(Log.DEBUG, "setState skip $className: $short")
@@ -210,6 +211,7 @@ class QscXposedModule : XposedModule() {
             val short = when {
                 it is ClassNotFoundException || it.message?.contains("Didn't find class") == true ->
                     "class missing"
+
                 else -> it.message?.take(120) ?: it.javaClass.simpleName
             }
             xpLog(Log.DEBUG, "setResumedActivityUncheckLocked skip $className: $short")
@@ -554,11 +556,9 @@ class QscXposedModule : XposedModule() {
         return loadPkgSet(XpPrefs.VIEWER_PKGS_PATH, viewerPkgsCacheAt, viewerPkgsCached).contains(pkg)
     }
 
-    private fun isGamePackage(pkg: String): Boolean =
-        loadPkgSet(XpPrefs.GAME_PKGS_PATH, gamePkgsCacheAt, gamePkgsCached).contains(pkg)
+    private fun isGamePackage(pkg: String): Boolean = loadPkgSet(XpPrefs.GAME_PKGS_PATH, gamePkgsCacheAt, gamePkgsCached).contains(pkg)
 
-    private fun isStopPackage(pkg: String): Boolean =
-        loadPkgSet(XpPrefs.STOP_PKGS_PATH, stopPkgsCacheAt, stopPkgsCached).contains(pkg)
+    private fun isStopPackage(pkg: String): Boolean = loadPkgSet(XpPrefs.STOP_PKGS_PATH, stopPkgsCacheAt, stopPkgsCached).contains(pkg)
 
     private fun loadPkgSet(
         path: String,

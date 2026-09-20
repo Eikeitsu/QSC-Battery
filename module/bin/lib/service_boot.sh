@@ -233,7 +233,10 @@ fi
 qsc_runtime_trace() {
 	local hypothesis="$1" message="$2" value="$3" now="${QSC_PS_NOW:-0}"
 	local note level category
-	qsc_debug_enabled || return 0
+	# 默认关：需 debug_on 或 diagnostic_on，避免待机写盘
+	if ! qsc_debug_enabled; then
+		[ -f "$DATADIR/diagnostic_on" ] || return 0
+	fi
 	case "$now" in ""|*[!0-9]*) now=0 ;; esac
 	case "$message" in
 		service_start)
@@ -253,6 +256,9 @@ qsc_runtime_trace() {
 			;;
 		loop_enter)
 			note="主循环开始"; level=trace; category=service
+			;;
+		loop_lean)
+			note="未插电 lean 再入"; level=trace; category=service
 			;;
 		after_description)
 			note="简介刷新完成，准备判断后续流程"; level=trace; category=description

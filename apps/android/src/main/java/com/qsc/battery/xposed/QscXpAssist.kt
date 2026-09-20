@@ -113,7 +113,9 @@ internal object QscXpAssist {
         if (!hookedScreen.compareAndSet(false, true)) return
         var n = 0
         n += hookNamed(
-            mod, loader, log,
+            mod,
+            loader,
+            log,
             "com.android.server.power.Notifier",
             listOf("onWakefulnessChangeFinished", "onWakefulnessChangeStarted"),
         ) { chain, _ ->
@@ -124,7 +126,9 @@ internal object QscXpAssist {
             result
         }
         n += hookNamed(
-            mod, loader, log,
+            mod,
+            loader,
+            log,
             "com.android.server.power.PowerManagerService",
             listOf("setWakefulnessLocked", "setWakefulnessInternal"),
         ) { chain, _ ->
@@ -145,14 +149,18 @@ internal object QscXpAssist {
         if (!hookedDoze.compareAndSet(false, true)) return
         var n = 0
         n += hookNamed(
-            mod, loader, log,
+            mod,
+            loader,
+            log,
             "com.android.server.DeviceIdleController",
             listOf("deepIdleLocked", "becomeActiveLocked", "goIdleLocked", "stepIdleStateLocked"),
         ) { chain, methodName ->
             val result = chain.proceed()
             when (methodName) {
                 "becomeActiveLocked" -> onDozeChange(false, log)
+
                 "deepIdleLocked", "goIdleLocked" -> onDozeChange(true, log)
+
                 "stepIdleStateLocked" -> {
                     // 进入 STATE_IDLE(5) / STATE_IDLE_MAINTENANCE(6) 视为 idle
                     val state = argInt(chain, 0)
@@ -261,31 +269,30 @@ internal object QscXpAssist {
         className: String,
         methodNames: List<String>,
         intercept: (XposedInterface.Chain, String) -> Any?,
-    ): Int {
-        return runCatching {
-            val cls = loader.loadClass(className)
-            val nameSet = methodNames.toSet()
-            val methods = cls.declaredMethods.filter { it.name in nameSet }
-            var n = 0
-            for (method in methods) {
-                runCatching { mod.deoptimize(method) }
-                val methodName = method.name
-                mod.hook(method)
-                    .setPriority(XposedInterface.PRIORITY_DEFAULT)
-                    .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
-                    .intercept { chain -> intercept(chain, methodName) }
-                n++
-            }
-            if (n > 0) log(Log.DEBUG, "assist hooked $className x$n")
-            n
-        }.getOrElse {
-            val short = when {
-                it is ClassNotFoundException || it.message?.contains("Didn't find class") == true ->
-                    "class missing"
-                else -> it.message?.take(120) ?: it.javaClass.simpleName
-            }
-            log(Log.DEBUG, "assist skip $className: $short")
-            0
+    ): Int = runCatching {
+        val cls = loader.loadClass(className)
+        val nameSet = methodNames.toSet()
+        val methods = cls.declaredMethods.filter { it.name in nameSet }
+        var n = 0
+        for (method in methods) {
+            runCatching { mod.deoptimize(method) }
+            val methodName = method.name
+            mod.hook(method)
+                .setPriority(XposedInterface.PRIORITY_DEFAULT)
+                .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+                .intercept { chain -> intercept(chain, methodName) }
+            n++
         }
+        if (n > 0) log(Log.DEBUG, "assist hooked $className x$n")
+        n
+    }.getOrElse {
+        val short = when {
+            it is ClassNotFoundException || it.message?.contains("Didn't find class") == true ->
+                "class missing"
+
+            else -> it.message?.take(120) ?: it.javaClass.simpleName
+        }
+        log(Log.DEBUG, "assist skip $className: $short")
+        0
     }
 }

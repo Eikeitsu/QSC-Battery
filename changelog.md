@@ -23,6 +23,8 @@
 
 - **`stop_hold_wakelock=auto` 不再日用常持锁**：仅息屏/夜间持锁，亮屏释放，减轻对深度 Doze 的阻挡；强制 `1` 仍持续持锁。
 - **未插电 lean wait**：确认未插电后主循环再入几乎只做「读 online + 策略/idle + wait」；简介/XP 管家仅在拔电首轮或配置变更时跑。配置本就按 mtime 哨兵，未变不重读全文；App/WebUI 保存另 bump `conf_reload_req`。
+- **深睡粘滞**：已进 deep 后连续数次跳过亮度 sysfs，沿用 `deep_idle_sec`；约每 3 次醒全量探测一次以便亮屏退出。进入息屏加强/深睡时停简介 worker，离开驻停再拉起。
+- **未插电不再强制满轮**：取消 `FULL_MAX_GAP` 定时 `qsc_switch`；qscd 失败回退未插电至少按 idle 地板（≥90s），避免短睡抖醒。
 
 ### 修复
 

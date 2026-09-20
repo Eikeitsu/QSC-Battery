@@ -332,6 +332,17 @@ qsc_ps_wait() {
 		type qsc_runtime_trace >/dev/null 2>&1 &&
 			qsc_runtime_trace "H9" "failure_wake_exit" "$?"
 		# endregion
+		# 未插电失败回退：禁止掉进 loop=3 短睡；至少按 idle 地板
+		if type qsc_ps_plugged >/dev/null 2>&1 && ! qsc_ps_plugged; then
+			_floor="${QSC_PS_IDLE:-90}"
+			case "$_floor" in ""|*[!0-9]*) _floor=90 ;; esac
+			[ "$_floor" -lt 90 ] 2>/dev/null && _floor=90
+			[ "$fallback_secs" -lt "$_floor" ] 2>/dev/null && fallback_secs="$_floor"
+			# 首次失败也拉长，避免抖成 1Hz 级
+			[ "$QSC_PS_WAIT_FAILURES" -le 1 ] 2>/dev/null &&
+				[ "$fallback_secs" -lt 120 ] 2>/dev/null &&
+				fallback_secs=120
+		fi
 	fi
 	# region agent log
 	type qsc_runtime_trace >/dev/null 2>&1 &&
