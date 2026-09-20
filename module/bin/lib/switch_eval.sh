@@ -56,7 +56,7 @@ if [ "$app_stop" = "1" ] && [ -n "$app_stop_list" ] \
 		fi
 	fi
 	if type qsc_fg_session_apply >/dev/null 2>&1; then
-		if qsc_fg_session_apply "$DATADIR/app_stop_sess" "$_as_raw"; then
+		if qsc_fg_session_apply "$DATADIR/app_stop_sess" "$_as_raw" "$DATADIR/app_stop_flag"; then
 			app_stop_hit=1
 		fi
 	else

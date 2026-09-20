@@ -232,12 +232,13 @@ qsc_fg_xp_hit_cached() {
 # 列表命中墓碑会话（游戏/App 停充）：约 1s 稳定进入，确认离开后 30s 宽限。
 # 管理器简介会话在 XP 侧另用 3s/90s，不走这里。
 # 状态文件：${prefix}.on ${prefix}.last ${prefix}.enter_at
-# in_list=1/0；返回 0=会话命中 1=未命中
+# in_list=1/0；可选第 3 参 sticky_file：业务标记已在（如 app_stop_flag）则跳过进入等待。
+# 返回 0=会话命中 1=未命中
 QSC_FG_SESSION_ENTER_SEC="${QSC_FG_SESSION_ENTER_SEC:-1}"
 QSC_FG_SESSION_LEAVE_SEC="${QSC_FG_SESSION_LEAVE_SEC:-30}"
 
 qsc_fg_session_apply() {
-	local prefix="$1" in_list="$2" now enter_at last
+	local prefix="$1" in_list="$2" sticky="${3:-}" now enter_at last
 	[ -n "$prefix" ] || return 1
 	now="$(date +%s 2>/dev/null)"
 	case "$now" in ""|*[!0-9]*) now=0 ;; esac
@@ -246,6 +247,12 @@ qsc_fg_session_apply() {
 	if [ "$in_list" = "1" ]; then
 		printf '%s\n' "$now" >"${prefix}.last" 2>/dev/null
 		if [ -f "${prefix}.on" ]; then
+			rm -f "${prefix}.enter_at" 2>/dev/null
+			return 0
+		fi
+		# 已在停充/限流维持：不要因进入防抖把 latch 松掉
+		if [ -n "$sticky" ] && [ -f "$sticky" ]; then
+			touch "${prefix}.on" 2>/dev/null
 			rm -f "${prefix}.enter_at" 2>/dev/null
 			return 0
 		fi

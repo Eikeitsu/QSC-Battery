@@ -36,6 +36,7 @@ class QscXposedModule : XposedModule() {
     private val lastViewerLogMsg = AtomicReference<String?>(null)
 
     private val lastFgPkg = AtomicReference<String?>(null)
+
     /** 已确认的管理器观看会话（含离开后的 90s 宽限，直到 leave 落盘） */
     private val managerSession = AtomicBoolean(false)
     private val enterPending = AtomicBoolean(false)
@@ -621,10 +622,13 @@ class QscXposedModule : XposedModule() {
         private const val ARM_RECHECK_MS = 60_000L
         private const val VIEWER_PKGS_CACHE_MS = 60_000L
         private const val VIEWER_LOG_DEBOUNCE_MS = 2_000L
+
         /** 进出管理器边沿稳定时间（防抖） */
         private const val MANAGER_STABLE_MS = 3_000L
+
         /** 确认离开后再等此时长才发 leave（会话超时） */
         private const val MANAGER_LEAVE_TIMEOUT_MS = 90_000L
+
         /** 普通 App 前台落盘稳定时间（≈800ms，与列表墓碑进入对齐） */
         private const val FG_STABLE_DEBOUNCE_MS = 800L
         private const val LOG_MAX_BYTES = 48_000L

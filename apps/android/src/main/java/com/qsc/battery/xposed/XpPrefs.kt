@@ -20,12 +20,16 @@ object XpPrefs {
 
     /** 当前前台包：timestamp\\tpkg（每次切换覆盖） */
     const val FG_PATH = "/data/system/qsc_xp_fg"
+
     /** 前台切换边沿通知（worker 打断睡眠用），内容同 FG 一行 */
     const val FG_EDGE_PATH = "/data/system/qsc_xp_fg_edge"
+
     /** 管理器前台边沿：timestamp\\tenter|leave\\tpkg（不依赖 qsc_xp_arm） */
     const val VIEWER_PATH = "/data/system/qsc_xp_viewer"
+
     /** shell 同步的管理器包名列表（一行一个），供 XP 合并内置表 */
     const val VIEWER_PKGS_PATH = "/data/system/qsc_xp_viewer_pkgs"
+
     /** 可选：关闭前台包名总线（简介/游戏/App 停充的 XP 路径） */
     const val NO_VIEWER_PATH = "/data/system/qsc_xp_no_viewer"
 
@@ -49,8 +53,7 @@ object XpPrefs {
         else -> pkg
     }
 
-    fun hasPrimaryScope(scopeList: Collection<String>): Boolean =
-        scopeList.any { it.trim().equals(PRIMARY_SCOPE, ignoreCase = true) }
+    fun hasPrimaryScope(scopeList: Collection<String>): Boolean = scopeList.any { it.trim().equals(PRIMARY_SCOPE, ignoreCase = true) }
 
     /** 仅识别 system；android 不算有效作用域。 */
     fun hasAnyFrameworkScope(scopeList: Collection<String>): Boolean = hasPrimaryScope(scopeList)
