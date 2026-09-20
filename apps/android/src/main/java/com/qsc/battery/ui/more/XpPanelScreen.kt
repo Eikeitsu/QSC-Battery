@@ -172,9 +172,9 @@ fun XpPanelScreen(
 
             ChargeSection(title = "开关") {
                 ChargeToggleRow(
-                    title = "允许边沿唤醒",
+                    title = "允许插拔边沿唤醒",
                     checked = toggles.wakeEnabled && !toggles.xpOff,
-                    summary = "仅在 qscd 不可用且已武装时写唤醒文件",
+                    summary = "仅 qscd 不可用且已武装时写 qsc_xp_wake；不影响管理器简介边沿",
                     enabled = !busy,
                     onCheckedChange = { vm.setWakeEnabled(it) },
                 )

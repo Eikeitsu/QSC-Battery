@@ -314,9 +314,9 @@ qsc_current_now_ua() {
 	echo "${c:-0}"
 }
 
-# 游戏命中：进程列表匹配主程序；并补充前台窗口匹配
+# 游戏命中：前台或进程命中均可（与原先一致，后台子进程也维持限流），再套墓碑会话（约 1s 进 / 30s 离）
 qsc_current_game_hit() {
-	local pkg focus list_file
+	local list_file raw=0
 	list_file="$DATADIR/.app_list_tmp"
 	qsc_current_conf_get_strings app_list >"$list_file" 2>/dev/null || return 1
 	[ -s "$list_file" ] || {
@@ -324,29 +324,18 @@ qsc_current_game_hit() {
 		return 1
 	}
 
-	# 进程匹配统一走 qsc_pkg_proc_hit：有原生守护时遍历 /proc，否则一次 ps
-	# 快照喂给所有包名（这里原先是每个包名各跑一遍 ps -ef，最贵的写法）
-	if qsc_pkg_proc_hit "$list_file"; then
-		rm -f "$list_file"
-		return 0
+	if type qsc_fg_list_raw_hit >/dev/null 2>&1 && qsc_fg_list_raw_hit "$list_file"; then
+		raw=1
+	elif type qsc_pkg_proc_hit >/dev/null 2>&1 && qsc_pkg_proc_hit "$list_file"; then
+		raw=1
 	fi
-
-	# 补充：前台窗口包名命中也触发
-	focus="$(dumpsys window 2>/dev/null | grep 'mCurrentFocus' | tail -1)"
-	[ -z "$focus" ] && focus="$(dumpsys activity activities 2>/dev/null | grep -E 'mResumedActivity|topResumedActivity' | head -1)"
-	if [ -n "$focus" ]; then
-		while IFS= read -r pkg || [ -n "$pkg" ]; do
-			pkg="$(printf '%s' "$pkg" | tr -d ' \r\n')"
-			[ -n "$pkg" ] || continue
-			if echo "$focus" | grep -q "$pkg"; then
-				rm -f "$list_file"
-				return 0
-			fi
-		done <"$list_file"
-	fi
-
 	rm -f "$list_file"
-	return 1
+
+	if type qsc_fg_session_apply >/dev/null 2>&1; then
+		qsc_fg_session_apply "$DATADIR/game_sess" "$raw"
+		return $?
+	fi
+	[ "$raw" = "1" ]
 }
 
 # bypass_schedule 字符串数组任一段命中则返回 0（时间函数见 util.sh）

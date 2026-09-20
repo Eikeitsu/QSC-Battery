@@ -61,19 +61,18 @@ qsc_pkg_proc_hit() {
 }
 
 qsc_pkg_list_hit() {
-	local list_file="$1" pkg focus
+	local list_file="$1"
 	[ -f "$list_file" ] && [ -s "$list_file" ] || return 1
-	if qsc_pkg_proc_hit "$list_file"; then
+	# 有 XP：只认前台包（边沿驱动），不再 dumpsys / 不必靠进程轮询
+	if type qsc_fg_xp_ready >/dev/null 2>&1 && qsc_fg_xp_ready; then
+		type qsc_fg_pkg_in_list >/dev/null 2>&1 && qsc_fg_pkg_in_list "$list_file"
+		return $?
+	fi
+	if type qsc_fg_pkg_in_list >/dev/null 2>&1 && qsc_fg_pkg_in_list "$list_file"; then
 		return 0
 	fi
-	focus="$(dumpsys window 2>/dev/null | grep 'mCurrentFocus' | tail -1)"
-	[ -z "$focus" ] && focus="$(dumpsys activity activities 2>/dev/null | grep -E 'mResumedActivity|topResumedActivity' | head -1)"
-	if [ -n "$focus" ]; then
-		while IFS= read -r pkg || [ -n "$pkg" ]; do
-			pkg="$(printf '%s' "$pkg" | tr -d ' \r\n')"
-			[ -n "$pkg" ] || continue
-			echo "$focus" | grep -q "$pkg" && return 0
-		done <"$list_file"
+	if qsc_pkg_proc_hit "$list_file"; then
+		return 0
 	fi
 	return 1
 }

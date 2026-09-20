@@ -94,7 +94,7 @@ fun OnboardingScreen(
                     ChargeBanner(
                         text = "本应用用于配置与查看 Magisk「充电控制」模块，不在后台执行停充逻辑。\n\n" +
                             "接下来会检测权限。没有全部授权也能用主题与检查更新；停充配置需要 Root。\n\n" +
-                            "LSPosed 为可选项：系统框架插拔边沿可在事件守护不可用时协助唤醒模块。",
+                            "LSPosed 为可选项：系统框架可在打开管理器时即时刷简介，并在事件守护不可用时协助插拔唤醒。",
                     )
                     ChargePrimaryButton("开始检测", onClick = { step = 1 })
                 }
@@ -217,7 +217,7 @@ fun OnboardingScreen(
                         color = ChargeTheme.colors.ink,
                     )
                     ChargeBanner(
-                        text = "为什么可选：事件守护不可用时，由系统框架在插拔边沿写唤醒标记，缩短 Magisk 轮询。\n" +
+                        text = "为什么可选：① 打开模块管理器时即时刷简介电量；② 事件守护不可用时插拔边沿助唤醒。\n" +
                             "不写充电节点。请启用本模块，作用域只勾选「系统框架」(system) 后重启。",
                     )
                     val status = xp

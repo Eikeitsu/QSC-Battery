@@ -35,35 +35,38 @@ if qsc_debug_enabled; then
 		"停充评估：level=$battery_level stop=$power_stop status=$battery_status raw_status=${_sf_status:-?} powered=$([ -n "$battery_powered" ] && echo 1 || echo 0) eval=$charge_eval switch=$([ -f "$DATADIR/power_switch" ] && echo 1 || echo 0) mca=$(qsc_profile_get mca 2>/dev/null) mca_path=$(qsc_profile_get mca_path 2>/dev/null) usb_online=${_dbg_online:-?} usb_present=${_dbg_present:-?} usb_type=${_dbg_type:-?} usb_vbus=${_dbg_vbus:-?}"
 fi
 
-# 按 App 停充命中。前台检测要跑 ps / dumpsys window，是本模块最贵的一步：
-# 只在「该评估停充」或「已因 App 停充需维持」时执行，且至少间隔
-# QSC_APP_STOP_MIN_GAP 秒，中间沿用上轮缓存结果。
+# 按 App 停充命中。前台检测走统一总线（XP 优先）；进程检测仍可能用 ps/qscd pkgs。
+# 有缓存窗口，避免主循环每轮都打。
+# App 停充：列表命中经墓碑会话（约 1s 进 / 30s 离），避免闪切反复停充/恢复。
+# 有 XP 时以前台为准；无 XP 走列表命中（含进程弱退回）。
 # 注意：已停充时 status 会变成 Not charging，若此时不检测会误判应用已退出而恢复充电；
 # 拔掉充电器后不再检测，标记会在恢复流程里清掉，下次插电重新判定。
-QSC_APP_STOP_MIN_GAP=10
 app_stop_hit=0
 if [ "$app_stop" = "1" ] && [ -n "$app_stop_list" ] \
 	&& { [ "$charge_eval" = "1" ] \
 		|| { [ -n "$battery_powered" ] && [ -f "$DATADIR/app_stop_flag" ]; }; }; then
-	_as_now="$(date +%s 2>/dev/null)"
-	_as_last=""
-	qsc_read_node "$DATADIR/app_stop_ts" && _as_last="$QSC_NODE_VAL"
-	case "$_as_last" in ""|*[!0-9]*) _as_last=0 ;; esac
-	if [ -n "$_as_now" ] && [ "$((_as_now - _as_last))" -lt "$QSC_APP_STOP_MIN_GAP" ] 2>/dev/null; then
-		[ -f "$DATADIR/app_stop_cache" ] && app_stop_hit=1
+	qsc_write_pkg_tmp "$app_stop_list" "$DATADIR/.app_stop_list"
+	_as_raw=0
+	if type qsc_fg_xp_trust_file >/dev/null 2>&1 && qsc_fg_xp_trust_file; then
+		type qsc_fg_list_raw_hit >/dev/null 2>&1 &&
+			qsc_fg_list_raw_hit "$DATADIR/.app_stop_list" && _as_raw=1
 	else
-		qsc_write_pkg_tmp "$app_stop_list" "$DATADIR/.app_stop_list"
-		if qsc_pkg_list_hit "$DATADIR/.app_stop_list"; then
-			app_stop_hit=1
-			touch "$DATADIR/app_stop_cache"
-		else
-			rm -f "$DATADIR/app_stop_cache"
+		if type qsc_pkg_list_hit >/dev/null 2>&1 && qsc_pkg_list_hit "$DATADIR/.app_stop_list"; then
+			_as_raw=1
 		fi
-		rm -f "$DATADIR/.app_stop_list"
-		[ -n "$_as_now" ] && echo "$_as_now" >"$DATADIR/app_stop_ts" 2>/dev/null
 	fi
+	if type qsc_fg_session_apply >/dev/null 2>&1; then
+		if qsc_fg_session_apply "$DATADIR/app_stop_sess" "$_as_raw"; then
+			app_stop_hit=1
+		fi
+	else
+		[ "$_as_raw" = "1" ] && app_stop_hit=1
+	fi
+	rm -f "$DATADIR/.app_stop_list"
 elif [ "$app_stop" != "1" ]; then
-	rm -f "$DATADIR/app_stop_cache" "$DATADIR/app_stop_ts" 2>/dev/null
+	rm -f "$DATADIR/app_stop_cache" "$DATADIR/app_stop_ts" "$DATADIR/app_stop_fg_tok" \
+		"$DATADIR/app_stop_sess.on" "$DATADIR/app_stop_sess.last" \
+		"$DATADIR/app_stop_sess.enter_at" 2>/dev/null
 fi
 
 if [ "$charge_eval" = "1" ]; then

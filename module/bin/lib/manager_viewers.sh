@@ -28,7 +28,8 @@ QSC_MANAGER_VIEWER_CACHE_AT=0
 QSC_MANAGER_VIEWER_CACHE_VAL=0
 QSC_MANAGER_VIEWER_WAS=0
 QSC_MANAGER_VIEWER_LIST="$DATADIR/.manager_viewer_pkgs"
-QSC_MANAGER_VIEWER_CACHE_SEC=50
+# 负缓存不宜过长：打开管理器后应尽快命中；正缓存仍靠 worker 观看间隔节流 dumpsys
+QSC_MANAGER_VIEWER_CACHE_SEC=12
 
 qsc_manager_viewer_extra_pkgs() {
 	local v=""
@@ -83,7 +84,7 @@ qsc_manager_viewer_discovered_pkgs() {
 	done
 }
 
-# 写入一行一个包名的列表文件
+# 写入一行一个包名的列表文件，并同步到 /data/system 供 LSPosed 边沿 Hook 使用
 qsc_manager_viewer_build_list() {
 	local f="${1:-$QSC_MANAGER_VIEWER_LIST}" extra pkg
 	mkdir -p "$(dirname "$f")" 2>/dev/null
@@ -93,22 +94,77 @@ qsc_manager_viewer_build_list() {
 		extra="$(qsc_manager_viewer_extra_pkgs)"
 		[ -n "$extra" ] && printf '%s' "$extra" | tr ',; ' '\n'
 	} | sed '/^$/d;s/^[[:space:]]*//;s/[[:space:]]*$//' | sort -u >"$f" 2>/dev/null
+	# XP 读此文件合并包名（隐藏 Magisk 等）；失败忽略
+	if [ -s "$f" ]; then
+		cp -f "$f" /data/system/qsc_xp_viewer_pkgs 2>/dev/null &&
+			chmod 0644 /data/system/qsc_xp_viewer_pkgs 2>/dev/null
+	fi
 	[ -s "$f" ]
+}
+
+# LSPosed 前台边沿文件是否待处理（近 30s 内；不看 unreliable，便于异常后恢复）
+qsc_manager_viewer_xp_edge_pending() {
+	local f=/data/system/qsc_xp_viewer mt now
+	[ -f /data/system/qsc_xp_off ] && return 1
+	[ -f /data/system/qsc_xp_no_viewer ] && return 1
+	[ -f "$f" ] || return 1
+	mt="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
+	now="$(date +%s 2>/dev/null || echo 0)"
+	case "$mt:$now" in *[!0-9:]*) return 1 ;; esac
+	[ "$mt" -gt 0 ] 2>/dev/null && [ "$((now - mt))" -le 30 ] 2>/dev/null
+}
+
+# 消费 XP 边沿：设置 RISING/FALLING/WAS；0=当前应视为在看
+qsc_manager_viewer_consume_xp_edge() {
+	local f=/data/system/qsc_xp_viewer line edge pkg prev
+	QSC_MANAGER_VIEWER_RISING=0
+	QSC_MANAGER_VIEWER_FALLING=0
+	qsc_manager_viewer_xp_edge_pending || return 1
+	IFS= read -r line <"$f" 2>/dev/null || true
+	rm -f "$f" 2>/dev/null || true
+	# timestamp\tenter|leave\tpkg
+	edge="$(printf '%s' "$line" | awk -F'\t' 'NF>=2{print $2; exit}')"
+	pkg="$(printf '%s' "$line" | awk -F'\t' 'NF>=3{print $3; exit}')"
+	edge="$(printf '%s' "$edge" | tr -d ' \r\n')"
+	pkg="$(printf '%s' "$pkg" | tr -d ' \r\n')"
+	prev="${QSC_MANAGER_VIEWER_WAS:-0}"
+	case "$edge" in
+		enter)
+			QSC_MANAGER_VIEWER_WAS=1
+			QSC_MANAGER_VIEWER_CACHE_VAL=1
+			QSC_MANAGER_VIEWER_CACHE_AT=0
+			if [ "$prev" != "1" ]; then
+				QSC_MANAGER_VIEWER_RISING=1
+				type qsc_log >/dev/null 2>&1 &&
+					qsc_log info "模块管理器在前台（XP边沿${pkg:+: $pkg}）"
+			fi
+			return 0
+			;;
+		leave)
+			QSC_MANAGER_VIEWER_WAS=0
+			QSC_MANAGER_VIEWER_CACHE_VAL=0
+			QSC_MANAGER_VIEWER_CACHE_AT=0
+			if [ "$prev" = "1" ]; then
+				QSC_MANAGER_VIEWER_FALLING=1
+				type qsc_log >/dev/null 2>&1 &&
+					qsc_log info "已离开模块管理器（XP边沿${pkg:+: $pkg}）"
+			fi
+			return 1
+			;;
+		*)
+			return 1
+			;;
+	esac
 }
 
 # 焦点/前台是否命中列表中任一包。0=命中
 qsc_manager_viewer_focus_hit() {
-	local list_file="$1" focus pkg
+	local list_file="$1"
 	[ -f "$list_file" ] && [ -s "$list_file" ] || return 1
-	focus="$(dumpsys window 2>/dev/null | grep 'mCurrentFocus' | tail -1)"
-	[ -z "$focus" ] &&
-		focus="$(dumpsys activity activities 2>/dev/null | grep -E 'mResumedActivity|topResumedActivity' | head -1)"
-	[ -n "$focus" ] || return 1
-	while IFS= read -r pkg || [ -n "$pkg" ]; do
-		pkg="$(printf '%s' "$pkg" | tr -d ' \r\n')"
-		[ -n "$pkg" ] || continue
-		printf '%s\n' "$focus" | grep -Fq "$pkg" && return 0
-	done <"$list_file"
+	# 统一前台总线：有 XP 读 qsc_xp_fg；无 XP 才 dumpsys
+	if type qsc_fg_pkg_in_list >/dev/null 2>&1 && qsc_fg_pkg_in_list "$list_file"; then
+		return 0
+	fi
 	return 1
 }
 
@@ -123,7 +179,7 @@ qsc_manager_viewer_active() {
 
 	if [ "$now" -gt 0 ] 2>/dev/null &&
 		[ "${QSC_MANAGER_VIEWER_CACHE_AT:-0}" -gt 0 ] 2>/dev/null &&
-		[ "$((now - QSC_MANAGER_VIEWER_CACHE_AT))" -lt "${QSC_MANAGER_VIEWER_CACHE_SEC:-50}" ] 2>/dev/null; then
+		[ "$((now - QSC_MANAGER_VIEWER_CACHE_AT))" -lt "${QSC_MANAGER_VIEWER_CACHE_SEC:-12}" ] 2>/dev/null; then
 		[ "${QSC_MANAGER_VIEWER_CACHE_VAL:-0}" = "1" ]
 		return $?
 	fi
@@ -132,9 +188,11 @@ qsc_manager_viewer_active() {
 	if qsc_manager_viewer_build_list "$list_file"; then
 		if qsc_manager_viewer_focus_hit "$list_file"; then
 			QSC_MANAGER_VIEWER_CACHE_VAL=1
-		elif type qsc_pkg_proc_hit >/dev/null 2>&1 && qsc_pkg_proc_hit "$list_file"; then
-			# dumpsys 失败时弱退回：进程在跑也可能在看 WebUI
-			QSC_MANAGER_VIEWER_CACHE_VAL=1
+		elif ! type qsc_fg_xp_ready >/dev/null 2>&1 || ! qsc_fg_xp_ready; then
+			# 无 XP 时弱退回进程命中（WebUI 壳可能焦点不准）
+			if type qsc_pkg_proc_hit >/dev/null 2>&1 && qsc_pkg_proc_hit "$list_file"; then
+				QSC_MANAGER_VIEWER_CACHE_VAL=1
+			fi
 		fi
 	fi
 	QSC_MANAGER_VIEWER_CACHE_AT="$now"
@@ -146,7 +204,23 @@ qsc_manager_viewer_poll() {
 	local prev="${QSC_MANAGER_VIEWER_WAS:-0}" cur=0
 	QSC_MANAGER_VIEWER_RISING=0
 	QSC_MANAGER_VIEWER_FALLING=0
-	if qsc_manager_viewer_active; then
+	# 优先消费管理器专用边沿；其次用通用 fg 状态判断
+	if type qsc_manager_viewer_consume_xp_edge >/dev/null 2>&1 &&
+		qsc_manager_viewer_xp_edge_pending; then
+		if qsc_manager_viewer_consume_xp_edge; then
+			return 0
+		fi
+		return 1
+	fi
+	# XP 通用前台：按当前包是否在管理器列表，不 dumpsys
+	if type qsc_fg_xp_ready >/dev/null 2>&1 && qsc_fg_xp_ready &&
+		type qsc_manager_viewer_build_list >/dev/null 2>&1; then
+		qsc_manager_viewer_build_list "${QSC_MANAGER_VIEWER_LIST:-$DATADIR/.manager_viewer_pkgs}" >/dev/null 2>&1 || true
+		if type qsc_fg_pkg_in_list >/dev/null 2>&1 &&
+			qsc_fg_pkg_in_list "${QSC_MANAGER_VIEWER_LIST:-$DATADIR/.manager_viewer_pkgs}"; then
+			cur=1
+		fi
+	elif qsc_manager_viewer_active; then
 		cur=1
 	fi
 	if [ "$cur" = "1" ] && [ "$prev" != "1" ]; then

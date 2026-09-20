@@ -34,10 +34,13 @@
 2. **作用域已含 system**：`getScope()` / 一键请求
 3. **框架已注入**：`/data/system/qsc_xp_alive` 或 `runningTargets` 含 system_server
 
-- **作用**：仅当 Magisk 事件守护 `qscd` 不可用时，在插拔**边沿**写 `/data/system/qsc_xp_wake`，缩短轮询；平时几乎零开销
-- **通道**：`/data/system/`；开关经 RemotePreferences 同步 `qsc_xp_off` / `qsc_xp_no_wake`
+- **作用**：
+  1. **前台包名总线**：`qsc_xp_fg`（+ edge）；简介 / 游戏旁路 / App 停充共用。管理器 **3s 稳定 + 90s 离开超时**；游戏/停充列表约 **1s 进 / 30s 离**（游戏另认进程，后台子进程也维持限流）。普通 App fg 落盘 **800ms**。有 XP 时后台简介不轮询；稳定进入后刷电量、观看中约 45–60s 复刷。无 XP、软关或与 dumpsys 不一致时自动回退 dumpsys，边沿恢复后再切回
+  2. **管理器边沿**：`qsc_xp_viewer` enter/leave（经稳定 + 离开超时）
+  3. **插拔边沿**：仅 qscd 不可用且已武装时写 `qsc_xp_wake`
+- **通道**：`/data/system/`；`qsc_xp_off` 全关；`qsc_xp_no_wake` 仅关插拔；`qsc_xp_no_viewer` 关前台总线
 - **停充**始终由 Magisk 模块负责
-- 排查：动态页 LSP Tab，或 `adb logcat -s QscXp`
+- 排查：动态页 LSP Tab，或 `adb logcat -s QscXp`；成功可见 `ok fg` / `ok viewer enter|leave`
 
 ## 安装
 

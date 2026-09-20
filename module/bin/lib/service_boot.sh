@@ -620,6 +620,11 @@ qsc_start_description_worker() {
 
 qsc_start_description_worker
 
+# 尽早把管理器包名表同步到 /data/system，供 LSPosed 前台边沿合并（含隐藏 Magisk）
+if type qsc_manager_viewer_build_list >/dev/null 2>&1; then
+	qsc_manager_viewer_build_list >/dev/null 2>&1 || true
+fi
+
 # 探测 AccA 等限流模块（提示开兼容模式）
 if type qsc_detect_compat_modules >/dev/null 2>&1; then
 	qsc_detect_compat_modules >/dev/null 2>&1 || true

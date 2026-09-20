@@ -1,11 +1,9 @@
 #!/system/bin/sh
 
 # 独立简介刷新进程。
-# 参数：父 service.sh 的 PID。worker 不依赖父 shell 中已经 source 的函数，
-# 每次启动都重新加载当前模块文件，热更新后由新 service 接管新 worker。
-#
-# 有人打开 Magisk/KSU/APatch/MMRL 等管理器（前台）时勤刷；
-# 无人看列表时不写电量，仅周期性复检是否打开管理器。
+# 有 XP 且健康：后台零轮询；管理器会话经 XP 3s 稳定后 enter，观看中温和复刷；
+# 确认离开后再经 90s 超时才 leave。会话未结束时切回不重复强制刷。
+# 无 XP / XP 异常：dumpsys 降级；边沿恢复后自动切回 XP。
 MODDIR=${0%/*}
 MODDIR=${MODDIR%/*}
 PARENT_PID="${1:-0}"
@@ -13,10 +11,9 @@ PARENT_PID="${1:-0}"
 
 WORKER_PID_FILE="$DATADIR/description_worker.pid"
 WORKER_LOCK="$DATADIR/.description_worker.lock"
-# 管理器在看：插电 30s / 未插电 45s；空闲仅复检 180s
-REFRESH_VIEWING_PLUGGED=30
-REFRESH_VIEWING=45
-REFRESH_IDLE_CHECK=180
+REFRESH_VIEWING_PLUGGED=45
+REFRESH_VIEWING=60
+REFRESH_IDLE_CHECK=20
 
 case "$PARENT_PID" in
 	""|*[!0-9]*) PARENT_PID=0 ;;
@@ -60,7 +57,6 @@ worker_service_ready() {
 	now="$(date +%s 2>/dev/null)"
 	[ -n "$heartbeat" ] && [ -n "$now" ] || return 1
 	case "$heartbeat:$now" in *[!0-9:]*) return 1 ;; esac
-	# 心跳写盘约 180s 一次，探活窗口放宽到 400s
 	[ "$now" -ge "$heartbeat" ] 2>/dev/null &&
 		[ "$((now - heartbeat))" -le 400 ] 2>/dev/null
 }
@@ -76,23 +72,18 @@ worker_state() {
 			"$DATADIR/description_worker.state" 2>/dev/null
 }
 
-# 返回 0=本轮应写简介；1=仅复检、跳过写电量
-worker_should_refresh() {
-	if type qsc_ps_desc_suppressed >/dev/null 2>&1 && qsc_ps_desc_suppressed; then
-		return 0
-	fi
-	if ! type qsc_manager_viewer_poll >/dev/null 2>&1; then
-		return 0
-	fi
-	if qsc_manager_viewer_poll; then
-		# 上升沿：强制绕过 MIN_GAP，立刻对齐电量
-		[ "${QSC_MANAGER_VIEWER_RISING:-0}" = "1" ] && QSC_PS_DESC_FORCE=1
-		return 0
-	fi
-	return 1
+worker_xp_mode() {
+	type qsc_fg_xp_ready >/dev/null 2>&1 && qsc_fg_xp_ready
 }
 
-worker_refresh() {
+worker_poll_viewer() {
+	QSC_MANAGER_VIEWER_CACHE_AT=0
+	type qsc_manager_viewer_poll >/dev/null 2>&1 || return 1
+	qsc_manager_viewer_poll
+}
+
+worker_do_refresh() {
+	local force="${1:-0}"
 	if [ -f "$DATADIR/hot_update_fallback_reboot" ]; then
 		worker_state 125
 		return 125
@@ -105,7 +96,7 @@ worker_refresh() {
 	fi
 	if ! worker_service_ready; then
 		worker_state 126
-		return 0
+		return 1
 	fi
 	if ! type qsc_ps_load_conf >/dev/null 2>&1 ||
 		! type qsc_ps_refresh_desc >/dev/null 2>&1; then
@@ -114,16 +105,12 @@ worker_refresh() {
 	fi
 	qsc_ps_load_conf
 	qsc_ps_now
-	if type qsc_ps_policy_refresh >/dev/null 2>&1; then
-		qsc_ps_policy_refresh
-	fi
-	if ! worker_should_refresh; then
-		worker_state 0
-		return 0
-	fi
-	# 观看中：缩短最小写盘间隔
-	if [ "${QSC_MANAGER_VIEWER_WAS:-0}" = "1" ]; then
+	type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
+	if [ "$force" = "1" ]; then
+		QSC_PS_DESC_FORCE=1
 		QSC_PS_DESC_MIN_GAP=30
+	elif [ "${QSC_MANAGER_VIEWER_WAS:-0}" = "1" ]; then
+		QSC_PS_DESC_MIN_GAP=45
 	fi
 	qsc_ps_refresh_desc "${QSC_PS_NOW:-0}"
 	_rc="$?"
@@ -132,33 +119,197 @@ worker_refresh() {
 	return "$_rc"
 }
 
-worker_sleep_secs() {
-	local s
-	if type qsc_ps_desc_suppressed >/dev/null 2>&1 && qsc_ps_desc_suppressed; then
-		printf '%s\n' "900"
-		return 0
-	fi
-	if [ "${QSC_MANAGER_VIEWER_WAS:-0}" = "1" ]; then
-		if type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged; then
-			s="$REFRESH_VIEWING_PLUGGED"
-		else
-			s="$REFRESH_VIEWING"
+worker_wait_edges() {
+	local secs="${1:-3600}" left chunk=2
+	case "$secs" in ""|*[!0-9]*) secs=3600 ;; esac
+	left=$secs
+	while [ "$left" -gt 0 ] 2>/dev/null; do
+		chunk=2
+		[ "$left" -lt "$chunk" ] 2>/dev/null && chunk=$left
+		sleep "$chunk"
+		left=$((left - chunk))
+		if type qsc_manager_viewer_xp_edge_pending >/dev/null 2>&1 &&
+			qsc_manager_viewer_xp_edge_pending; then
+			return 0
 		fi
-		printf '%s\n' "$s"
-		return 0
-	fi
-	# 无人看：只复检管理器是否打开
-	printf '%s\n' "$REFRESH_IDLE_CHECK"
+		if type qsc_fg_xp_edge_pending >/dev/null 2>&1 &&
+			qsc_fg_xp_edge_pending; then
+			type qsc_fg_xp_consume_edge >/dev/null 2>&1 &&
+				qsc_fg_xp_consume_edge
+			return 0
+		fi
+		worker_parent_alive || return 1
+	done
+	return 0
 }
 
-# 热更新/启动后：服务未就绪时短间隔重试。
-# 就绪后：有人看勤刷，无人看长睡复检。
-while worker_parent_alive; do
-	worker_refresh
-	if worker_service_ready; then
-		sleep "$(worker_sleep_secs)"
+worker_viewing_interval() {
+	if type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged; then
+		printf '%s\n' "$REFRESH_VIEWING_PLUGGED"
 	else
-		sleep 2
+		printf '%s\n' "$REFRESH_VIEWING"
 	fi
-	worker_parent_alive || break
+}
+
+worker_try_recover_xp() {
+	type qsc_fg_xp_injected >/dev/null 2>&1 || return 1
+	qsc_fg_xp_injected || return 1
+	if type qsc_fg_xp_edge_pending >/dev/null 2>&1 && qsc_fg_xp_edge_pending 30; then
+		type qsc_fg_clear_unreliable >/dev/null 2>&1 && qsc_fg_clear_unreliable
+		return 0
+	fi
+	if type qsc_manager_viewer_xp_edge_pending >/dev/null 2>&1 &&
+		qsc_manager_viewer_xp_edge_pending; then
+		type qsc_fg_clear_unreliable >/dev/null 2>&1 && qsc_fg_clear_unreliable
+		return 0
+	fi
+	return 1
+}
+
+# dumpsys 安全网：XP 漏边沿时仍能发现管理器
+worker_dumpsys_manager_hit() {
+	local list _p
+	type qsc_manager_viewer_build_list >/dev/null 2>&1 || return 1
+	type qsc_fg_dumpsys_read >/dev/null 2>&1 || return 1
+	list="${QSC_MANAGER_VIEWER_LIST:-$DATADIR/.manager_viewer_pkgs}"
+	qsc_manager_viewer_build_list "$list" >/dev/null 2>&1 || true
+	QSC_FG_CACHE_AT=0
+	QSC_FG_CACHE_PKG=""
+	qsc_fg_dumpsys_read || return 1
+	while IFS= read -r _p || [ -n "$_p" ]; do
+		_p="$(printf '%s' "$_p" | tr -d ' \r\n')"
+		[ -n "$_p" ] || continue
+		[ "$_p" = "$QSC_FG_PKG" ] && return 0
+	done <"$list"
+	return 1
+}
+
+worker_should_refresh_fallback() {
+	if ! type qsc_manager_viewer_poll >/dev/null 2>&1; then
+		return 0
+	fi
+	QSC_MANAGER_VIEWER_CACHE_AT=0
+	if qsc_manager_viewer_poll; then
+		QSC_PS_DESC_FORCE=1
+		return 0
+	fi
+	if type qsc_ps_desc_suppressed >/dev/null 2>&1 && qsc_ps_desc_suppressed; then
+		return 0
+	fi
+	return 1
+}
+
+worker_tick_fallback() {
+	if type qsc_description_enabled >/dev/null 2>&1 && ! qsc_description_enabled; then
+		type qsc_description_restore_static >/dev/null 2>&1 &&
+			qsc_description_restore_static
+		worker_state 0
+		exit 0
+	fi
+	if ! worker_service_ready; then
+		worker_state 126
+		sleep 2
+		return 1
+	fi
+	qsc_ps_load_conf
+	qsc_ps_now
+	type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
+	if worker_should_refresh_fallback; then
+		[ "${QSC_MANAGER_VIEWER_WAS:-0}" = "1" ] && QSC_PS_DESC_MIN_GAP=30
+		qsc_ps_refresh_desc "${QSC_PS_NOW:-0}"
+		QSC_PS_DESC_FORCE=0
+		worker_state "$?"
+	else
+		worker_state 0
+	fi
+	if [ "${QSC_MANAGER_VIEWER_WAS:-0}" = "1" ]; then
+		worker_wait_edges "$(worker_viewing_interval)"
+	else
+		worker_wait_edges "$REFRESH_IDLE_CHECK"
+	fi
+	return 0
+}
+
+# —— 主循环：XP ↔ dumpsys 可切换 ——
+while worker_parent_alive; do
+	if [ -f "$DATADIR/hot_update_fallback_reboot" ]; then
+		worker_state 125
+		sleep 5
+		continue
+	fi
+
+	if worker_xp_mode; then
+		# 空闲：只等边沿；周期性健康检查 + dumpsys 安全网
+		_entered=0
+		while worker_parent_alive && worker_xp_mode && worker_service_ready; do
+			if worker_poll_viewer; then
+				_entered=1
+				break
+			fi
+			if type qsc_ps_desc_suppressed >/dev/null 2>&1 && qsc_ps_desc_suppressed; then
+				qsc_ps_load_conf 2>/dev/null
+				qsc_ps_now 2>/dev/null
+				type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
+				type qsc_description_restore_static >/dev/null 2>&1 &&
+					qsc_description_restore_static
+			fi
+			worker_state 0
+			worker_wait_edges 120
+			if type qsc_fg_xp_health_check >/dev/null 2>&1 &&
+				! qsc_fg_xp_health_check; then
+				break
+			fi
+			if worker_dumpsys_manager_hit; then
+				type qsc_log >/dev/null 2>&1 &&
+					qsc_log info "简介：dumpsys 发现管理器（XP边沿缺失，安全网）"
+				QSC_MANAGER_VIEWER_WAS=1
+				QSC_MANAGER_VIEWER_RISING=1
+				_entered=1
+				break
+			fi
+		done
+
+		if [ "$_entered" = "1" ] && worker_parent_alive && worker_service_ready; then
+			type qsc_log >/dev/null 2>&1 &&
+				qsc_log info "简介：管理器前台，开始刷新"
+			worker_do_refresh 1
+			while worker_parent_alive && worker_service_ready; do
+				if worker_xp_mode; then
+					worker_wait_edges "$(worker_viewing_interval)"
+					if type qsc_manager_viewer_xp_edge_pending >/dev/null 2>&1 &&
+						qsc_manager_viewer_xp_edge_pending; then
+						if type qsc_manager_viewer_consume_xp_edge >/dev/null 2>&1; then
+							if ! qsc_manager_viewer_consume_xp_edge; then
+								type qsc_log >/dev/null 2>&1 &&
+									qsc_log info "简介：已离开管理器，停止刷新"
+								break
+							fi
+							# 会话内再次 enter：轮询已在跑，不必强制重写
+							continue
+						fi
+					fi
+					QSC_MANAGER_VIEWER_WAS=1
+					worker_do_refresh 0
+					type qsc_fg_xp_health_check >/dev/null 2>&1 &&
+						qsc_fg_xp_health_check >/dev/null 2>&1 || true
+				else
+					# 观看中 XP 变坏：dumpsys 维持直到离开
+					QSC_MANAGER_VIEWER_CACHE_AT=0
+					worker_poll_viewer || break
+					worker_do_refresh 0
+					worker_wait_edges "$(worker_viewing_interval)"
+				fi
+			done
+			continue
+		fi
+
+		# 未进入观看且可能已不可靠 → 下面走 fallback 分支
+		if worker_xp_mode; then
+			continue
+		fi
+	fi
+
+	# —— dumpsys 回退（无 XP / 软关 / 标记不可靠）——
+	worker_tick_fallback
+	worker_try_recover_xp || true
 done

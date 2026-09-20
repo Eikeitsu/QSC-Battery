@@ -36,11 +36,6 @@ qsc_ps_refresh_desc() {
 	local now="${1:-0}"
 	local lv temp digits off plugged stopped sig state_sig p viewer=0 gap
 	[ -f "$DATADIR/hot_update_fallback_reboot" ] && return 0
-	if type qsc_ps_desc_suppressed >/dev/null 2>&1 && qsc_ps_desc_suppressed; then
-		type qsc_description_restore_static >/dev/null 2>&1 &&
-			qsc_description_restore_static
-		return 0
-	fi
 	if ! qsc_description_enabled 2>/dev/null; then
 		type qsc_description_restore_static >/dev/null 2>&1 &&
 			qsc_description_restore_static
@@ -63,6 +58,14 @@ qsc_ps_refresh_desc() {
 	if type qsc_manager_viewer_active >/dev/null 2>&1 && qsc_manager_viewer_active; then
 		viewer=1
 		QSC_PS_VIEWER_HITS=$((${QSC_PS_VIEWER_HITS:-0} + 1))
+	fi
+
+	# 息屏/深睡/强力档默认写静态；但管理器已在前台时仍刷动态电量（人在看）
+	if [ "$viewer" != "1" ] &&
+		type qsc_ps_desc_suppressed >/dev/null 2>&1 && qsc_ps_desc_suppressed; then
+		type qsc_description_restore_static >/dev/null 2>&1 &&
+			qsc_description_restore_static
+		return 0
 	fi
 
 	# 无人看模块列表：仅状态类变化才继续；纯电量/温度抖动跳过（不停充满轮仍会写简介）
