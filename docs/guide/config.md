@@ -74,29 +74,43 @@
 
 未插电为**事件驱动驻停**（qscd 阻塞在插拔 uevent），不是杀进程，也不是绝对「零耗电」。
 
-| 键                              | 默认        | 含义                                                               |
-| ------------------------------- | ----------- | ------------------------------------------------------------------ |
-| `power_saver`                   | 1           | 省电总开关                                                         |
-| `power_profile`                 | balanced    | `balanced` / `aggressive` / `custom`                               |
-| `screen_off_saver`              | 1           | 息屏加强                                                           |
-| `night_saver`                   | 0           | 夜间省电                                                           |
-| `night_schedule`                | 23:00-07:00 | 多行 `HH:MM-HH:MM`；**支持跨天**；`night_saver=0` 时不生效         |
-| `deep_idle_enable`              | 1           | 深睡（息屏持续或夜间）                                             |
-| `deep_after_sec`                | 600         | 息屏多久后深睡                                                     |
-| `deep_idle_sec`                 | 900         | 深睡未插电兜底秒数                                                 |
-| `deep_full_gap_sec`             | 7200        | 深睡强制满轮间隔                                                   |
-| `heartbeat_sec`                 | 180         | 心跳写盘间隔                                                       |
-| `loop_interval_*`               | 见模板      | 自定义档可调；插电近阈值不受 DeepPark 放松                         |
-| `native_daemon` / `native_impl` | 1 / rust    | 事件守护                                                           |
-| `description_enable`            | 1           | 动态简介                                                           |
-| `desc_viewer_pkgs`              | （空）      | 逗号追加管理器包名；Magisk 会尽量从 `requester` 自动识别随机包名   |
-| `stop_hold_wakelock`            | auto        | 停充持锁：`auto`=魅族/MCA 仅息屏·夜间持锁；`1`=持续持锁（挡 Doze） |
+未插电时大致时间线（默认均衡档）：
+
+1. **亮屏日用**：快路径跳过满轮 + qscd 长睡（兜底约 600s）
+2. **连续息屏 ≥ `screen_off_enter_sec`（默认 90s）** → 息屏加强（放大 idle、停动态简介）
+3. **再连续息屏 ≥ `deep_after_sec`（默认 600s）** → 深睡（兜底约 900s）
+4. **开启夜间且命中时段** → 直接按深睡参数（不要求先满 10 分钟息屏）
+
+亮灭闪动：不足约 90s 不会进息屏加强；过短驻停也不写 INFO 总结。
+
+| 键                              | 默认        | 含义                                                         |
+| ------------------------------- | ----------- | ------------------------------------------------------------ |
+| `power_saver`                   | 1           | 省电总开关                                                   |
+| `power_profile`                 | balanced    | `balanced` / `aggressive` / `custom`                         |
+| `screen_off_saver`              | 1           | 息屏加强                                                     |
+| `screen_off_enter_sec`          | 90          | 连续息屏多久才进息屏加强；`0`=立刻                           |
+| `night_saver`                   | 0           | 夜间省电                                                     |
+| `night_schedule`                | 23:00-07:00 | 多行 `HH:MM-HH:MM`；**支持跨天**；`night_saver=0` 时不生效   |
+| `deep_idle_enable`              | 1           | 深睡（息屏持续或夜间）                                       |
+| `deep_after_sec`                | 600         | 息屏多久后深睡                                               |
+| `deep_idle_sec`                 | 900         | 深睡未插电兜底秒数                                           |
+| `deep_full_gap_sec`             | 7200        | 深睡强制满轮间隔                                             |
+| `heartbeat_sec`                 | 180         | 心跳写盘间隔                                                 |
+| `loop_interval_idle_sec`        | 90          | 无守护时未插电轻量间隔                                       |
+| `loop_interval_idle_native_sec` | 600         | 有 qscd 时未插电超时兜底                                     |
+| `loop_interval_*`               | 见模板      | 自定义档可调；插电近阈值不受 DeepPark 放松                   |
+| `native_daemon` / `native_impl` | 1 / rust    | 事件守护                                                     |
+| `description_enable`            | 1           | 动态简介                                                     |
+| `desc_viewer_pkgs`              | （空）      | 逗号追加管理器包名；Magisk 会尽量从 `requester` 识别随机包名 |
+| `stop_hold_wakelock`            | auto        | `auto`=魅族/MCA 仅息屏·夜间持锁；`1`=持续持锁（挡 Doze）     |
 
 动态简介默认**按需刷新**：仅当模块管理器在前台时勤刷电量；无人看列表时可不更新电量数字（打开管理器会立即对齐）。停充/复充/关模块等状态变化仍会写入。关 `description_enable` 则固定文案并停 worker。
 
 守护实际版本写在 `data/native_version`（安装/下载时更新，只读状态，不是手改项）。
 
-档位：`balanced`≈现网；`aggressive` 拉长 idle/心跳并强制静态简介；`custom` 用手调秒数。
+档位：`balanced` 默认；`aggressive` 拉长 idle/心跳并强制静态简介；`custom` 用手调秒数。
+
+自查省电：`qsc diagnostic on` + `qsc stats`，或见 [FAQ](/guide/faq#standby)。
 
 ---
 

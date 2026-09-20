@@ -2,8 +2,8 @@
 
 ## 环境要求
 
-- 已安装 **Magisk** 或 **KernelSU**（或兼容方案）
-- 使用 WebUI 需支持模块 WebUI 的管理器（如 KernelSU / SukiSU / MMRL / WebUI-X）
+- 已安装 **Magisk**、**KernelSU**、**APatch** 或兼容方案
+- 使用 WebUI 需支持模块 WebUI 的管理器（如 KernelSU / SukiSU / APatch 系 / MMRL / WebUI-X）
 - 伴侣 APP 需 Android 8+（`minSdk 26`），读写模块需 Root
 
 ## 该下哪个？先看这三句
@@ -88,7 +88,7 @@
 - **音量下**：全部使用包内默认配置
 - **超时**：按「保留核心配置」处理
 
-若你曾手动改过省电间隔又想继续用旧值，更新后可在 WebUI「进阶」里再改回去。
+若你曾手动改过省电间隔又想继续用旧值，更新后可在 WebUI「**省电策略**」里再改回去。
 
 WebUI / 电流控制 / APK 是否安装每次都会再问。
 

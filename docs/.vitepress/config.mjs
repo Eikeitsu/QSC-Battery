@@ -6,7 +6,7 @@ const repoName =
 export default defineConfig({
   title: "充电控制",
   description:
-    "Magisk / KernelSU 充电管理：电量与温度停充、可选电流控制、事件驱动省电、WebUI 与伴侣 APP",
+    "Magisk / KernelSU / APatch 充电管理：电量与温度停充、可选电流控制、分级省电、WebUI 与伴侣 APP",
   base: `/${repoName}/`,
   lang: "zh-CN",
   head: [
@@ -26,9 +26,16 @@ export default defineConfig({
       { text: "首页", link: "/" },
       { text: "功能", link: "/guide/features" },
       { text: "安装", link: "/guide/install" },
-      { text: "配置", link: "/guide/config" },
-      { text: "WebUI", link: "/guide/webui" },
-      { text: "APP", link: "/guide/app" },
+      { text: "常见问题", link: "/guide/faq" },
+      {
+        text: "更多",
+        items: [
+          { text: "配置说明", link: "/guide/config" },
+          { text: "WebUI", link: "/guide/webui" },
+          { text: "伴侣 APP", link: "/guide/app" },
+          { text: "命令行 CLI", link: "/guide/cli" },
+        ],
+      },
       { text: "更新日志", link: "/guide/changelog" },
     ],
     sidebar: [
@@ -64,7 +71,7 @@ export default defineConfig({
       },
     ],
     footer: {
-      message: "充电控制 · QSC_Battery · Magisk / KernelSU",
+      message: "充电控制 · QSC_Battery · Magisk / KernelSU / APatch",
       copyright: "由许小墨维护",
     },
     search: {
