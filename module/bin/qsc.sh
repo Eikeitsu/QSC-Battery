@@ -26,29 +26,101 @@ QSC-Battery CLI
       （等价于 sh $BINDIR/qsc.sh <命令>）
 
 命令:
-  status [--raw]          电池/模块状态（默认人类可读；--raw 为 APP 分段格式）
-  on                      开启充电控制（删除 data/module_off）
-  off                     关闭充电控制（写入 data/module_off，不卸载模块）
-  toggle                  切换 on/off
-  config list             列出可读写配置键及当前值
-  config get <键>         读取配置
-  config set <键> <值>    写入配置（仅白名单单行键）
-  log [行数]              运行日志尾部（默认 40）
-  events [行数]           充电事件尾部（默认 40）
-  diagnose                运行诊断 → /sdcard/qsc_diagnose.txt
-  test-switch             开关可逆测试（需插电）
-  detect                  重新探测设备档案
-  daemon <子命令...>      转交 qscd_fetch.sh（status|check|install|use|remove）
-  version                 模块版本
-  help                    显示本帮助
+  status [--raw]   (st)       电池/模块状态
+  on / off / toggle           软开关（data/module_off）
+  config list|get|set         (cfg / conf) 配置读写
+  log [行数]                  运行日志尾部（默认 40）
+  events [行数]               充电事件尾部（默认 40）
+  stats                       省电证据：service_power_stats / 驻停总结
+  diagnose         (diag)     诊断 → /sdcard/qsc_diagnose.txt
+  diagnostic on|off|status    开关 data/diagnostic_on（省电统计）
+  test-switch      (test)     开关可逆测试（需插电）
+  detect                      重新探测设备档案
+  daemon <子命令...>          转交 qscd_fetch（status|check|install|use|remove）
+  version          (ver, -v)  模块版本
+  help             (-h)       显示本帮助
 
 入口: /data/adb/qsc/bin/qsc（不挂 system）
 
 示例:
-  /data/adb/qsc/bin/qsc status
-  /data/adb/qsc/bin/qsc config set power_stop 80
-  /data/adb/qsc/bin/qsc off
+  /data/adb/qsc/bin/qsc st
+  /data/adb/qsc/bin/qsc cfg set power_stop 80
+  /data/adb/qsc/bin/qsc stats
+  /data/adb/qsc/bin/qsc diagnostic on
 EOF
+}
+
+qsc_cli_suggest() {
+	local bad="$1"
+	case "$bad" in
+		stat*|Sta*|STATUS) printf 'status' ;;
+		st) printf 'status' ;;
+		cfg*|conf*|CFG*) printf 'config' ;;
+		diag*) printf 'diagnose' ;;
+		test*) printf 'test-switch' ;;
+		pow*|park*|metr*) printf 'stats' ;;
+		ver*) printf 'version' ;;
+		hel*|-\?) printf 'help' ;;
+		*) printf 'help' ;;
+	esac
+}
+
+qsc_cli_stats() {
+	local f
+	echo "=== 省电证据 ==="
+	if [ -f "$DATADIR/park_last_summary" ]; then
+		echo "最近驻停总结:"
+		cat "$DATADIR/park_last_summary" 2>/dev/null
+		echo
+	else
+		echo "最近驻停总结: （尚无；息屏/夜间/深睡退出后会出现）"
+		echo
+	fi
+	f="$DATADIR/service_power_stats"
+	if [ -f "$f" ]; then
+		echo "service_power_stats:"
+		cat "$f" 2>/dev/null
+	else
+		echo "service_power_stats: （无；请 qsc diagnostic on 后等待心跳）"
+	fi
+	if [ -f "$DATADIR/diagnostic_on" ]; then
+		echo
+		echo "诊断采样: 开（rm $DATADIR/diagnostic_on 可关）"
+	else
+		echo
+		echo "诊断采样: 关（qsc diagnostic on 开启）"
+	fi
+	if [ -f "$DATADIR/service_metrics" ]; then
+		echo
+		echo "service_metrics:"
+		cat "$DATADIR/service_metrics" 2>/dev/null
+	fi
+}
+
+qsc_cli_diagnostic() {
+	local sub="${1:-status}"
+	mkdir -p "$DATADIR" 2>/dev/null
+	case "$sub" in
+		on|1|enable)
+			: >"$DATADIR/diagnostic_on"
+			echo "已开启 diagnostic_on（心跳写 service_power_stats；测完请 off）"
+			;;
+		off|0|disable)
+			rm -f "$DATADIR/diagnostic_on"
+			echo "已关闭 diagnostic_on"
+			;;
+		status|st|"")
+			if [ -f "$DATADIR/diagnostic_on" ]; then
+				echo "diagnostic_on: 开"
+			else
+				echo "diagnostic_on: 关"
+			fi
+			;;
+		*)
+			echo "用法: diagnostic on|off|status" >&2
+			return 2
+			;;
+	esac
 }
 
 qsc_cli_version() {
@@ -205,8 +277,8 @@ cmd="${1:-help}"
 
 case "$cmd" in
 	help|-h|--help) qsc_cli_usage ;;
-	version|-v|--version) qsc_cli_version ;;
-	status)
+	version|-v|--version|ver) qsc_cli_version ;;
+	status|st)
 		case "${1:-}" in
 			--raw) sh "$BINDIR/qsc_status.sh" ;;
 			*) qsc_cli_status_human ;;
@@ -231,29 +303,35 @@ case "$cmd" in
 			echo "已开启充电控制"
 		fi
 		;;
-	config)
+	config|cfg|conf)
 		sub="${1:-}"
 		[ -n "$sub" ] && shift
 		case "$sub" in
-			list) qsc_cli_conf_list ;;
+			list|ls) qsc_cli_conf_list ;;
 			get) qsc_cli_conf_get "$1" ;;
 			set) qsc_cli_conf_set "$1" "$2" ;;
 			*)
-				echo "用法: config list|get <键>|set <键> <值>" >&2
+				echo "用法: config list|get <键>|set <键> <值>（缩写 cfg/conf）" >&2
 				exit 2
 				;;
 		esac
 		;;
 	log) qsc_cli_tail "$LOG_FILE" "${1:-40}" ;;
 	events) qsc_cli_tail "$DATADIR/charge_events.log" "${1:-40}" ;;
-	diagnose)
+	stats|power-stats|park)
+		qsc_cli_stats
+		;;
+	diagnose|diag)
 		[ -f "$BINDIR/diagnose.sh" ] || {
 			echo "缺少 diagnose.sh" >&2
 			exit 1
 		}
 		sh "$BINDIR/diagnose.sh"
 		;;
-	test-switch|test_switch)
+	diagnostic|diagnostics)
+		qsc_cli_diagnostic "${1:-status}"
+		;;
+	test-switch|test_switch|test)
 		[ -f "$BINDIR/test_switch.sh" ] || {
 			echo "缺少 test_switch.sh" >&2
 			exit 1
@@ -275,7 +353,10 @@ case "$cmd" in
 		sh "$BINDIR/qscd_fetch.sh" "$@"
 		;;
 	*)
-		echo "未知命令: $cmd（试 help）" >&2
+		_sug="$(qsc_cli_suggest "$cmd")"
+		echo "未知命令: $cmd" >&2
+		echo "你是不是想用: qsc ${_sug}" >&2
+		echo "全部命令见: qsc help" >&2
 		exit 2
 		;;
 esac

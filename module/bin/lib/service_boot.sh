@@ -213,6 +213,7 @@ type qsc_xp_bootstrap_logs >/dev/null 2>&1 && qsc_xp_bootstrap_logs
 QSC_SERVICE_HEARTBEAT_LAST=0
 QSC_SERVICE_LOOP_COUNT=0
 QSC_SERVICE_FULL_ROUNDS=0
+QSC_SERVICE_SKIP_ROUNDS=0
 QSC_SERVICE_DIAG_LAST=0
 # 清掉上一进程残留，避免热更新 verifier 读到旧 loop_count 误判已接管
 printf '0\n' >"$DATADIR/service_loop_count" 2>/dev/null
@@ -338,6 +339,167 @@ qsc_runtime_trace() {
 }
 # endregion
 qsc_runtime_trace "H0" "service_start" "$$"
+
+# 读当前电量（0–100）；失败返回空
+qsc_ps_stat_read_cap() {
+	local p v
+	for p in "$PSDIR/battery/capacity" "$PSDIR/bms/capacity" "$PSDIR/battery/soc"; do
+		[ -r "$p" ] || continue
+		IFS= read -r v <"$p" 2>/dev/null || true
+		v="$(printf '%s' "$v" | tr -d ' \r\n')"
+		case "$v" in
+			""|*[!0-9]*) ;;
+			*)
+				[ "$v" -le 100 ] 2>/dev/null && {
+					printf '%s' "$v"
+					return 0
+				}
+				;;
+		esac
+	done
+	printf ''
+}
+
+# 读放电电流绝对值 mA；失败返回空
+qsc_ps_stat_read_ma() {
+	local ua abs
+	[ -r "$PSDIR/battery/current_now" ] || {
+		printf ''
+		return 0
+	}
+	IFS= read -r ua <"$PSDIR/battery/current_now" 2>/dev/null || true
+	ua="$(printf '%s' "$ua" | tr -d ' \r\n')"
+	case "$ua" in
+		""|*[!0-9-]*)
+			printf ''
+			return 0
+			;;
+	esac
+	abs="${ua#-}"
+	case "$abs" in
+		""|*[!0-9]*)
+			printf ''
+			return 0
+			;;
+	esac
+	printf '%s' "$((abs / 1000))"
+}
+
+# diagnostic_on：按心跳写出 service_power_stats + 一条 INFO（证明省电路径是否在工作）
+qsc_ps_power_stats_flush() {
+	local now="$1"
+	local elapsed avg_sleep cap_now cap_delta pct_h ma ma_avg wl=0 plugged=0
+	local loops skips full wakes sleep_sum sleep_n desc_w desc_sk viewers
+	local wait_mode mins msg _pct10 _whole _frac
+
+	[ -f "$DATADIR/diagnostic_on" ] || return 0
+	case "$now" in ""|*[!0-9]*) return 0 ;; esac
+
+	if [ "${QSC_PS_STAT_PERIOD_START:-0}" -eq 0 ] 2>/dev/null; then
+		QSC_PS_STAT_PERIOD_START="$now"
+	fi
+	elapsed=$((now - QSC_PS_STAT_PERIOD_START))
+	[ "$elapsed" -lt 1 ] 2>/dev/null && elapsed=1
+
+	loops="${QSC_SERVICE_LOOP_COUNT:-0}"
+	skips="${QSC_SERVICE_SKIP_ROUNDS:-0}"
+	full="${QSC_SERVICE_FULL_ROUNDS:-0}"
+	wakes="${QSC_PS_WAKE_COUNT:-0}"
+	sleep_sum="${QSC_PS_SLEEP_SEC_SUM:-0}"
+	sleep_n="${QSC_PS_SLEEP_COUNT:-0}"
+	desc_w="${QSC_PS_DESC_WRITES:-0}"
+	desc_sk="${QSC_PS_DESC_IDLE_SKIPS:-0}"
+	viewers="${QSC_PS_VIEWER_HITS:-0}"
+	wait_mode="${QSC_PS_NATIVE_MODE:-sleep}"
+	[ -z "$wait_mode" ] && wait_mode="sleep"
+
+	avg_sleep=0
+	[ "$sleep_n" -gt 0 ] 2>/dev/null && avg_sleep=$((sleep_sum / sleep_n))
+
+	if type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged; then
+		plugged=1
+	fi
+	[ -f "$DATADIR/wakelock_held" ] && wl=1
+
+	cap_now="$(qsc_ps_stat_read_cap)"
+	ma="$(qsc_ps_stat_read_ma)"
+	cap_delta=""
+	pct_h=""
+	ma_avg=""
+	if [ "$plugged" = "1" ]; then
+		QSC_PS_STAT_CAP_START=""
+		QSC_PS_STAT_MA_SUM=0
+		QSC_PS_STAT_MA_N=0
+	else
+		case "$cap_now" in
+			""|*[!0-9]*) ;;
+			*)
+				case "${QSC_PS_STAT_CAP_START:-}" in
+					""|*[!0-9]*) QSC_PS_STAT_CAP_START="$cap_now" ;;
+				esac
+				;;
+		esac
+		case "${QSC_PS_STAT_CAP_START:-}" in
+			""|*[!0-9]*) ;;
+			*)
+				case "$cap_now" in
+					""|*[!0-9]*) ;;
+					*)
+						cap_delta=$((QSC_PS_STAT_CAP_START - cap_now))
+						# 一位小数 %/h（掉电为正）
+						_pct10=$((cap_delta * 36000 / elapsed))
+						_whole=$((_pct10 / 10))
+						_frac=$((_pct10 % 10))
+						[ "$_frac" -lt 0 ] 2>/dev/null && _frac=$((0 - _frac))
+						pct_h="${_whole}.${_frac}"
+						;;
+				esac
+				;;
+		esac
+		case "$ma" in
+			""|*[!0-9]*) ;;
+			*)
+				QSC_PS_STAT_MA_SUM=$((${QSC_PS_STAT_MA_SUM:-0} + ma))
+				QSC_PS_STAT_MA_N=$((${QSC_PS_STAT_MA_N:-0} + 1))
+				;;
+		esac
+		[ "${QSC_PS_STAT_MA_N:-0}" -gt 0 ] 2>/dev/null &&
+			ma_avg=$((QSC_PS_STAT_MA_SUM / QSC_PS_STAT_MA_N))
+	fi
+
+	{
+		printf 'period_start=%s\nperiod_end=%s\nelapsed_sec=%s\n' \
+			"$QSC_PS_STAT_PERIOD_START" "$now" "$elapsed"
+		printf 'loops=%s\nfull_rounds=%s\nskip_rounds=%s\n' \
+			"$loops" "$full" "$skips"
+		printf 'native_wakes=%s\nlast_wake=%s\nwait_mode=%s\n' \
+			"$wakes" "${QSC_PS_LAST_WAKE_REASON:-}" "$wait_mode"
+		printf 'sleep_sec_sum=%s\nsleep_count=%s\navg_sleep_sec=%s\n' \
+			"$sleep_sum" "$sleep_n" "$avg_sleep"
+		printf 'desc_writes=%s\ndesc_idle_skips=%s\nviewer_hits=%s\n' \
+			"$desc_w" "$desc_sk" "$viewers"
+		printf 'wakelock_held=%s\nplugged=%s\n' "$wl" "$plugged"
+		printf 'cap_start=%s\ncap_now=%s\ncap_delta=%s\npct_per_hour=%s\n' \
+			"${QSC_PS_STAT_CAP_START:-}" "${cap_now:-}" "${cap_delta:-}" "${pct_h:-}"
+		printf 'ma_avg=%s\nma_now=%s\n' "${ma_avg:-}" "${ma:-}"
+	} >"$DATADIR/service_power_stats.tmp" 2>/dev/null &&
+		mv -f "$DATADIR/service_power_stats.tmp" "$DATADIR/service_power_stats" 2>/dev/null
+
+	mins=$((elapsed / 60))
+	[ "$mins" -lt 1 ] 2>/dev/null && mins=1
+	msg="省电统计 ${mins}m：skip ${skips}/${loops} 满轮${full} 均睡${avg_sleep}s 简介写${desc_w}/跳过${desc_sk}"
+	case "$cap_now" in
+		""|*[!0-9]*) ;;
+		*)
+			msg="${msg} 电量${QSC_PS_STAT_CAP_START:-?}→${cap_now}"
+			[ -n "$pct_h" ] && msg="${msg} ≈${pct_h}%/h"
+			;;
+	esac
+	[ -n "$ma_avg" ] && msg="${msg} ≈${ma_avg}mA"
+	msg="${msg} wake=${QSC_PS_LAST_WAKE_REASON:-?} mode=${wait_mode} wl=${wl}"
+	qsc_log info "$msg"
+}
+
 qsc_service_heartbeat() {
 	local now pending hb_gap
 	now="${QSC_PS_NOW:-$(date +%s 2>/dev/null)}"
@@ -363,6 +525,9 @@ qsc_service_heartbeat() {
 			printf '%s\n' "${QSC_PS_LAST_WAKE_REASON:-}" \
 				>"$DATADIR/qscd_last_wake_reason" 2>/dev/null
 		fi
+		# 省电证据：仅 diagnostic_on，跟心跳同频，避免密写盘
+		type qsc_ps_power_stats_flush >/dev/null 2>&1 &&
+			qsc_ps_power_stats_flush "$now"
 		QSC_SERVICE_HEARTBEAT_LAST="$now"
 	fi
 	# 诊断采样默认关闭；touch data/diagnostic_on 后每 10 秒记录一次详细
@@ -375,12 +540,13 @@ qsc_service_heartbeat() {
 			pending="$(wc -l <"${QSC_HISTORY_BUFFER:-$DATADIR/charge_history.csv.pending}" 2>/dev/null | tr -d ' ')"
 		fi
 		case "$pending" in ""|*[!0-9]*) pending=0 ;; esac
-		printf 'timestamp=%s\nloops=%s\nfull_rounds=%s\nnative_wakes=%s\n' \
+		printf 'timestamp=%s\nloops=%s\nfull_rounds=%s\nskip_rounds=%s\nnative_wakes=%s\n' \
 			"$now" "$QSC_SERVICE_LOOP_COUNT" "$QSC_SERVICE_FULL_ROUNDS" \
-			"${QSC_PS_WAKE_COUNT:-0}" \
+			"${QSC_SERVICE_SKIP_ROUNDS:-0}" "${QSC_PS_WAKE_COUNT:-0}" \
 			>"$DATADIR/service_diag.tmp" 2>/dev/null
-		printf 'description_writes=%s\nhistory_pending=%s\nnative_failure=%s\n' \
-			"${QSC_PS_DESC_WRITES:-0}" "$pending" \
+		printf 'description_writes=%s\ndesc_idle_skips=%s\nsleep_sec_sum=%s\nhistory_pending=%s\nnative_failure=%s\n' \
+			"${QSC_PS_DESC_WRITES:-0}" "${QSC_PS_DESC_IDLE_SKIPS:-0}" \
+			"${QSC_PS_SLEEP_SEC_SUM:-0}" "$pending" \
 			"${QSC_PS_NATIVE_ERROR:-}" >>"$DATADIR/service_diag.tmp" 2>/dev/null &&
 			mv -f "$DATADIR/service_diag.tmp" "$DATADIR/service_diag" 2>/dev/null
 		QSC_SERVICE_DIAG_LAST="$now"

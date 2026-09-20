@@ -258,6 +258,14 @@ qsc_ps_wait() {
 	fallback_secs="${QSC_PS_WAIT_FALLBACK:-${QSC_PS_LOOP:-3}}"
 	case "$fallback_secs" in ""|*[!0-9]*) fallback_secs=3 ;;
 	esac
+	# 省电诊断：累加计划睡眠秒（实际可能被 uevent 提前叫醒）
+	case "$secs" in
+		""|*[!0-9]*) ;;
+		*)
+			QSC_PS_SLEEP_SEC_SUM=$((${QSC_PS_SLEEP_SEC_SUM:-0} + secs))
+			QSC_PS_SLEEP_COUNT=$((${QSC_PS_SLEEP_COUNT:-0} + 1))
+			;;
+	esac
 	if qsc_ps_native_ready; then
 		qsc_ps_native_wait "$secs" "$floor"
 		rc="$?"

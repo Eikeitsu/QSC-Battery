@@ -62,12 +62,14 @@ qsc_ps_refresh_desc() {
 
 	if type qsc_manager_viewer_active >/dev/null 2>&1 && qsc_manager_viewer_active; then
 		viewer=1
+		QSC_PS_VIEWER_HITS=$((${QSC_PS_VIEWER_HITS:-0} + 1))
 	fi
 
 	# 无人看模块列表：仅状态类变化才继续；纯电量/温度抖动跳过（不停充满轮仍会写简介）
 	if [ "$viewer" != "1" ]; then
 		if [ -n "${QSC_PS_DESC_STATE_SIG:-}" ] &&
 			[ "$state_sig" = "$QSC_PS_DESC_STATE_SIG" ]; then
+			QSC_PS_DESC_IDLE_SKIPS=$((${QSC_PS_DESC_IDLE_SKIPS:-0} + 1))
 			return 0
 		fi
 	fi
@@ -77,6 +79,7 @@ qsc_ps_refresh_desc() {
 	if [ "${QSC_PS_DESC_FORCE:-0}" != "1" ] &&
 		[ "$now" -gt 0 ] 2>/dev/null &&
 		[ "$((now - QSC_PS_DESC_TS))" -lt "$gap" ] 2>/dev/null; then
+		QSC_PS_DESC_IDLE_SKIPS=$((${QSC_PS_DESC_IDLE_SKIPS:-0} + 1))
 		return 0
 	fi
 
@@ -140,6 +143,7 @@ qsc_ps_refresh_desc() {
 	sig="${state_sig}:${lv}:${temp}"
 	[ "$sig" = "$QSC_PS_DESC_SIG" ] && {
 		QSC_PS_DESC_STATE_SIG="$state_sig"
+		QSC_PS_DESC_IDLE_SKIPS=$((${QSC_PS_DESC_IDLE_SKIPS:-0} + 1))
 		return 0
 	}
 

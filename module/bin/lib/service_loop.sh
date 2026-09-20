@@ -72,6 +72,7 @@ qsc_service_loop_once() {
 		qsc_runtime_trace "H1" "skip_result" "$_skip_rc"
 		# endregion
 		if [ "$_skip_rc" -eq 0 ]; then
+			QSC_SERVICE_SKIP_ROUNDS=$((${QSC_SERVICE_SKIP_ROUNDS:-0} + 1))
 			if type qsc_notify_power_status >/dev/null 2>&1; then
 				qsc_notify_power_status
 			fi
