@@ -624,6 +624,9 @@ qsc_start_description_worker
 if type qsc_manager_viewer_build_list >/dev/null 2>&1; then
 	qsc_manager_viewer_build_list >/dev/null 2>&1 || true
 fi
+if type qsc_xp_sync_fg_policy >/dev/null 2>&1; then
+	qsc_xp_sync_fg_policy >/dev/null 2>&1 || true
+fi
 
 # 探测 AccA 等限流模块（提示开兼容模式）
 if type qsc_detect_compat_modules >/dev/null 2>&1; then

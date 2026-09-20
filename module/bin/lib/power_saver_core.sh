@@ -98,17 +98,24 @@ qsc_ps_read() {
 }
 
 # 解析 power.conf（省电键）+ config.conf（停充/温控阈值，供 watch 使用）
-# 哨兵：.power_conf_seen / .conf_seen（阈值变化也要重载）
+# 哨兵：.power_conf_seen / .conf_seen（mtime）；或 data/conf_reload_req（App/WebUI 保存 bump）
+# 未变则立刻返回，不重读全文。QSC_PS_CONF_RELOADED=1 表示本轮确实重载了。
 qsc_ps_load_conf() {
 	local seen_p="$DATADIR/.power_conf_seen"
 	local seen_c="$DATADIR/.conf_seen"
+	local bump="$DATADIR/conf_reload_req"
 	local power="${POWER_CONF:-$CONFDIR/power.conf}"
 	local conf="${CONF:-}"
 	local line k v
 	local need=0
 	local was_loaded="${QSC_PS_CONF_LOADED:-0}"
 
-	if [ "$QSC_PS_CONF_LOADED" != "1" ]; then
+	QSC_PS_CONF_RELOADED=0
+
+	if [ -f "$bump" ]; then
+		need=1
+		rm -f "$bump" 2>/dev/null || true
+	elif [ "$QSC_PS_CONF_LOADED" != "1" ]; then
 		need=1
 	elif [ -f "$power" ] && [ -f "$seen_p" ] && [ "$power" -nt "$seen_p" ]; then
 		need=1
@@ -120,6 +127,8 @@ qsc_ps_load_conf() {
 		need=1
 	fi
 	[ "$need" = "1" ] || return 0
+
+	QSC_PS_CONF_RELOADED=1
 
 	QSC_PS_ENABLE=1
 	QSC_PS_IDLE=90
@@ -251,7 +260,15 @@ qsc_ps_load_conf() {
 	if [ "$was_loaded" = "1" ]; then
 		qsc_log info "已重载配置（profile=${QSC_PS_PROFILE} saver=${QSC_PS_ENABLE} idle_native=${QSC_PS_IDLE_NATIVE}s）"
 	fi
+	type qsc_xp_sync_fg_policy >/dev/null 2>&1 &&
+		qsc_xp_sync_fg_policy >/dev/null 2>&1 || true
 	return 0
+}
+
+# App / WebUI / CLI：保存配置后 bump，服务下一轮（或 lean 醒时）强制重载
+qsc_conf_notify_reload() {
+	mkdir -p "$DATADIR" 2>/dev/null || true
+	: >"$DATADIR/conf_reload_req" 2>/dev/null || true
 }
 
 # 单调秒（/proc/uptime 整数部分），避免快路径每轮 fork 一次 date

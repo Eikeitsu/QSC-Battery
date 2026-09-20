@@ -19,8 +19,10 @@ import java.util.concurrent.atomic.AtomicReference
  * LSPosed：仅系统框架。
  * 1) qscd 不可用时插拔边沿写 [XpPrefs.WAKE_PATH]（需 arm）
  * 2) 前台包名总线 [XpPrefs.FG_PATH] + 管理器进出 [XpPrefs.VIEWER_PATH]
+ *    Magisk 写 [XpPrefs.FG_POLICY_PATH] 门禁：无简介/游戏/停充则 idle，XP 不写盘。
+ *    分级：仅简介→管理器；游戏/停充→各自列表；离开关注包仍写一次。
  *    管理器会话：进出各经 3s 稳定；确认离开后再等 90s 超时才发 leave。
- *    会话仍在（含宽限）时切回管理器不重复 enter。
+ * 3) 可选辅助边沿（默认关）：亮灭屏 / Doze / 白名单广播 → [QscXpAssist]
  * 不写充电节点。
  */
 class QscXposedModule : XposedModule() {
@@ -37,6 +39,9 @@ class QscXposedModule : XposedModule() {
 
     private val lastFgPkg = AtomicReference<String?>(null)
 
+    /** 上一前台是否属于策略关注包（用于离开时仍写一次 fg） */
+    private val lastWasWatch = AtomicBoolean(false)
+
     /** 已确认的管理器观看会话（含离开后的 90s 宽限，直到 leave 落盘） */
     private val managerSession = AtomicBoolean(false)
     private val enterPending = AtomicBoolean(false)
@@ -44,6 +49,16 @@ class QscXposedModule : XposedModule() {
     private val pendingLeavePkg = AtomicReference<String?>(null)
     private val viewerPkgsCacheAt = AtomicLong(0L)
     private val viewerPkgsCached = AtomicReference<Set<String>>(emptySet())
+    private val gamePkgsCacheAt = AtomicLong(0L)
+    private val gamePkgsCached = AtomicReference<Set<String>>(emptySet())
+    private val stopPkgsCacheAt = AtomicLong(0L)
+    private val stopPkgsCached = AtomicReference<Set<String>>(emptySet())
+    private val policyCacheAt = AtomicLong(0L)
+    private val policyCached = AtomicReference(FgPolicy.DEFAULT)
+    private val verboseCacheAt = AtomicLong(0L)
+    private val verboseCached = AtomicBoolean(false)
+    private val fgIdleCacheAt = AtomicLong(0L)
+    private val fgIdleCached = AtomicBoolean(false)
 
     private val fgHandler = Handler(Looper.getMainLooper())
     private var enterStableRunnable: Runnable? = null
@@ -64,6 +79,7 @@ class QscXposedModule : XposedModule() {
         writeAliveOnce()
         hookBatteryService(param.classLoader)
         hookActivityForeground(param.classLoader)
+        QscXpAssist.install(this, param.classLoader) { p, m -> xpLog(p, m) }
     }
 
     override fun onHotReloading(param: HotReloadingParam): Boolean {
@@ -126,6 +142,8 @@ class QscXposedModule : XposedModule() {
                     .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
                     .intercept { chain ->
                         val result = chain.proceed()
+                        // idle：跳过反射取包名
+                        if (isFgIdleFast()) return@intercept result
                         val ar = runCatching { chain.thisObject }.getOrNull() ?: return@intercept result
                         if (!isActivityCurrentlyResumed(ar)) return@intercept result
                         val pkg = activityPackage(ar) ?: return@intercept result
@@ -165,6 +183,7 @@ class QscXposedModule : XposedModule() {
                     .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
                     .intercept { chain ->
                         val result = chain.proceed()
+                        if (isFgIdleFast()) return@intercept result
                         // libxposed HookChain：优先 getArg；没有则跳过本站点
                         val ar = runCatching {
                             val m = chain.javaClass.methods.firstOrNull {
@@ -264,35 +283,137 @@ class QscXposedModule : XposedModule() {
         if (File(XpPrefs.NO_VIEWER_PATH).isFile) return
         val clean = pkg.trim()
         if (clean.isEmpty()) return
+
+        val policy = loadFgPolicy()
+        if (policy.idle) {
+            // 简介/游戏/停充均关：不写盘、不排程
+            cancelEnterStable()
+            cancelLeavePipeline()
+            cancelFgStableDebounce()
+            if (managerSession.getAndSet(false)) {
+                xpLog(Log.DEBUG, "fg policy idle, drop manager session")
+            }
+            lastFgPkg.set(clean)
+            lastWasWatch.set(false)
+            return
+        }
+
         val prev = lastFgPkg.getAndSet(clean)
         if (prev == clean) return
 
-        val wantManager = isManagerPackage(clean)
+        val wantManager = policy.desc && isManagerPackage(clean)
+        val watchNow = wantManager ||
+            (policy.game && isGamePackage(clean)) ||
+            (policy.appStop && isStopPackage(clean))
+
         if (wantManager) {
             cancelLeavePipeline()
             cancelFgStableDebounce()
-            // 会话仍在（含 90s 宽限）：轮询应还在跑，只更新 fg，不重复 enter
             if (managerSession.get()) {
-                writeFg(clean, notifyEdge = true)
+                // 仅简介：viewer 会话已在，不必反复写 fg
+                writeFgIfNeeded(clean, notifyEdge = true, policy)
+                lastWasWatch.set(true)
                 xpLog(Log.DEBUG, "viewer session keep ($clean)")
                 return
             }
-            writeFg(clean, notifyEdge = false)
+            writeFgIfNeeded(clean, notifyEdge = false, policy)
             scheduleEnterStable(clean)
             return
         }
 
         cancelEnterStable()
-        if (managerSession.get()) {
-            // 会话中离开：fg 立刻更新；3s 稳定后再开 90s 超时，到点才 leave
+        if (policy.desc && managerSession.get()) {
             cancelFgStableDebounce()
-            writeFg(clean, notifyEdge = true)
+            writeFgIfNeeded(clean, notifyEdge = true, policy)
             scheduleLeavePipeline(clean)
             return
         }
 
-        // 普通 App 切换：短防抖后再落盘，避免 A↔B 连切刷边沿
-        scheduleFgStableDebounce(clean)
+        // 进入或离开游戏/停充关注包才落盘；其它 App 切换零 I/O
+        if (watchNow || lastWasWatch.get()) {
+            lastWasWatch.set(watchNow)
+            scheduleFgStableDebounce(clean)
+            return
+        }
+        lastWasWatch.set(false)
+    }
+
+    private data class FgPolicy(
+        val desc: Boolean,
+        val game: Boolean,
+        val appStop: Boolean,
+        val idle: Boolean,
+    ) {
+        companion object {
+            /** 策略文件尚未写出时：默认只开管理器边沿（与 description 默认开一致） */
+            val DEFAULT = FgPolicy(desc = true, game = false, appStop = false, idle = false)
+        }
+    }
+
+    private fun loadFgPolicy(): FgPolicy {
+        val now = System.currentTimeMillis()
+        if (now - policyCacheAt.get() < POLICY_CACHE_MS) {
+            return policyCached.get()
+        }
+        policyCacheAt.set(now)
+        val f = File(XpPrefs.FG_POLICY_PATH)
+        if (!f.isFile) {
+            policyCached.set(FgPolicy.DEFAULT)
+            return FgPolicy.DEFAULT
+        }
+        var desc = false
+        var game = false
+        var appStop = false
+        var idle = false
+        runCatching {
+            f.readLines().forEach { line ->
+                val t = line.trim()
+                when {
+                    t.startsWith("desc=") -> desc = t.substringAfter('=') == "1"
+                    t.startsWith("game=") -> game = t.substringAfter('=') == "1"
+                    t.startsWith("app_stop=") -> appStop = t.substringAfter('=') == "1"
+                    t.startsWith("idle=") -> idle = t.substringAfter('=') == "1"
+                }
+            }
+        }
+        if (!desc && !game && !appStop) idle = true
+        val p = FgPolicy(desc, game, appStop, idle)
+        policyCached.set(p)
+        return p
+    }
+
+    private fun isVerbose(): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - verboseCacheAt.get() < VERBOSE_CACHE_MS) {
+            return verboseCached.get()
+        }
+        verboseCacheAt.set(now)
+        val on = File(XpPrefs.VERBOSE_PATH).isFile
+        verboseCached.set(on)
+        return on
+    }
+
+    /** 热路径：优先看 idle 标记文件，再回落策略缓存 */
+    private fun isFgIdleFast(): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - fgIdleCacheAt.get() < FG_IDLE_CACHE_MS) {
+            return fgIdleCached.get()
+        }
+        fgIdleCacheAt.set(now)
+        val idle = File(XpPrefs.FG_IDLE_PATH).isFile ||
+            File(XpPrefs.OFF_PATH).isFile ||
+            File(XpPrefs.NO_VIEWER_PATH).isFile ||
+            loadFgPolicy().idle
+        fgIdleCached.set(idle)
+        return idle
+    }
+
+    /** 仅简介时只要 viewer 边沿；游戏/停充才需要 qsc_xp_fg */
+    private fun needFgBus(policy: FgPolicy): Boolean = policy.game || policy.appStop
+
+    private fun writeFgIfNeeded(pkg: String, notifyEdge: Boolean, policy: FgPolicy) {
+        if (!needFgBus(policy)) return
+        writeFg(pkg, notifyEdge)
     }
 
     private fun cancelEnterStable() {
@@ -328,8 +449,9 @@ class QscXposedModule : XposedModule() {
             val cur = lastFgPkg.get() ?: return@Runnable
             if (!isManagerPackage(cur)) return@Runnable
             if (!managerSession.compareAndSet(false, true)) return@Runnable
-            writeFg(cur, notifyEdge = true)
+            writeFgIfNeeded(cur, notifyEdge = true, loadFgPolicy())
             writeViewerEdge("enter", cur)
+            lastWasWatch.set(true)
             xpLog(Log.DEBUG, "viewer enter stable ($cur)")
         }
         enterStableRunnable = r
@@ -369,8 +491,13 @@ class QscXposedModule : XposedModule() {
                 val now = lastFgPkg.get()
                 if (now != null && isManagerPackage(now)) return@Runnable
                 if (managerSession.compareAndSet(true, false)) {
-                    writeFg(finalPkg, notifyEdge = true)
+                    val p = loadFgPolicy()
+                    writeFgIfNeeded(finalPkg, notifyEdge = true, p)
                     writeViewerEdge("leave", finalPkg)
+                    lastWasWatch.set(
+                        (p.game && isGamePackage(finalPkg)) ||
+                            (p.appStop && isStopPackage(finalPkg)),
+                    )
                     xpLog(Log.DEBUG, "viewer leave timeout ($finalPkg)")
                 }
             }
@@ -389,6 +516,12 @@ class QscXposedModule : XposedModule() {
             if (managerSession.get() || leavePending.get() || enterPending.get()) return@Runnable
             if (lastFgPkg.get() != pkg) return@Runnable
             writeFg(pkg, notifyEdge = true)
+            val p = loadFgPolicy()
+            lastWasWatch.set(
+                (p.desc && isManagerPackage(pkg)) ||
+                    (p.game && isGamePackage(pkg)) ||
+                    (p.appStop && isStopPackage(pkg)),
+            )
         }
         fgStableRunnable = r
         fgHandler.postDelayed(r, FG_STABLE_DEBOUNCE_MS)
@@ -418,27 +551,39 @@ class QscXposedModule : XposedModule() {
 
     private fun isManagerPackage(pkg: String): Boolean {
         if (BUILTIN_MANAGER_PKGS.contains(pkg)) return true
-        return loadViewerPkgs().contains(pkg)
+        return loadPkgSet(XpPrefs.VIEWER_PKGS_PATH, viewerPkgsCacheAt, viewerPkgsCached).contains(pkg)
     }
 
-    private fun loadViewerPkgs(): Set<String> {
+    private fun isGamePackage(pkg: String): Boolean =
+        loadPkgSet(XpPrefs.GAME_PKGS_PATH, gamePkgsCacheAt, gamePkgsCached).contains(pkg)
+
+    private fun isStopPackage(pkg: String): Boolean =
+        loadPkgSet(XpPrefs.STOP_PKGS_PATH, stopPkgsCacheAt, stopPkgsCached).contains(pkg)
+
+    private fun loadPkgSet(
+        path: String,
+        cacheAt: AtomicLong,
+        cached: AtomicReference<Set<String>>,
+    ): Set<String> {
         val now = System.currentTimeMillis()
-        if (now - viewerPkgsCacheAt.get() < VIEWER_PKGS_CACHE_MS) {
-            return viewerPkgsCached.get()
+        if (now - cacheAt.get() < PKG_LIST_CACHE_MS) {
+            return cached.get()
         }
-        viewerPkgsCacheAt.set(now)
+        cacheAt.set(now)
         val set = linkedSetOf<String>()
         runCatching {
-            val f = File(XpPrefs.VIEWER_PKGS_PATH)
+            val f = File(path)
             if (!f.isFile) return@runCatching
             f.readLines().forEach { line ->
                 val p = line.trim()
-                if (p.isNotEmpty() && !p.startsWith("#") && p.all { it.isLetterOrDigit() || it == '.' || it == '_' }) {
+                if (p.isNotEmpty() && !p.startsWith("#") &&
+                    p.all { it.isLetterOrDigit() || it == '.' || it == '_' }
+                ) {
                     set.add(p)
                 }
             }
         }
-        viewerPkgsCached.set(set)
+        cached.set(set)
         return set
     }
 
@@ -595,7 +740,7 @@ class QscXposedModule : XposedModule() {
     }
 
     private fun appendLogLine(priority: Int, msg: String) {
-        if (priority == Log.DEBUG && !File(XpPrefs.VERBOSE_PATH).isFile) return
+        if (priority == Log.DEBUG && !isVerbose()) return
         val level = when (priority) {
             Log.ERROR -> "ERROR"
             Log.WARN -> "WARN"
@@ -624,6 +769,8 @@ class QscXposedModule : XposedModule() {
     }
 
     private fun xpLog(priority: Int, msg: String, tr: Throwable? = null) {
+        // 非详细模式：DEBUG 不进 logcat / 文件，避免前台连切刷屏
+        if (priority == Log.DEBUG && !isVerbose()) return
         if (tr != null) log(priority, TAG, msg, tr) else log(priority, TAG, msg)
         appendLogLine(priority, if (tr != null) "$msg (${tr.javaClass.simpleName})" else msg)
     }
@@ -631,7 +778,10 @@ class QscXposedModule : XposedModule() {
     companion object {
         private const val TAG = "QscXp"
         private const val ARM_RECHECK_MS = 60_000L
-        private const val VIEWER_PKGS_CACHE_MS = 60_000L
+        private const val PKG_LIST_CACHE_MS = 60_000L
+        private const val POLICY_CACHE_MS = 15_000L
+        private const val VERBOSE_CACHE_MS = 5_000L
+        private const val FG_IDLE_CACHE_MS = 10_000L
         private const val VIEWER_LOG_DEBOUNCE_MS = 2_000L
 
         /** 进出管理器边沿稳定时间（防抖） */

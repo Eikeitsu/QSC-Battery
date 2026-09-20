@@ -235,3 +235,7 @@ if [ "$module_off" = "1" ] && [ -f "$DATADIR/power_switch" ]; then
 		qsc_log_once off_restore error "模块已关闭但还原充电节点失败，将持续重试"
 	fi
 fi
+
+# 插电评估轮：刷新 XP 前台门禁（游戏列表 / App 停充等）
+type qsc_xp_sync_fg_policy >/dev/null 2>&1 &&
+	qsc_xp_sync_fg_policy >/dev/null 2>&1 || true

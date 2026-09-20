@@ -16,6 +16,12 @@ qsc_fg_xp_disabled() {
 	[ -f /data/system/qsc_xp_off ] || [ -f /data/system/qsc_xp_no_viewer ]
 }
 
+# 前台总线策略空闲（简介/游戏/停充都关）
+qsc_fg_xp_policy_idle() {
+	[ -f /data/system/qsc_xp_fg_policy ] || return 1
+	grep -q '^idle=1' /data/system/qsc_xp_fg_policy 2>/dev/null
+}
+
 # 仅表示：已注入且未软关（不一定可信）
 qsc_fg_xp_injected() {
 	qsc_fg_xp_disabled && return 1
@@ -26,10 +32,11 @@ qsc_fg_xp_injected() {
 	return 1
 }
 
-# 可走 XP 事件路径：已注入、未标记不可靠
+# 可走 XP 事件路径：已注入、未标记不可靠、策略非空闲
 qsc_fg_xp_ready() {
 	qsc_fg_xp_injected || return 1
 	[ -f "${QSC_FG_UNRELIABLE}" ] && return 1
+	qsc_fg_xp_policy_idle && return 1
 	return 0
 }
 
@@ -116,6 +123,14 @@ qsc_fg_xp_health_check() {
 		return 1
 	}
 	qsc_fg_xp_disabled && return 1
+	qsc_fg_xp_policy_idle && return 1
+	# 仅简介（无游戏/停充）时 fg 故意不跟普通 App，不做 mismatch
+	if [ -f /data/system/qsc_xp_fg_policy ]; then
+		if ! grep -q '^game=1' /data/system/qsc_xp_fg_policy 2>/dev/null &&
+			! grep -q '^app_stop=1' /data/system/qsc_xp_fg_policy 2>/dev/null; then
+			return 0
+		fi
+	fi
 	if qsc_fg_xp_edge_pending 60; then
 		qsc_fg_clear_unreliable
 		return 0
@@ -299,4 +314,94 @@ qsc_fg_focus_text_hit() {
 		printf '%s\n' "$focus" | grep -Fq "$pkg" && return 0
 	done <"$list_file"
 	return 1
+}
+
+# 同步 XP 前台门禁：无简介/游戏/停充需求时 idle=1，XP 跳过写盘。
+# 游戏限流 / App 停充仅在「已插电」时需要 XP 配合；未插电强制 game=0、app_stop=0。
+# 并写出游戏/停充关注包列表，供 XP 分级过滤。
+qsc_xp_sync_fg_policy() {
+	local desc=0 game=0 stop=0 idle=1 plugged=0
+	local list_tmp cc app_on stop_on
+	local pol=/data/system/qsc_xp_fg_policy
+	local game_pkgs=/data/system/qsc_xp_game_pkgs
+	local stop_pkgs=/data/system/qsc_xp_stop_pkgs
+
+	if type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged; then
+		plugged=1
+	elif [ -n "${battery_powered:-}" ]; then
+		plugged=1
+	fi
+
+	if type qsc_description_enabled >/dev/null 2>&1 && qsc_description_enabled; then
+		desc=1
+	fi
+
+	# 游戏 / 停充：功能开且已插电才纳入 XP 关注
+	if [ "$plugged" = "1" ]; then
+		if [ -f "${CURRENT_CONF:-$CONFDIR/current.json}" ] &&
+			type qsc_current_conf_get >/dev/null 2>&1; then
+			cc="$(qsc_current_conf_get current_control 2>/dev/null)"
+			app_on="$(qsc_current_conf_get app_limit 2>/dev/null)"
+			cc="$(qsc_clamp_int "${cc:-0}" 0 1 0)"
+			app_on="$(qsc_clamp_int "${app_on:-0}" 0 1 0)"
+			if [ "$cc" = "1" ] && [ "$app_on" = "1" ] &&
+				type qsc_current_conf_get_strings >/dev/null 2>&1; then
+				list_tmp="${DATADIR:-}/.xp_game_pkgs_tmp"
+				qsc_current_conf_get_strings app_list >"$list_tmp" 2>/dev/null || : >"$list_tmp"
+				if [ -s "$list_tmp" ]; then
+					game=1
+					sed '/^$/d' "$list_tmp" | sort -u >"$game_pkgs" 2>/dev/null &&
+						chmod 0644 "$game_pkgs" 2>/dev/null || true
+				fi
+				rm -f "$list_tmp" 2>/dev/null
+			fi
+		fi
+
+		local conf_file="${CONF:-${CONFDIR:-}/config.conf}"
+		stop_on="${app_stop:-${QSCV_app_stop:-}}"
+		case "$stop_on" in
+			"" ) [ -f "$conf_file" ] &&
+				stop_on="$(sed -n 's/^app_stop=//p' "$conf_file" 2>/dev/null | head -n1 | tr -d ' \r')" ;;
+		esac
+		stop_on="$(qsc_clamp_int "${stop_on:-0}" 0 1 0)"
+		if [ "$stop_on" = "1" ]; then
+			list_tmp="${DATADIR:-}/.xp_stop_pkgs_tmp"
+			if [ -n "${app_stop_list:-${QSCV_app_stop_list:-}}" ]; then
+				printf '%s' "${app_stop_list:-$QSCV_app_stop_list}" | tr ',; ' '\n' |
+					sed '/^$/d' | sort -u >"$list_tmp" 2>/dev/null
+			elif [ -f "$conf_file" ]; then
+				sed -n 's/^app_stop_list=//p' "$conf_file" 2>/dev/null | head -n1 |
+					tr ',; ' '\n' | sed '/^$/d' | sort -u >"$list_tmp" 2>/dev/null
+			else
+				: >"$list_tmp"
+			fi
+			if [ -s "$list_tmp" ]; then
+				stop=1
+				cp -f "$list_tmp" "$stop_pkgs" 2>/dev/null && chmod 0644 "$stop_pkgs" 2>/dev/null || true
+			fi
+			rm -f "$list_tmp" 2>/dev/null
+		fi
+	fi
+	[ "$game" = "1" ] || rm -f "$game_pkgs" 2>/dev/null
+	[ "$stop" = "1" ] || rm -f "$stop_pkgs" 2>/dev/null
+
+	if [ "$desc" = "1" ] || [ "$game" = "1" ] || [ "$stop" = "1" ]; then
+		idle=0
+	fi
+
+	if [ "$desc" = "1" ] && type qsc_manager_viewer_build_list >/dev/null 2>&1; then
+		qsc_manager_viewer_build_list >/dev/null 2>&1 || true
+	fi
+
+	printf 'desc=%s\ngame=%s\napp_stop=%s\nplugged=%s\nidle=%s\n' \
+		"$desc" "$game" "$stop" "$plugged" "$idle" \
+		>"$pol" 2>/dev/null && chmod 0644 "$pol" 2>/dev/null || true
+
+	# XP 热路径只 exists 此文件
+	if [ "$idle" = "1" ]; then
+		touch /data/system/qsc_xp_fg_idle 2>/dev/null &&
+			chmod 0644 /data/system/qsc_xp_fg_idle 2>/dev/null || true
+	else
+		rm -f /data/system/qsc_xp_fg_idle 2>/dev/null
+	fi
 }

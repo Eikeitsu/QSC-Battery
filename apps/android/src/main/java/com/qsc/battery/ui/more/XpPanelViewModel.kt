@@ -13,7 +13,11 @@ import kotlinx.coroutines.launch
 
 data class XpPanelUiState(
     val status: XpRuntime.Status? = null,
-    val toggles: XpServiceHolder.ToggleState = XpServiceHolder.ToggleState(true, false, false),
+    val toggles: XpServiceHolder.ToggleState = XpServiceHolder.ToggleState(
+        wakeEnabled = true,
+        xpOff = false,
+        verboseLog = false,
+    ),
     val busy: Boolean = false,
     val message: String? = null,
 )
@@ -80,6 +84,48 @@ class XpPanelViewModel(
             XpServiceHolder.setVerboseLog(on, container.root)
             refreshBlocking()
             _ui.update { it.copy(busy = false) }
+        }
+    }
+
+    fun setScreenEdge(on: Boolean) {
+        viewModelScope.launch {
+            _ui.update { it.copy(busy = true) }
+            XpServiceHolder.setScreenEdge(on, container.root)
+            refreshBlocking()
+            _ui.update {
+                it.copy(
+                    busy = false,
+                    message = if (on) "已开亮灭屏边沿" else "已关亮灭屏边沿",
+                )
+            }
+        }
+    }
+
+    fun setDozeEdge(on: Boolean) {
+        viewModelScope.launch {
+            _ui.update { it.copy(busy = true) }
+            XpServiceHolder.setDozeEdge(on, container.root)
+            refreshBlocking()
+            _ui.update {
+                it.copy(
+                    busy = false,
+                    message = if (on) "已开 Doze 边沿" else "已关 Doze 边沿",
+                )
+            }
+        }
+    }
+
+    fun setBcastEdge(on: Boolean) {
+        viewModelScope.launch {
+            _ui.update { it.copy(busy = true) }
+            XpServiceHolder.setBcastEdge(on, container.root)
+            refreshBlocking()
+            _ui.update {
+                it.copy(
+                    busy = false,
+                    message = if (on) "已开广播边沿" else "已关广播边沿",
+                )
+            }
         }
     }
 

@@ -217,6 +217,30 @@ qsc_ps_xp_wake_fresh() {
 	[ "$mt" -gt 0 ] 2>/dev/null && [ "$((now - mt))" -le 20 ] 2>/dev/null
 }
 
+# 可选辅助边沿（亮灭屏/Doze/广播）亦可武装打断；与 wake 同窗口
+qsc_ps_xp_assist_fresh() {
+	local now mt age f
+	[ -f /data/system/qsc_xp_off ] && return 1
+	now="$(date +%s 2>/dev/null || echo 0)"
+	case "$now" in ""|*[!0-9]*) return 1 ;; esac
+	for f in /data/system/qsc_xp_screen /data/system/qsc_xp_doze /data/system/qsc_xp_bcast; do
+		[ -f "$f" ] || continue
+		case "$f" in
+			*/qsc_xp_screen) [ -f /data/system/qsc_xp_want_screen ] || continue ;;
+			*/qsc_xp_doze) [ -f /data/system/qsc_xp_want_doze ] || continue ;;
+			*/qsc_xp_bcast) [ -f /data/system/qsc_xp_want_bcast ] || continue ;;
+		esac
+		mt="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
+		case "$mt" in ""|*[!0-9]*) continue ;; esac
+		age=$((now - mt))
+		if [ "$mt" -gt 0 ] 2>/dev/null && [ "$age" -ge 0 ] 2>/dev/null &&
+			[ "$age" -le 20 ] 2>/dev/null; then
+			return 0
+		fi
+	done
+	return 1
+}
+
 # qscd 不可用时的睡眠：仅在已武装 XP 时用短片打断；否则一次 sleep，少唤醒
 qsc_ps_fallback_sleep() {
 	local secs="${1:-3}" left chunk=3
@@ -229,10 +253,10 @@ qsc_ps_fallback_sleep() {
 		sleep "$secs"
 		return 0
 	fi
-	if qsc_ps_xp_wake_fresh; then
+	if qsc_ps_xp_wake_fresh || qsc_ps_xp_assist_fresh; then
 		rm -f /data/system/qsc_xp_wake 2>/dev/null || true
 		type qsc_xp_file_log >/dev/null 2>&1 &&
-			qsc_xp_file_log INFO "ok magisk: xp wake consumed"
+			qsc_xp_file_log INFO "ok magisk: xp wake/assist consumed"
 		return 0
 	fi
 	left=$secs
@@ -241,10 +265,10 @@ qsc_ps_fallback_sleep() {
 		[ "$left" -lt "$chunk" ] 2>/dev/null && chunk=$left
 		sleep "$chunk"
 		left=$((left - chunk))
-		if qsc_ps_xp_wake_fresh; then
+		if qsc_ps_xp_wake_fresh || qsc_ps_xp_assist_fresh; then
 			rm -f /data/system/qsc_xp_wake 2>/dev/null || true
 			type qsc_xp_file_log >/dev/null 2>&1 &&
-				qsc_xp_file_log INFO "ok magisk: xp wake consumed"
+				qsc_xp_file_log INFO "ok magisk: xp wake/assist consumed"
 			return 0
 		fi
 	done

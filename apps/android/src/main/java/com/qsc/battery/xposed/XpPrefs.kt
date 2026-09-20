@@ -10,6 +10,9 @@ object XpPrefs {
     const val KEY_WAKE_ENABLED = "wake_enabled"
     const val KEY_VERBOSE_LOG = "verbose_log"
     const val KEY_XP_OFF = "xp_off"
+    const val KEY_SCREEN_EDGE = "screen_edge"
+    const val KEY_DOZE_EDGE = "doze_edge"
+    const val KEY_BCAST_EDGE = "bcast_edge"
 
     const val OFF_PATH = "/data/system/qsc_xp_off"
     const val NO_WAKE_PATH = "/data/system/qsc_xp_no_wake"
@@ -17,6 +20,27 @@ object XpPrefs {
     const val ARM_PATH = "/data/system/qsc_xp_arm"
     const val WAKE_PATH = "/data/system/qsc_xp_wake"
     const val ALIVE_PATH = "/data/system/qsc_xp_alive"
+
+    /** 亮灭屏边沿开关（touch=开，默认关） */
+    const val WANT_SCREEN_PATH = "/data/system/qsc_xp_want_screen"
+
+    /** Doze 进出边沿开关（touch=开，默认关） */
+    const val WANT_DOZE_PATH = "/data/system/qsc_xp_want_doze"
+
+    /** 广播边沿开关（touch=开，默认关；动作列表见 BCAST_ACTIONS_PATH） */
+    const val WANT_BCAST_PATH = "/data/system/qsc_xp_want_bcast"
+
+    /** 亮灭屏：timestamp\\ton|off */
+    const val SCREEN_PATH = "/data/system/qsc_xp_screen"
+
+    /** Doze：timestamp\\tidle|active */
+    const val DOZE_PATH = "/data/system/qsc_xp_doze"
+
+    /** 广播：timestamp\\taction */
+    const val BCAST_PATH = "/data/system/qsc_xp_bcast"
+
+    /** 允许写入边沿的广播 Action（一行一个）；空则用内置低噪声默认集 */
+    const val BCAST_ACTIONS_PATH = "/data/system/qsc_xp_bcast_actions"
 
     /** 当前前台包：timestamp\\tpkg（每次切换覆盖） */
     const val FG_PATH = "/data/system/qsc_xp_fg"
@@ -32,6 +56,18 @@ object XpPrefs {
 
     /** 可选：关闭前台包名总线（简介/游戏/App 停充的 XP 路径） */
     const val NO_VIEWER_PATH = "/data/system/qsc_xp_no_viewer"
+
+    /** Magisk 同步：desc=0|1 / game=0|1 / app_stop=0|1 / idle=0|1 */
+    const val FG_POLICY_PATH = "/data/system/qsc_xp_fg_policy"
+
+    /** idle=1 时 touch；XP 热路径只做 exists，避免解析策略 */
+    const val FG_IDLE_PATH = "/data/system/qsc_xp_fg_idle"
+
+    /** 游戏限流关注包（一行一个） */
+    const val GAME_PKGS_PATH = "/data/system/qsc_xp_game_pkgs"
+
+    /** App 停充关注包（一行一个） */
+    const val STOP_PKGS_PATH = "/data/system/qsc_xp_stop_pkgs"
 
     /** system_server 在部分机型写 /data/system 会失败；多路径探测注入 */
     val ALIVE_CANDIDATES: List<String> = listOf(

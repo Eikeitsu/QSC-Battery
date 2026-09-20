@@ -19,6 +19,11 @@ class ConfigRepository(private val root: RootBridge) {
         else -> ModulePaths.CONF
     }
 
+    /** 通知 Magisk 服务：配置已变（与 conf mtime 双保险） */
+    private suspend fun notifyConfReload() {
+        root.exec("mkdir -p '${ModulePaths.DATADIR}'; : >'${ModulePaths.CONF_RELOAD_REQ}'")
+    }
+
     suspend fun loadConf(): Map<String, String> {
         val map = ConfigKeys.DEFAULTS.toMutableMap()
         val files = listOf(ModulePaths.CONF, ModulePaths.POWER_CONF, ModulePaths.NOTIFY_CONF)
@@ -53,12 +58,25 @@ class ConfigRepository(private val root: RootBridge) {
                 "sed -i '/^$key=/d' \"\$f\"; " +
                 "printf '%s=%s\\n' '$key' '$escaped' >> \"\$f\"",
         )
+        if (r.ok) notifyConfReload()
         return r.ok
     }
 
     suspend fun setConfValues(values: Map<String, String>): Boolean {
         var ok = true
-        values.forEach { (k, v) -> if (!setConfValue(k, v)) ok = false }
+        values.forEach { (k, v) ->
+            val escaped = v.replace("'", "'\\''")
+            val path = confPathForKey(k)
+            val r = root.exec(
+                "mkdir -p '${ModulePaths.MODDIR}/config'; " +
+                    "f='$path'; " +
+                    "touch \"\$f\"; " +
+                    "sed -i '/^$k=/d' \"\$f\"; " +
+                    "printf '%s=%s\\n' '$k' '$escaped' >> \"\$f\"",
+            )
+            if (!r.ok) ok = false
+        }
+        if (ok) notifyConfReload()
         return ok
     }
 
@@ -111,6 +129,7 @@ class ConfigRepository(private val root: RootBridge) {
             val escaped = line.replace("'", "'\\''")
             if (!root.exec("printf '%s=%s\\n' '$key' '$escaped' >> '$path'").ok) return false
         }
+        notifyConfReload()
         return true
     }
 }

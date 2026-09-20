@@ -196,6 +196,32 @@ fun XpPanelScreen(
                 )
             }
 
+            ChargeSection(title = "辅助边沿（默认关）") {
+                ChargeToggleRow(
+                    title = "亮灭屏边沿",
+                    checked = toggles.screenEdge && !toggles.xpOff,
+                    summary = "写 qsc_xp_screen；息屏策略优先读此文件；武装时兼可打断 sleep",
+                    enabled = !busy && !toggles.xpOff,
+                    onCheckedChange = { vm.setScreenEdge(it) },
+                )
+                ChargeDivider()
+                ChargeToggleRow(
+                    title = "Doze 边沿",
+                    checked = toggles.dozeEdge && !toggles.xpOff,
+                    summary = "写 qsc_xp_doze（idle/active）；武装时可打断 sleep",
+                    enabled = !busy && !toggles.xpOff,
+                    onCheckedChange = { vm.setDozeEdge(it) },
+                )
+                ChargeDivider()
+                ChargeToggleRow(
+                    title = "白名单广播边沿",
+                    checked = toggles.bcastEdge && !toggles.xpOff,
+                    summary = "写 qsc_xp_bcast；默认含 SCREEN/IDLE/插拔；可改 qsc_xp_bcast_actions",
+                    enabled = !busy && !toggles.xpOff,
+                    onCheckedChange = { vm.setBcastEdge(it) },
+                )
+            }
+
             ChargeSection(title = "其它") {
                 ChargeListRow(
                     title = "Magisk 武装",

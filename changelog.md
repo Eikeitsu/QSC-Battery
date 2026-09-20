@@ -11,6 +11,7 @@
 - **简介按需刷新**：检测到 Magisk/KSU/APatch/MMRL 等管理器在前台时勤刷电量；无人看列表时几乎不更新电量（停充/插拔等状态仍即时写）。内置含 Alpha / Kitsune、KSU Next / SukiSU / ReSukiSU、APatch Next / FolkPatch、WebUI X 等活跃分支；可选 `desc_viewer_pkgs` 追加包名。
 - **LSPosed 管理器前台边沿**：系统框架 Hook Activity 恢复；进出各 3s 稳定，确认离开后再 90s 超时写 `qsc_xp_viewer` leave。无 XP 时仍 dumpsys 轮询降级。与既有插拔 `qsc_xp_wake`（仅 qscd 不可用）独立。
 - **LSPosed 前台包名总线**：每次前台切换写 `qsc_xp_fg`；简介 / 游戏旁路 / App 停充共用；有 XP 时跳过认前台用的 dumpsys，无 XP 再降级。
+- **LSPosed 辅助边沿（默认关）**：亮灭屏 → `qsc_xp_screen`（息屏策略优先读）；Doze → `qsc_xp_doze`；白名单广播 → `qsc_xp_bcast`（可改 `qsc_xp_bcast_actions`）。APP「LSPosed / XP」面板开关；武装时亦可打断 qscd 回退 sleep。
 - **XP 生效时事件驱动**：简介后台零轮询；管理器进出各 **3s 稳定** 后才确认，确认离开后再 **90s 超时** 才停刷；会话未结束时切回不重复强制刷。观看中约 45–60s 复刷。游戏限流：前台或进程命中（后台子进程也维持），再套约 **1s 进 / 30s 离** 墓碑；App 停充同间隔（有 XP 以前台为准）。
 - **无 XP / XP 异常回退**：`alive` 缺失、软关、或与 dumpsys 连续不一致时写 `xp_fg_unreliable`，简介与认前台改 dumpsys/进程路径；边沿恢复后自动切回 XP。漏边沿时 dumpsys 安全网仍能发现管理器。
 - **省电诊断统计**：`touch data/diagnostic_on` 后按心跳写出 `service_power_stats` 与日志「省电统计」（skip/均睡/简介写盘/未插电 %/h）；默认关闭，避免调试本身耗电。
@@ -21,9 +22,11 @@
 ### 优化
 
 - **`stop_hold_wakelock=auto` 不再日用常持锁**：仅息屏/夜间持锁，亮屏释放，减轻对深度 Doze 的阻挡；强制 `1` 仍持续持锁。
+- **未插电 lean wait**：确认未插电后主循环再入几乎只做「读 online + 策略/idle + wait」；简介/XP 管家仅在拔电首轮或配置变更时跑。配置本就按 mtime 哨兵，未变不重读全文；App/WebUI 保存另 bump `conf_reload_req`。
 
 ### 修复
 
+- **XP 前台门禁与分级**：Magisk 同步 `qsc_xp_fg_policy`；简介/游戏限流/App 停充全关时 XP 不写前台盘（`qsc_xp_fg_idle` 热路径快判）。仅简介→只处理管理器且**不写** `qsc_xp_fg`（只要 viewer）；游戏/停充→列表包（离开再写一次）。**未插电时游戏/停充不纳入 XP**。非详细日志下 DEBUG 不进 logcat。
 - **CI 通道检测版本落后于 Actions**：`publish-updates` / `publish-ci-dist` 曾把整份 tip 拷进 STAGE 再推送，并发的 App/守护发布会把模块元数据回滚（如远端已是 `.ci.315` 却检测到 `.ci.314`）。改为只推送本产品文件，`state.json` 与 tip 合并。
 - （继承）充满拔线后 uevent 乱叫醒、停充持锁间隔等，见 2026.09.18。
 

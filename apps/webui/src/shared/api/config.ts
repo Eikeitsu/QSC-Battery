@@ -41,6 +41,12 @@ export async function loadConfigValues(
   return values;
 }
 
+export async function notifyConfReload(): Promise<void> {
+  await exec(
+    `mkdir -p '${PATHS.DATADIR}' 2>/dev/null; : >'${PATHS.CONF_RELOAD_REQ}' 2>/dev/null`,
+  );
+}
+
 export async function setConf(key: string, value: string | number): Promise<void> {
   const safeKey = String(key).replace(/[^a-zA-Z0-9_]/g, "");
   const safeVal = String(value).replace(/[^0-9A-Za-z._:,-]/g, "");
@@ -48,6 +54,7 @@ export async function setConf(key: string, value: string | number): Promise<void
   await exec(
     `mkdir -p '${PATHS.MODDIR}/config' 2>/dev/null; touch '${path}'; sed -i '/^${safeKey}=/d' '${path}' 2>/dev/null; echo '${safeKey}=${safeVal}' >> '${path}'`,
   );
+  await notifyConfReload();
 }
 
 /** 解析 config.conf 中的 power_switch 行为「路径 start=X stop=Y」列表 */
@@ -118,6 +125,7 @@ export async function savePowerSwitches(entries: string[]): Promise<boolean> {
       : `true`,
   ].join("; ");
   const result = await exec(script);
+  if (result.errno === 0) await notifyConfReload();
   return result.errno === 0;
 }
 
@@ -148,6 +156,7 @@ export async function savePowerStopSchedule(ranges: string[]): Promise<boolean> 
       : `true`,
   ].join("; ");
   const result = await exec(script);
+  if (result.errno === 0) await notifyConfReload();
   return result.errno === 0;
 }
 
@@ -181,6 +190,7 @@ export async function saveNotifyQuietSchedule(ranges: string[]): Promise<boolean
       : `true`,
   ].join("; ");
   const result = await exec(script);
+  if (result.errno === 0) await notifyConfReload();
   return result.errno === 0;
 }
 
@@ -212,6 +222,7 @@ export async function saveNightSchedule(ranges: string[]): Promise<boolean> {
       : `true`,
   ].join("; ");
   const result = await exec(script);
+  if (result.errno === 0) await notifyConfReload();
   return result.errno === 0;
 }
 

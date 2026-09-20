@@ -147,6 +147,24 @@ object XpServiceHolder : XposedServiceHelper.OnServiceListener {
         true
     }
 
+    suspend fun setScreenEdge(on: Boolean, root: RootBridge): Boolean = withContext(Dispatchers.IO) {
+        remotePrefs()?.edit()?.putBoolean(XpPrefs.KEY_SCREEN_EDGE, on)?.apply()
+        if (on) root.touch(XpPrefs.WANT_SCREEN_PATH) else root.rm(XpPrefs.WANT_SCREEN_PATH)
+        true
+    }
+
+    suspend fun setDozeEdge(on: Boolean, root: RootBridge): Boolean = withContext(Dispatchers.IO) {
+        remotePrefs()?.edit()?.putBoolean(XpPrefs.KEY_DOZE_EDGE, on)?.apply()
+        if (on) root.touch(XpPrefs.WANT_DOZE_PATH) else root.rm(XpPrefs.WANT_DOZE_PATH)
+        true
+    }
+
+    suspend fun setBcastEdge(on: Boolean, root: RootBridge): Boolean = withContext(Dispatchers.IO) {
+        remotePrefs()?.edit()?.putBoolean(XpPrefs.KEY_BCAST_EDGE, on)?.apply()
+        if (on) root.touch(XpPrefs.WANT_BCAST_PATH) else root.rm(XpPrefs.WANT_BCAST_PATH)
+        true
+    }
+
     suspend fun readToggleState(root: RootBridge): ToggleState = withContext(Dispatchers.IO) {
         val prefs = remotePrefs()
         val wake = prefs?.getBoolean(XpPrefs.KEY_WAKE_ENABLED, true)
@@ -155,12 +173,28 @@ object XpServiceHolder : XposedServiceHelper.OnServiceListener {
             ?: root.exists(XpPrefs.OFF_PATH)
         val verbose = prefs?.getBoolean(XpPrefs.KEY_VERBOSE_LOG, false)
             ?: root.exists(XpPrefs.VERBOSE_PATH)
-        ToggleState(wakeEnabled = wake, xpOff = off, verboseLog = verbose)
+        val screen = prefs?.getBoolean(XpPrefs.KEY_SCREEN_EDGE, false)
+            ?: root.exists(XpPrefs.WANT_SCREEN_PATH)
+        val doze = prefs?.getBoolean(XpPrefs.KEY_DOZE_EDGE, false)
+            ?: root.exists(XpPrefs.WANT_DOZE_PATH)
+        val bcast = prefs?.getBoolean(XpPrefs.KEY_BCAST_EDGE, false)
+            ?: root.exists(XpPrefs.WANT_BCAST_PATH)
+        ToggleState(
+            wakeEnabled = wake,
+            xpOff = off,
+            verboseLog = verbose,
+            screenEdge = screen,
+            dozeEdge = doze,
+            bcastEdge = bcast,
+        )
     }
 
     data class ToggleState(
         val wakeEnabled: Boolean,
         val xpOff: Boolean,
         val verboseLog: Boolean,
+        val screenEdge: Boolean = false,
+        val dozeEdge: Boolean = false,
+        val bcastEdge: Boolean = false,
     )
 }

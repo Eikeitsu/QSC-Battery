@@ -61,13 +61,42 @@ qsc_ps_apply_profile_defaults() {
 	esac
 }
 
-# 廉价息屏探测；失败视为亮屏。缓存 60s。
+# 廉价息屏探测；失败视为亮屏。优先读 XP 亮灭屏边沿（opt-in）；否则 sysfs，缓存 60s。
 qsc_ps_screen_is_off() {
-	local now="${QSC_PS_NOW:-0}" p v
+	local now="${QSC_PS_NOW:-0}" p v f line state mt age
 	if [ "$now" -gt 0 ] 2>/dev/null &&
 		[ "$now" = "${QSC_PS_SCREEN_CACHE_AT:-}" ]; then
 		[ "${QSC_PS_SCREEN_CACHE_VAL:-0}" = "1" ]
 		return $?
+	fi
+	# XP 亮灭屏：want_screen 且边沿文件新鲜时跳过 sysfs 缓存窗口
+	if [ -f /data/system/qsc_xp_want_screen ] &&
+		[ ! -f /data/system/qsc_xp_off ] &&
+		[ -f /data/system/qsc_xp_screen ]; then
+		f=/data/system/qsc_xp_screen
+		mt="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
+		case "$mt:$now" in *[!0-9:]*) ;;
+		*)
+			age=$((now - mt))
+			if [ "$mt" -gt 0 ] 2>/dev/null && [ "$age" -ge 0 ] 2>/dev/null &&
+				[ "$age" -le 120 ] 2>/dev/null; then
+				IFS= read -r line <"$f" 2>/dev/null || line=
+				state="$(printf '%s' "$line" | awk -F'\t' 'NF{print $NF; exit}' | tr -d ' \r\n')"
+				case "$state" in
+					off)
+						QSC_PS_SCREEN_CACHE_VAL=1
+						QSC_PS_SCREEN_CACHE_AT="$now"
+						return 0
+						;;
+					on)
+						QSC_PS_SCREEN_CACHE_VAL=0
+						QSC_PS_SCREEN_CACHE_AT="$now"
+						return 1
+						;;
+				esac
+			fi
+			;;
+		esac
 	fi
 	if [ "$now" -gt 0 ] 2>/dev/null &&
 		[ "$((now - ${QSC_PS_SCREEN_CACHE_AT:-0}))" -lt 60 ] 2>/dev/null; then
