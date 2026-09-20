@@ -9,6 +9,10 @@
 - **停充维持 × 息屏/夜间**：非 MCA 息屏约 180s、夜间/深睡约 300s；MCA 仍按 `loop_interval_maintain_sec` 重申。
 - **夜间时段**：模板默认 `23:00-07:00`（跨天）；WebUI/APP 可编辑；开启「夜间省电」且无时段时自动写入该默认。
 - **简介按需刷新**：检测到 Magisk/KSU/APatch/MMRL 等管理器在前台时勤刷电量；无人看列表时几乎不更新电量（停充/插拔等状态仍即时写）。内置含 Alpha / Kitsune、KSU Next / SukiSU / ReSukiSU、APatch Next / FolkPatch、WebUI X 等活跃分支；可选 `desc_viewer_pkgs` 追加包名。
+- **省电诊断统计**：`touch data/diagnostic_on` 后按心跳写出 `service_power_stats` 与日志「省电统计」（skip/均睡/简介写盘/未插电 %/h）；默认关闭，避免调试本身耗电。
+- **策略边沿日志与驻停总结**：进入/退出息屏·夜间·深睡写 INFO；同段重合不重复结算；退出时总结唤醒次数、均睡、skip，并给出「接近少唤醒 / 偏勤」评判。管理器前台进出、配置热重载亦有日志。息屏加强须连续息屏约 90s 才进档；不足约 3 分钟的短驻停不写总结，减轻亮灭闪动刷屏。
+- **CLI**：`help` 汇总命令；缩写 `st`/`cfg`/`diag`/`test`/`ver`；`stats` 看省电证据；`diagnostic on|off`；未知命令提示相近指令。
+- **用户文档**：功能/配置/WebUI/APP/FAQ/首页对齐分级省电与多 conf；顶栏增加「常见问题」。
 
 ### 优化
 
