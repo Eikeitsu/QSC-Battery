@@ -10,9 +10,14 @@ QSC_PS_DEEP_IDLE=900
 QSC_PS_DEEP_FULL_GAP=7200
 QSC_PS_HB_SEC=180
 QSC_PS_SCREEN_DUMPSYS=0
+# 连续息屏满此秒数才切到 screen_off 模式（防亮灭闪动刷日志/抖策略）
+QSC_PS_SCREEN_OFF_ENTER=90
+# 驻停不足此秒数退出时不写 INFO 总结（仍结束段）
+QSC_PS_PARK_MIN_SUMMARY=180
 
 # 运行态（qsc_ps_policy_refresh 填写）
 QSC_PS_MODE=active
+QSC_PS_MODE_WAS=
 QSC_PS_SCREEN_OFF=0
 QSC_PS_NIGHT=0
 QSC_PS_DEEP=0
@@ -21,6 +26,19 @@ QSC_PS_SCREEN_OFF_SINCE=0
 QSC_PS_SCREEN_CACHE_AT=0
 QSC_PS_SCREEN_CACHE_VAL=0
 QSC_PS_MAINTAIN_EFF=30
+
+# 息屏/夜间/深睡驻停段（三者重合时合成一段，退出才总结）
+QSC_PS_PARK_ACTIVE=0
+QSC_PS_PARK_LABEL=
+QSC_PS_PARK_SINCE=0
+QSC_PS_PARK_WAKES0=0
+QSC_PS_PARK_LOOPS0=0
+QSC_PS_PARK_SKIPS0=0
+QSC_PS_PARK_FULL0=0
+QSC_PS_PARK_SLEEP_SUM0=0
+QSC_PS_PARK_SLEEP_N0=0
+QSC_PS_PARK_DESC_W0=0
+QSC_PS_PARK_LAST_SUMMARY=
 
 qsc_ps_apply_profile_defaults() {
 	case "${QSC_PS_PROFILE:-balanced}" in
@@ -190,6 +208,169 @@ qsc_ps_wakelock_screen_wants_hold() {
 	return 1
 }
 
+# 当前是否处于「省电驻停」场景（息屏/夜间/深睡；重合算一段）
+qsc_ps_park_tier() {
+	# 输出: deep|night|screen_off|（空=非驻停）
+	case "${QSC_PS_MODE:-}" in
+		deep)
+			if [ "${QSC_PS_NIGHT:-0}" = "1" ]; then
+				printf '%s' "night"
+			else
+				printf '%s' "deep"
+			fi
+			return 0
+			;;
+		screen_off)
+			printf '%s' "screen_off"
+			return 0
+			;;
+		maintain)
+			if [ "${QSC_PS_NIGHT:-0}" = "1" ]; then
+				printf '%s' "night"
+				return 0
+			fi
+			if [ "${QSC_PS_DEEP:-0}" = "1" ]; then
+				printf '%s' "deep"
+				return 0
+			fi
+			if [ "${QSC_PS_SCREEN_OFF:-0}" = "1" ]; then
+				printf '%s' "screen_off"
+				return 0
+			fi
+			;;
+	esac
+	printf ''
+	return 1
+}
+
+qsc_ps_park_label_zh() {
+	case "$1" in
+		night) printf '%s' "夜间深睡" ;;
+		deep) printf '%s' "息屏深睡" ;;
+		screen_off) printf '%s' "息屏加强" ;;
+		*) printf '%s' "${1:-驻停}" ;;
+	esac
+}
+
+qsc_ps_park_session_begin() {
+	local label="$1" now="${QSC_PS_NOW:-0}" zh
+	QSC_PS_PARK_ACTIVE=1
+	QSC_PS_PARK_LABEL="$label"
+	QSC_PS_PARK_SINCE="$now"
+	QSC_PS_PARK_WAKES0="${QSC_PS_WAKE_COUNT:-0}"
+	QSC_PS_PARK_LOOPS0="${QSC_SERVICE_LOOP_COUNT:-0}"
+	QSC_PS_PARK_SKIPS0="${QSC_SERVICE_SKIP_ROUNDS:-0}"
+	QSC_PS_PARK_FULL0="${QSC_SERVICE_FULL_ROUNDS:-0}"
+	QSC_PS_PARK_SLEEP_SUM0="${QSC_PS_SLEEP_SEC_SUM:-0}"
+	QSC_PS_PARK_SLEEP_N0="${QSC_PS_SLEEP_COUNT:-0}"
+	QSC_PS_PARK_DESC_W0="${QSC_PS_DESC_WRITES:-0}"
+	zh="$(qsc_ps_park_label_zh "$label")"
+	qsc_log info "进入${zh}（目标少唤醒；idle≈${QSC_PS_IDLE_EFF:-?}s）"
+}
+
+qsc_ps_park_session_end() {
+	local now="${QSC_PS_NOW:-0}" label="${QSC_PS_PARK_LABEL:-}" zh
+	local elapsed wakes loops skips full sleep_sum sleep_n desc_w
+	local avg_sleep wph verdict mins _wph_a _wph_b
+
+	[ "${QSC_PS_PARK_ACTIVE:-0}" = "1" ] || return 0
+	case "$now" in ""|*[!0-9]*) now=0 ;; esac
+	elapsed=$((now - ${QSC_PS_PARK_SINCE:-0}))
+	[ "$elapsed" -lt 1 ] 2>/dev/null && elapsed=1
+
+	wakes=$((${QSC_PS_WAKE_COUNT:-0} - ${QSC_PS_PARK_WAKES0:-0}))
+	loops=$((${QSC_SERVICE_LOOP_COUNT:-0} - ${QSC_PS_PARK_LOOPS0:-0}))
+	skips=$((${QSC_SERVICE_SKIP_ROUNDS:-0} - ${QSC_PS_PARK_SKIPS0:-0}))
+	full=$((${QSC_SERVICE_FULL_ROUNDS:-0} - ${QSC_PS_PARK_FULL0:-0}))
+	sleep_sum=$((${QSC_PS_SLEEP_SEC_SUM:-0} - ${QSC_PS_PARK_SLEEP_SUM0:-0}))
+	sleep_n=$((${QSC_PS_SLEEP_COUNT:-0} - ${QSC_PS_PARK_SLEEP_N0:-0}))
+	desc_w=$((${QSC_PS_DESC_WRITES:-0} - ${QSC_PS_PARK_DESC_W0:-0}))
+	[ "$wakes" -lt 0 ] 2>/dev/null && wakes=0
+	[ "$loops" -lt 0 ] 2>/dev/null && loops=0
+	[ "$skips" -lt 0 ] 2>/dev/null && skips=0
+	[ "$full" -lt 0 ] 2>/dev/null && full=0
+	[ "$sleep_sum" -lt 0 ] 2>/dev/null && sleep_sum=0
+	[ "$sleep_n" -lt 0 ] 2>/dev/null && sleep_n=0
+	[ "$desc_w" -lt 0 ] 2>/dev/null && desc_w=0
+
+	avg_sleep=0
+	[ "$sleep_n" -gt 0 ] 2>/dev/null && avg_sleep=$((sleep_sum / sleep_n))
+	wph=$((wakes * 36000 / elapsed))
+	_wph_a=$((wph / 10))
+	_wph_b=$((wph % 10))
+
+	if [ "$avg_sleep" -ge 500 ] 2>/dev/null || [ "$wakes" -eq 0 ] ||
+		[ "$((wakes * 3600))" -le "$((8 * elapsed))" ] 2>/dev/null; then
+		verdict="接近少唤醒待机"
+	elif [ "$avg_sleep" -ge 180 ] 2>/dev/null; then
+		verdict="中等（可再查 qscd/持锁）"
+	else
+		verdict="唤醒偏勤"
+	fi
+
+	zh="$(qsc_ps_park_label_zh "$label")"
+	mins=$((elapsed / 60))
+	[ "$mins" -lt 1 ] 2>/dev/null && mins=1
+	QSC_PS_PARK_LAST_SUMMARY="退出${zh} ${mins}m：唤醒${wakes}次(≈${_wph_a}.${_wph_b}/h) skip ${skips}/${loops} 满轮${full} 均睡${avg_sleep}s 简介写${desc_w} → ${verdict}"
+	# 过短驻停（常见于亮灭闪动）不刷 INFO，避免误导且少写盘
+	if [ "$elapsed" -lt "${QSC_PS_PARK_MIN_SUMMARY:-180}" ] 2>/dev/null; then
+		qsc_log debug "短驻停忽略总结（${elapsed}s<${QSC_PS_PARK_MIN_SUMMARY:-180}s）: $QSC_PS_PARK_LAST_SUMMARY"
+	else
+		qsc_log info "$QSC_PS_PARK_LAST_SUMMARY"
+		printf '%s\n' "$QSC_PS_PARK_LAST_SUMMARY" >"$DATADIR/park_last_summary" 2>/dev/null
+	fi
+
+	QSC_PS_PARK_ACTIVE=0
+	QSC_PS_PARK_LABEL=
+	QSC_PS_PARK_SINCE=0
+}
+
+# 在 policy_refresh 末尾调用：边沿日志 + 驻停段总结
+qsc_ps_policy_edge_log() {
+	local prev="${QSC_PS_MODE_WAS:-}" cur="${QSC_PS_MODE:-}"
+	local tier new_park=0 zh
+
+	tier="$(qsc_ps_park_tier)"
+	[ -n "$tier" ] && new_park=1
+
+	if [ -n "$prev" ] && [ "$prev" != "$cur" ]; then
+		case "$prev:$cur" in
+			screen_off:deep|deep:screen_off)
+				qsc_log debug "省电档切换 ${prev}→${cur}（同属驻停段）"
+				;;
+			*)
+				case "$cur" in
+					deep|screen_off) ;;
+					*)
+						case "$prev" in
+							deep|screen_off) ;;
+							*)
+								qsc_log info "运行模式 ${prev}→${cur}"
+								;;
+						esac
+						;;
+				esac
+				;;
+		esac
+	fi
+
+	if [ "$new_park" = "1" ]; then
+		if [ "${QSC_PS_PARK_ACTIVE:-0}" != "1" ]; then
+			qsc_ps_park_session_begin "$tier"
+		elif [ -n "$tier" ] && [ "$tier" != "${QSC_PS_PARK_LABEL:-}" ]; then
+			zh="$(qsc_ps_park_label_zh "$tier")"
+			qsc_log info "驻停加深为${zh}"
+			QSC_PS_PARK_LABEL="$tier"
+		fi
+	else
+		if [ "${QSC_PS_PARK_ACTIVE:-0}" = "1" ]; then
+			qsc_ps_park_session_end
+		fi
+	fi
+
+	QSC_PS_MODE_WAS="$cur"
+}
+
 qsc_ps_policy_refresh() {
 	local plugged=0 now="${QSC_PS_NOW:-0}"
 
@@ -213,12 +394,14 @@ qsc_ps_policy_refresh() {
 		if [ "${QSC_PS_SCREEN_OFF:-0}" = "1" ] || [ "${QSC_PS_DEEP:-0}" = "1" ]; then
 			QSC_PS_DESC_FORCE_STATIC=1
 		fi
+		qsc_ps_policy_edge_log
 		return 0
 	fi
 
 	if [ "$plugged" = "1" ]; then
 		QSC_PS_MODE=plugged
 		# 插电充电中不拉未插电 DeepPark
+		qsc_ps_policy_edge_log
 		return 0
 	fi
 
@@ -230,22 +413,34 @@ qsc_ps_policy_refresh() {
 		QSC_PS_HB_SEC="$(qsc_clamp_int "${QSC_PS_HB_SEC:-180}" 180 900 600)"
 		QSC_PS_DESC_FORCE_STATIC=1
 		QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+		qsc_ps_policy_edge_log
 		return 0
 	fi
 
+	# 息屏加强：须连续息屏满 screen_off_enter_sec（默认 90s）才切 MODE，
+	# 避免口袋亮灭立刻进出；深睡仍按 deep_after_sec（默认 600s）另计。
 	if [ "${QSC_PS_SCREEN_OFF:-0}" = "1" ]; then
-		QSC_PS_MODE=screen_off
-		QSC_PS_IDLE_EFF="$QSC_PS_IDLE"
-		qsc_ps_native_ready 2>/dev/null &&
-			[ "${QSC_PS_IDLE_NATIVE:-0}" -gt "$QSC_PS_IDLE_EFF" ] 2>/dev/null &&
-			QSC_PS_IDLE_EFF="$QSC_PS_IDLE_NATIVE"
-		QSC_PS_IDLE_EFF=$((QSC_PS_IDLE_EFF + QSC_PS_IDLE_EFF / 2))
-		[ "$QSC_PS_IDLE_EFF" -gt 900 ] 2>/dev/null && QSC_PS_IDLE_EFF=900
-		QSC_PS_DESC_FORCE_STATIC=1
-		QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
-		return 0
+		_enter="${QSC_PS_SCREEN_OFF_ENTER:-90}"
+		_since="${QSC_PS_SCREEN_OFF_SINCE:-0}"
+		case "$_enter" in ""|*[!0-9]*) _enter=90 ;; esac
+		if [ "$now" -gt 0 ] 2>/dev/null &&
+			[ "$_since" -gt 0 ] 2>/dev/null &&
+			[ "$((now - _since))" -ge "$_enter" ] 2>/dev/null; then
+			QSC_PS_MODE=screen_off
+			QSC_PS_IDLE_EFF="$QSC_PS_IDLE"
+			qsc_ps_native_ready 2>/dev/null &&
+				[ "${QSC_PS_IDLE_NATIVE:-0}" -gt "$QSC_PS_IDLE_EFF" ] 2>/dev/null &&
+				QSC_PS_IDLE_EFF="$QSC_PS_IDLE_NATIVE"
+			QSC_PS_IDLE_EFF=$((QSC_PS_IDLE_EFF + QSC_PS_IDLE_EFF / 2))
+			[ "$QSC_PS_IDLE_EFF" -gt 900 ] 2>/dev/null && QSC_PS_IDLE_EFF=900
+			QSC_PS_DESC_FORCE_STATIC=1
+			QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+			qsc_ps_policy_edge_log
+			return 0
+		fi
 	fi
 
+	qsc_ps_policy_edge_log
 	return 0
 }
 

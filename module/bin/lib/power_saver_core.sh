@@ -11,6 +11,15 @@ QSC_PS_WAIT_FAILURES=0
 QSC_PS_WAIT_NEXT_RETRY=0
 QSC_PS_NATIVE_MODE=""
 QSC_PS_DESC_WRITES=0
+# 省电诊断计数（仅 diagnostic_on 时落盘；默认路径只占内存）
+QSC_PS_SLEEP_SEC_SUM=0
+QSC_PS_SLEEP_COUNT=0
+QSC_PS_DESC_IDLE_SKIPS=0
+QSC_PS_VIEWER_HITS=0
+QSC_PS_STAT_PERIOD_START=0
+QSC_PS_STAT_CAP_START=""
+QSC_PS_STAT_MA_SUM=0
+QSC_PS_STAT_MA_N=0
 
 # 仅在用户开启 debug_on 时落盘；默认路径不增加日志写入。
 qsc_ps_dbg() {
@@ -97,6 +106,7 @@ qsc_ps_load_conf() {
 	local conf="${CONF:-}"
 	local line k v
 	local need=0
+	local was_loaded="${QSC_PS_CONF_LOADED:-0}"
 
 	if [ "$QSC_PS_CONF_LOADED" != "1" ]; then
 		need=1
@@ -132,6 +142,7 @@ qsc_ps_load_conf() {
 	QSC_PS_DEEP_FULL_GAP=7200
 	QSC_PS_HB_SEC=180
 	QSC_PS_SCREEN_DUMPSYS=0
+	QSC_PS_SCREEN_OFF_ENTER=90
 	QSC_PS_IDLE_NATIVE_SET=0
 	QSC_PS_HB_SET=0
 	QSC_PS_FULL_MAX_GAP=1800
@@ -159,6 +170,7 @@ qsc_ps_load_conf() {
 				deep_full_gap_sec) QSC_PS_DEEP_FULL_GAP="$v" ;;
 				heartbeat_sec) QSC_PS_HB_SEC="$v"; QSC_PS_HB_SET=1 ;;
 				screen_probe_dumpsys) QSC_PS_SCREEN_DUMPSYS="$v" ;;
+				screen_off_enter_sec) QSC_PS_SCREEN_OFF_ENTER="$v" ;;
 				loop_interval_idle_sec) QSC_PS_IDLE="$v" ;;
 				loop_interval_idle_native_sec) QSC_PS_IDLE_NATIVE="$v"; QSC_PS_IDLE_NATIVE_SET=1 ;;
 				loop_interval_plugged_sec) QSC_PS_PLUGGED="$v" ;;
@@ -219,6 +231,7 @@ qsc_ps_load_conf() {
 	QSC_PS_DEEP_FULL_GAP="$(qsc_clamp_int "$QSC_PS_DEEP_FULL_GAP" 600 14400 7200)"
 	QSC_PS_HB_SEC="$(qsc_clamp_int "$QSC_PS_HB_SEC" 60 900 180)"
 	QSC_PS_SCREEN_DUMPSYS="$(qsc_clamp_int "$QSC_PS_SCREEN_DUMPSYS" 0 1 0)"
+	QSC_PS_SCREEN_OFF_ENTER="$(qsc_clamp_int "${QSC_PS_SCREEN_OFF_ENTER:-90}" 0 600 90)"
 	QSCV_description_enable="$(qsc_clamp_int "${QSCV_description_enable:-1}" 0 1 1)"
 	description_enable="$QSCV_description_enable"
 
@@ -234,6 +247,9 @@ qsc_ps_load_conf() {
 		if [ ! -f "$seen_c" ] || [ "$conf" -nt "$seen_c" ]; then
 			: >"$seen_c" 2>/dev/null
 		fi
+	fi
+	if [ "$was_loaded" = "1" ]; then
+		qsc_log info "已重载配置（profile=${QSC_PS_PROFILE} saver=${QSC_PS_ENABLE} idle_native=${QSC_PS_IDLE_NATIVE}s）"
 	fi
 	return 0
 }

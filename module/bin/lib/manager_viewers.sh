@@ -141,15 +141,22 @@ qsc_manager_viewer_active() {
 	[ "${QSC_MANAGER_VIEWER_CACHE_VAL:-0}" = "1" ]
 }
 
-# 检测并更新 WAS；返回 0=当前在看。若刚从空闲→在看，设 QSC_MANAGER_VIEWER_RISING=1
+# 检测并更新 WAS；返回 0=当前在看。上升沿 RISING=1，离开 FALLING=1
 qsc_manager_viewer_poll() {
 	local prev="${QSC_MANAGER_VIEWER_WAS:-0}" cur=0
 	QSC_MANAGER_VIEWER_RISING=0
+	QSC_MANAGER_VIEWER_FALLING=0
 	if qsc_manager_viewer_active; then
 		cur=1
 	fi
 	if [ "$cur" = "1" ] && [ "$prev" != "1" ]; then
 		QSC_MANAGER_VIEWER_RISING=1
+		type qsc_log >/dev/null 2>&1 &&
+			qsc_log info "模块管理器在前台（简介将勤刷）"
+	elif [ "$cur" != "1" ] && [ "$prev" = "1" ]; then
+		QSC_MANAGER_VIEWER_FALLING=1
+		type qsc_log >/dev/null 2>&1 &&
+			qsc_log info "已离开模块管理器（简介恢复按需）"
 	fi
 	QSC_MANAGER_VIEWER_WAS="$cur"
 	[ "$cur" = "1" ]
