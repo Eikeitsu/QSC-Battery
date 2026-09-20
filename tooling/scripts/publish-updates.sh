@@ -4,7 +4,7 @@
 # Usage:
 #   publish-updates.sh <stable|prerelease|ci> [options...]
 #
-# Options (omit a product to inherit previous tip for that product):
+# Options (omit a product to leave tip unchanged for that product):
 #   --module-version V --module-code N --module-zip-url URL [--module-changelog URL]
 #   --app-version V --app-code N --app-apk-url URL [--app-changelog URL]
 #   --daemon-version V --daemon-code N --daemon-base-url URL
@@ -16,6 +16,10 @@
 #
 # Env: GITHUB_TOKEN, GITHUB_REPOSITORY
 # Pushes with history (no force).
+#
+# 重要：STAGE 只含本跑要改的文件。禁止把整份 tip 拷进 STAGE 再推——
+# 否则并发的 module/app/daemon 发布会把对方刚写的元数据回滚（例如检测到 .ci.314
+# 而 Actions 已是 .ci.315）。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -77,15 +81,11 @@ trap cleanup EXIT
 
 chmod +x tooling/scripts/git-push-tree.sh
 
+# 只读 tip（守护继承 hash / 合并 state），禁止整树拷进 STAGE
 if [ -n "${GITHUB_TOKEN:-}" ]; then
   git clone --depth 1 --branch updates \
     "https://x-access-token:${GITHUB_TOKEN}@github.com/${OWNER_REPO}.git" "$OLD" \
     2>/dev/null || true
-fi
-
-if [ -d "$OLD/stable" ] || [ -d "$OLD/ci" ] || [ -d "$OLD/prerelease" ] || [ -f "$OLD/README.md" ]; then
-  cp -a "$OLD"/. "$STAGE"/ 2>/dev/null || true
-  rm -rf "$STAGE/.git"
 fi
 
 mkdir -p "$STAGE/$CHANNEL/qscd"
@@ -94,15 +94,17 @@ export CHANNEL MODULE_VERSION MODULE_CODE MODULE_ZIP MODULE_CHANGELOG
 export APP_VERSION APP_CODE APP_APK APP_CHANGELOG
 export DAEMON_VERSION DAEMON_CODE DAEMON_BASE DAEMON_DIR SOURCE_SHA OWNER_REPO
 export DAEMON_RUST_BUILT DAEMON_C_BUILT
-export STATE_KEY STAGE
+export STATE_KEY STAGE OLD
 python3 - <<'PY'
 import hashlib, json, os, pathlib, sys
 
 stage = pathlib.Path(os.environ["STAGE"])
+old = pathlib.Path(os.environ["OLD"])
 channel = os.environ["CHANNEL"]
 ch = stage / channel
 ch.mkdir(parents=True, exist_ok=True)
 (qscd := ch / "qscd").mkdir(exist_ok=True)
+old_ch = old / channel
 
 def load(path: pathlib.Path) -> dict:
     if not path.is_file():
@@ -122,11 +124,9 @@ def as_int(v, default=0) -> int:
     except Exception:
         return default
 
-# --- module ---
-mod_path = ch / "update.json"
-prev_mod = load(mod_path)
-mod = dict(prev_mod)
+# --- module：仅在本跑更新时写入 STAGE ---
 if os.environ.get("MODULE_VERSION") and os.environ.get("MODULE_CODE"):
+    prev_mod = load(old_ch / "update.json")
     mod = {
         "version": os.environ["MODULE_VERSION"],
         "versionCode": int(os.environ["MODULE_CODE"]),
@@ -134,17 +134,12 @@ if os.environ.get("MODULE_VERSION") and os.environ.get("MODULE_CODE"):
         "changelog": os.environ.get("MODULE_CHANGELOG") or prev_mod.get("changelog", ""),
         "channel": channel,
     }
-    write(mod_path, mod)
+    write(ch / "update.json", mod)
     print("updates: wrote module", mod["version"], mod["versionCode"])
-elif mod:
-    write(mod_path, mod)
-    print("updates: keep module", mod.get("versionCode"))
 
 # --- app ---
-app_path = ch / "app-update.json"
-prev_app = load(app_path)
-app = dict(prev_app)
 if os.environ.get("APP_VERSION") and os.environ.get("APP_CODE"):
+    prev_app = load(old_ch / "app-update.json")
     app = {
         "version": os.environ["APP_VERSION"],
         "versionCode": int(os.environ["APP_CODE"]),
@@ -152,18 +147,13 @@ if os.environ.get("APP_VERSION") and os.environ.get("APP_CODE"):
         "changelog": os.environ.get("APP_CHANGELOG") or prev_app.get("changelog", ""),
         "channel": channel,
     }
-    write(app_path, app)
+    write(ch / "app-update.json", app)
     print("updates: wrote app", app["version"], app["versionCode"])
-elif app:
-    write(app_path, app)
-    print("updates: keep app", app.get("versionCode"))
 
 # --- daemon ---
-man_path = qscd / "manifest.json"
-prev_man = load(man_path)
-man = dict(prev_man)
 daemon_dir = os.environ.get("DAEMON_DIR") or ""
 if os.environ.get("DAEMON_VERSION") and os.environ.get("DAEMON_CODE") and os.environ.get("DAEMON_BASE"):
+    prev_man = load(old_ch / "qscd" / "manifest.json")
     base = os.environ["DAEMON_BASE"].rstrip("/")
     tip_ver = os.environ["DAEMON_VERSION"]
     tip_code = int(os.environ["DAEMON_CODE"])
@@ -197,11 +187,9 @@ if os.environ.get("DAEMON_VERSION") and os.environ.get("DAEMON_CODE") and os.env
     c_flag = flag("DAEMON_C_BUILT")
     rust_built = rust_flag if rust_flag is not None else (1 if rust_hash_changed or not prev_man else 0)
     c_built = c_flag if c_flag is not None else (1 if c_hash_changed or not prev_man else 0)
-    # 两侧都没标且无旧清单：两侧一起升
     if rust_flag is None and c_flag is None and not prev_man:
         rust_built = c_built = 1
     if rust_built == 0 and c_built == 0:
-        # 发版/推送显式带了新 code，至少升有新 hash 的一侧；都没有则两侧升
         if rust_hash_changed:
             rust_built = 1
         elif c_hash_changed:
@@ -231,7 +219,6 @@ if os.environ.get("DAEMON_VERSION") and os.environ.get("DAEMON_CODE") and os.env
         "channel": channel,
         "baseUrl": base,
     }
-    # inherit / write hashes
     for name in names:
         if name in next_hashes:
             man[name] = next_hashes[name]
@@ -241,53 +228,43 @@ if os.environ.get("DAEMON_VERSION") and os.environ.get("DAEMON_CODE") and os.env
             man[f"{name}Url"] = prev_man.get(f"{name}Url") or f"{base}/{name}"
         if name in man and f"{name}Url" not in man:
             man[f"{name}Url"] = f"{base}/{name}"
-    write(man_path, man)
+    write(qscd / "manifest.json", man)
     print(
         "updates: wrote daemon",
         f"tip={tip_ver}/{top_code}",
         f"rust={rust_ver}/{rust_code}(built={rust_built})",
         f"c={c_ver}/{c_code}(built={c_built})",
     )
-elif man:
-    # backfill dual codes for old tips
-    if "rustVersionCode" not in man and "versionCode" in man:
-        man["rustVersionCode"] = as_int(man.get("versionCode"))
-        man["rustVersion"] = man.get("version") or ""
-    if "cVersionCode" not in man and "versionCode" in man:
-        man["cVersionCode"] = as_int(man.get("versionCode"))
-        man["cVersion"] = man.get("version") or ""
-    write(man_path, man)
-    print("updates: keep daemon", man.get("versionCode"))
 
-# per-component state for CI
+# state：只写本产品补丁键；git-push-tree 与 tip 合并
 if channel == "ci":
-    state = load(ch / "state.json") or {"channel": channel}
-    state["channel"] = channel
     sha = os.environ.get("SOURCE_SHA") or ""
     key = os.environ.get("STATE_KEY") or ""
+    patch = {"channel": channel}
     if sha:
-        state["sourceSha"] = sha
+        patch["sourceSha"] = sha
         if key == "module":
-            state["moduleSourceSha"] = sha
+            patch["moduleSourceSha"] = sha
         elif key == "app":
-            state["appSourceSha"] = sha
+            patch["appSourceSha"] = sha
         elif key == "daemon":
-            state["daemonSourceSha"] = sha
-    write(ch / "state.json", state)
+            patch["daemonSourceSha"] = sha
+    write(ch / "state.json", patch)
 
-readme = stage / "README.md"
-readme.write_text(
-    "# updates\n\n"
-    "APP / WebUI update **metadata only** (`stable` / `prerelease` / `ci`).\n\n"
-    "- Magisk / KSU / APatch still use **GitHub Pages** `update.json`.\n"
-    "- CI binaries live on **`ci-dist`** (`module/` / `app/` / `qscd/`); "
-    "prerelease packages on GitHub Releases; "
-    "stable package URLs usually point at Pages.\n"
-    "- Daemon manifest carries **rustVersionCode** / **cVersionCode** so each "
-    "implementation can update independently.\n"
-    "- Each product workflow updates only its JSON and pushes a normal commit.\n",
-    encoding="utf-8",
-)
+# README 仅在 tip 缺失时补，避免无谓改动
+if not (old / "README.md").is_file():
+    (stage / "README.md").write_text(
+        "# updates\n\n"
+        "APP / WebUI update **metadata only** (`stable` / `prerelease` / `ci`).\n\n"
+        "- Magisk / KSU / APatch still use **GitHub Pages** `update.json`.\n"
+        "- CI binaries live on **`ci-dist`** (`module/` / `app/` / `qscd/`); "
+        "prerelease packages on GitHub Releases; "
+        "stable package URLs usually point at Pages.\n"
+        "- Daemon manifest carries **rustVersionCode** / **cVersionCode** so each "
+        "implementation can update independently.\n"
+        "- Each product workflow updates only its JSON and pushes a normal commit.\n",
+        encoding="utf-8",
+    )
 PY
 
 tooling/scripts/git-push-tree.sh updates "$STAGE" \

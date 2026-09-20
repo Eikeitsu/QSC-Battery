@@ -137,7 +137,13 @@ class QscXposedModule : XposedModule() {
             if (n > 0) xpLog(Log.DEBUG, "setState hooked $className x$n")
             n
         }.getOrElse {
-            xpLog(Log.DEBUG, "setState skip $className: ${it.message}")
+            // 新系统 ActivityRecord 在 wm，am 路径必缺；只记短句，避免 ClassNotFound 带整段 DexPathList
+            val short = when {
+                it is ClassNotFoundException || it.message?.contains("Didn't find class") == true ->
+                    "class missing (ok on modern Android)"
+                else -> it.message?.take(120) ?: it.javaClass.simpleName
+            }
+            xpLog(Log.DEBUG, "setState skip $className: $short")
             0
         }
     }
@@ -182,7 +188,12 @@ class QscXposedModule : XposedModule() {
             if (n > 0) xpLog(Log.DEBUG, "setResumedActivityUncheckLocked hooked $className x$n")
             n
         }.getOrElse {
-            xpLog(Log.DEBUG, "setResumedActivityUncheckLocked skip $className: ${it.message}")
+            val short = when {
+                it is ClassNotFoundException || it.message?.contains("Didn't find class") == true ->
+                    "class missing"
+                else -> it.message?.take(120) ?: it.javaClass.simpleName
+            }
+            xpLog(Log.DEBUG, "setResumedActivityUncheckLocked skip $className: $short")
             0
         }
     }
