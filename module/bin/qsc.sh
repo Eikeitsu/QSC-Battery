@@ -34,6 +34,7 @@ QSC-Battery CLI
   stats                       省电证据：service_power_stats / 驻停总结
   diagnose         (diag)     诊断 → /sdcard/qsc_diagnose.txt
   diagnostic on|off|status    开关 data/diagnostic_on（省电统计）
+  debug on|off|status         开关 data/debug_on（详细排障日志，约 2s 生效）
   test-switch      (test)     开关可逆测试（需插电）
   detect                      重新探测设备档案
   daemon <子命令...>          转交 qscd_fetch（status|check|install|use|remove）
@@ -47,6 +48,7 @@ QSC-Battery CLI
   /data/adb/qsc/bin/qsc cfg set power_stop 80
   /data/adb/qsc/bin/qsc stats
   /data/adb/qsc/bin/qsc diagnostic on
+  /data/adb/qsc/bin/qsc debug on
 EOF
 }
 
@@ -118,6 +120,33 @@ qsc_cli_diagnostic() {
 			;;
 		*)
 			echo "用法: diagnostic on|off|status" >&2
+			return 2
+			;;
+	esac
+}
+
+qsc_cli_debug() {
+	local sub="${1:-status}"
+	mkdir -p "$DATADIR" 2>/dev/null
+	case "$sub" in
+		on|1|enable)
+			: >"$DATADIR/debug_on"
+			# 清进程内缓存提示：下一轮热路径约 2s 内重读文件
+			echo "已开启 debug_on（详细排障写入 log.log；约 2s 内生效；测完请 off）"
+			;;
+		off|0|disable)
+			rm -f "$DATADIR/debug_on"
+			echo "已关闭 debug_on"
+			;;
+		status|st|"")
+			if [ -f "$DATADIR/debug_on" ]; then
+				echo "debug_on: 开"
+			else
+				echo "debug_on: 关"
+			fi
+			;;
+		*)
+			echo "用法: debug on|off|status" >&2
 			return 2
 			;;
 	esac
@@ -330,6 +359,9 @@ case "$cmd" in
 		;;
 	diagnostic|diagnostics)
 		qsc_cli_diagnostic "${1:-status}"
+		;;
+	debug|dbg)
+		qsc_cli_debug "${1:-status}"
 		;;
 	test-switch|test_switch|test)
 		[ -f "$BINDIR/test_switch.sh" ] || {

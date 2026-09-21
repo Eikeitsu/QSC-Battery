@@ -22,18 +22,6 @@ fi
 if [ "$charge_eval" = "1" ] && [ "$battery_status_data" != "1" ]; then
 	qsc_log_once st_odd debug "插电但 status=${battery_status:-?}（非充电中），仍按供电评估停充"
 fi
-if qsc_debug_enabled; then
-	_dbg_online=""
-	_dbg_present=""
-	_dbg_type=""
-	_dbg_vbus=""
-	qsc_read_node "$PSDIR/usb/online" && _dbg_online="$QSC_NODE_VAL"
-	qsc_read_node "$PSDIR/usb/present" && _dbg_present="$QSC_NODE_VAL"
-	qsc_read_node "$PSDIR/usb/type" && _dbg_type="$QSC_NODE_VAL"
-	qsc_read_node "$PSDIR/usb/voltage_now" && _dbg_vbus="$QSC_NODE_VAL"
-	qsc_log_once mca_decision debug \
-		"停充评估：level=$battery_level stop=$power_stop status=$battery_status raw_status=${_sf_status:-?} powered=$([ -n "$battery_powered" ] && echo 1 || echo 0) eval=$charge_eval switch=$([ -f "$DATADIR/power_switch" ] && echo 1 || echo 0) mca=$(qsc_profile_get mca 2>/dev/null) mca_path=$(qsc_profile_get mca_path 2>/dev/null) usb_online=${_dbg_online:-?} usb_present=${_dbg_present:-?} usb_type=${_dbg_type:-?} usb_vbus=${_dbg_vbus:-?}"
-fi
 
 # 按 App 停充命中。前台检测走统一总线（XP 优先）；进程检测仍可能用 ps/qscd pkgs。
 # 有缓存窗口，避免主循环每轮都打。
@@ -69,9 +57,30 @@ elif [ "$app_stop" != "1" ]; then
 		"$DATADIR/app_stop_sess.enter_at" 2>/dev/null
 fi
 
+if qsc_debug_enabled; then
+	_dbg_online=""
+	_dbg_present=""
+	_dbg_type=""
+	_dbg_vbus=""
+	_dbg_cur=""
+	_dbg_charger=""
+	qsc_read_node "$PSDIR/usb/online" && _dbg_online="$QSC_NODE_VAL"
+	qsc_read_node "$PSDIR/usb/present" && _dbg_present="$QSC_NODE_VAL"
+	qsc_read_node "$PSDIR/usb/type" && _dbg_type="$QSC_NODE_VAL"
+	qsc_read_node "$PSDIR/usb/voltage_now" && _dbg_vbus="$QSC_NODE_VAL"
+	qsc_read_node "$PSDIR/battery/current_now" && _dbg_cur="$QSC_NODE_VAL"
+	qsc_read_node "$PSDIR/charger/online" && _dbg_charger="$QSC_NODE_VAL"
+	qsc_dbg "停充评估：level=$battery_level stop=$power_stop start=$power_start status=$battery_status raw_status=${_sf_status:-?} powered=$([ -n "$battery_powered" ] && echo 1 || echo 0) eval=$charge_eval switch=$([ -f "$DATADIR/power_switch" ] && echo 1 || echo 0) mca=$(qsc_profile_get mca 2>/dev/null) mca_path=$(qsc_profile_get mca_path 2>/dev/null) mca_ineff=$([ -f "$DATADIR/mca_ineffective" ] && echo 1 || echo 0) usb_online=${_dbg_online:-?} usb_present=${_dbg_present:-?} usb_type=${_dbg_type:-?} usb_vbus=${_dbg_vbus:-?} charger_online=${_dbg_charger:-?} current=${_dbg_cur:-?} app_hit=$app_stop_hit wireless_skip=$wireless_skip"
+fi
+
 if [ "$charge_eval" = "1" ]; then
 	if type qsc_trim_file_lines >/dev/null 2>&1; then
-		qsc_trim_file_lines "$LOG_FILE" 400 300
+		if qsc_debug_enabled; then
+			# 排障时保留更长窗口，避免关键判定被裁掉
+			qsc_trim_file_lines "$LOG_FILE" 2000 1500
+		else
+			qsc_trim_file_lines "$LOG_FILE" 400 300
+		fi
 	elif [ -f "$LOG_FILE" ]; then
 		log_n="$(wc -l <"$LOG_FILE" 2>/dev/null | tr -d ' ')"
 		case "$log_n" in ""|*[!0-9]*) log_n=0 ;; esac
@@ -93,15 +102,22 @@ if [ "$charge_eval" = "1" ]; then
 				if [ "$full_log" = "0" ]; then
 					switch_stop_mode=1
 					battery_stop_reason=1
+					qsc_dbg "触发电量停充：level=$battery_level ≥ stop=$power_stop full_ok=1"
+				else
+					qsc_dbg "电量已达停充点但充满再停未满足：level=$battery_level mode=$charge_full_mode"
 				fi
+			else
+				qsc_dbg "电量达停充点但时段未激活：level=$battery_level"
 			fi
 		fi
 		if [ "$app_stop_hit" = "1" ]; then
 			switch_stop_mode=1
 			touch "$DATADIR/app_stop_flag"
+			qsc_dbg "触发 App 停充"
 		fi
 	fi
 	if [ "$switch_stop_mode" = "1" -o "$cpu_log" = "1" ]; then
+		qsc_dbg "进入停充分支：stop_mode=$switch_stop_mode temp=$cpu_log first=$([ -f "$DATADIR/power_switch" ] && echo 0 || echo 1)"
 		first_stop=0
 		if [ ! -f "$DATADIR/power_switch" ]; then
 			first_stop=1
@@ -222,6 +238,7 @@ else
 	fi
 	if [ "$unplug_ok" = "1" ]; then
 		rm -f "$DATADIR/unplug_streak" 2>/dev/null
+		qsc_dbg "拔线确认：unplug_restore=$unplug_restore"
 		if [ "$unplug_restore" = "0" ]; then
 			# 不清 power_switch / 不还原节点：再插上仍保持停充直到恢复阈值
 			qsc_log info "已拔出充电器，保留停充状态（未还原节点）"

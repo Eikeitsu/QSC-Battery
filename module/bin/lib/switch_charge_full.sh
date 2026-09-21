@@ -25,6 +25,9 @@ qsc_charge_full() {
 				if [ "$now_current_n" -ge "3" ]; then
 					_cur_ok=1
 				fi
+				qsc_dbg "涓流·电流：|I|=$now_current samples=$now_current_n cur_ok=$_cur_ok（需≥3次且<100mA）"
+			else
+				qsc_dbg "涓流·电流：current_now 不可读"
 			fi
 		else
 			rm -f "$DATADIR/now_c"
@@ -45,6 +48,7 @@ qsc_charge_full() {
 			if [ "$_elapsed" -ge "$charge_full_wait_sec" ] 2>/dev/null; then
 				_time_ok=1
 			fi
+			qsc_dbg "涓流·时间：elapsed=$_elapsed need=$charge_full_wait_sec time_ok=$_time_ok"
 		else
 			rm -f "$DATADIR/charge_full_since"
 		fi
@@ -64,6 +68,9 @@ qsc_charge_full() {
 		if [ "$full_log" = "0" ]; then
 			rm -f "$DATADIR/now_c" "$DATADIR/charge_full_since"
 			qsc_log debug "电量$battery_level 充满再停·条件满足 mode=$charge_full_mode"
+			qsc_dbg "涓流·通过 mode=$charge_full_mode cur_ok=$_cur_ok time_ok=$_time_ok"
+		else
+			qsc_dbg "涓流·未满足 mode=$charge_full_mode cur_ok=$_cur_ok time_ok=$_time_ok"
 		fi
 	else
 		rm -f "$DATADIR/charge_full_since"

@@ -2,6 +2,7 @@ package com.qsc.battery.ui.more
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.qsc.battery.core.ModulePaths
 import com.qsc.battery.core.PermStatus
 import com.qsc.battery.core.PermissionChecker
 import com.qsc.battery.data.AppContainer
@@ -15,6 +16,7 @@ import kotlinx.coroutines.launch
 data class MoreUiState(
     val permHint: String = "",
     val xpStatus: XpRuntime.Status? = null,
+    val debugOn: Boolean = false,
 )
 
 class MoreViewModel(
@@ -29,6 +31,7 @@ class MoreViewModel(
             val st = container.statusRepository.load()
             val snap = checker.snapshot(st.modulePresent, container.root)
             val xp = XpRuntime.probe(container.appContext, container.root)
+            val debugOn = container.root.exists(ModulePaths.DEBUG_ON)
             val hint = buildString {
                 append(if (snap.root == PermStatus.Ok) "Root ✓  " else "Root ✗  ")
                 append(if (snap.modulePresent) "模块 ✓  " else "模块 ✗  ")
@@ -43,7 +46,20 @@ class MoreViewModel(
                     },
                 )
             }
-            _ui.update { it.copy(permHint = hint, xpStatus = xp) }
+            _ui.update { it.copy(permHint = hint, xpStatus = xp, debugOn = debugOn) }
+        }
+    }
+
+    fun setDebugOn(enabled: Boolean) {
+        viewModelScope.launch {
+            val ok = if (enabled) {
+                container.root.touch(ModulePaths.DEBUG_ON)
+            } else {
+                container.root.rm(ModulePaths.DEBUG_ON)
+            }
+            if (ok) {
+                _ui.update { it.copy(debugOn = enabled) }
+            }
         }
     }
 

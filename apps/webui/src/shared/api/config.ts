@@ -393,3 +393,18 @@ export async function clearSwitchCache(): Promise<boolean> {
   );
   return result.stdout.trim() === "1";
 }
+
+/** 详细排障日志：data/debug_on，模块约 2s 内实时生效 */
+export async function isDebugOn(): Promise<boolean> {
+  const result = await exec(`[ -f '${PATHS.DEBUG_ON}' ] && echo 1 || echo 0`);
+  return result.stdout.trim() === "1";
+}
+
+export async function setDebugOn(enabled: boolean): Promise<boolean> {
+  const result = await exec(
+    enabled
+      ? `mkdir -p '${PATHS.DATADIR}' 2>/dev/null; : >'${PATHS.DEBUG_ON}' 2>/dev/null; [ -f '${PATHS.DEBUG_ON}' ] && echo 1 || echo 0`
+      : `rm -f '${PATHS.DEBUG_ON}' 2>/dev/null; [ ! -f '${PATHS.DEBUG_ON}' ] && echo 1 || echo 0`,
+  );
+  return result.stdout.trim() === "1";
+}

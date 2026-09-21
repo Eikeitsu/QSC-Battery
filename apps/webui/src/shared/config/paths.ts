@@ -15,6 +15,7 @@ export const PATHS = {
   TEST_SWITCH_BG: `${ROOT}/bin/test_switch_bg.sh`,
   DATADIR: `${ROOT}/data`,
   CONF_RELOAD_REQ: `${ROOT}/data/conf_reload_req`,
+  DEBUG_ON: `${ROOT}/data/debug_on`,
   MODULE_OFF_FLAG: `${ROOT}/data/module_off`,
   LOG_FILE: `${ROOT}/data/log.log`,
   LIST_SWITCH: `${ROOT}/data/list_switch`,

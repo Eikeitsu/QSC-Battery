@@ -5,20 +5,38 @@
 # 免得有人直接 source 某个 lib 时把路径拼成 /battery/capacity 这种废路径
 PSDIR="${PSDIR:-/sys/class/power_supply}"
 
-# 调试开关：每个进程只判定一次（主循环每轮会问 9 次）
+# 调试开关：看 data/debug_on（或 QSC_DEBUG=1），约 2s 缓存以便热路径少 stat，
+# 仍可随开随关（进程生命周期不再永久缓存）。
 qsc_debug_enabled() {
-	if [ -z "$QSC_DEBUG_ON" ]; then
-		if [ "${QSC_DEBUG:-0}" = "1" ] || [ -f "$DATADIR/debug_on" ]; then
-			QSC_DEBUG_ON=1
-		else
-			QSC_DEBUG_ON=0
-		fi
+	local now=0 up rest
+	if [ -n "${QSC_PS_NOW:-}" ] && [ "$QSC_PS_NOW" -gt 0 ] 2>/dev/null; then
+		now="$QSC_PS_NOW"
+	elif IFS=' ' read -r up rest </proc/uptime 2>/dev/null; then
+		now="${up%%.*}"
+	fi
+	case "$now" in ""|*[!0-9]*) now=0 ;; esac
+	if [ -n "${QSC_DEBUG_CACHE_AT:-}" ] && [ "$now" -gt 0 ] &&
+		[ $((now - QSC_DEBUG_CACHE_AT)) -lt 2 ] 2>/dev/null; then
+		[ "${QSC_DEBUG_ON:-0}" = "1" ]
+		return $?
+	fi
+	QSC_DEBUG_CACHE_AT="$now"
+	if [ "${QSC_DEBUG:-0}" = "1" ] || [ -f "$DATADIR/debug_on" ]; then
+		QSC_DEBUG_ON=1
+	else
+		QSC_DEBUG_ON=0
 	fi
 	[ "$QSC_DEBUG_ON" = "1" ]
 }
 
+# 详细排障日志：仅 debug_on 时写入 log.log；可每轮刷屏，勿用 log_once。
+qsc_dbg() {
+	qsc_debug_enabled || return 0
+	qsc_log debug "$@"
+}
+
 # 默认不写盘：主循环每轮 9 次步进日志会带来数十万次/天的小写入。
-# 需要排障时 touch data/debug_on（或 export QSC_DEBUG=1）。
+# 需要排障时 touch data/debug_on（或 export QSC_DEBUG=1 / App·WebUI 开关）。
 qsc_debug_step() {
 	qsc_debug_enabled || return 0
 	echo "$(date +%F_%T) step$1" >> "$DATADIR/debug.log"

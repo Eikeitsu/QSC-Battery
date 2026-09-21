@@ -4,6 +4,7 @@
 
 ### 新增
 
+- **详细调试日志开关**：App「我的 → 排障」、WebUI「测开关与缓存」、CLI `qsc debug on|off`；写 `data/debug_on`，约 2 秒内随开随关。开启后 `log.log` 记录插电判定、停充评估、节点写入/复核、假停充自愈、涓流电流与时间、电流控制、qscd 等待/唤醒等；默认关闭不影响日常。
 - **分级省电策略**（`config/power.conf`）：档位均衡/强力/自定义；息屏加强、夜间时段、深睡 DeepPark；未插电事件驱动驻停，插拔仍即时响应（非绝对零耗电）。WebUI「省电策略」、APP「进阶 → 省电策略」。
 - **配置拆分**：省电键迁入 `power.conf`，通知迁入 `notify.conf`；旧 `config.conf` 启动时自动迁移。
 - **停充维持 × 息屏/夜间**：非 MCA 息屏约 180s、夜间/深睡约 300s；MCA 仍按 `loop_interval_maintain_sec` 重申。
@@ -16,7 +17,7 @@
 - **无 XP / XP 异常回退**：`alive` 缺失、软关、或与 dumpsys 连续不一致时写 `xp_fg_unreliable`，简介与认前台改 dumpsys/进程路径；边沿恢复后自动切回 XP。漏边沿时 dumpsys 安全网仍能发现管理器。
 - **省电诊断统计**：`touch data/diagnostic_on` 后按心跳写出 `service_power_stats` 与日志「省电统计」（skip/均睡/简介写盘/未插电 %/h）；默认关闭，避免调试本身耗电。
 - **策略边沿日志与驻停总结**：进入/退出息屏·夜间·深睡写 INFO；同段重合不重复结算；退出时总结唤醒次数、均睡、skip，并给出「接近少唤醒 / 偏勤」评判。管理器前台进出、配置热重载亦有日志。息屏加强须连续息屏约 90s 才进档；不足约 3 分钟的短驻停不写总结，减轻亮灭闪动刷屏。
-- **CLI**：`help` 汇总命令；缩写 `st`/`cfg`/`diag`/`test`/`ver`；`stats` 看省电证据；`diagnostic on|off`；未知命令提示相近指令。
+- **CLI**：`help` 汇总命令；缩写 `st`/`cfg`/`diag`/`test`/`ver`；`stats` 看省电证据；`diagnostic on|off`；`debug on|off`；未知命令提示相近指令。
 - **用户文档**：功能/配置/WebUI/APP/FAQ/首页对齐分级省电与多 conf；顶栏增加「常见问题」。
 
 ### 优化
@@ -29,6 +30,7 @@
 
 ### 修复
 
+- **K60U（MTK，通用节点）停充回归**：非 MCA；盲写后以电流复核，失败则逐节点 `verify` 回滚无效项；用户开关同样校验；preferred 写入后电流仍高则继续试列表；保留假停充自愈；插电判定增加 `charger/online` 与「Not charging/Charging + |I|≥150mA」旁证。真 MCA 机仍走专用路径硬复核。
 - **XP 前台门禁与分级**：Magisk 同步 `qsc_xp_fg_policy`；简介/游戏限流/App 停充全关时 XP 不写前台盘（`qsc_xp_fg_idle` 热路径快判）。仅简介→只处理管理器且**不写** `qsc_xp_fg`（只要 viewer）；游戏/停充→列表包（离开再写一次）。**未插电时游戏/停充不纳入 XP**。非详细日志下 DEBUG 不进 logcat。
 - **CI 通道检测版本落后于 Actions**：`publish-updates` / `publish-ci-dist` 曾把整份 tip 拷进 STAGE 再推送，并发的 App/守护发布会把模块元数据回滚（如远端已是 `.ci.315` 却检测到 `.ci.314`）。改为只推送本产品文件，`state.json` 与 tip 合并。
 - （继承）充满拔线后 uevent 乱叫醒、停充持锁间隔等，见 2026.09.18。

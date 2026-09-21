@@ -1,11 +1,34 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 import { showConfirmDialog, showToast, showSuccessToast } from "vant";
 import SectionHead from "@/shared/ui/SectionHead.vue";
+import SwitchCell from "@/shared/ui/SwitchCell.vue";
 import ThemedCard from "@/shared/ui/ThemedCard.vue";
 import * as api from "@/shared/api";
 
 const testing = ref(false);
+const debugOn = ref(false);
+const debugBusy = ref(false);
+
+async function refreshDebug() {
+  debugOn.value = await api.isDebugOn();
+}
+
+async function onDebugToggle(v: boolean) {
+  debugBusy.value = true;
+  try {
+    const ok = await api.setDebugOn(v);
+    if (ok) {
+      debugOn.value = v;
+      showToast(v ? "已开详细调试日志" : "已关详细调试日志");
+    } else {
+      showToast("切换失败");
+      await refreshDebug();
+    }
+  } finally {
+    debugBusy.value = false;
+  }
+}
 
 async function onClearCache() {
   try {
@@ -56,11 +79,22 @@ async function onTestSwitch(full: boolean) {
     testing.value = false;
   }
 }
+
+onMounted(() => {
+  void refreshDebug();
+});
 </script>
 
 <template>
   <SectionHead title="测开关与缓存" hint="排障用；日常用上方首选开关即可" />
   <ThemedCard>
+    <SwitchCell
+      title="详细调试日志"
+      label="插电/停充/涓流/电流/qscd 等写入 log.log；随开随关"
+      :model-value="debugOn"
+      :disabled="debugBusy"
+      @update:model-value="onDebugToggle"
+    />
     <van-cell
       title="快速测开关"
       label="插电 · 约 12 条候选"

@@ -78,8 +78,13 @@ qsc_mca_write() {
 	fi
 
 	if [ "$label" = "stop" ]; then
-		# 写成功即认；电流复核仅打日志，不拉黑 MCA
-		qsc_mca_stop_verify || true
+		# 硬复核：写入成功 ≠ 真停充（K60U 假 MCA / 延迟生效）
+		if ! qsc_mca_stop_verify; then
+			qsc_mca_mark_ineffective "$path"
+			stop_ok=0
+			qsc_dbg "MCA stop 复核失败 path=$path，改试其它节点"
+			return 1
+		fi
 		QSC_MCA=1
 		QSC_MCA_PATH="$path"
 		QSC_MCA_STOP=1
@@ -91,6 +96,9 @@ qsc_mca_write() {
 		log_log=1
 		stop_ok=1
 		qsc_save_active_switch "${path},start=0,stop=1"
+		rm -f "$DATADIR/mca_ineffective" 2>/dev/null
+		qsc_log_once_clear mca_ineffective 2>/dev/null || true
+		qsc_dbg "MCA stop 成功 path=$path"
 	else
 		QSC_MCA=1
 		QSC_MCA_PATH="$path"
@@ -103,6 +111,7 @@ qsc_mca_write() {
 		start_val="$val"
 		log_log2=1
 		start_ok=1
+		qsc_dbg "MCA start 成功 path=$path"
 	fi
 	return 0
 }
@@ -136,39 +145,69 @@ qsc_pref_write() {
 qsc_power_stop() {
 	stop_ok=0
 	stop_nodes=""
-	local _batch
+	local _batch _vd
 	qsc_load_device_profile 2>/dev/null || true
 	_batch="${QSCV_switch_batch_blind:-}"
 	[ -n "$_batch" ] ||
 		_batch="$(echo "${config_conf:-}" | egrep '^switch_batch_blind=' | sed -n 's/switch_batch_blind=//g;$p')"
 	_batch="$(qsc_clamp_int "${_batch:-1}" 0 1 1)"
-	# MCA 最先：直接 echo 1，不走全量列表（小米17/K90）
+	qsc_dbg "power_stop 开始 batch=$_batch mca=${QSC_MCA:-?} mca_path=${QSC_MCA_PATH:-?} skip_mca=$([ -f "$DATADIR/mca_ineffective" ] && echo 1 || echo 0)"
+	# MCA 最先：直接 echo 1，不走全量列表（小米17/K90）；K60U 等非 MCA 不会进此路径
 	if qsc_mca_write stop; then
+		qsc_dbg "power_stop：MCA 路径成功 [$stop_nodes]"
 		return
 	fi
 	if qsc_pref_write stop; then
-		return
+		# preferred：测开关认定有效；仍用电流软确认，失败则继续试列表
+		_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
+		_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
+		[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
+		if qsc_charge_looks_stopped; then
+			qsc_dbg "power_stop：preferred 成功且电流已停 [$stop_nodes]"
+			return
+		fi
+		qsc_dbg "power_stop：preferred 写入后电流仍高，继续试列表"
+		stop_ok=0
+		stop_nodes=""
+		qsc_clear_active_switch
 	fi
 	if [ -n "$QSC_USER_SWITCHES" ]; then
-		# 用户显式配置：写入成功即认（允许策略类节点）
-		qsc_write_switch_list stop "$QSC_USER_SWITCHES" first 1
+		# 用户显式配置：写入后校验（允许策略类节点）
+		qsc_write_switch_list stop "$QSC_USER_SWITCHES" verify 1
 		if [ "$stop_ok" = "1" ]; then
 			stop_nodes="$stop_nodes (user)"
+			qsc_dbg "power_stop：用户开关成功 [$stop_nodes]"
 			return
 		fi
 	fi
 	if [ "$_batch" = "1" ]; then
-		# 全量盲写：存在的节点尽量都写一遍，不做电流硬回滚
+		# 全量盲写（小米等需多节点同时压住）；非 MCA 再做电流复核
 		qsc_write_switch_list stop "$switch_list"
+		if [ "$stop_ok" = "1" ] && ! qsc_device_is_mca; then
+			_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
+			_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
+			[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
+			if ! qsc_charge_looks_stopped; then
+				qsc_log_once batch_fake warn \
+					"盲写后电流仍高（通用节点机型），改逐节点校验"
+				qsc_dbg "power_stop：盲写假成功，回退 verify"
+				stop_ok=0
+				stop_nodes=""
+				qsc_clear_active_switch
+				qsc_write_switch_list stop "$switch_list" verify
+			fi
+		fi
 	else
-		# 优化：只认首个写入成功的节点，后续靠 active_switch 重申
-		qsc_write_switch_list stop "$switch_list" first
+		# 对齐 0814/K60U：逐节点写入后电流校验，无效则回滚并试下一条
+		qsc_write_switch_list stop "$switch_list" verify
 	fi
 	if [ "$stop_ok" = "1" ]; then
+		qsc_dbg "power_stop：列表成功 batch=$_batch [$stop_nodes]"
 		return
 	fi
 	# 末位兜底：电流墙 / 端口 suspend（仍做校验，避免误伤快充协商）
 	qsc_write_switch_list stop "$QSC_LAST_RESORT_SWITCHES" verify
+	qsc_dbg "power_stop：末位兜底 stop_ok=$stop_ok [$stop_nodes]"
 }
 
 qsc_power_start() {

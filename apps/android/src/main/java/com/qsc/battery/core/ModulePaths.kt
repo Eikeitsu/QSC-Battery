@@ -13,6 +13,9 @@ object ModulePaths {
 
     /** App/WebUI 保存配置后 touch；服务 lean 醒时强制重载 conf */
     const val CONF_RELOAD_REQ = "$DATADIR/conf_reload_req"
+
+    /** 详细排障日志开关；模块侧约 2s 内实时生效 */
+    const val DEBUG_ON = "$DATADIR/debug_on"
     const val LOG_FILE = "$DATADIR/log.log"
     const val CHARGE_EVENTS = "$DATADIR/charge_events.log"
     const val CHARGE_HISTORY = "$DATADIR/charge_history.csv"

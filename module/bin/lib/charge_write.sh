@@ -134,26 +134,31 @@ qsc_write_switch_list() {
 				qsc_write_node "$route" "$val" && _wrote=1
 			fi
 			if [ "$_wrote" = "1" ]; then
-				if [ "$first_only" = "verify" ]; then
+				# MCA 名节点：即使盲写也硬复核（真 MCA 无效则改试通用节点）
+				if [ "$_is_mca" = "1" ]; then
+					if ! qsc_mca_stop_verify; then
+						qsc_mca_mark_ineffective "$route"
+						qsc_dbg "列表 MCA 名节点写入后未停充，跳过 $route"
+						continue
+					fi
+				elif [ "$first_only" = "verify" ]; then
+					# 通用节点：写入后电流校验（K60U 等 MTK 机型关键）
 					_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
 					_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
-					if [ "$_is_mca" = "1" ]; then
-						# MCA：不 chmod 回滚；写成功即认（电流仅软日志）
-						qsc_mca_stop_verify || true
-					else
-						[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
-						if ! qsc_charge_looks_stopped; then
-							start_val="$(echo "$i" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
-							qsc_write_node "$route" "$start_val" 2>/dev/null || true
-							qsc_log_once "sw_ineff_${route##*/}" warn "节点写入成功但未停充，已跳过 $route"
-							continue
-						fi
+					[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
+					if ! qsc_charge_looks_stopped; then
+						start_val="$(echo "$i" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
+						qsc_write_node "$route" "$start_val" 2>/dev/null || true
+						qsc_log_once "sw_ineff_${route##*/}" warn "节点写入成功但未停充，已跳过 $route"
+						qsc_dbg "列表节点 verify 失败已回滚 $route"
+						continue
 					fi
 				fi
 				stop_nodes="$stop_nodes $route=$val"
 				[ "$_is_mca" = "1" ] && stop_nodes="$stop_nodes (MCA)"
 				log_log=1
 				stop_ok=1
+				qsc_dbg "停充写入成功 route=$route val=$val mca=$_is_mca mode=$first_only"
 				qsc_save_active_switch "$i"
 				if [ "$_is_mca" = "1" ] && type qsc_write_device_profile >/dev/null 2>&1; then
 					qsc_write_device_profile "$route" >/dev/null 2>&1 || true
@@ -194,8 +199,8 @@ qsc_clear_active_switch() {
 }
 
 # 粗判是否已停充（供 verify）。
-# MCA/K60U 等机型插电充电时 status 也可能长期报 Not charging，不能单信 status；
-# 电流明显偏大时一律视为仍在充，避免「写成功但假停充」。
+# 部分机型（MCA / K60U 等 MTK）插电充电时 status 也可能长期报 Not charging，
+# 不能单信 status；电流明显偏大时一律视为仍在充，避免「写成功但假停充」。
 qsc_charge_looks_stopped() {
 	local st cur
 	cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
@@ -219,26 +224,41 @@ qsc_charge_looks_stopped() {
 	return 1
 }
 
-# MCA 停充复核：仅作日志；不因短暂大电流判失败（写成功即认）
+# MCA 停充复核：允许短暂延迟；仍大电流则视为本机 MCA 无效（对齐 K60U 修复）
 qsc_mca_stop_verify() {
-	local _vd
+	local _vd _cur _st
 	_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
 	_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
 	[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
+	_cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
+	_st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
 	if qsc_charge_looks_stopped; then
+		qsc_dbg "MCA verify OK cur=${_cur:-?} status=${_st:-?}"
 		return 0
 	fi
-	qsc_log_once mca_verify_soft debug "MCA 写入后瞬时仍显示充电中（常见，保持停充写入）"
-	return 0
+	# K90 等偶发延迟生效：再等 1s
+	sleep 1
+	_cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
+	_st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
+	if qsc_charge_looks_stopped; then
+		qsc_dbg "MCA verify OK after retry cur=${_cur:-?} status=${_st:-?}"
+		return 0
+	fi
+	qsc_dbg "MCA verify FAIL cur=${_cur:-?} status=${_st:-?}（仍像在充）"
+	return 1
 }
 
 qsc_mca_mark_ineffective() {
-	# 保留空实现兼容旧调用；不再因单次电流样本拉黑 MCA
-	:
+	local why="${1:-电流仍高}"
+	mkdir -p "$DATADIR" 2>/dev/null
+	touch "$DATADIR/mca_ineffective" 2>/dev/null
+	qsc_log_once mca_ineffective warn \
+		"MCA 写入成功但未真正停充（${why}），本启动周期改试其它节点"
+	qsc_dbg "已标记 mca_ineffective why=$why"
 }
 
 qsc_mca_skip_stop() {
-	return 1
+	[ -f "$DATADIR/mca_ineffective" ]
 }
 
 # 仅重写 data/active_switch；MCA 节点不加 chmod
@@ -367,25 +387,52 @@ qsc_device_is_mca() {
 
 # 插电且处于停充态：仅 MCA/preferred 持续重申（非 MCA 停充成功后不再写节点，避免小米 OS2 闪充）
 qsc_maintain_stop_while_plugged() {
-	local online _ts _now
+	local online _ts _now _cur _st
 	[ -f "$DATADIR/power_switch" ] || {
 		qsc_stop_wakelock_release
 		return 1
 	}
-	# 小米等停充后 dumpsys 可能短暂无 powered:true，改用 usb/online 判断仍插电
+	# 小米等停充后 dumpsys 可能短暂无 powered:true，改用 usb/online / 完整插电判定
 	if [ -z "$battery_powered" ]; then
 		for online in "$PSDIR/usb/online" "$PSDIR/qc_usb/online" \
-			"$PSDIR/wireless/online"; do
+			"$PSDIR/wireless/online" "$PSDIR/charger/online"; do
 			if [ -f "$online" ] && [ "$(cat "$online" 2>/dev/null | tr -d ' \r\n')" = "1" ]; then
 				battery_powered="powered: true"
+				qsc_dbg "maintain：online 兜底仍插电 $online"
 				break
 			fi
 		done
 	fi
+	if [ -z "$battery_powered" ] && type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged; then
+		battery_powered="powered: true"
+		qsc_dbg "maintain：qsc_ps_plugged 兜底仍插电"
+	fi
 	[ -n "$battery_powered" ] || {
+		qsc_dbg "maintain：判定已不插电，释放持锁"
 		qsc_stop_wakelock_release
 		return 1
 	}
+
+	# 假停充自愈：标记已超过数秒但电流仍大（通用节点盲写无效 / 假 MCA 遗留）
+	# → 清停充标记，让主循环重新走完整停充分支
+	_ts="$(cat "$DATADIR/power_stop_ts" 2>/dev/null | tr -d ' \r\n')"
+	_now="$(date +%s 2>/dev/null | tr -d ' \r\n')"
+	case "$_ts" in ""|*[!0-9]*) _ts=0 ;; esac
+	case "$_now" in ""|*[!0-9]*) _now=0 ;; esac
+	if [ "$_now" -gt 0 ] && [ "$_ts" -gt 0 ] && [ $((_now - _ts)) -ge 8 ]; then
+		_cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
+		_st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
+		if ! qsc_charge_looks_stopped; then
+			qsc_log_once fake_stop warn \
+				"假停充：已标记停充但电流仍高，清除标记并重试停充"
+			qsc_dbg "fake_stop 触发 age=$((_now - _ts))s cur=${_cur:-?} status=${_st:-?}"
+			rm -f "$DATADIR/power_switch" "$DATADIR/active_switch" \
+				"$DATADIR/power_on" "$DATADIR/power_off" 2>/dev/null
+			qsc_stop_wakelock_release
+			return 1
+		fi
+		qsc_dbg "maintain：停充态正常 age=$((_now - _ts))s cur=${_cur:-?} status=${_st:-?}"
+	fi
 
 	# 按场景决定持锁或释放（auto 亮屏会释放）
 	if ! qsc_stop_wakelock_acquire; then
@@ -394,15 +441,23 @@ qsc_maintain_stop_while_plugged() {
 	fi
 	# MCA：系统会改回 handle_state，必须每轮重申
 	if qsc_mca_write stop; then
+		qsc_dbg "maintain：MCA 重申成功"
 		return 0
 	fi
 	# preferred（测开关）或 active_switch：停充期间持续重申，防 OEM 改回
 	qsc_load_device_profile 2>/dev/null || true
 	if [ -n "$QSC_PREF_PATH" ] && [ -f "$QSC_PREF_PATH" ]; then
-		qsc_pref_write stop && return 0
+		if qsc_pref_write stop; then
+			qsc_dbg "maintain：preferred 重申成功 $QSC_PREF_PATH"
+			return 0
+		fi
 	fi
 	if [ -f "$DATADIR/active_switch" ]; then
-		qsc_reaffirm_active_stop && return 0
+		if qsc_reaffirm_active_stop; then
+			qsc_dbg "maintain：active_switch 重申成功"
+			return 0
+		fi
+		qsc_dbg "maintain：active_switch 重申失败"
 	fi
 	return 0
 }

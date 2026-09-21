@@ -22,9 +22,13 @@ QSC_PS_STAT_MA_SUM=0
 QSC_PS_STAT_MA_N=0
 
 # 仅在用户开启 debug_on 时落盘；默认路径不增加日志写入。
+# 签名与 qsc_log_once 相同（key level msg），但 debug 下每轮都打，便于排障。
 qsc_ps_dbg() {
 	qsc_debug_enabled || return 0
-	qsc_log_once "$@"
+	_qsc_ps_dbg_k="$1"
+	_qsc_ps_dbg_l="$2"
+	shift 2
+	qsc_log "$_qsc_ps_dbg_l" "[$_qsc_ps_dbg_k] $*"
 }
 
 qsc_ps_native_impl_label() {
@@ -60,7 +64,7 @@ qsc_ps_native_parse_stderr() {
 qsc_ps_log_native_wake() {
 	local wake="${QSC_PS_NATIVE_WAKE:-ok}"
 	local mode="${QSC_PS_NATIVE_MODE:-wait}"
-	local human="" msg _now _prev_at _prev_why
+	local human="" msg
 	case "$wake" in
 		event|ok) human="收到供电变化，开始检查" ;;
 		timeout) human="等待超时，按计划检查" ;;
@@ -68,19 +72,8 @@ qsc_ps_log_native_wake() {
 	esac
 	msg="${mode}: ${human}"
 	qsc_ps_record_wake "${mode}: ${wake}"
-	# 唤醒细节走 DEBUG，且做简单节流：同一原因连续刷时最多 30 秒写一条
-	qsc_debug_enabled || return 0
-	_now="$(date +%s 2>/dev/null)"
-	case "$_now" in ""|*[!0-9]*) _now=0 ;; esac
-	_prev_at="$(cat "$DATADIR/qscd_wake_log_at" 2>/dev/null | tr -d ' \r\n')"
-	_prev_why="$(cat "$DATADIR/qscd_wake_log_why" 2>/dev/null | tr -d '\r\n')"
-	case "$_prev_at" in ""|*[!0-9]*) _prev_at=0 ;; esac
-	if [ "$wake" = "$_prev_why" ] && [ "$((_now - _prev_at))" -lt 30 ] 2>/dev/null; then
-		return 0
-	fi
-	printf '%s\n' "$_now" >"$DATADIR/qscd_wake_log_at" 2>/dev/null
-	printf '%s\n' "$wake" >"$DATADIR/qscd_wake_log_why" 2>/dev/null
-	qsc_log debug "qscd ${msg}"
+	# 开启详细调试时每条唤醒都落盘（排障用；日常关 debug_on）
+	qsc_dbg "qscd 唤醒：$msg"
 }
 
 qsc_ps_record_wake() {

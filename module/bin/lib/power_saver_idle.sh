@@ -115,6 +115,7 @@ qsc_ps_native_exec() {
 qsc_ps_native_wait() {
 	local secs="$1" floor="$2" rc error_file
 	error_file="$DATADIR/qscd_wait_error.$$"
+	qsc_dbg "qscd wait 进入 secs=$secs floor=$floor watch=$([ -x "$BINDIR/qscd" ] && qsc_ps_watch_supported && echo 1 || echo 0) switch=$([ -f "$DATADIR/power_switch" ] && echo 1 || echo 0)"
 	if qsc_ps_watch_supported; then
 		QSC_PS_NATIVE_MODE=watch
 		# region agent log
@@ -174,6 +175,7 @@ qsc_ps_native_wait() {
 		qsc_ps_native_parse_stderr "$error_file"
 	fi
 	[ -n "$QSC_PS_NATIVE_ERROR" ] || QSC_PS_NATIVE_ERROR=wait_failed
+	qsc_dbg "qscd wait 结束 mode=${QSC_PS_NATIVE_MODE:-?} rc=$rc err=${QSC_PS_NATIVE_ERROR:-?} secs=$secs floor=$floor"
 	rm -f "$error_file" 2>/dev/null
 	# region agent log
 	type qsc_runtime_trace >/dev/null 2>&1 &&

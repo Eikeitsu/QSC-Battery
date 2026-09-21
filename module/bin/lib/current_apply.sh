@@ -564,6 +564,8 @@ qsc_apply_current_control() {
 	prev_tag="$(cat "$DATADIR/current_mode_tag" 2>/dev/null)"
 	reached="$(cat "$DATADIR/current_reached" 2>/dev/null | tr -d ' \r\n')"
 
+	qsc_dbg "电流判定：tag=$reason prev=${prev_tag:-?} reached=${reached:-?} want_bypass=$want_bypass temp=$temperature level=$battery_level cpu_log=$cpu_log"
+
 	qsc_current_decide_force "$target"
 
 	if [ "${QSC_CW_FORCE:-0}" != "1" ] \
@@ -571,6 +573,7 @@ qsc_apply_current_control() {
 		&& [ "$prev_tag" = "$reason" ] \
 		&& [ "$reached" = "1" ]; then
 		# 偏小/正常：零节点 I/O
+		qsc_dbg "电流跳过写盘：已达标 force=${QSC_CW_FORCE:-0} over=${QSC_CW_OVER:-0}"
 		return 0
 	fi
 

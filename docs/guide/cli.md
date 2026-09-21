@@ -23,6 +23,7 @@
 | `events` [`行数`]                              | 充电事件尾部                                 |
 | `stats` / `power-stats`                        | 省电证据（驻停总结 + `service_power_stats`） |
 | `diagnostic on`\|`off`\|`status`               | 开关 `data/diagnostic_on`                    |
+| `debug on`\|`off`\|`status`                    | 开关 `data/debug_on`（详细排障日志）         |
 | `diagnose` / `diag`                            | 生成诊断报告                                 |
 | `test-switch` / `test`                         | 测停充开关（**须插电**）                     |
 | `detect`                                       | 重新探测设备档案                             |

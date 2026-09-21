@@ -34,6 +34,7 @@ import com.qsc.battery.ui.design.charge.ChargeListRow
 import com.qsc.battery.ui.design.charge.ChargeScreen
 import com.qsc.battery.ui.design.charge.ChargeSection
 import com.qsc.battery.ui.design.charge.ChargeTheme
+import com.qsc.battery.ui.design.charge.ChargeToggleRow
 import com.qsc.battery.ui.design.charge.ChargeTopBar
 import com.qsc.battery.ui.util.LifecycleResumeEffect
 import com.qsc.battery.xposed.XpRuntime
@@ -135,6 +136,15 @@ fun MoreScreen(
                     title = "配置档",
                     summary = "档位管理与 JSON 导入导出",
                     onClick = onOpenProfiles,
+                )
+            }
+
+            ChargeSection(title = "排障") {
+                ChargeToggleRow(
+                    title = "详细调试日志",
+                    checked = ui.debugOn,
+                    summary = "写入 log.log：插电/停充/涓流/电流/qscd 等；随开随关，日常请关",
+                    onCheckedChange = { vm.setDebugOn(it) },
                 )
             }
 
