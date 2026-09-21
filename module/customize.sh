@@ -30,10 +30,12 @@ else
 	qsc_abort "缺少 bin/lib/keys.sh，安装包不完整"
 fi
 
-# APP CLI / 脚本刷入：/data/adb/qsc/install_auto 或环境变量 → 跳过音量键，用安全默认
+# APP CLI / 脚本刷入：/data/adb/qsc/install_auto 或环境变量 → 跳过音量键，走既有安全默认（等同自定义路径的自动答案，逻辑不变）
 QSC_INSTALL_AUTO=0
+INSTALL_MODE=""
 if [ -f /data/adb/qsc/install_auto ] || [ "${QSC_NONINTERACTIVE:-}" = "1" ]; then
 	QSC_INSTALL_AUTO=1
+	INSTALL_MODE="auto"
 	ui_print "- 无人值守安装：跳过音量键，使用安全默认选项"
 fi
 
@@ -41,15 +43,23 @@ ui_print "--------------------------------"
 if [ "$QSC_INSTALL_AUTO" = "1" ]; then
 	ui_print " 无人值守：已确认安装"
 else
-	ui_print " 是否确认安装 充电控制？"
-	ui_print " 音量上：确认安装"
-	ui_print " 音量下：取消安装"
-	ui_print " 请在 20 秒内选择"
+	ui_print " 请选择安装方式"
+	ui_print " 音量上：默认安装（推荐）"
+	ui_print "   安装全部可用组件（WebUI / 电流控制 / 伴侣 APP 等）"
+	ui_print "   有旧配置时保留核心停充项，省电用新版默认"
+	ui_print " 音量下：自定义安装"
+	ui_print "   逐项选择配置保留、WebUI、电流控制、守护下载、伴侣 APP"
+	ui_print " 20 秒未选择将使用默认安装"
 	qsc_volume_choice
 	case "$?" in
-		0) ui_print "- 已确认安装" ;;
-		1) qsc_abort "用户取消安装" ;;
-		*) qsc_abort "等待安装确认超时，已安全取消" ;;
+		1)
+			INSTALL_MODE="custom"
+			ui_print "- 已选择自定义安装"
+			;;
+		*)
+			INSTALL_MODE="default"
+			ui_print "- 已选择默认安装（全量组件）"
+			;;
 	esac
 fi
 
@@ -89,6 +99,9 @@ if [ -f "$CONFIG_BACKUP" ]; then
 	if [ "$QSC_INSTALL_AUTO" = "1" ]; then
 		KEEP_CONFIG=1
 		ui_print "- 无人值守：保留核心配置"
+	elif [ "$INSTALL_MODE" = "default" ]; then
+		KEEP_CONFIG=1
+		ui_print "- 默认安装：保留核心配置，省电用新版默认"
 	else
 		ui_print "--------------------------------"
 		ui_print " 检测到已安装的 QSC-Battery"
@@ -112,6 +125,8 @@ if [ ! -f "$MODPATH/webroot/index.html" ]; then
 	ui_print "- 本包为 lite（无 WebUI），跳过界面安装选项"
 elif [ "$QSC_INSTALL_AUTO" = "1" ]; then
 	ui_print "- 无人值守：安装 WebUI"
+elif [ "$INSTALL_MODE" = "default" ]; then
+	ui_print "- 默认安装：安装 WebUI"
 else
 	ui_print "--------------------------------"
 	ui_print " 是否安装 WebUI？"
@@ -129,6 +144,8 @@ fi
 INSTALL_CURRENT=1
 if [ "$QSC_INSTALL_AUTO" = "1" ]; then
 	ui_print "- 无人值守：安装电流控制组件（默认关闭）"
+elif [ "$INSTALL_MODE" = "default" ]; then
+	ui_print "- 默认安装：安装电流控制组件（默认关闭）"
 else
 	ui_print "--------------------------------"
 	ui_print " 是否安装「电流控制」组件？"
@@ -227,6 +244,11 @@ qscd_offer_download() {
 	_pref="$1"
 	if [ "$QSC_INSTALL_AUTO" = "1" ]; then
 		ui_print "- 无人值守：跳过联网下载守护（可在更新页 / WebUI 安装）"
+		return 0
+	fi
+	# 默认安装只装包内已有组件，不联网；自定义才询问
+	if [ "$INSTALL_MODE" = "default" ]; then
+		ui_print "- 默认安装：跳过联网下载守护（可在 WebUI 安装）"
 		return 0
 	fi
 	ui_print "--------------------------------"

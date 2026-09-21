@@ -5,6 +5,34 @@ install_companion_app() {
 		ui_print "- 无人值守：跳过伴侣 APP 安装（可在 APP「更新」页安装）"
 		return 0
 	fi
+
+	_bundled_apk=""
+	for _cand in \
+		"$MODPATH/apk/QSC-Battery.apk" \
+		"$MODPATH/QSC-Battery.apk" \
+		"$MODPATH/apk/app-release.apk"; do
+		if [ -f "$_cand" ] && [ -s "$_cand" ]; then
+			_bundled_apk="$_cand"
+			break
+		fi
+	done
+
+	# 默认安装：有内嵌 APK 则直接装，不问
+	if [ "$INSTALL_MODE" = "default" ]; then
+		if [ -z "$_bundled_apk" ]; then
+			ui_print "- 默认安装：包内无伴侣 APK，已跳过"
+			return 0
+		fi
+		ui_print "- 默认安装：正在安装内嵌伴侣 APP..."
+		if pm install -r "$_bundled_apk" >/dev/null 2>&1; then
+			ui_print "- 伴侣 APP 已安装"
+		else
+			ui_print "- APP 安装失败（签名冲突或 pm 不可用）"
+			ui_print "- 发布页安装或跳过均可；模块目录不会保留 APK"
+		fi
+		return 0
+	fi
+
 	ui_print "--------------------------------"
 	ui_print " 伴侣 APP（可选）"
 	ui_print " APP 可不装模块单独使用；装上后才方便控制停充"
@@ -20,17 +48,6 @@ install_companion_app() {
 			return 0
 			;;
 	esac
-
-	_bundled_apk=""
-	for _cand in \
-		"$MODPATH/apk/QSC-Battery.apk" \
-		"$MODPATH/QSC-Battery.apk" \
-		"$MODPATH/apk/app-release.apk"; do
-		if [ -f "$_cand" ] && [ -s "$_cand" ]; then
-			_bundled_apk="$_cand"
-			break
-		fi
-	done
 
 	if [ -n "$_bundled_apk" ]; then
 		ui_print "- 正在安装内嵌伴侣 APP..."
