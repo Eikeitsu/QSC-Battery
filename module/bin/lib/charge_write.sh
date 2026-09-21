@@ -433,8 +433,12 @@ qsc_maintain_stop_while_plugged() {
 		_st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
 		if ! qsc_charge_looks_stopped; then
 			qsc_log_once fake_stop warn \
-				"假停充：已标记停充但电流仍高，清除标记并重试停充"
+				"假停充：已标记停充但电流仍高，先还原节点再清标记并重试停充"
 			qsc_dbg "fake_stop 触发 age=$((_now - _ts))s cur=${_cur:-?} status=${_st:-?}"
+			# 必须先还原：只清 power_switch 会留下孤儿停充，热更新/杀进程后更难自愈
+			if type qsc_power_start >/dev/null 2>&1; then
+				qsc_power_start
+			fi
 			rm -f "$DATADIR/power_switch" "$DATADIR/active_switch" \
 				"$DATADIR/power_on" "$DATADIR/power_off" 2>/dev/null
 			qsc_stop_wakelock_release

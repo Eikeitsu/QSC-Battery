@@ -72,6 +72,16 @@ do
 done
 sleep 1
 
+# 停服后先还原可能残留的停充节点，避免热更新后插电充不进
+if type qsc_hot_prestop_safeguard >/dev/null 2>&1; then
+	qsc_hot_prestop_safeguard "$MODDIR" || true
+elif [ -f "$MODDIR/bin/lib/hot_update_charge.sh" ]; then
+	# shellcheck disable=SC1090
+	. "$MODDIR/bin/lib/hot_update_charge.sh" 2>/dev/null || true
+	type qsc_hot_prestop_safeguard >/dev/null 2>&1 &&
+		qsc_hot_prestop_safeguard "$MODDIR" || true
+fi
+
 if [ -f "$MODDIR/service.sh" ]; then
 	# 安装器结束时可能连带清理当前会话；让常驻服务先脱离该会话。
 	if command -v setsid >/dev/null 2>&1; then

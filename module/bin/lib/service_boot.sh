@@ -566,13 +566,20 @@ elif [ -f "$DATADIR/hot_update_at" ]; then
 		qsc_write_module_description "♻️更新中" "服务已重启" \
 			"本次更新无需重启；正在读取实时充电状态"
 	fi
+	# 补发 viewer enter，避免热更新空窗里 XP 边沿过期导致简介永不勤刷
+	_hu_now="$(date +%s 2>/dev/null || echo 0)"
+	printf '%s\tenter\thot_update\n' "$_hu_now" \
+		>/data/system/qsc_xp_viewer 2>/dev/null || true
+	chmod 0644 /data/system/qsc_xp_viewer 2>/dev/null || true
 	rm -f "$DATADIR/hot_update_at"
 	# 不要等设备探测、兼容模块扫描和全量节点扫描完成后才刷新简介。
 	# 这些任务可能较慢，先用当前电量/温度/供电状态覆盖临时的「更新中」。
 	if type qsc_ps_load_conf >/dev/null 2>&1; then
+		QSC_PS_DESC_FORCE=1
 		qsc_ps_load_conf
 		qsc_ps_now
 		qsc_ps_refresh_desc "${QSC_PS_NOW:-0}"
+		QSC_PS_DESC_FORCE=0
 	fi
 elif qsc_description_enabled 2>/dev/null; then
 	qsc_write_module_description "🔎启动中" "服务已拉起" "$DESC_INTRO"

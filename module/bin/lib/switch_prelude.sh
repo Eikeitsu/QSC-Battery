@@ -208,6 +208,11 @@ fi
 
 qsc_build_switch_list
 
+# 热更新 dirty：强制还原停充残留 + 刷简介 + 补发 viewer enter
+if type qsc_hot_boot_charge_heal >/dev/null 2>&1; then
+	qsc_hot_boot_charge_heal || true
+fi
+
 # 每次开机（服务启动）检查一轮残留停充节点。标记由 service.sh 启动时清掉，
 # 所以这段每个开机周期只跑一次，不进热路径。
 if [ ! -f "$DATADIR/.orphan_checked" ] && type qsc_orphan_stop_check >/dev/null 2>&1; then

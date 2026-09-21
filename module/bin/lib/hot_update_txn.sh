@@ -638,6 +638,43 @@ esac
 pkill -f "$OLD/service.sh" 2>/dev/null || true
 pkill -f "$OLD/bin/qsc_switch.sh" 2>/dev/null || true
 sleep 1
+# 服务已停：打 dirty + 尽量还原停充节点（worker 为独立脚本，逻辑内联）
+mkdir -p "$OLD/data" 2>/dev/null
+touch "$OLD/data/hot_update_charge_dirty" 2>/dev/null
+rm -f "$OLD/data/.orphan_checked" 2>/dev/null
+if [ -f "$OLD/bin/common.sh" ]; then
+	(
+		MODDIR="$OLD"
+		MODPATH="$OLD"
+		unset QSC_LIBS_LOADED
+		# shellcheck disable=SC1090
+		. "$OLD/bin/common.sh" 2>/dev/null || exit 0
+		if type qsc_hot_restore_charge_nodes >/dev/null 2>&1; then
+			qsc_hot_restore_charge_nodes
+			exit $?
+		fi
+		# 旧包无自愈函数：尽力按 power_switch / 孤儿路径还原
+		type qsc_build_switch_list >/dev/null 2>&1 || exit 0
+		type qsc_power_start >/dev/null 2>&1 || exit 0
+		qsc_build_switch_list
+		if [ -f "$DATADIR/power_switch" ]; then
+			qsc_power_start
+			if [ "${start_ok:-0}" = "1" ]; then
+				rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" \
+					"$DATADIR/battery_switch" "$DATADIR/app_stop_flag" \
+					"$DATADIR/resume_fail_hint" 2>/dev/null
+				type qsc_clear_active_switch >/dev/null 2>&1 && qsc_clear_active_switch
+				type qsc_stop_wakelock_release >/dev/null 2>&1 && qsc_stop_wakelock_release
+			else
+				touch "$DATADIR/resume_fail_hint" 2>/dev/null
+			fi
+		elif type qsc_orphan_stop_check >/dev/null 2>&1; then
+			qsc_orphan_stop_check || true
+		fi
+		exit 0
+	) || true
+fi
+hu_log "charge: 热更新停服后已尝试还原充电节点（失败则 dirty 留给新服务）"
 
 # 就地覆盖（只增改不删），全程不出现空模块窗口。
 # webroot 含 Vite 产物：必须先整目录替换，否则旧 js/css 会残留。
