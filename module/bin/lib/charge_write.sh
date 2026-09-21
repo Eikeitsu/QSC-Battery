@@ -134,15 +134,15 @@ qsc_write_switch_list() {
 				qsc_write_node "$route" "$val" && _wrote=1
 			fi
 			if [ "$_wrote" = "1" ]; then
-				# MCA 名节点：即使盲写也硬复核（真 MCA 无效则改试通用节点）
-				if [ "$_is_mca" = "1" ]; then
+				# 默认写成功即认（0814）。switch_hard_verify=1 时对 MCA 名节点做电流硬复核；
+				# first_only=verify 时对非 MCA 节点做电流硬回滚（末位兜底 / 关盲写）。
+				if [ "$_is_mca" = "1" ] && qsc_switch_hard_verify_on; then
 					if ! qsc_mca_stop_verify; then
 						qsc_mca_mark_ineffective "$route"
-						qsc_dbg "列表 MCA 名节点写入后未停充，跳过 $route"
+						qsc_dbg "列表 MCA 硬复核失败，跳过 $route"
 						continue
 					fi
-				elif [ "$first_only" = "verify" ]; then
-					# 通用节点：写入后电流校验（K60U 等 MTK 机型关键）
+				elif [ "$_is_mca" != "1" ] && [ "$first_only" = "verify" ]; then
 					_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
 					_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
 					[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
@@ -198,9 +198,8 @@ qsc_clear_active_switch() {
 	rm -f "$DATADIR/active_switch" 2>/dev/null
 }
 
-# 粗判是否已停充（供 verify）。
-# 部分机型（MCA / K60U 等 MTK）插电充电时 status 也可能长期报 Not charging，
-# 不能单信 status；电流明显偏大时一律视为仍在充，避免「写成功但假停充」。
+# 粗判是否已停充（供 verify / 调试 / 假停充自愈）。
+# 不能单信 status=Not charging（插电充电时也可能报）；电流明显偏大视为仍在充。
 qsc_charge_looks_stopped() {
 	local st cur
 	cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
@@ -224,10 +223,21 @@ qsc_charge_looks_stopped() {
 	return 1
 }
 
-# MCA 停充复核：允许短暂延迟；仍大电流则视为本机 MCA 无效（对齐 K60U 修复）
+# 事后电流硬复核开关（默认关，对齐 0814 写成功即认）。
+# switch_hard_verify=1 时：MCA/列表 MCA 名节点写后看电流，失败则拉黑并改试其它节点。
+qsc_switch_hard_verify_on() {
+	local v="${QSCV_switch_hard_verify:-}"
+	if [ -z "$v" ] && [ -n "${config_conf:-}" ]; then
+		v="$(echo "$config_conf" | egrep '^switch_hard_verify=' | sed -n 's/switch_hard_verify=//g;$p')"
+	fi
+	[ "$(qsc_clamp_int "${v:-0}" 0 1 0)" = "1" ]
+}
+
+# MCA 停充复核：等待后看电流；仍大则失败（仅 switch_hard_verify=1 时由调用方采纳）
 qsc_mca_stop_verify() {
 	local _vd _cur _st
 	_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
+	[ -n "$_vd" ] || _vd="${QSCV_switch_verify_sec:-1}"
 	_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
 	[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
 	_cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
@@ -236,7 +246,6 @@ qsc_mca_stop_verify() {
 		qsc_dbg "MCA verify OK cur=${_cur:-?} status=${_st:-?}"
 		return 0
 	fi
-	# K90 等偶发延迟生效：再等 1s
 	sleep 1
 	_cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
 	_st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
@@ -244,7 +253,7 @@ qsc_mca_stop_verify() {
 		qsc_dbg "MCA verify OK after retry cur=${_cur:-?} status=${_st:-?}"
 		return 0
 	fi
-	qsc_dbg "MCA verify FAIL cur=${_cur:-?} status=${_st:-?}（仍像在充）"
+	qsc_dbg "MCA verify FAIL cur=${_cur:-?} status=${_st:-?}"
 	return 1
 }
 
@@ -413,8 +422,8 @@ qsc_maintain_stop_while_plugged() {
 		return 1
 	}
 
-	# 假停充自愈：标记已超过数秒但电流仍大（通用节点盲写无效 / 假 MCA 遗留）
-	# → 清停充标记，让主循环重新走完整停充分支
+	# 假停充自愈（0814 无；保留为有意义优化）：
+	# 标记已超过数秒但电流仍大 → 清标记，让主循环重新走完整停充分支
 	_ts="$(cat "$DATADIR/power_stop_ts" 2>/dev/null | tr -d ' \r\n')"
 	_now="$(date +%s 2>/dev/null | tr -d ' \r\n')"
 	case "$_ts" in ""|*[!0-9]*) _ts=0 ;; esac

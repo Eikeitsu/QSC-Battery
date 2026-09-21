@@ -65,6 +65,7 @@
 | `history_interval_sec` | 60       | 采样间隔                         |
 | `switch_verify_sec`    | 1        | 停充校验等待                     |
 | `switch_batch_blind`   | 1        | 全量盲写停充节点                 |
+| `switch_hard_verify`   | 0        | 事后电流硬复核（默认关）         |
 
 ---
 

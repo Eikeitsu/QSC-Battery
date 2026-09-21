@@ -70,7 +70,7 @@ if qsc_debug_enabled; then
 	qsc_read_node "$PSDIR/usb/voltage_now" && _dbg_vbus="$QSC_NODE_VAL"
 	qsc_read_node "$PSDIR/battery/current_now" && _dbg_cur="$QSC_NODE_VAL"
 	qsc_read_node "$PSDIR/charger/online" && _dbg_charger="$QSC_NODE_VAL"
-	qsc_dbg "停充评估：level=$battery_level stop=$power_stop start=$power_start status=$battery_status raw_status=${_sf_status:-?} powered=$([ -n "$battery_powered" ] && echo 1 || echo 0) eval=$charge_eval switch=$([ -f "$DATADIR/power_switch" ] && echo 1 || echo 0) mca=$(qsc_profile_get mca 2>/dev/null) mca_path=$(qsc_profile_get mca_path 2>/dev/null) mca_ineff=$([ -f "$DATADIR/mca_ineffective" ] && echo 1 || echo 0) usb_online=${_dbg_online:-?} usb_present=${_dbg_present:-?} usb_type=${_dbg_type:-?} usb_vbus=${_dbg_vbus:-?} charger_online=${_dbg_charger:-?} current=${_dbg_cur:-?} app_hit=$app_stop_hit wireless_skip=$wireless_skip"
+	qsc_dbg "停充评估：level=$battery_level stop=$power_stop start=$power_start status=$battery_status raw_status=${_sf_status:-?} powered=$([ -n "$battery_powered" ] && echo 1 || echo 0) eval=$charge_eval switch=$([ -f "$DATADIR/power_switch" ] && echo 1 || echo 0) mca=$(qsc_profile_get mca 2>/dev/null) mca_path=$(qsc_profile_get mca_path 2>/dev/null) usb_online=${_dbg_online:-?} usb_present=${_dbg_present:-?} usb_type=${_dbg_type:-?} usb_vbus=${_dbg_vbus:-?} charger_online=${_dbg_charger:-?} current=${_dbg_cur:-?} app_hit=$app_stop_hit wireless_skip=$wireless_skip"
 fi
 
 if [ "$charge_eval" = "1" ]; then

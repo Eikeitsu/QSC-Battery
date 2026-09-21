@@ -30,7 +30,7 @@
 
 ### 修复
 
-- **K60U（MTK，通用节点）停充回归**：非 MCA；盲写后以电流复核，失败则逐节点 `verify` 回滚无效项；用户开关同样校验；preferred 写入后电流仍高则继续试列表；保留假停充自愈；插电判定增加 `charger/online` 与「Not charging/Charging + |I|≥150mA」旁证。真 MCA 机仍走专用路径硬复核。
+- **停充基线对齐 v2026.08.14**：机型相关停充以 0814 为准（MCA 仅 `mca=1`、写成功即认、非 MCA 不抢 `handle_state`）。保留优化：全量盲写、假停充自愈、插电多信号、MCA raw echo、详细调试日志。事后电流硬复核改为 `switch_hard_verify`（**默认关**；App/WebUI「冷门/实验」可开）。
 - **XP 前台门禁与分级**：Magisk 同步 `qsc_xp_fg_policy`；简介/游戏限流/App 停充全关时 XP 不写前台盘（`qsc_xp_fg_idle` 热路径快判）。仅简介→只处理管理器且**不写** `qsc_xp_fg`（只要 viewer）；游戏/停充→列表包（离开再写一次）。**未插电时游戏/停充不纳入 XP**。非详细日志下 DEBUG 不进 logcat。
 - **CI 通道检测版本落后于 Actions**：`publish-updates` / `publish-ci-dist` 曾把整份 tip 拷进 STAGE 再推送，并发的 App/守护发布会把模块元数据回滚（如远端已是 `.ci.315` 却检测到 `.ci.314`）。改为只推送本产品文件，`state.json` 与 tip 合并。
 - （继承）充满拔线后 uevent 乱叫醒、停充持锁间隔等，见 2026.09.18。

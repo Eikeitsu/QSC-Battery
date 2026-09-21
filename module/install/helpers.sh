@@ -116,7 +116,7 @@ qsc_merge_config() {
 	_core_migrated=0
 	for _nk in wireless_policy history_enable history_interval_sec \
 		app_stop app_stop_list chart_show \
-		switch_batch_blind unplug_restore \
+		switch_batch_blind switch_hard_verify unplug_restore \
 		charge_full_mode charge_full_wait_sec; do
 		_nv="$(sed -n "s/^${_nk}=//p" "$source" 2>/dev/null | head -n1 | tr -d '\r')"
 		[ -n "$_nv" ] || continue
@@ -124,7 +124,7 @@ qsc_merge_config() {
 			wireless_policy)
 				case "$_nv" in same|ignore) ;; *) continue ;; esac
 				;;
-			history_enable|app_stop|chart_show|switch_batch_blind|unplug_restore)
+			history_enable|app_stop|chart_show|switch_batch_blind|switch_hard_verify|unplug_restore)
 				case "$_nv" in 0|1) ;; *) continue ;; esac
 				;;
 			charge_full_mode)

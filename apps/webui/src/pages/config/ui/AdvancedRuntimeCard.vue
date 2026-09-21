@@ -107,6 +107,12 @@ onMounted(async () => {
           @update:model-value="(v) => onSwitch('switch_batch_blind', v)"
         />
         <SwitchCell
+          title="事后电流硬复核"
+          label="默认关（对齐0814写成功即认）；开=MCA写后看电流，失败拉黑并改试其它节点"
+          :model-value="store.settings.switch_hard_verify === '1'"
+          @update:model-value="(v) => onSwitch('switch_hard_verify', v)"
+        />
+        <SwitchCell
           title="无线时忽略停充策略"
           label="仅无线供电不触发阈值/温控停充"
           :model-value="wirelessIgnore"

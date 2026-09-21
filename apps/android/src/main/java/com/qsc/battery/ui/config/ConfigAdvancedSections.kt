@@ -149,6 +149,15 @@ internal fun ConfigAdvancedSections(
                 setLocal("switch_batch_blind", if (it) "1" else "0")
             },
         )
+        ChargeDivider()
+        ChargeToggleRow(
+            title = "事后电流硬复核",
+            checked = v("switch_hard_verify") == "1",
+            summary = "默认关（0814）；开=MCA 写后看电流，失败拉黑改试其它节点",
+            onCheckedChange = {
+                setLocal("switch_hard_verify", if (it) "1" else "0")
+            },
+        )
     }
 
     ChargeSection(title = "通知与行为") {
