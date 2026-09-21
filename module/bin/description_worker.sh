@@ -2,7 +2,7 @@
 
 # 独立简介刷新进程。
 # 有 XP 且健康：后台零轮询；管理器会话经 XP 3s 稳定后 enter，观看中温和复刷；
-# 确认离开后再经 90s 超时才 leave。会话未结束时切回不重复强制刷。
+# 确认离开后再经 90s 超时才 leave。亮屏边沿会补发 enter（防息屏后卡住静态文案）。
 # 无 XP / XP 异常：dumpsys 降级；边沿恢复后自动切回 XP。
 MODDIR=${0%/*}
 MODDIR=${MODDIR%/*}
@@ -233,6 +233,7 @@ worker_tick_fallback() {
 }
 
 # —— 主循环：XP ↔ dumpsys 可切换 ——
+_was_suppressed=0
 while worker_parent_alive; do
 	if [ -f "$DATADIR/hot_update_fallback_reboot" ]; then
 		worker_state 125
@@ -246,17 +247,31 @@ while worker_parent_alive; do
 		while worker_parent_alive && worker_xp_mode && worker_service_ready; do
 			if worker_poll_viewer; then
 				_entered=1
+				_was_suppressed=0
 				break
 			fi
+			qsc_ps_load_conf 2>/dev/null
+			qsc_ps_now 2>/dev/null
+			type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
 			if type qsc_ps_desc_suppressed >/dev/null 2>&1 && qsc_ps_desc_suppressed; then
-				qsc_ps_load_conf 2>/dev/null
-				qsc_ps_now 2>/dev/null
-				type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
 				type qsc_description_restore_static >/dev/null 2>&1 &&
 					qsc_description_restore_static
 				worker_state 0
+				_was_suppressed=1
 				worker_wait_edges 120
 				continue
+			fi
+			# 刚离开息屏压制：立刻 dumpsys，勿再空等一轮 120s
+			if [ "$_was_suppressed" = "1" ]; then
+				_was_suppressed=0
+				if worker_dumpsys_manager_hit; then
+					type qsc_log >/dev/null 2>&1 &&
+						qsc_log info "简介：亮屏后 dumpsys 发现管理器"
+					QSC_MANAGER_VIEWER_WAS=1
+					QSC_MANAGER_VIEWER_RISING=1
+					_entered=1
+					break
+				fi
 			fi
 			worker_state 0
 			worker_wait_edges 120
@@ -289,9 +304,17 @@ while worker_parent_alive; do
 									qsc_log info "简介：已离开管理器，停止刷新"
 								break
 							fi
-							# 会话内再次 enter：轮询已在跑，不必强制重写
+							# 亮屏补发 enter：强制刷一次，清掉息屏留下的静态文案
+							worker_do_refresh 1
 							continue
 						fi
+					fi
+					# 每轮复核是否仍在看（息屏后 desc-only 无 fg 文件时勿空转写静态）
+					QSC_MANAGER_VIEWER_CACHE_AT=0
+					if ! worker_poll_viewer; then
+						type qsc_log >/dev/null 2>&1 &&
+							qsc_log info "简介：管理器已不在前台，停止刷新"
+						break
 					fi
 					QSC_MANAGER_VIEWER_WAS=1
 					worker_do_refresh 0

@@ -39,6 +39,9 @@ class QscXposedModule : XposedModule() {
 
     private val lastFgPkg = AtomicReference<String?>(null)
 
+    /** 上一帧 isInteractive；亮灭屏边沿用于重发管理器 enter */
+    private val lastInteractive = AtomicReference<Boolean?>(null)
+
     /** 上一前台是否属于策略关注包（用于离开时仍写一次 fg） */
     private val lastWasWatch = AtomicBoolean(false)
 
@@ -79,7 +82,9 @@ class QscXposedModule : XposedModule() {
         writeAliveOnce()
         hookBatteryService(param.classLoader)
         hookActivityForeground(param.classLoader)
-        QscXpAssist.install(this, param.classLoader) { p, m -> xpLog(p, m) }
+        QscXpAssist.install(this, param.classLoader, { p, m -> xpLog(p, m) }) { on ->
+            onInteractiveChanged(on)
+        }
     }
 
     override fun onHotReloading(param: HotReloadingParam): Boolean {
@@ -300,6 +305,45 @@ class QscXposedModule : XposedModule() {
         }.getOrDefault(true)
     }
 
+    /**
+     * 亮灭屏边沿（不依赖 want_screen）。
+     * 管理器仍在前台时息屏→亮屏，AMS 常不重抛前台切换；必须在此补 leave/enter，
+     * 否则简介 worker 会停在静态文案。
+     */
+    private fun onInteractiveChanged(on: Boolean) {
+        if (writeDisabled.get()) return
+        if (File(XpPrefs.OFF_PATH).isFile) return
+        if (File(XpPrefs.NO_VIEWER_PATH).isFile) return
+        val prev = lastInteractive.getAndSet(on)
+        if (prev != null && prev == on) return
+
+        val policy = loadFgPolicy()
+        if (policy.idle || !policy.desc) return
+        val pkg = lastFgPkg.get()?.trim().orEmpty()
+
+        if (!on) {
+            cancelEnterStable()
+            if (managerSession.get()) {
+                cancelFgStableDebounce()
+                scheduleLeavePipeline(pkg.ifEmpty { "screen_off" })
+            }
+            return
+        }
+
+        // 亮屏：宽限期内取消 leave；会话已结束则重进；会话仍在则补发 enter 唤醒 worker
+        if (pkg.isNotEmpty() && isManagerPackage(pkg)) {
+            cancelLeavePipeline()
+            cancelFgStableDebounce()
+            if (managerSession.get()) {
+                writeViewerEdge("enter", pkg)
+                lastWasWatch.set(true)
+                xpLog(Log.DEBUG, "viewer pulse enter on screen on ($pkg)")
+            } else {
+                scheduleEnterStable(pkg)
+            }
+        }
+    }
+
     private fun onForegroundPackage(pkg: String) {
         if (writeDisabled.get()) return
         if (File(XpPrefs.OFF_PATH).isFile) return
@@ -321,10 +365,14 @@ class QscXposedModule : XposedModule() {
             return
         }
 
-        val prev = lastFgPkg.getAndSet(clean)
-        if (prev == clean) return
-
         val interactive = isInteractive()
+        val prevInteractive = lastInteractive.getAndSet(interactive)
+        val prev = lastFgPkg.getAndSet(clean)
+        val samePkg = prev == clean
+        // 同包名通常忽略；但亮屏边沿必须放行（息屏后再亮时 AMS 往往不再抛前台切换）
+        val screenJustOn = prevInteractive == false && interactive
+        if (samePkg && !screenJustOn) return
+
         val wantManager = policy.desc && isManagerPackage(clean)
         val watchNow = wantManager ||
             (policy.game && isGamePackage(clean)) ||
@@ -348,7 +396,13 @@ class QscXposedModule : XposedModule() {
             cancelLeavePipeline()
             cancelFgStableDebounce()
             if (managerSession.get()) {
-                // 仅简介：viewer 会话已在，不必反复写 fg
+                // 仅简介：viewer 会话已在；亮屏同包名时补发 enter，唤醒被驻停杀掉的简介 worker
+                if (screenJustOn) {
+                    writeViewerEdge("enter", clean)
+                    lastWasWatch.set(true)
+                    xpLog(Log.DEBUG, "viewer re-enter after screen on ($clean)")
+                    return
+                }
                 writeFgIfNeeded(clean, notifyEdge = true, policy)
                 lastWasWatch.set(true)
                 xpLog(Log.DEBUG, "viewer session keep ($clean)")

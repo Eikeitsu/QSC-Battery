@@ -171,6 +171,18 @@ qsc_manager_viewer_focus_hit() {
 	if type qsc_fg_pkg_in_list >/dev/null 2>&1 && qsc_fg_pkg_in_list "$list_file"; then
 		return 0
 	fi
+	# 仅简介策略不写 qsc_xp_fg：XP ready 时 fg 文件常缺，必须 dumpsys 才能认管理器
+	if type qsc_fg_xp_ready >/dev/null 2>&1 && qsc_fg_xp_ready &&
+		{ [ ! -f /data/system/qsc_xp_fg ] || [ ! -s /data/system/qsc_xp_fg ]; }; then
+		if type qsc_fg_dumpsys_read >/dev/null 2>&1; then
+			qsc_fg_dumpsys_read || return 1
+			while IFS= read -r _p || [ -n "$_p" ]; do
+				_p="$(printf '%s' "$_p" | tr -d ' \r\n')"
+				[ -n "$_p" ] || continue
+				[ "$_p" = "$QSC_FG_PKG" ] && return 0
+			done <"$list_file"
+		fi
+	fi
 	return 1
 }
 

@@ -20,6 +20,9 @@ internal object QscXpAssist {
     private val hookedDoze = AtomicBoolean(false)
     private val hookedBcast = AtomicBoolean(false)
     private val lastScreenOn = AtomicReference<Boolean?>(null)
+    /** 与 want_screen 无关：专供简介会话在亮灭屏边沿恢复 */
+    private val lastInteractiveNotify = AtomicReference<Boolean?>(null)
+    private val interactiveListener = AtomicReference<((Boolean) -> Unit)?>(null)
     private val lastDozeIdle = AtomicReference<Boolean?>(null)
     private val wantCacheAt = AtomicLong(0L)
     private val wantScreen = AtomicBoolean(false)
@@ -30,7 +33,13 @@ internal object QscXpAssist {
     private val armCacheAt = AtomicLong(0L)
     private val armCached = AtomicBoolean(false)
 
-    fun install(mod: XposedModule, loader: ClassLoader, log: (Int, String) -> Unit) {
+    fun install(
+        mod: XposedModule,
+        loader: ClassLoader,
+        log: (Int, String) -> Unit,
+        onInteractive: ((Boolean) -> Unit)? = null,
+    ) {
+        interactiveListener.set(onInteractive)
         hookScreen(mod, loader, log)
         hookDoze(mod, loader, log)
         hookBroadcast(mod, loader, log)
@@ -92,6 +101,12 @@ internal object QscXpAssist {
     }
 
     private fun onScreenChange(on: Boolean, log: (Int, String) -> Unit) {
+        // 始终回调亮灭屏（不依赖 want_screen）：管理器前台息屏后再亮时需重发 viewer enter
+        val prevNotify = lastInteractiveNotify.getAndSet(on)
+        if (prevNotify == null || prevNotify != on) {
+            runCatching { interactiveListener.get()?.invoke(on) }
+                .onFailure { log(Log.DEBUG, "assist interactive cb: ${it.message}") }
+        }
         refreshWants()
         if (!wantScreen.get() || xpOff()) return
         val prev = lastScreenOn.getAndSet(on)
