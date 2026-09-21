@@ -72,8 +72,9 @@ qsc_ps_log_native_wake() {
 	esac
 	msg="${mode}: ${human}"
 	qsc_ps_record_wake "${mode}: ${wake}"
-	# 开启详细调试时每条唤醒都落盘（排障用；日常关 debug_on）
-	qsc_dbg "qscd 唤醒：$msg"
+	# 详细调试时落盘；字面量 "qscd ${msg}" 为热更新契约冻结格式
+	qsc_debug_enabled || return 0
+	qsc_log debug "qscd ${msg}"
 }
 
 qsc_ps_record_wake() {
