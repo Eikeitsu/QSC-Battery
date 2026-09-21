@@ -20,6 +20,7 @@ internal object QscXpAssist {
     private val hookedDoze = AtomicBoolean(false)
     private val hookedBcast = AtomicBoolean(false)
     private val lastScreenOn = AtomicReference<Boolean?>(null)
+
     /** 与 want_screen 无关：专供简介会话在亮灭屏边沿恢复 */
     private val lastInteractiveNotify = AtomicReference<Boolean?>(null)
     private val interactiveListener = AtomicReference<((Boolean) -> Unit)?>(null)
