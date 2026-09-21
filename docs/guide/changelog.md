@@ -1,8 +1,48 @@
 # 更新日志
 
+## 2026.09.21
+
+> 机型过多适配困难，本版已引入详细调试日志开关
+>
+> 反馈问题请详细描述问题，并打开详细日志开关提供关键日志
+
+### 新增
+
+- **详细调试日志开关**：App「我的 → 排障」、WebUI「测开关与缓存」、CLI `qsc debug on|off`；写 `data/debug_on`，约 2 秒内随开随关。开启后 `log.log` 记录插电判定、停充评估、节点写入/复核、假停充自愈、涓流电流与时间、电流控制、qscd 等待/唤醒等；默认关闭不影响日常。
+- **分级省电策略**（`config/power.conf`）：档位均衡/强力/自定义；息屏加强、夜间时段、深睡 DeepPark；未插电事件驱动驻停，插拔仍即时响应（非绝对零耗电）。WebUI「省电策略」、APP「进阶 → 省电策略」。
+- **配置拆分**：省电键迁入 `power.conf`，通知迁入 `notify.conf`；旧 `config.conf` 启动时自动迁移。
+- **停充维持 × 息屏/夜间**：非 MCA 息屏约 180s、夜间/深睡约 300s；MCA 仍按 `loop_interval_maintain_sec` 重申。
+- **夜间时段**：模板默认 `23:00-07:00`（跨天）；WebUI/APP 可编辑；开启「夜间省电」且无时段时自动写入该默认。
+- **简介按需刷新**：检测到 Magisk/KSU/APatch/MMRL 等管理器在前台时勤刷电量；无人看列表时几乎不更新电量（停充/插拔等状态仍即时写）。内置含 Alpha / Kitsune、KSU Next / SukiSU / ReSukiSU、APatch Next / FolkPatch、WebUI X 等活跃分支；可选 `desc_viewer_pkgs` 追加包名。
+- **LSPosed 管理器前台边沿**：系统框架 Hook Activity 恢复；进出各 3s 稳定，确认离开后再 90s 超时写 `qsc_xp_viewer` leave。无 XP 时仍 dumpsys 轮询降级。与既有插拔 `qsc_xp_wake`（仅 qscd 不可用）独立。
+- **LSPosed 前台包名总线**：每次前台切换写 `qsc_xp_fg`；简介 / 游戏旁路 / App 停充共用；有 XP 时跳过认前台用的 dumpsys，无 XP 再降级。
+- **LSPosed 辅助边沿（默认关）**：亮灭屏 → `qsc_xp_screen`（息屏策略优先读）；Doze → `qsc_xp_doze`；白名单广播 → `qsc_xp_bcast`（可改 `qsc_xp_bcast_actions`）。APP「LSPosed / XP」面板开关；武装时亦可打断 qscd 回退 sleep。
+- **XP 生效时事件驱动**：简介后台零轮询；管理器进出各 **3s 稳定** 后才确认，确认离开后再 **90s 超时** 才停刷；会话未结束时切回不重复强制刷。观看中约 45–60s 复刷。游戏限流：前台或进程命中（后台子进程也维持），再套约 **1s 进 / 30s 离** 墓碑；App 停充同间隔（有 XP 以前台为准）。
+- **无 XP / XP 异常回退**：`alive` 缺失、软关、或与 dumpsys 连续不一致时写 `xp_fg_unreliable`，简介与认前台改 dumpsys/进程路径；边沿恢复后自动切回 XP。漏边沿时 dumpsys 安全网仍能发现管理器。
+- **省电诊断统计**：`touch data/diagnostic_on` 后按心跳写出 `service_power_stats` 与日志「省电统计」（skip/均睡/简介写盘/未插电 %/h）；默认关闭，避免调试本身耗电。
+- **策略边沿日志与驻停总结**：进入/退出息屏·夜间·深睡写 INFO；同段重合不重复结算；退出时总结唤醒次数、均睡、skip，并给出「接近少唤醒 / 偏勤」评判。管理器前台进出、配置热重载亦有日志。息屏加强须连续息屏约 90s 才进档；不足约 3 分钟的短驻停不写总结，减轻亮灭闪动刷屏。
+- **CLI**：`help` 汇总命令；缩写 `st`/`cfg`/`diag`/`test`/`ver`；`stats` 看省电证据；`diagnostic on|off`；`debug on|off`；未知命令提示相近指令。
+- **用户文档**：功能/配置/WebUI/APP/FAQ/首页对齐分级省电与多 conf；顶栏增加「常见问题」。
+
+### 优化
+
+- **`stop_hold_wakelock=auto` 不再日用常持锁**：仅息屏/夜间持锁，亮屏释放，减轻对深度 Doze 的阻挡；强制 `1` 仍持续持锁。
+- **未插电 lean wait**：确认未插电后主循环再入几乎只做「读 online + 策略/idle + wait」；简介/XP 管家仅在拔电首轮或配置变更时跑。配置本就按 mtime 哨兵，未变不重读全文；App/WebUI 保存另 bump `conf_reload_req`。
+- **深睡粘滞**：已进 deep 后连续数次跳过亮度 sysfs，沿用 `deep_idle_sec`；约每 3 次醒全量探测一次以便亮屏退出。进入息屏加强/深睡时停简介 worker，离开驻停再拉起。
+- **未插电不再强制满轮**：取消 `FULL_MAX_GAP` 定时 `qsc_switch`；qscd 失败回退未插电至少按 idle 地板（≥90s），避免短睡抖醒。
+- **管理器前台误报**：息屏禁用 dumpsys 安全网与「在看」判定；退出驻停需亮屏滞回且连续两次非 deep；XP enter 要求亮屏。修复过夜周期性「管理器前台」假日志与短驻停无退出总结。
+
+### 修复
+
+- **管理器前台息屏后再亮简介卡静态**：亮灭屏边沿补发 viewer enter（不依赖 want_screen）；仅简介策略无 `qsc_xp_fg` 时 dumpsys 认管理器；观看循环每轮复核、离开息屏压制后立即安全网，避免一直停在静态文案。
+- **停充基线对齐 v2026.08.14**：机型相关停充以 0814 为准（MCA 仅 `mca=1`、写成功即认、非 MCA 不抢 `handle_state`）。保留优化：全量盲写、假停充自愈、插电多信号、MCA raw echo、详细调试日志。事后电流硬复核改为 `switch_hard_verify`（**默认关**；App/WebUI「冷门/实验」可开）。
+- **XP 前台门禁与分级**：Magisk 同步 `qsc_xp_fg_policy`；简介/游戏限流/App 停充全关时 XP 不写前台盘（`qsc_xp_fg_idle` 热路径快判）。仅简介→只处理管理器且**不写** `qsc_xp_fg`（只要 viewer）；游戏/停充→列表包（离开再写一次）。**未插电时游戏/停充不纳入 XP**。非详细日志下 DEBUG 不进 logcat。
+- **CI 通道检测版本落后于 Actions**：`publish-updates` / `publish-ci-dist` 曾把整份 tip 拷进 STAGE 再推送，并发的 App/守护发布会把模块元数据回滚（如远端已是 `.ci.315` 却检测到 `.ci.314`）。改为只推送本产品文件，`state.json` 与 tip 合并。
+- （继承）充满拔线后 uevent 乱叫醒、停充持锁间隔等，见 2026.09.18。
+
 ## 2026.09.18
 
-相对 **2026.09.16** 的变更。本版起模块 `versionCode` 以 `2026091701` 为兼容切断线。
+> 相对 **2026.09.16** 的变更。本版起模块 `versionCode` 以 `2026091701` 为兼容切断线。
 
 ### 升级说明
 
@@ -14,11 +54,14 @@
 
 - **涓流模式**（`charge_full_mode`）：在「充满再停」且停止电量=100% 时，可选自动 / 仅电流 / 仅时间（约 10 分钟）后再停充；WebUI「策略」、APP「策略」可配置。
 - **拔线立刻还原**（`unplug_restore`，默认开）：拔线后立即恢复充电节点；关闭则保留停充迟滞，再插电仍停至恢复电量。
-- **动态简介开关**（`description_enable`，默认开）：开启时管理器列表随状态刷新；关闭后写入固定产品简介并停止简介 worker，略减待机开销。入口：WebUI「更多选项」、APP「循环与省电」。
+- **动态简介开关**（`description_enable`，默认开）：开启时管理器列表随状态刷新；关闭后写入固定产品简介并停止简介 worker，略减待机开销。入口：WebUI「省电策略」、APP「省电策略」。
 - **日志结果态**：主徽章区分停充中 / 已恢复 / 已拔线 / 已关闭 / 停充失败等；成功停充标注「已停充」。
 
 ### 修复
 
+- **过夜插电停充耗电偏高**：`stop_hold_wakelock=auto` 在魅族或 MCA 机持锁时，旧逻辑仍约 8s 跑满轮。现非 MCA 持锁维持约 300s；MCA 仍按 `loop_interval_maintain_sec`（默认 30）重申，避免 `handle_state` 被改回后长时间回充。
+- **充满拔线后待机仍异常掉电**：未插电时 qscd `watch` 未传阈值，退化为任意 `power_supply` uevent 都叫醒主循环（电流/电压/温度噪声），整夜无法 Doze。现未插电 / 停充维持仅响应插拔或超时；无 `watch` 的 C 版未插电改为纯 sleep。
+- **APP 版本号卡住 0.3.1 并反复提示更新**：正式版发版未向 Gradle 传入 `qscVersionName` / `qscVersionCode`，APK 一直用默认值，而远端清单已升号。现正式/预发布均写入发版号；默认值改为日期版对齐。
 - **停充后误判拔线**（K60 等）：`input_suspend` 停充后电池常报 Discharging，旧逻辑误还原节点。现以充电类型与 VBUS 为强证据，不再被假放电否决。
 - **强制升级后简介显示「核心脚本丢失」**：切断前先停止旧服务与简介进程，避免未重启时旧进程写入异常简介。
 - **强制升级失败或循环刷入**：切断时保留 `modules_update`；无人值守与 APP/WebUI 安装页避免重复触发刷入。

@@ -1,6 +1,6 @@
 {
-  "version": "2026.09.18",
-  "versionCode": 2026091801,
+  "version": "2026.09.21",
+  "versionCode": 2026092101,
   "qscd-c-arm": "ddb68bd5280990d5ed0e19bb61baabac7c09d79061a07f15ea142cacf606ce09",
   "qscd-c-arm64": "16a5794968118476421cbe91ca63dfc85f05f1e28736cbd9c72c3b08be6259c2",
   "qscd-rust-arm": "3a489926912a55cd4c0dd36c3cc4d45c21b6244098eb42bdcd6bb0bf65a4eb3d",
