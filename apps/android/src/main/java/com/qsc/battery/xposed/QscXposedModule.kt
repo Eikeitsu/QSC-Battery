@@ -279,6 +279,27 @@ class QscXposedModule : XposedModule() {
         return null
     }
 
+    private fun isInteractive(): Boolean {
+        return runCatching {
+            val pmClass = Class.forName("android.os.PowerManager")
+            // system_server: ActivityManagerService 等同进程可读 PowerManagerService 内部；
+            // 更稳：通过 Context 拿 PowerManager（XposedModule 可能无 app context）
+            val ctx = runCatching {
+                val at = Class.forName("android.app.ActivityThread")
+                val cur = at.getMethod("currentActivityThread").invoke(null)
+                at.getMethod("getSystemContext").invoke(cur)
+            }.getOrNull() ?: return@runCatching true
+            val pm = ctx.javaClass.getMethod("getSystemService", String::class.java)
+                .invoke(ctx, "power") ?: return@runCatching true
+            val m = pm.javaClass.methods.firstOrNull {
+                it.name == "isInteractive" && it.parameterCount == 0
+            } ?: pm.javaClass.methods.firstOrNull {
+                it.name == "isScreenOn" && it.parameterCount == 0
+            }
+            (m?.invoke(pm) as? Boolean) ?: true
+        }.getOrDefault(true)
+    }
+
     private fun onForegroundPackage(pkg: String) {
         if (writeDisabled.get()) return
         if (File(XpPrefs.OFF_PATH).isFile) return
@@ -303,10 +324,25 @@ class QscXposedModule : XposedModule() {
         val prev = lastFgPkg.getAndSet(clean)
         if (prev == clean) return
 
+        val interactive = isInteractive()
         val wantManager = policy.desc && isManagerPackage(clean)
         val watchNow = wantManager ||
             (policy.game && isGamePackage(clean)) ||
             (policy.appStop && isStopPackage(clean))
+
+        // 息屏：不允许新进管理器会话；若已在会话则走离开管线
+        if (!interactive) {
+            cancelEnterStable()
+            if (policy.desc && managerSession.get()) {
+                cancelFgStableDebounce()
+                scheduleLeavePipeline(clean)
+            }
+            if (watchNow || lastWasWatch.get()) {
+                lastWasWatch.set(false)
+                if (needFgBus(policy)) scheduleFgStableDebounce(clean)
+            }
+            return
+        }
 
         if (wantManager) {
             cancelLeavePipeline()
@@ -448,6 +484,10 @@ class QscXposedModule : XposedModule() {
             enterStableRunnable = null
             enterPending.set(false)
             if (managerSession.get()) return@Runnable
+            if (!isInteractive()) {
+                xpLog(Log.DEBUG, "viewer enter skip: not interactive")
+                return@Runnable
+            }
             val cur = lastFgPkg.get() ?: return@Runnable
             if (!isManagerPackage(cur)) return@Runnable
             if (!managerSession.compareAndSet(false, true)) return@Runnable
@@ -540,9 +580,16 @@ class QscXposedModule : XposedModule() {
         }
         if (okFg || okEdge) {
             failStreak.set(0)
+            val watched = isManagerPackage(pkg) || isGamePackage(pkg) || isStopPackage(pkg)
             if (fgBusFirstOk.compareAndSet(false, true)) {
-                xpLog(Log.INFO, "ok fg-bus ready (first=$pkg)")
+                // 首帧就绪：关注包 INFO；非关注仅详细模式（DEBUG 受 verbose 门禁）
+                if (watched) {
+                    xpLog(Log.INFO, "ok fg-bus ready (first=$pkg)")
+                } else {
+                    xpLog(Log.DEBUG, "ok fg-bus ready (first=$pkg)")
+                }
             } else {
+                // 常规前台切换一律 DEBUG（非详细不落盘）；关注进出看 viewer / 策略 INFO
                 xpLog(Log.DEBUG, "fg $pkg")
             }
         } else {

@@ -130,6 +130,12 @@ qsc_manager_viewer_consume_xp_edge() {
 	prev="${QSC_MANAGER_VIEWER_WAS:-0}"
 	case "$edge" in
 		enter)
+			# 息屏时丢弃 enter（防残留焦点/误调度）
+			if type qsc_ps_screen_is_off >/dev/null 2>&1 && qsc_ps_screen_is_off; then
+				type qsc_log >/dev/null 2>&1 &&
+					qsc_log debug "忽略管理器 XP enter（息屏）"
+				return 1
+			fi
 			QSC_MANAGER_VIEWER_WAS=1
 			QSC_MANAGER_VIEWER_CACHE_VAL=1
 			QSC_MANAGER_VIEWER_CACHE_AT=0
@@ -177,6 +183,13 @@ qsc_manager_viewer_active() {
 		case "$now" in ""|*[!0-9]*) now=0 ;; esac
 	fi
 
+	# 息屏时不做「在看」判定（dumpsys/残留前台包名极易误报）
+	if type qsc_ps_screen_is_off >/dev/null 2>&1 && qsc_ps_screen_is_off; then
+		QSC_MANAGER_VIEWER_CACHE_VAL=0
+		QSC_MANAGER_VIEWER_CACHE_AT="$now"
+		return 1
+	fi
+
 	if [ "$now" -gt 0 ] 2>/dev/null &&
 		[ "${QSC_MANAGER_VIEWER_CACHE_AT:-0}" -gt 0 ] 2>/dev/null &&
 		[ "$((now - QSC_MANAGER_VIEWER_CACHE_AT))" -lt "${QSC_MANAGER_VIEWER_CACHE_SEC:-12}" ] 2>/dev/null; then
@@ -204,6 +217,17 @@ qsc_manager_viewer_poll() {
 	local prev="${QSC_MANAGER_VIEWER_WAS:-0}" cur=0
 	QSC_MANAGER_VIEWER_RISING=0
 	QSC_MANAGER_VIEWER_FALLING=0
+	# 息屏：强制视为未在看（并在曾为观看时发离开）
+	if type qsc_ps_screen_is_off >/dev/null 2>&1 && qsc_ps_screen_is_off; then
+		if [ "$prev" = "1" ]; then
+			QSC_MANAGER_VIEWER_FALLING=1
+			QSC_MANAGER_VIEWER_WAS=0
+			QSC_MANAGER_VIEWER_CACHE_VAL=0
+			type qsc_log >/dev/null 2>&1 &&
+				qsc_log info "已离开模块管理器（息屏）"
+		fi
+		return 1
+	fi
 	# 优先消费管理器专用边沿；其次用通用 fg 状态判断
 	if type qsc_manager_viewer_consume_xp_edge >/dev/null 2>&1 &&
 		qsc_manager_viewer_xp_edge_pending; then

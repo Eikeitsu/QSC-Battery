@@ -342,8 +342,13 @@ qsc_ps_park_session_end() {
 	[ "$mins" -lt 1 ] 2>/dev/null && mins=1
 	QSC_PS_PARK_LAST_SUMMARY="退出${zh} ${mins}m：唤醒${wakes}次(≈${_wph_a}.${_wph_b}/h) skip ${skips}/${loops} 满轮${full} 均睡${avg_sleep}s 简介写${desc_w} → ${verdict}"
 	# 过短驻停（常见于亮灭闪动）不刷 INFO，避免误导且少写盘
-	if [ "$elapsed" -lt "${QSC_PS_PARK_MIN_SUMMARY:-180}" ] 2>/dev/null; then
-		qsc_log debug "短驻停忽略总结（${elapsed}s<${QSC_PS_PARK_MIN_SUMMARY:-180}s）: $QSC_PS_PARK_LAST_SUMMARY"
+	# 深睡段即使略短也写 INFO（用户更关心过夜总结）
+	_min="${QSC_PS_PARK_MIN_SUMMARY:-180}"
+	case "$label" in
+		deep|night) [ "$_min" -gt 60 ] 2>/dev/null && _min=60 ;;
+	esac
+	if [ "$elapsed" -lt "$_min" ] 2>/dev/null; then
+		qsc_log debug "短驻停忽略总结（${elapsed}s<${_min}s）: $QSC_PS_PARK_LAST_SUMMARY"
 	else
 		qsc_log info "$QSC_PS_PARK_LAST_SUMMARY"
 		printf '%s\n' "$QSC_PS_PARK_LAST_SUMMARY" >"$DATADIR/park_last_summary" 2>/dev/null
@@ -384,6 +389,8 @@ qsc_ps_policy_edge_log() {
 	fi
 
 	if [ "$new_park" = "1" ]; then
+		QSC_PS_PARK_EXIT_SINCE=0
+		QSC_PS_DEEP_EXIT_HITS=0
 		if [ "${QSC_PS_PARK_ACTIVE:-0}" != "1" ]; then
 			qsc_ps_park_session_begin "$tier"
 			# 进入息屏加强/深睡：停简介 worker，少一个常驻 shell
@@ -399,8 +406,10 @@ qsc_ps_policy_edge_log() {
 	else
 		if [ "${QSC_PS_PARK_ACTIVE:-0}" = "1" ]; then
 			qsc_ps_park_session_end
-			# 离开驻停：若仍开动态简介则拉回 worker
-			if type qsc_description_enabled >/dev/null 2>&1 &&
+			# 离开驻停：仅亮屏且非压制时再拉简介 worker（防息屏误判反复启停）
+			if type qsc_ps_screen_is_off >/dev/null 2>&1 && qsc_ps_screen_is_off; then
+				:
+			elif type qsc_description_enabled >/dev/null 2>&1 &&
 				qsc_description_enabled; then
 				type qsc_start_description_worker >/dev/null 2>&1 &&
 					qsc_start_description_worker
@@ -412,7 +421,8 @@ qsc_ps_policy_edge_log() {
 }
 
 # 深睡粘滞：跳过息屏 sysfs 探测，沿用 deep idle。
-# 每隔 QSC_PS_DEEP_STICKY_MAX（默认 2）次 lean 醒做一次全量场景刷新，以便亮屏退出。
+# 每隔 QSC_PS_DEEP_STICKY_MAX（默认 2）次 lean 醒做一次全量场景刷新。
+# 退出深睡需连续两次全量探测都非 deep（防亮度抖动误退出 → 反复启停 worker）。
 # 返回 0=已粘滞处理；1=需走全量 policy_refresh
 qsc_ps_policy_try_deep_sticky() {
 	local max="${QSC_PS_DEEP_STICKY_MAX:-2}" n
@@ -436,6 +446,23 @@ qsc_ps_policy_try_deep_sticky() {
 	QSC_PS_FULL_MAX_GAP="${QSC_PS_DEEP_FULL_GAP:-7200}"
 	QSC_PS_HB_SEC="$(qsc_clamp_int "${QSC_PS_HB_SEC:-180}" 180 900 600)"
 	QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+	return 0
+}
+
+# 若本应从驻停退出，先滞回一段时间（默认=screen_off_enter_sec），避免亮灭闪一下就结算总结/拉 worker
+qsc_ps_policy_hold_park_exit() {
+	local now="${QSC_PS_NOW:-0}" need="${QSC_PS_SCREEN_OFF_ENTER:-90}" since
+	case "$need" in ""|*[!0-9]*) need=90 ;; esac
+	[ "$need" -lt 30 ] 2>/dev/null && need=30
+	since="${QSC_PS_PARK_EXIT_SINCE:-0}"
+	if [ "$since" -le 0 ] 2>/dev/null; then
+		QSC_PS_PARK_EXIT_SINCE="$now"
+		return 0
+	fi
+	if [ "$now" -gt 0 ] 2>/dev/null &&
+		[ "$((now - since))" -ge "$need" ] 2>/dev/null; then
+		return 1
+	fi
 	return 0
 }
 
@@ -477,7 +504,8 @@ qsc_ps_policy_refresh() {
 
 	if [ "$plugged" = "1" ]; then
 		QSC_PS_MODE=plugged
-		# 插电充电中不拉未插电 DeepPark
+		QSC_PS_PARK_EXIT_SINCE=0
+		QSC_PS_DEEP_EXIT_HITS=0
 		qsc_ps_policy_edge_log
 		return 0
 	fi
@@ -490,9 +518,31 @@ qsc_ps_policy_refresh() {
 		QSC_PS_HB_SEC="$(qsc_clamp_int "${QSC_PS_HB_SEC:-180}" 180 900 600)"
 		QSC_PS_DESC_FORCE_STATIC=1
 		QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+		QSC_PS_PARK_EXIT_SINCE=0
+		QSC_PS_DEEP_EXIT_HITS=0
 		qsc_ps_policy_edge_log
 		return 0
 	fi
+
+	# 曾在深睡：单次探测非 deep 不够，连续 2 次才允许退出（防亮度闪一下）
+	case "${QSC_PS_MODE_WAS:-}" in
+		deep)
+			QSC_PS_DEEP_EXIT_HITS=$((${QSC_PS_DEEP_EXIT_HITS:-0} + 1))
+			if [ "${QSC_PS_DEEP_EXIT_HITS:-0}" -lt 2 ] 2>/dev/null; then
+				QSC_PS_MODE=deep
+				QSC_PS_DEEP=1
+				QSC_PS_SCREEN_OFF=1
+				QSC_PS_DESC_FORCE_STATIC=1
+				QSC_PS_IDLE_EFF="${QSC_PS_DEEP_IDLE:-900}"
+				QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+				qsc_ps_policy_edge_log
+				return 0
+			fi
+			;;
+		*)
+			QSC_PS_DEEP_EXIT_HITS=0
+			;;
+	esac
 
 	# 息屏加强：须连续息屏满 screen_off_enter_sec（默认 90s）才切 MODE，
 	# 避免口袋亮灭立刻进出；深睡仍按 deep_after_sec（默认 600s）另计。
@@ -512,10 +562,39 @@ qsc_ps_policy_refresh() {
 			[ "$QSC_PS_IDLE_EFF" -gt 900 ] 2>/dev/null && QSC_PS_IDLE_EFF=900
 			QSC_PS_DESC_FORCE_STATIC=1
 			QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+			QSC_PS_PARK_EXIT_SINCE=0
 			qsc_ps_policy_edge_log
 			return 0
 		fi
 	fi
+
+	# 将离开息屏加强/深睡：滞回，避免短暂误判亮屏就结算总结并拉起 worker
+	case "${QSC_PS_MODE_WAS:-}" in
+		deep|screen_off)
+			if qsc_ps_policy_hold_park_exit; then
+				QSC_PS_MODE="${QSC_PS_MODE_WAS}"
+				QSC_PS_DESC_FORCE_STATIC=1
+				if [ "$QSC_PS_MODE" = "deep" ]; then
+					QSC_PS_DEEP=1
+					QSC_PS_SCREEN_OFF=1
+					QSC_PS_IDLE_EFF="${QSC_PS_DEEP_IDLE:-900}"
+				else
+					QSC_PS_SCREEN_OFF=1
+					QSC_PS_IDLE_EFF="$QSC_PS_IDLE"
+					qsc_ps_native_ready 2>/dev/null &&
+						[ "${QSC_PS_IDLE_NATIVE:-0}" -gt "$QSC_PS_IDLE_EFF" ] 2>/dev/null &&
+						QSC_PS_IDLE_EFF="$QSC_PS_IDLE_NATIVE"
+					QSC_PS_IDLE_EFF=$((QSC_PS_IDLE_EFF + QSC_PS_IDLE_EFF / 2))
+					[ "$QSC_PS_IDLE_EFF" -gt 900 ] 2>/dev/null && QSC_PS_IDLE_EFF=900
+				fi
+				QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+				qsc_ps_policy_edge_log
+				return 0
+			fi
+			;;
+	esac
+	QSC_PS_PARK_EXIT_SINCE=0
+	QSC_PS_DEEP_EXIT_HITS=0
 
 	qsc_ps_policy_edge_log
 	return 0

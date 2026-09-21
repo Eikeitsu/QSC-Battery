@@ -166,9 +166,11 @@ worker_try_recover_xp() {
 	return 1
 }
 
-# dumpsys 安全网：XP 漏边沿时仍能发现管理器
+# dumpsys 安全网：XP 漏边沿时仍能发现管理器（息屏/驻停压制时禁用，避免栈里残留包名误报）
 worker_dumpsys_manager_hit() {
 	local list _p
+	type qsc_ps_screen_is_off >/dev/null 2>&1 && qsc_ps_screen_is_off && return 1
+	type qsc_ps_desc_suppressed >/dev/null 2>&1 && qsc_ps_desc_suppressed && return 1
 	type qsc_manager_viewer_build_list >/dev/null 2>&1 || return 1
 	type qsc_fg_dumpsys_read >/dev/null 2>&1 || return 1
 	list="${QSC_MANAGER_VIEWER_LIST:-$DATADIR/.manager_viewer_pkgs}"
@@ -252,6 +254,9 @@ while worker_parent_alive; do
 				type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
 				type qsc_description_restore_static >/dev/null 2>&1 &&
 					qsc_description_restore_static
+				worker_state 0
+				worker_wait_edges 120
+				continue
 			fi
 			worker_state 0
 			worker_wait_edges 120
