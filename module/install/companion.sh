@@ -34,11 +34,10 @@ install_companion_app() {
 	fi
 
 	ui_print "--------------------------------"
-	ui_print " 伴侣 APP（可选）"
-	ui_print " APP 可不装模块单独使用；装上后才方便控制停充"
-	ui_print " 音量上：现在安装模块内嵌的 APK"
-	ui_print " 音量下：跳过（可在 APP「更新」页安装）"
-	ui_print " 20 秒未选择时跳过"
+	ui_print " 是否安装伴侣 APP？（可选，便于控制停充）"
+	ui_print " 音量上：安装包内 APK"
+	ui_print " 音量下：跳过（可之后再装）"
+	ui_print " 20 秒未选 → 跳过"
 	qsc_volume_choice
 	case "$?" in
 		0) ;;

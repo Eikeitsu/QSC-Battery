@@ -142,7 +142,7 @@ qsc_manager_viewer_consume_xp_edge() {
 			if [ "$prev" != "1" ]; then
 				QSC_MANAGER_VIEWER_RISING=1
 				type qsc_log >/dev/null 2>&1 &&
-					qsc_log info "模块管理器在前台（XP边沿${pkg:+: $pkg}）"
+					qsc_log debug "模块管理器在前台（XP边沿${pkg:+: $pkg}）"
 			fi
 			return 0
 			;;
@@ -153,7 +153,7 @@ qsc_manager_viewer_consume_xp_edge() {
 			if [ "$prev" = "1" ]; then
 				QSC_MANAGER_VIEWER_FALLING=1
 				type qsc_log >/dev/null 2>&1 &&
-					qsc_log info "已离开模块管理器（XP边沿${pkg:+: $pkg}）"
+					qsc_log debug "已离开模块管理器（XP边沿${pkg:+: $pkg}）"
 			fi
 			return 1
 			;;
@@ -236,7 +236,7 @@ qsc_manager_viewer_poll() {
 			QSC_MANAGER_VIEWER_WAS=0
 			QSC_MANAGER_VIEWER_CACHE_VAL=0
 			type qsc_log >/dev/null 2>&1 &&
-				qsc_log info "已离开模块管理器（息屏）"
+				qsc_log debug "已离开模块管理器（息屏）"
 		fi
 		return 1
 	fi
@@ -262,11 +262,11 @@ qsc_manager_viewer_poll() {
 	if [ "$cur" = "1" ] && [ "$prev" != "1" ]; then
 		QSC_MANAGER_VIEWER_RISING=1
 		type qsc_log >/dev/null 2>&1 &&
-			qsc_log info "模块管理器在前台（简介将勤刷）"
+			qsc_log debug "模块管理器在前台（简介将勤刷）"
 	elif [ "$cur" != "1" ] && [ "$prev" = "1" ]; then
 		QSC_MANAGER_VIEWER_FALLING=1
 		type qsc_log >/dev/null 2>&1 &&
-			qsc_log info "已离开模块管理器（简介恢复按需）"
+			qsc_log debug "已离开模块管理器（简介恢复按需）"
 	fi
 	QSC_MANAGER_VIEWER_WAS="$cur"
 	[ "$cur" = "1" ]

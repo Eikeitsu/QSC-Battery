@@ -231,6 +231,7 @@ if [ "$module_off" = "1" ] && [ -f "$DATADIR/power_switch" ]; then
 		rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" \
 			"$DATADIR/battery_switch" "$DATADIR/app_stop_flag" \
 			"$DATADIR/resume_fail_hint"
+		rm -f "$DATADIR/charge_full_done" "$DATADIR/charge_full_since" "$DATADIR/now_c"
 		qsc_clear_active_switch
 		qsc_log info "模块已关闭，还原充电节点并清除停充状态 [$start_node <- $start_val]"
 		qsc_log_once_clear off_restore

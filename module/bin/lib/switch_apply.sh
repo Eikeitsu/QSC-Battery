@@ -52,6 +52,7 @@ if [ -f "$DATADIR/power_switch" ] && [ "$module_off" != "1" ]; then
 		if [ "$start_ok" = "1" ]; then
 			rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" "$DATADIR/battery_switch" "$DATADIR/app_stop_flag"
 			rm -f "$DATADIR/resume_fail_hint"
+			rm -f "$DATADIR/charge_full_done" "$DATADIR/charge_full_since" "$DATADIR/now_c"
 			qsc_clear_active_switch
 			qsc_stop_wakelock_release
 			qsc_log_once_clear resume_fail

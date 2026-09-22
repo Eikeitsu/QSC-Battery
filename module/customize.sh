@@ -44,12 +44,9 @@ if [ "$QSC_INSTALL_AUTO" = "1" ]; then
 	ui_print " 无人值守：已确认安装"
 else
 	ui_print " 请选择安装方式"
-	ui_print " 音量上：默认安装（推荐）"
-	ui_print "   安装全部可用组件（WebUI / 电流控制 / 伴侣 APP 等）"
-	ui_print "   有旧配置时保留核心停充项，省电用新版默认"
-	ui_print " 音量下：自定义安装"
-	ui_print "   逐项选择配置保留、WebUI、电流控制、守护下载、伴侣 APP"
-	ui_print " 20 秒未选择将使用默认安装"
+	ui_print " 音量上：默认安装（推荐）— 全量组件；有旧配置则保留核心项"
+	ui_print " 音量下：自定义安装 — 逐项选择"
+	ui_print " 20 秒未选 → 默认安装"
 	qsc_volume_choice
 	case "$?" in
 		1)
@@ -104,16 +101,15 @@ if [ -f "$CONFIG_BACKUP" ]; then
 		ui_print "- 默认安装：保留核心配置，省电用新版默认"
 	else
 		ui_print "--------------------------------"
-		ui_print " 检测到已安装的 QSC-Battery"
-		ui_print " 音量上：保留核心配置（停充阈值/开关/时段等）"
-		ui_print "         省电间隔等运行参数用新版默认"
-		ui_print " 音量下：全部使用新版默认配置"
-		ui_print " 20 秒未选择时按「保留核心配置」处理"
+		ui_print " 检测到已安装"
+		ui_print " 音量上：保留核心配置（停充等），省电用新版默认"
+		ui_print " 音量下：全部用新版默认"
+		ui_print " 20 秒未选 → 保留核心配置"
 		qsc_volume_choice
 		case "$?" in
-			0) KEEP_CONFIG=1; ui_print "- 将保留核心配置，并应用新版省电默认" ;;
-			1) ui_print "- 将使用新版默认配置" ;;
-			*) KEEP_CONFIG=1; ui_print "- 选择超时，按安全默认保留核心配置" ;;
+			0) KEEP_CONFIG=1; ui_print "- 保留核心配置，省电用新版默认" ;;
+			1) ui_print "- 使用新版默认配置" ;;
+			*) KEEP_CONFIG=1; ui_print "- 超时，保留核心配置" ;;
 		esac
 	fi
 fi
@@ -130,14 +126,14 @@ elif [ "$INSTALL_MODE" = "default" ]; then
 else
 	ui_print "--------------------------------"
 	ui_print " 是否安装 WebUI？"
-	ui_print " 音量上：安装 WebUI"
-	ui_print " 音量下：不安装 WebUI"
-	ui_print " 20 秒未选择时默认安装 WebUI"
+	ui_print " 音量上：安装"
+	ui_print " 音量下：不安装"
+	ui_print " 20 秒未选 → 安装"
 	qsc_volume_choice
 	case "$?" in
 		0) ui_print "- 将安装 WebUI" ;;
 		1) INSTALL_WEBUI=0; ui_print "- 将不安装 WebUI" ;;
-		*) ui_print "- 选择超时，默认安装 WebUI" ;;
+		*) ui_print "- 超时，默认安装 WebUI" ;;
 	esac
 fi
 
@@ -148,17 +144,15 @@ elif [ "$INSTALL_MODE" = "default" ]; then
 	ui_print "- 默认安装：安装电流控制组件（默认关闭）"
 else
 	ui_print "--------------------------------"
-	ui_print " 是否安装「电流控制」组件？"
-	ui_print " （模拟旁路 / 慢充 / 限流 / 游戏限流）"
-	ui_print " 配置文件：config/current.json"
-	ui_print " 音量上：安装（默认关闭，需手动开启）"
-	ui_print " 音量下：不安装（不写入相关文件）"
-	ui_print " 20 秒未选择时默认安装"
+	ui_print " 是否安装电流控制？（旁路/慢充/限流，装完默认关）"
+	ui_print " 音量上：安装"
+	ui_print " 音量下：不安装"
+	ui_print " 20 秒未选 → 安装"
 	qsc_volume_choice
 	case "$?" in
-		0) ui_print "- 将安装电流控制组件" ;;
-		1) INSTALL_CURRENT=0; ui_print "- 将不安装电流控制组件" ;;
-		*) ui_print "- 选择超时，默认安装电流控制组件" ;;
+		0) ui_print "- 将安装电流控制" ;;
+		1) INSTALL_CURRENT=0; ui_print "- 将不安装电流控制" ;;
+		*) ui_print "- 超时，默认安装电流控制" ;;
 	esac
 fi
 
@@ -252,21 +246,19 @@ qscd_offer_download() {
 		return 0
 	fi
 	ui_print "--------------------------------"
-	ui_print " 本安装包未自带「事件唤醒」守护文件"
-	ui_print " 它能让未插电时由充电事件唤醒，替代定时轮询，更省电"
-	ui_print " 不装也不影响停充功能"
-	ui_print " 音量上：现在联网下载"
-	ui_print " 音量下：跳过（安装完成后可在 WebUI 里下载）"
-	ui_print " 20 秒未选择时跳过"
+	ui_print " 下载事件唤醒守护？（更省电；不装不影响停充）"
+	ui_print " 音量上：现在下载"
+	ui_print " 音量下：跳过（可在 WebUI 再下）"
+	ui_print " 20 秒未选 → 跳过"
 	qsc_volume_choice
 	case "$?" in
 		0) ;;
 		1)
-			ui_print "- 已跳过：可在 WebUI「事件唤醒（守护）」里随时下载"
+			ui_print "- 已跳过：可在 WebUI「事件唤醒」里再下"
 			return 0
 			;;
 		*)
-			ui_print "- 选择超时，已跳过：可在 WebUI 里随时下载"
+			ui_print "- 超时已跳过：可在 WebUI 再下"
 			return 0
 			;;
 	esac
@@ -278,10 +270,10 @@ qscd_offer_download() {
 	esac
 
 	ui_print "--------------------------------"
-	ui_print " 下载哪套实现？两者功能完全一致，只能二选一"
-	ui_print " 音量上：Rust 版（内存安全，体积略大）"
-	ui_print " 音量下：C 版（依赖最少，体积最小）"
-	ui_print " 20 秒未选择时下载 $_dl_name 版"
+	ui_print " 选守护实现（推荐 Rust）"
+	ui_print " 音量上：Rust（功能更多，bug也可能更多）"
+	ui_print " 音量下：C（更轻量）"
+	ui_print " 20 秒未选 → $_dl_name"
 	qsc_volume_choice
 	case "$?" in
 		0) _dl_impl="rust"; _dl_name="Rust" ;;
@@ -313,7 +305,7 @@ qscd_offer_download() {
 		unsupported_arch) ui_print "- 本机架构无可用守护文件" ;;
 		*) ui_print "- 下载未成功（${_dl_err:-未知原因}）" ;;
 	esac
-	ui_print "- 不影响安装：请在 WebUI「事件唤醒（守护）」里重试"
+	ui_print "- 不影响安装：请在 WebUI「事件唤醒」里重试"
 	return 0
 }
 install_qscd

@@ -422,8 +422,11 @@ qsc_maintain_stop_while_plugged() {
 		return 1
 	}
 
-	# 假停充自愈（0814 无；保留为有意义优化）：
-	# 标记已超过数秒但电流仍大 → 清标记，让主循环重新走完整停充分支
+	# 假停充自愈：
+	# 标记已超过数秒但电流仍大 → 清标记，让主循环重新走完整停充分支。
+	# 停充后短时间内 OEM（尤其 input_suspend）常仍报 Charging / 中等电流，
+	# 若立刻还原会「停充几秒又恢复」；充满再停还会丢掉已满足条件又重等 wait_sec。
+	# 宽限期内只重申，不清标记；已有 charge_full_done 时同样只重申。
 	_ts="$(cat "$DATADIR/power_stop_ts" 2>/dev/null | tr -d ' \r\n')"
 	_now="$(date +%s 2>/dev/null | tr -d ' \r\n')"
 	case "$_ts" in ""|*[!0-9]*) _ts=0 ;; esac
@@ -431,20 +434,31 @@ qsc_maintain_stop_while_plugged() {
 	if [ "$_now" -gt 0 ] && [ "$_ts" -gt 0 ] && [ $((_now - _ts)) -ge 8 ]; then
 		_cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
 		_st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
+		_age=$((_now - _ts))
+		_grace=120
 		if ! qsc_charge_looks_stopped; then
-			qsc_log_once fake_stop warn \
-				"假停充：已标记停充但电流仍高，先还原节点再清标记并重试停充"
-			qsc_dbg "fake_stop 触发 age=$((_now - _ts))s cur=${_cur:-?} status=${_st:-?}"
-			# 必须先还原：只清 power_switch 会留下孤儿停充，热更新/杀进程后更难自愈
-			if type qsc_power_start >/dev/null 2>&1; then
-				qsc_power_start
+			if [ "$_age" -lt "$_grace" ] 2>/dev/null || [ -f "$DATADIR/charge_full_done" ]; then
+				qsc_dbg "假停充可疑但宽限/闩锁中：仅重申 age=${_age}s cur=${_cur:-?} status=${_st:-?}"
+			else
+				qsc_log_once fake_stop warn \
+					"假停充：已标记停充但电流仍高，先还原节点再清标记并重试停充"
+				qsc_dbg "fake_stop 触发 age=${_age}s cur=${_cur:-?} status=${_st:-?}"
+				# 必须先还原：只清 power_switch 会留下孤儿停充，热更新/杀进程后更难自愈
+				if type qsc_power_start >/dev/null 2>&1; then
+					qsc_power_start
+				fi
+				# 保留充满再停闩锁，下一轮可立刻再停而不必重等
+				_keep_full=0
+				[ -f "$DATADIR/charge_full_done" ] && _keep_full=1
+				rm -f "$DATADIR/power_switch" "$DATADIR/active_switch" \
+					"$DATADIR/power_on" "$DATADIR/power_off" 2>/dev/null
+				[ "$_keep_full" = "1" ] && touch "$DATADIR/charge_full_done" 2>/dev/null
+				qsc_stop_wakelock_release
+				return 1
 			fi
-			rm -f "$DATADIR/power_switch" "$DATADIR/active_switch" \
-				"$DATADIR/power_on" "$DATADIR/power_off" 2>/dev/null
-			qsc_stop_wakelock_release
-			return 1
+		else
+			qsc_dbg "maintain：停充态正常 age=${_age}s cur=${_cur:-?} status=${_st:-?}"
 		fi
-		qsc_dbg "maintain：停充态正常 age=$((_now - _ts))s cur=${_cur:-?} status=${_st:-?}"
 	fi
 
 	# 按场景决定持锁或释放（auto 亮屏会释放）

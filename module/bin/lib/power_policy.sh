@@ -294,7 +294,7 @@ qsc_ps_park_session_begin() {
 	QSC_PS_PARK_SLEEP_N0="${QSC_PS_SLEEP_COUNT:-0}"
 	QSC_PS_PARK_DESC_W0="${QSC_PS_DESC_WRITES:-0}"
 	zh="$(qsc_ps_park_label_zh "$label")"
-	qsc_log info "进入${zh}（目标少唤醒；idle≈${QSC_PS_IDLE_EFF:-?}s）"
+	qsc_log debug "进入${zh}（目标少唤醒；idle≈${QSC_PS_IDLE_EFF:-?}s）"
 }
 
 qsc_ps_park_session_end() {
@@ -379,7 +379,7 @@ qsc_ps_policy_edge_log() {
 						case "$prev" in
 							deep|screen_off) ;;
 							*)
-								qsc_log info "运行模式 ${prev}→${cur}"
+								qsc_log debug "运行模式 ${prev}→${cur}"
 								;;
 						esac
 						;;
@@ -400,7 +400,7 @@ qsc_ps_policy_edge_log() {
 				qsc_description_restore_static
 		elif [ -n "$tier" ] && [ "$tier" != "${QSC_PS_PARK_LABEL:-}" ]; then
 			zh="$(qsc_ps_park_label_zh "$tier")"
-			qsc_log info "驻停加深为${zh}"
+			qsc_log debug "驻停加深为${zh}"
 			QSC_PS_PARK_LABEL="$tier"
 		fi
 	else

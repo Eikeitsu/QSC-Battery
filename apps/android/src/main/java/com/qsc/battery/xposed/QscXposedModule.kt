@@ -21,7 +21,8 @@ import java.util.concurrent.atomic.AtomicReference
  * 2) 前台包名总线 [XpPrefs.FG_PATH] + 管理器进出 [XpPrefs.VIEWER_PATH]
  *    Magisk 写 [XpPrefs.FG_POLICY_PATH] 门禁：无简介/游戏/停充则 idle，XP 不写盘。
  *    分级：仅简介→管理器；游戏/停充→各自列表；离开关注包仍写一次。
- *    管理器会话：进出各经 3s 稳定；确认离开后再等 90s 超时才发 leave。
+ *    管理器会话：进出各经 1.5s 稳定；确认离开后再等 90s 超时才发 leave。
+ *    宽限期内回到管理器会补发 enter，避免简介 worker 停刷。
  * 3) 可选辅助边沿（默认关）：亮灭屏 / Doze / 白名单广播 → [QscXpAssist]
  * 不写充电节点。
  */
@@ -52,10 +53,13 @@ class QscXposedModule : XposedModule() {
     private val pendingLeavePkg = AtomicReference<String?>(null)
     private val viewerPkgsCacheAt = AtomicLong(0L)
     private val viewerPkgsCached = AtomicReference<Set<String>>(emptySet())
+    private val viewerPkgsMtime = AtomicLong(-1L)
     private val gamePkgsCacheAt = AtomicLong(0L)
     private val gamePkgsCached = AtomicReference<Set<String>>(emptySet())
+    private val gamePkgsMtime = AtomicLong(-1L)
     private val stopPkgsCacheAt = AtomicLong(0L)
     private val stopPkgsCached = AtomicReference<Set<String>>(emptySet())
+    private val stopPkgsMtime = AtomicLong(-1L)
     private val policyCacheAt = AtomicLong(0L)
     private val policyCached = AtomicReference(FgPolicy.DEFAULT)
     private val verboseCacheAt = AtomicLong(0L)
@@ -335,10 +339,12 @@ class QscXposedModule : XposedModule() {
             cancelLeavePipeline()
             cancelFgStableDebounce()
             if (managerSession.get()) {
+                writeManagerFg(pkg)
                 writeViewerEdge("enter", pkg)
                 lastWasWatch.set(true)
                 xpLog(Log.DEBUG, "viewer pulse enter on screen on ($pkg)")
             } else {
+                writeManagerFg(pkg)
                 scheduleEnterStable(pkg)
             }
         }
@@ -393,22 +399,26 @@ class QscXposedModule : XposedModule() {
         }
 
         if (wantManager) {
+            val wasLeaving = leavePending.get()
             cancelLeavePipeline()
             cancelFgStableDebounce()
             if (managerSession.get()) {
-                // 仅简介：viewer 会话已在；亮屏同包名时补发 enter，唤醒被驻停杀掉的简介 worker
-                if (screenJustOn) {
-                    writeViewerEdge("enter", clean)
-                    lastWasWatch.set(true)
-                    xpLog(Log.DEBUG, "viewer re-enter after screen on ($clean)")
-                    return
-                }
-                writeFgIfNeeded(clean, notifyEdge = true, policy)
+                // 会话仍在（含离开宽限期取消回来 / 亮屏）：必须再发 enter，
+                // 否则 worker 若已因 poll 失败退出观看循环，简介会一直停住。
+                writeManagerFg(clean)
+                writeViewerEdge("enter", clean)
                 lastWasWatch.set(true)
-                xpLog(Log.DEBUG, "viewer session keep ($clean)")
+                xpLog(
+                    Log.DEBUG,
+                    when {
+                        screenJustOn -> "viewer pulse enter on screen on ($clean)"
+                        wasLeaving -> "viewer pulse enter after leave cancel ($clean)"
+                        else -> "viewer session pulse enter ($clean)"
+                    },
+                )
                 return
             }
-            writeFgIfNeeded(clean, notifyEdge = false, policy)
+            writeManagerFg(clean)
             scheduleEnterStable(clean)
             return
         }
@@ -416,7 +426,8 @@ class QscXposedModule : XposedModule() {
         cancelEnterStable()
         if (policy.desc && managerSession.get()) {
             cancelFgStableDebounce()
-            writeFgIfNeeded(clean, notifyEdge = true, policy)
+            // 离开管理器：先把 fg 改成当前包，避免 desc-only 下 fg 仍挂着管理器导致假阳性
+            writeFg(clean, notifyEdge = needFgBus(policy))
             scheduleLeavePipeline(clean)
             return
         }
@@ -500,12 +511,19 @@ class QscXposedModule : XposedModule() {
         return idle
     }
 
-    /** 仅简介时只要 viewer 边沿；游戏/停充才需要 qsc_xp_fg */
+    /** 游戏/停充需要通用前台总线；仅简介时也要给管理器写 fg，供 worker poll 命中 */
     private fun needFgBus(policy: FgPolicy): Boolean = policy.game || policy.appStop
 
     private fun writeFgIfNeeded(pkg: String, notifyEdge: Boolean, policy: FgPolicy) {
-        if (!needFgBus(policy)) return
-        writeFg(pkg, notifyEdge)
+        when {
+            needFgBus(policy) -> writeFg(pkg, notifyEdge)
+            policy.desc && isManagerPackage(pkg) -> writeFg(pkg, notifyEdge = false)
+        }
+    }
+
+    /** 管理器在前台：始终维护 qsc_xp_fg（即使仅开简介） */
+    private fun writeManagerFg(pkg: String) {
+        writeFg(pkg, notifyEdge = false)
     }
 
     private fun cancelEnterStable() {
@@ -528,7 +546,7 @@ class QscXposedModule : XposedModule() {
         fgStableRunnable = null
     }
 
-    /** 进入管理器：3s 稳定后才确认会话并写 enter */
+    /** 进入管理器：稳定后才确认会话并写 enter */
     private fun scheduleEnterStable(pkg: String) {
         if (enterPending.get()) {
             return
@@ -545,7 +563,9 @@ class QscXposedModule : XposedModule() {
             val cur = lastFgPkg.get() ?: return@Runnable
             if (!isManagerPackage(cur)) return@Runnable
             if (!managerSession.compareAndSet(false, true)) return@Runnable
-            writeFgIfNeeded(cur, notifyEdge = true, loadFgPolicy())
+            val p = loadFgPolicy()
+            writeManagerFg(cur)
+            if (needFgBus(p)) writeFg(cur, notifyEdge = true)
             writeViewerEdge("enter", cur)
             lastWasWatch.set(true)
             xpLog(Log.DEBUG, "viewer enter stable ($cur)")
@@ -556,8 +576,8 @@ class QscXposedModule : XposedModule() {
     }
 
     /**
-     * 离开管理器：先 3s 稳定确认离开，再等 [MANAGER_LEAVE_TIMEOUT_MS] 超时才写 leave。
-     * 宽限期内切回管理器会 cancel，会话不中断、不重复 enter。
+     * 离开管理器：先稳定确认离开，再等 [MANAGER_LEAVE_TIMEOUT_MS] 超时才写 leave。
+     * 宽限期内切回管理器会 cancel 并补发 enter，会话不中断。
      */
     private fun scheduleLeavePipeline(pkg: String) {
         pendingLeavePkg.set(pkg)
@@ -588,7 +608,8 @@ class QscXposedModule : XposedModule() {
                 if (now != null && isManagerPackage(now)) return@Runnable
                 if (managerSession.compareAndSet(true, false)) {
                     val p = loadFgPolicy()
-                    writeFgIfNeeded(finalPkg, notifyEdge = true, p)
+                    // 离开后 fg 指到当前前台（非管理器），避免简介 poll 假阳性
+                    writeFg(finalPkg, notifyEdge = needFgBus(p))
                     writeViewerEdge("leave", finalPkg)
                     lastWasWatch.set(
                         (p.game && isGamePackage(finalPkg)) ||
@@ -635,45 +656,69 @@ class QscXposedModule : XposedModule() {
         if (okFg || okEdge) {
             failStreak.set(0)
             val watched = isManagerPackage(pkg) || isGamePackage(pkg) || isStopPackage(pkg)
+            val verbose = isVerbose()
             if (fgBusFirstOk.compareAndSet(false, true)) {
-                // 首帧就绪：关注包 INFO；非关注仅详细模式（DEBUG 受 verbose 门禁）
-                if (watched) {
-                    xpLog(Log.INFO, "ok fg-bus ready (first=$pkg)")
-                } else {
-                    xpLog(Log.DEBUG, "ok fg-bus ready (first=$pkg)")
+                // 首帧：关注包带包名；非关注不报包名（非详细），避免刷无关应用
+                when {
+                    watched -> xpLog(Log.INFO, "ok fg-bus ready (first=$pkg)")
+                    verbose -> xpLog(Log.DEBUG, "ok fg-bus ready (first=$pkg)")
+                    else -> xpLog(Log.INFO, "ok fg-bus ready")
                 }
-            } else {
-                // 常规前台切换一律 DEBUG（非详细不落盘）；关注进出看 viewer / 策略 INFO
+            } else if (verbose) {
+                // 详细模式才逐条打前台切换；关注进出已有 viewer INFO
                 xpLog(Log.DEBUG, "fg $pkg")
             }
         } else {
-            onWriteFailed("fg:$pkg")
-            xpLog(Log.WARN, "fg write failed ($pkg)")
+            onWriteFailed("fg")
+            if (isVerbose()) {
+                xpLog(Log.WARN, "fg write failed ($pkg)")
+            } else {
+                xpLog(Log.WARN, "fg write failed")
+            }
         }
     }
 
     private fun isManagerPackage(pkg: String): Boolean {
         if (BUILTIN_MANAGER_PKGS.contains(pkg)) return true
-        return loadPkgSet(XpPrefs.VIEWER_PKGS_PATH, viewerPkgsCacheAt, viewerPkgsCached).contains(pkg)
+        return loadPkgSet(
+            XpPrefs.VIEWER_PKGS_PATH,
+            viewerPkgsCacheAt,
+            viewerPkgsCached,
+            viewerPkgsMtime,
+        ).contains(pkg)
     }
 
-    private fun isGamePackage(pkg: String): Boolean = loadPkgSet(XpPrefs.GAME_PKGS_PATH, gamePkgsCacheAt, gamePkgsCached).contains(pkg)
+    private fun isGamePackage(pkg: String): Boolean = loadPkgSet(
+        XpPrefs.GAME_PKGS_PATH,
+        gamePkgsCacheAt,
+        gamePkgsCached,
+        gamePkgsMtime,
+    ).contains(pkg)
 
-    private fun isStopPackage(pkg: String): Boolean = loadPkgSet(XpPrefs.STOP_PKGS_PATH, stopPkgsCacheAt, stopPkgsCached).contains(pkg)
+    private fun isStopPackage(pkg: String): Boolean = loadPkgSet(
+        XpPrefs.STOP_PKGS_PATH,
+        stopPkgsCacheAt,
+        stopPkgsCached,
+        stopPkgsMtime,
+    ).contains(pkg)
 
     private fun loadPkgSet(
         path: String,
         cacheAt: AtomicLong,
         cached: AtomicReference<Set<String>>,
+        fileMtime: AtomicLong,
     ): Set<String> {
+        val f = File(path)
+        val mtime = runCatching { if (f.isFile) f.lastModified() else 0L }.getOrDefault(0L)
         val now = System.currentTimeMillis()
-        if (now - cacheAt.get() < PKG_LIST_CACHE_MS) {
+        // 文件未变且未过期才用缓存；Magisk 隐藏包名列表更新后须尽快生效
+        if (now - cacheAt.get() < PKG_LIST_CACHE_MS && mtime == fileMtime.get()) {
             return cached.get()
         }
         cacheAt.set(now)
+        fileMtime.set(mtime)
         val set = linkedSetOf<String>()
         runCatching {
-            val f = File(path)
             if (!f.isFile) return@runCatching
             f.readLines().forEach { line ->
                 val p = line.trim()
@@ -879,14 +924,14 @@ class QscXposedModule : XposedModule() {
     companion object {
         private const val TAG = "QscXp"
         private const val ARM_RECHECK_MS = 60_000L
-        private const val PKG_LIST_CACHE_MS = 60_000L
+		private const val PKG_LIST_CACHE_MS = 8_000L
         private const val POLICY_CACHE_MS = 15_000L
         private const val VERBOSE_CACHE_MS = 5_000L
         private const val FG_IDLE_CACHE_MS = 10_000L
         private const val VIEWER_LOG_DEBOUNCE_MS = 2_000L
 
-        /** 进出管理器边沿稳定时间（防抖） */
-        private const val MANAGER_STABLE_MS = 3_000L
+        /** 进出管理器边沿稳定时间（防抖）；略短于旧 3s，进入后更快开始刷简介 */
+        private const val MANAGER_STABLE_MS = 1_500L
 
         /** 确认离开后再等此时长才发 leave（会话超时） */
         private const val MANAGER_LEAVE_TIMEOUT_MS = 90_000L

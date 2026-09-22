@@ -162,6 +162,10 @@ if [ "$charge_eval" = "1" ]; then
 			rm -f "$DATADIR/unplug_streak" 2>/dev/null
 			if [ "$battery_stop_reason" = "1" ]; then
 				touch "$DATADIR/battery_switch"
+				# 充满再停已成功落盘：闩锁，避免假停充清标记后重等 wait_sec
+				if [ "$charge_full" = "1" ] && [ "$battery_level" = "100" ] && [ "$power_stop" = "100" ]; then
+					touch "$DATADIR/charge_full_done" 2>/dev/null
+				fi
 			fi
 			if [ "$first_stop" = "1" -a "$log_log" = "1" ]; then
 				if [ "$cpu_log" = "1" ]; then
@@ -251,6 +255,7 @@ else
 				rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" \
 					"$DATADIR/battery_switch" "$DATADIR/app_stop_flag" \
 					"$DATADIR/resume_fail_hint"
+				rm -f "$DATADIR/charge_full_done" "$DATADIR/charge_full_since" "$DATADIR/now_c"
 				qsc_clear_active_switch
 				qsc_stop_wakelock_release
 				qsc_log info "已拔出充电器，还原充电节点并清除停充状态 [$start_node <- $start_val]"

@@ -91,34 +91,49 @@ qsc_ps_read() {
 	[ -n "$QSC_PS_VAL" ]
 }
 
+# 配置内容指纹（cksum）：避免 Magisk 刷新 module.prop / 挂载抖动导致 mtime 变新却内容未变，
+# 从而每轮误报「已重载配置」。
+qsc_ps_conf_fingerprint() {
+	local power="$1" conf="$2" fp=""
+	if [ -f "$power" ]; then
+		fp="p:$(cksum "$power" 2>/dev/null | awk '{print $1"-"$2}')"
+	else
+		fp="p:-"
+	fi
+	if [ -f "$conf" ]; then
+		fp="${fp}|c:$(cksum "$conf" 2>/dev/null | awk '{print $1"-"$2}')"
+	else
+		fp="${fp}|c:-"
+	fi
+	printf '%s\n' "$fp"
+}
+
 # 解析 power.conf（省电键）+ config.conf（停充/温控阈值，供 watch 使用）
-# 哨兵：.power_conf_seen / .conf_seen（mtime）；或 data/conf_reload_req（App/WebUI 保存 bump）
+# 哨兵：内容指纹 .conf_fingerprint；或 data/conf_reload_req（App/WebUI 保存 bump）
 # 未变则立刻返回，不重读全文。QSC_PS_CONF_RELOADED=1 表示本轮确实重载了。
 qsc_ps_load_conf() {
-	local seen_p="$DATADIR/.power_conf_seen"
-	local seen_c="$DATADIR/.conf_seen"
+	local fp_file="$DATADIR/.conf_fingerprint"
 	local bump="$DATADIR/conf_reload_req"
 	local power="${POWER_CONF:-$CONFDIR/power.conf}"
 	local conf="${CONF:-}"
 	local line k v
 	local need=0
 	local was_loaded="${QSC_PS_CONF_LOADED:-0}"
+	local fp_now fp_old conf_sig
 
 	QSC_PS_CONF_RELOADED=0
+	fp_now="$(qsc_ps_conf_fingerprint "$power" "$conf")"
 
 	if [ -f "$bump" ]; then
 		need=1
 		rm -f "$bump" 2>/dev/null || true
 	elif [ "$QSC_PS_CONF_LOADED" != "1" ]; then
 		need=1
-	elif [ -f "$power" ] && [ -f "$seen_p" ] && [ "$power" -nt "$seen_p" ]; then
+	elif [ ! -f "$fp_file" ]; then
 		need=1
-	elif [ -f "$conf" ] && [ -f "$seen_c" ] && [ "$conf" -nt "$seen_c" ]; then
-		need=1
-	elif [ -f "$power" ] && [ ! -f "$seen_p" ]; then
-		need=1
-	elif [ -f "$conf" ] && [ ! -f "$seen_c" ]; then
-		need=1
+	else
+		IFS= read -r fp_old <"$fp_file" 2>/dev/null || fp_old=
+		[ "$fp_now" = "$fp_old" ] || need=1
 	fi
 	[ "$need" = "1" ] || return 0
 
@@ -241,19 +256,18 @@ qsc_ps_load_conf() {
 	type qsc_ps_apply_profile_defaults >/dev/null 2>&1 &&
 		qsc_ps_apply_profile_defaults
 
-	if [ -f "$power" ]; then
-		if [ ! -f "$seen_p" ] || [ "$power" -nt "$seen_p" ]; then
-			: >"$seen_p" 2>/dev/null
-		fi
-	fi
-	if [ -f "$conf" ]; then
-		if [ ! -f "$seen_c" ] || [ "$conf" -nt "$seen_c" ]; then
-			: >"$seen_c" 2>/dev/null
-		fi
-	fi
-	if [ "$was_loaded" = "1" ]; then
+	# 重新算指纹（读盘后文件偶发被外部改写时仍对齐当前内容）
+	fp_now="$(qsc_ps_conf_fingerprint "$power" "$conf")"
+	printf '%s\n' "$fp_now" >"$fp_file" 2>/dev/null || true
+	# 清理旧 mtime 哨兵（升级兼容）
+	rm -f "$DATADIR/.power_conf_seen" "$DATADIR/.conf_seen" 2>/dev/null || true
+
+	# 只在关键运行参数相对上次日志有变化时打印，避免无意义刷屏
+	conf_sig="${QSC_PS_PROFILE}|${QSC_PS_ENABLE}|${QSC_PS_IDLE_NATIVE}|${QSC_PS_IDLE}|${QSC_PS_PLUGGED}|${QSC_PS_MAINTAIN}|${QSC_PS_STOP}|${QSC_PS_TEMP_ON}|${QSC_PS_TEMP_STOP}"
+	if [ "$was_loaded" = "1" ] && [ "$conf_sig" != "${QSC_PS_CONF_SIG:-}" ]; then
 		qsc_log info "已重载配置（profile=${QSC_PS_PROFILE} saver=${QSC_PS_ENABLE} idle_native=${QSC_PS_IDLE_NATIVE}s）"
 	fi
+	QSC_PS_CONF_SIG="$conf_sig"
 	type qsc_xp_sync_fg_policy >/dev/null 2>&1 &&
 		qsc_xp_sync_fg_policy >/dev/null 2>&1 || true
 	return 0

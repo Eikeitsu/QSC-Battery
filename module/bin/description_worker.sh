@@ -1,8 +1,9 @@
 #!/system/bin/sh
 
 # 独立简介刷新进程。
-# 有 XP 且健康：后台零轮询；管理器会话经 XP 3s 稳定后 enter，观看中温和复刷；
-# 确认离开后再经 90s 超时才 leave。亮屏边沿会补发 enter（防息屏后卡住静态文案）。
+# 有 XP 且健康：后台零轮询；管理器会话经 XP 1.5s 稳定后 enter，观看中温和复刷；
+# 确认离开后再经 90s 超时才 leave。宽限期内回到管理器会补发 enter。
+# 亮屏边沿会补发 enter（防息屏后卡住静态文案）。
 # 无 XP / XP 异常：dumpsys 降级；边沿恢复后自动切回 XP。
 MODDIR=${0%/*}
 MODDIR=${MODDIR%/*}
@@ -266,7 +267,7 @@ while worker_parent_alive; do
 				_was_suppressed=0
 				if worker_dumpsys_manager_hit; then
 					type qsc_log >/dev/null 2>&1 &&
-						qsc_log info "简介：亮屏后 dumpsys 发现管理器"
+						qsc_log debug "简介：亮屏后 dumpsys 发现管理器"
 					QSC_MANAGER_VIEWER_WAS=1
 					QSC_MANAGER_VIEWER_RISING=1
 					_entered=1
@@ -281,7 +282,7 @@ while worker_parent_alive; do
 			fi
 			if worker_dumpsys_manager_hit; then
 				type qsc_log >/dev/null 2>&1 &&
-					qsc_log info "简介：dumpsys 发现管理器（XP边沿缺失，安全网）"
+					qsc_log debug "简介：dumpsys 发现管理器（XP边沿缺失，安全网）"
 				QSC_MANAGER_VIEWER_WAS=1
 				QSC_MANAGER_VIEWER_RISING=1
 				_entered=1
@@ -291,8 +292,9 @@ while worker_parent_alive; do
 
 		if [ "$_entered" = "1" ] && worker_parent_alive && worker_service_ready; then
 			type qsc_log >/dev/null 2>&1 &&
-				qsc_log info "简介：管理器前台，开始刷新"
+				qsc_log debug "简介：管理器前台，开始刷新"
 			worker_do_refresh 1
+			_view_miss=0
 			while worker_parent_alive && worker_service_ready; do
 				if worker_xp_mode; then
 					worker_wait_edges "$(worker_viewing_interval)"
@@ -301,21 +303,30 @@ while worker_parent_alive; do
 						if type qsc_manager_viewer_consume_xp_edge >/dev/null 2>&1; then
 							if ! qsc_manager_viewer_consume_xp_edge; then
 								type qsc_log >/dev/null 2>&1 &&
-									qsc_log info "简介：已离开管理器，停止刷新"
+									qsc_log debug "简介：已离开管理器，停止刷新"
 								break
 							fi
 							# 亮屏补发 enter：强制刷一次，清掉息屏留下的静态文案
+							_view_miss=0
 							worker_do_refresh 1
 							continue
 						fi
 					fi
-					# 每轮复核是否仍在看（息屏后 desc-only 无 fg 文件时勿空转写静态）
+					# 复核是否仍在看：单次 dumpsys/fg 抖动不立刻退出（需连续未命中）
 					QSC_MANAGER_VIEWER_CACHE_AT=0
 					if ! worker_poll_viewer; then
-						type qsc_log >/dev/null 2>&1 &&
-							qsc_log info "简介：管理器已不在前台，停止刷新"
-						break
+						_view_miss=$((_view_miss + 1))
+						if [ "$_view_miss" -ge 3 ] 2>/dev/null; then
+							type qsc_log >/dev/null 2>&1 &&
+								qsc_log debug "简介：管理器已不在前台，停止刷新"
+							break
+						fi
+						# 宽限：仍按观看间隔再试，不把简介打回静态
+						QSC_MANAGER_VIEWER_WAS=1
+						worker_do_refresh 0
+						continue
 					fi
+					_view_miss=0
 					QSC_MANAGER_VIEWER_WAS=1
 					worker_do_refresh 0
 					type qsc_fg_xp_health_check >/dev/null 2>&1 &&

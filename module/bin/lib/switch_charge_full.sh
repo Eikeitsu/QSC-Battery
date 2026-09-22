@@ -1,7 +1,15 @@
 #!/system/bin/sh
 # switch: charge_full helper
+# charge_full_done：本轮 100% 充满再停条件已满足并成功停过一次。
+# 假停充自愈若清掉 power_switch，下一轮凭此闩锁立刻再停，不必重等 wait_sec。
 qsc_charge_full() {
 	if [ "$charge_full" = "1" -a "$battery_level" = "100" -a "$power_stop" = "100" ]; then
+		if [ -f "$DATADIR/charge_full_done" ]; then
+			full_log=0
+			rm -f "$DATADIR/now_c" "$DATADIR/charge_full_since"
+			qsc_dbg "充满再停·已闩锁，跳过等待直接允许停充"
+			return
+		fi
 		if [ "$battery_status" = "5" ]; then
 			rm -f "$DATADIR/now_c" "$DATADIR/charge_full_since"
 			qsc_log info "电量$battery_level 触发充满再停功能 当前已充满"
@@ -73,6 +81,6 @@ qsc_charge_full() {
 			qsc_dbg "涓流·未满足 mode=$charge_full_mode cur_ok=$_cur_ok time_ok=$_time_ok"
 		fi
 	else
-		rm -f "$DATADIR/charge_full_since"
+		rm -f "$DATADIR/charge_full_since" "$DATADIR/charge_full_done"
 	fi
 }
