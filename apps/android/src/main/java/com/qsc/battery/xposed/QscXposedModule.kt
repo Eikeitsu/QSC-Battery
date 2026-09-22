@@ -924,7 +924,7 @@ class QscXposedModule : XposedModule() {
     companion object {
         private const val TAG = "QscXp"
         private const val ARM_RECHECK_MS = 60_000L
-		private const val PKG_LIST_CACHE_MS = 8_000L
+        private const val PKG_LIST_CACHE_MS = 8_000L
         private const val POLICY_CACHE_MS = 15_000L
         private const val VERBOSE_CACHE_MS = 5_000L
         private const val FG_IDLE_CACHE_MS = 10_000L
