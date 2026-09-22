@@ -120,7 +120,7 @@ jobs:
           chmod +x tooling/scripts/inherit-qscd-from-ci-dist.sh
           tooling/scripts/inherit-qscd-from-ci-dist.sh
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: qscd-binaries-${{ github.sha }}
           path: |

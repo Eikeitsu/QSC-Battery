@@ -60,7 +60,7 @@ jobs:
           cp apps/android/build/outputs/apk/debug/app-debug.apk release/QSC-Battery-debug.apk
           node tooling/scripts/package-app.mjs --skip-build
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: qsc-companion-apk
           path: |
