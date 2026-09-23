@@ -49,19 +49,21 @@ const emit = defineEmits<{
         >
           说明
         </button>
-        <van-button
+        <button
           v-if="
             result.module?.zipUrl && (result.moduleHasUpdate || result.moduleCanSwitch)
           "
-          size="mini"
-          type="primary"
-          round
-          :loading="actionBusy === 'module'"
+          type="button"
+          class="action"
           :disabled="!!actionBusy"
+          :aria-busy="actionBusy === 'module'"
           @click="emit('updateModule')"
         >
-          {{ result.moduleCanSwitch && !result.moduleHasUpdate ? "切换" : "更新" }}
-        </van-button>
+          <span v-if="actionBusy === 'module'" class="action-spin" aria-hidden="true" />
+          <span>{{
+            result.moduleCanSwitch && !result.moduleHasUpdate ? "切换" : "更新"
+          }}</span>
+        </button>
       </div>
       <p class="ver">
         {{ versionLine(result.moduleLocalVersion, result.module?.version) }}
@@ -101,23 +103,23 @@ const emit = defineEmits<{
         >
           说明
         </button>
-        <van-button
+        <button
           v-if="result.app?.apkUrl && (result.appHasUpdate || result.appCanSwitch)"
-          size="mini"
-          type="primary"
-          round
-          :loading="actionBusy === 'app'"
+          type="button"
+          class="action"
           :disabled="!!actionBusy"
+          :aria-busy="actionBusy === 'app'"
           @click="emit('updateApp')"
         >
-          {{
+          <span v-if="actionBusy === 'app'" class="action-spin" aria-hidden="true" />
+          <span>{{
             result.appMissing
               ? "安装"
               : result.appCanSwitch && !result.appHasUpdate
                 ? "切换"
                 : "更新"
-          }}
-        </van-button>
+          }}</span>
+        </button>
       </div>
       <p class="ver">
         {{
@@ -154,23 +156,23 @@ const emit = defineEmits<{
                     : "最新"
           }}
         </span>
-        <van-button
+        <button
           v-if="result.daemonHasUpdate || result.daemonCanSwitch"
-          size="mini"
-          type="primary"
-          round
-          :loading="actionBusy === 'daemon'"
+          type="button"
+          class="action"
           :disabled="!!actionBusy"
+          :aria-busy="actionBusy === 'daemon'"
           @click="emit('updateDaemon')"
         >
-          {{
+          <span v-if="actionBusy === 'daemon'" class="action-spin" aria-hidden="true" />
+          <span>{{
             result.daemonMissing
               ? "安装"
               : result.daemonCanSwitch && !result.daemonHasUpdate
                 ? "切换"
                 : "更新"
-          }}
-        </van-button>
+          }}</span>
+        </button>
       </div>
       <p class="ver">
         {{ versionLine(result.daemonLocalVersion, result.daemon?.version) }}

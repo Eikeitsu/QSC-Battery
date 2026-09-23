@@ -248,6 +248,10 @@
   font-weight: 650;
   color: var(--qsc-text);
   margin-right: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ver {
@@ -263,9 +267,10 @@
 .chip {
   font-size: 11px;
   font-weight: 600;
-  padding: 2px 8px;
+  padding: 3px 8px;
   border-radius: 999px;
   flex-shrink: 0;
+  line-height: 1.2;
 }
 
 .chip[data-tone="ok"] {
@@ -291,6 +296,59 @@
   font-weight: 600;
   cursor: pointer;
   padding: 0;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+
+/* 行内更新/切换：不用 van-button mini（WebView 里易偏高、圆角/内边距错乱） */
+.action {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  box-sizing: border-box;
+  min-width: 52px;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: #fff;
+  background: var(--van-primary-color, var(--qsc-primary, #1989fa));
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 0.16s cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 0.16s ease,
+    filter 0.16s ease;
+}
+
+.action:not(:disabled):active {
+  transform: scale(0.96);
+  filter: brightness(0.94);
+}
+
+.action:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.action[aria-busy="true"] {
+  opacity: 0.85;
+}
+
+.action-spin {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid rgb(255 255 255 / 35%);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: qsc-spin 0.75s linear infinite;
   flex-shrink: 0;
 }
 
