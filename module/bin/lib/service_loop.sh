@@ -3,44 +3,9 @@
 
 # 未插电管家：简介 worker / XP 门禁 / 简介快照（不含策略；策略由 idle_secs 统一刷）
 # $1=1 时顺带 flush 充电历史 pending（仅拔电后首轮）
-# 未插电管家：简介 worker / XP 门禁 / 简介快照（不含策略；策略由 idle_secs 统一刷）
-# $1=1 时顺带 flush 充电历史 pending（仅拔电后首轮）
 qsc_service_desc_ondemand_sync() {
 	# 先刷策略，再按需启停 worker
 	type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
-	# 无 XP：偶发 dumpsys 发现管理器时置 viewing，再拉 worker
-	if type qsc_description_enabled >/dev/null 2>&1 &&
-		qsc_description_enabled &&
-		{ ! type qsc_fg_xp_ready >/dev/null 2>&1 || ! qsc_fg_xp_ready; }; then
-		if type qsc_ps_screen_is_off >/dev/null 2>&1 &&
-			! qsc_ps_screen_is_off &&
-			! { type qsc_desc_viewing_active >/dev/null 2>&1 &&
-				qsc_desc_viewing_active; }; then
-			_probe_n="${QSC_DESC_DUMPSYS_PROBE_N:-0}"
-			_probe_n=$((_probe_n + 1))
-			QSC_DESC_DUMPSYS_PROBE_N="$_probe_n"
-			# 约每 6 次 lean/管家醒一次（避免每轮 dumpsys）
-			if [ "$((_probe_n % 6))" -eq 1 ] 2>/dev/null; then
-				if type qsc_manager_viewer_build_list >/dev/null 2>&1 &&
-					type qsc_fg_dumpsys_read >/dev/null 2>&1; then
-					_list="${QSC_MANAGER_VIEWER_LIST:-$DATADIR/.manager_viewer_pkgs}"
-					qsc_manager_viewer_build_list "$_list" >/dev/null 2>&1 || true
-					QSC_FG_CACHE_AT=0
-					if qsc_fg_dumpsys_read; then
-						while IFS= read -r _p || [ -n "$_p" ]; do
-							_p="$(printf '%s' "$_p" | tr -d ' \r\n')"
-							[ -n "$_p" ] || continue
-							if [ "$_p" = "${QSC_FG_PKG:-}" ]; then
-								type qsc_desc_viewing_set >/dev/null 2>&1 &&
-									qsc_desc_viewing_set
-								break
-							fi
-						done <"$_list"
-					fi
-				fi
-			fi
-		fi
-	fi
 	_desc_want=0
 	if type qsc_ps_desc_worker_wanted >/dev/null 2>&1; then
 		qsc_ps_desc_worker_wanted && _desc_want=1

@@ -621,7 +621,7 @@ qsc_ps_desc_suppressed() {
 
 # 是否应跑简介 worker（按需）。
 # 有 XP：仅 enter 待消费或正在观看时跑；leave/息屏后退出，空闲零进程。
-# 无 XP：仅 viewing 标记时跑（由 service 偶发 dumpsys 置位）。
+# 无 XP：亮屏且未驻停时允许跑（dumpsys 降级，约数十秒级响应，不过夜常驻）。
 qsc_ps_desc_worker_wanted() {
 	type qsc_description_enabled >/dev/null 2>&1 || return 1
 	qsc_description_enabled || return 1
@@ -660,9 +660,12 @@ qsc_ps_desc_worker_wanted() {
 		return 0
 	fi
 
-	# 无 XP：不要常驻；由 service 偶发 dumpsys 置 viewing 后再拉
+	# 无 XP：亮屏降级常驻（息屏/驻停仍停），避免「打开管理器要等好几分钟」
 	if type qsc_fg_xp_ready >/dev/null 2>&1 && qsc_fg_xp_ready; then
 		return 1
 	fi
-	return 1
+	if type qsc_ps_screen_is_off >/dev/null 2>&1 && qsc_ps_screen_is_off; then
+		return 1
+	fi
+	return 0
 }

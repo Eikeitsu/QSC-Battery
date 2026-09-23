@@ -1,8 +1,8 @@
 #!/system/bin/sh
 
 # 独立简介刷新进程（按需）。
-# 主服务仅在 XP enter 待消费 / 正在观看 / 无 XP 亮屏降级时拉起本进程；
-# 离开管理器或息屏后自行退出，空闲不常驻。
+# 有 XP：仅 enter/观看时跑，离开或息屏退出。
+# 无 XP：亮屏 dumpsys 降级轮询（约 20–30s），息屏退出。
 MODDIR=${0%/*}
 MODDIR=${MODDIR%/*}
 PARENT_PID="${1:-0}"
@@ -415,20 +415,15 @@ while worker_parent_alive; do
 		exit 0
 	fi
 
-	# —— dumpsys 回退（无 XP）：仍用短循环；离开后退出由 service 按需再拉 ——
-	worker_tick_fallback
-	if [ "${QSC_MANAGER_VIEWER_WAS:-0}" != "1" ] &&
-		! { type qsc_desc_viewing_active >/dev/null 2>&1 &&
-			qsc_desc_viewing_active; }; then
-		# 无 XP 且当前不在看：睡一轮后若仍空闲则退出，避免常驻
-		worker_wait_edges "$REFRESH_IDLE_CHECK"
-		if ! worker_poll_viewer; then
-			type qsc_description_restore_static >/dev/null 2>&1 &&
-				qsc_description_restore_static
-			worker_state 0
-			exit 0
-		fi
+	# —— dumpsys 回退（无 XP）：亮屏时保持轮询，约 20–30s 发现管理器；息屏则退出 ——
+	if type qsc_ps_screen_is_off >/dev/null 2>&1 && qsc_ps_screen_is_off; then
+		type qsc_desc_viewing_clear >/dev/null 2>&1 && qsc_desc_viewing_clear
+		type qsc_description_restore_static >/dev/null 2>&1 &&
+			qsc_description_restore_static
+		worker_state 0
+		exit 0
 	fi
+	worker_tick_fallback
 	worker_try_recover_xp || true
 done
 worker_state 0
