@@ -4,7 +4,7 @@
 
 # 内置常见管理器（Magisk / KSU 系 / APatch 系 / MMRL / WebUI 壳）
 # 伴侣 APP 不读 module.prop 简介，故意不列入。
-# Magisk 隐藏/随机包名另走 magisk.db requester，不必穷举。
+# 随机/隐藏包名：Magisk←requester；KSU/SukiSU←ksud debug package / libksud.so，不必穷举。
 QSC_MANAGER_VIEWER_BUILTIN="
 com.topjohnwu.magisk
 io.github.vvb2060.magisk
@@ -40,9 +40,9 @@ qsc_manager_viewer_extra_pkgs() {
 	printf '%s' "$v"
 }
 
-# 从本机 root 方案尽量解析「官方管理器」包名（冷门/随机包名 Magisk 尤其有用）
+# 从本机 root 方案尽量解析「官方管理器」包名（冷门/随机包名尤其有用）
 qsc_manager_viewer_discovered_pkgs() {
-	local pkg="" line
+	local pkg="" line bin so dir base
 
 	# Magisk：strings.requester = 当前 Manager（可被隐藏随机包名）
 	if command -v magisk >/dev/null 2>&1; then
@@ -70,8 +70,28 @@ qsc_manager_viewer_discovered_pkgs() {
 		*.*) printf '%s\n' "$pkg" ;;
 	esac
 
-	# KernelSU：无稳定「当前管理器包名」API（按签名识别）；常见 fork 已在 BUILTIN。
-	# 部分环境会落盘 uid/包名提示，有则追加。
+	# KernelSU / SukiSU / KSU Next：
+	# 1) ksud debug package → 编译进守护的管理器包名（含 Spoofed/随机包名版）
+	# 2) 偶落盘的 manager_pkg 提示文件
+	# 3) 已安装 APK 内嵌 libksud.so（轻量扫，兜底）
+	pkg=""
+	for bin in \
+		/data/adb/ksu/bin/ksud \
+		/data/adb/ksud \
+		/data/adb/ksu/bin/ksu; do
+		[ -x "$bin" ] || continue
+		line="$("$bin" debug package 2>/dev/null | head -n1)"
+		pkg="$(printf '%s' "$line" | tr -d ' \r\n')"
+		case "$pkg" in
+			*[!a-zA-Z0-9._]*|"") pkg="" ;;
+			*.*)
+				printf '%s\n' "$pkg"
+				pkg=""
+				break
+				;;
+			*) pkg="" ;;
+		esac
+	done
 	for f in /data/adb/ksu/manager_pkg \
 		/data/adb/ksu/.manager_pkg \
 		/data/adb/ksu/manager; do
@@ -80,6 +100,22 @@ qsc_manager_viewer_discovered_pkgs() {
 		case "$pkg" in
 			*[!a-zA-Z0-9._]*|"") ;;
 			*.*) printf '%s\n' "$pkg" ;;
+		esac
+	done
+	# libksud.so：Spoofed Manager 几乎必带；路径 …/com.foo.bar-XXXX/lib/…/libksud.so
+	# 限制深度与条数，避免刷机扫盘过重
+	for so in /data/app/~~*/*/lib/*/libksud.so /data/app/*/lib/*/libksud.so; do
+		[ -f "$so" ] || continue
+		dir="$(dirname "$(dirname "$(dirname "$so")")")"
+		base="${dir##*/}"
+		# Android：包名-随机后缀；去掉末段无点后缀
+		pkg="$(printf '%s' "$base" | sed 's/-[A-Za-z0-9_=]*$//')"
+		case "$pkg" in
+			*[!a-zA-Z0-9._]*|"") ;;
+			*.*)
+				printf '%s\n' "$pkg"
+				break
+				;;
 		esac
 	done
 }
