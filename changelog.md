@@ -8,6 +8,7 @@
 
 ### 修复
 
+- **日用 Doze / 未插电**：lean 路径强制释放停充 `wake_lock`，避免残留锁挡系统 Deep Doze。
 - **审计跟进（续）**：观看中多信 XP leave + fg 轻量确认，少 poll/dumpsys；有 `inotifywait` 时边沿事件唤醒；lean 救 worker 时尊重驻停压制；FAQ 写明未插电耗电构成。
 - **审计跟进**：`poll` 先消费 XP 边沿再判息屏；lean idle 救活挂掉的简介 worker；驻滞回真亮屏时放开简介；停充维持轮去掉无意义 `sleep 3`；XP `screen` 信任窗 120s→15s；亮屏先写 `qsc_xp_screen` 再 pulse enter；写盘失败落 `qsc_xp_write_disabled` 供 Magisk 回退 dumpsys。
 - **简介 worker 待机高频唤醒导致过夜耗电**：等 XP 边沿曾用 2s 短片轮询（息屏也醒），约 0.5Hz shell 唤醒；改为息屏/压制约 25s 一片（不超过边沿 30s 窗），亮屏空闲约 15s、观看约 8s 探边。XP 健康时 dumpsys 安全网降频；日志不再写「XP边沿缺失」（易误解为 LSP 坏了，实为兜底）。

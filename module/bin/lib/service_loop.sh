@@ -8,6 +8,11 @@ qsc_service_unplug_housekeep() {
 	qsc_ps_now
 	_now="$QSC_PS_NOW"
 	qsc_service_heartbeat
+	# 未插电绝不持停充锁（挡 Doze）；残留标记一并清掉
+	if type qsc_ps_plugged >/dev/null 2>&1 && ! qsc_ps_plugged; then
+		type qsc_stop_wakelock_release >/dev/null 2>&1 &&
+			qsc_stop_wakelock_release
+	fi
 	if type qsc_xp_sync_fg_policy >/dev/null 2>&1; then
 		_xp_plugged=0
 		type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged && _xp_plugged=1
@@ -74,15 +79,25 @@ qsc_service_loop_once() {
 			qsc_runtime_trace "H1" "loop_lean" "$QSC_SERVICE_LOOP_COUNT:$_now:${QSC_PS_CONF_RELOADED:-0}"
 			# endregion
 			qsc_service_heartbeat
+			# 未插电强制放锁，避免残留 wake_lock 挡系统 Doze
+			type qsc_stop_wakelock_release >/dev/null 2>&1 &&
+				qsc_stop_wakelock_release
 			# 配置变了才重做简介/XP；策略+idle 每轮都要（进深睡靠它）
 			if [ "${QSC_PS_CONF_RELOADED:-0}" = "1" ]; then
 				qsc_service_unplug_housekeep 0
 			else
 				# lean：救活挂掉的简介 worker；驻停压制时保持停掉
 				type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
+				_desc_want=0
 				if type qsc_description_enabled >/dev/null 2>&1 &&
-					qsc_description_enabled &&
-					{ ! type qsc_ps_desc_suppressed >/dev/null 2>&1 || ! qsc_ps_desc_suppressed; }; then
+					qsc_description_enabled; then
+					_desc_want=1
+				fi
+				if type qsc_ps_desc_suppressed >/dev/null 2>&1 &&
+					qsc_ps_desc_suppressed; then
+					_desc_want=0
+				fi
+				if [ "$_desc_want" = "1" ]; then
 					_desc_pid="$(cat "$DATADIR/description_worker.pid" 2>/dev/null | tr -d ' \r\n')"
 					case "$_desc_pid" in
 						""|*[!0-9]*)
@@ -96,8 +111,7 @@ qsc_service_loop_once() {
 							}
 							;;
 					esac
-				elif type qsc_ps_desc_suppressed >/dev/null 2>&1 &&
-					qsc_ps_desc_suppressed; then
+				else
 					type qsc_stop_description_worker >/dev/null 2>&1 &&
 						qsc_stop_description_worker
 				fi
