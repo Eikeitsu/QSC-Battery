@@ -50,8 +50,10 @@ class QscXposedModule : XposedModule() {
     private val managerSession = AtomicBoolean(false)
     private val enterPending = AtomicBoolean(false)
     private val leavePending = AtomicBoolean(false)
+
     /** 离开管线里暂存「切去的包」；leave 边沿仍写 [lastManagerPkg] */
     private val pendingLeaveToPkg = AtomicReference<String?>(null)
+
     /** 最近一次确认 enter 的管理器包名（leave 日志/边沿用它，勿写成 launcher） */
     private val lastManagerPkg = AtomicReference<String?>(null)
     private val viewerPkgsCacheAt = AtomicLong(0L)
@@ -329,10 +331,7 @@ class QscXposedModule : XposedModule() {
 
         if (!on) {
             cancelEnterStable()
-            if (managerSession.get()) {
-                cancelFgStableDebounce()
-                scheduleLeavePipeline(pkg.ifEmpty { "screen_off" })
-            }
+            // 息屏但管理器仍在前台：不发 leave；亮屏靠 pulse enter 唤醒 Magisk
             return
         }
 

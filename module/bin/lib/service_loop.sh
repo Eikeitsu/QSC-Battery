@@ -3,6 +3,57 @@
 
 # 未插电管家：简介 worker / XP 门禁 / 简介快照（不含策略；策略由 idle_secs 统一刷）
 # $1=1 时顺带 flush 充电历史 pending（仅拔电后首轮）
+# 未插电管家：简介 worker / XP 门禁 / 简介快照（不含策略；策略由 idle_secs 统一刷）
+# $1=1 时顺带 flush 充电历史 pending（仅拔电后首轮）
+qsc_service_desc_ondemand_sync() {
+	# 先刷策略，再按需启停 worker
+	type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
+	# 无 XP：偶发 dumpsys 发现管理器时置 viewing，再拉 worker
+	if type qsc_description_enabled >/dev/null 2>&1 &&
+		qsc_description_enabled &&
+		{ ! type qsc_fg_xp_ready >/dev/null 2>&1 || ! qsc_fg_xp_ready; }; then
+		if type qsc_ps_screen_is_off >/dev/null 2>&1 &&
+			! qsc_ps_screen_is_off &&
+			! { type qsc_desc_viewing_active >/dev/null 2>&1 &&
+				qsc_desc_viewing_active; }; then
+			_probe_n="${QSC_DESC_DUMPSYS_PROBE_N:-0}"
+			_probe_n=$((_probe_n + 1))
+			QSC_DESC_DUMPSYS_PROBE_N="$_probe_n"
+			# 约每 6 次 lean/管家醒一次（避免每轮 dumpsys）
+			if [ "$((_probe_n % 6))" -eq 1 ] 2>/dev/null; then
+				if type qsc_manager_viewer_build_list >/dev/null 2>&1 &&
+					type qsc_fg_dumpsys_read >/dev/null 2>&1; then
+					_list="${QSC_MANAGER_VIEWER_LIST:-$DATADIR/.manager_viewer_pkgs}"
+					qsc_manager_viewer_build_list "$_list" >/dev/null 2>&1 || true
+					QSC_FG_CACHE_AT=0
+					if qsc_fg_dumpsys_read; then
+						while IFS= read -r _p || [ -n "$_p" ]; do
+							_p="$(printf '%s' "$_p" | tr -d ' \r\n')"
+							[ -n "$_p" ] || continue
+							if [ "$_p" = "${QSC_FG_PKG:-}" ]; then
+								type qsc_desc_viewing_set >/dev/null 2>&1 &&
+									qsc_desc_viewing_set
+								break
+							fi
+						done <"$_list"
+					fi
+				fi
+			fi
+		fi
+	fi
+	_desc_want=0
+	if type qsc_ps_desc_worker_wanted >/dev/null 2>&1; then
+		qsc_ps_desc_worker_wanted && _desc_want=1
+	fi
+	if [ "$_desc_want" = "1" ]; then
+		type qsc_start_description_worker >/dev/null 2>&1 &&
+			qsc_start_description_worker
+	else
+		type qsc_stop_description_worker >/dev/null 2>&1 &&
+			qsc_stop_description_worker
+	fi
+}
+
 qsc_service_unplug_housekeep() {
 	local do_flush="${1:-0}"
 	qsc_ps_now
@@ -23,33 +74,7 @@ qsc_service_unplug_housekeep() {
 		fi
 	fi
 	if type qsc_description_enabled >/dev/null 2>&1; then
-		_desc_want=0
-		if qsc_description_enabled; then
-			_desc_want=1
-		fi
-		# 息屏/深睡压制：依赖调用方先 policy_refresh，或此处轻量刷一次
-		type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
-		if type qsc_ps_desc_suppressed >/dev/null 2>&1 && qsc_ps_desc_suppressed; then
-			_desc_want=0
-		fi
-		if [ "$_desc_want" = "1" ]; then
-			_desc_pid="$(cat "$DATADIR/description_worker.pid" 2>/dev/null | tr -d ' \r\n')"
-			case "$_desc_pid" in
-				""|*[!0-9]*)
-					type qsc_start_description_worker >/dev/null 2>&1 &&
-						qsc_start_description_worker
-					;;
-				*)
-					kill -0 "$_desc_pid" 2>/dev/null || {
-						type qsc_start_description_worker >/dev/null 2>&1 &&
-							qsc_start_description_worker
-					}
-					;;
-			esac
-		else
-			type qsc_stop_description_worker >/dev/null 2>&1 &&
-				qsc_stop_description_worker
-		fi
+		qsc_service_desc_ondemand_sync
 	fi
 	if type qsc_ps_refresh_desc >/dev/null 2>&1; then
 		qsc_ps_refresh_desc "$_now"
@@ -86,35 +111,8 @@ qsc_service_loop_once() {
 			if [ "${QSC_PS_CONF_RELOADED:-0}" = "1" ]; then
 				qsc_service_unplug_housekeep 0
 			else
-				# lean：救活挂掉的简介 worker；驻停压制时保持停掉
-				type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
-				_desc_want=0
-				if type qsc_description_enabled >/dev/null 2>&1 &&
-					qsc_description_enabled; then
-					_desc_want=1
-				fi
-				if type qsc_ps_desc_suppressed >/dev/null 2>&1 &&
-					qsc_ps_desc_suppressed; then
-					_desc_want=0
-				fi
-				if [ "$_desc_want" = "1" ]; then
-					_desc_pid="$(cat "$DATADIR/description_worker.pid" 2>/dev/null | tr -d ' \r\n')"
-					case "$_desc_pid" in
-						""|*[!0-9]*)
-							type qsc_start_description_worker >/dev/null 2>&1 &&
-								qsc_start_description_worker
-							;;
-						*)
-							kill -0 "$_desc_pid" 2>/dev/null || {
-								type qsc_start_description_worker >/dev/null 2>&1 &&
-									qsc_start_description_worker
-							}
-							;;
-					esac
-				else
-					type qsc_stop_description_worker >/dev/null 2>&1 &&
-						qsc_stop_description_worker
-				fi
+				# lean：按需启停简介 worker（enter / 观看才跑）
+				qsc_service_desc_ondemand_sync
 			fi
 			if type qsc_ps_idle_secs >/dev/null 2>&1; then
 				qsc_ps_idle_secs
@@ -127,6 +125,10 @@ qsc_service_loop_once() {
 			_wait_rc="$?"
 			qsc_runtime_trace "H1" "wait_exit" "$_wait_rc"
 			# endregion
+			# 等待被 viewer enter 打断：立刻按需拉起 worker
+			if type qsc_service_desc_ondemand_sync >/dev/null 2>&1; then
+				qsc_service_desc_ondemand_sync
+			fi
 			return 0
 		fi
 

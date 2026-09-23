@@ -219,6 +219,12 @@ qsc_ps_xp_wake_fresh() {
 	[ "$mt" -gt 0 ] 2>/dev/null && [ "$((now - mt))" -le 20 ] 2>/dev/null
 }
 
+# XP 管理器边沿待消费（非空队列）→ 可打断主服务长睡
+qsc_ps_xp_viewer_pending() {
+	type qsc_manager_viewer_xp_edge_pending >/dev/null 2>&1 &&
+		qsc_manager_viewer_xp_edge_pending
+}
+
 # 可选辅助边沿（亮灭屏/Doze/广播）亦可武装打断；与 wake 同窗口
 qsc_ps_xp_assist_fresh() {
 	local now mt age f
@@ -243,34 +249,84 @@ qsc_ps_xp_assist_fresh() {
 	return 1
 }
 
-# qscd 不可用时的睡眠：仅在已武装 XP 时用短片打断；否则一次 sleep，少唤醒
+# 简介开时：qscd/长睡与 viewer 边沿竞速，亮屏 enter 能立刻醒主服务/救 worker
+qsc_ps_wait_race_viewer() {
+	local secs="$1" vf=/data/system/qsc_xp_viewer
+	local qpid ipid
+	case "$secs" in ""|*[!0-9]*) secs=30 ;; esac
+	[ "$secs" -lt 1 ] 2>/dev/null && secs=1
+	# 占位，否则 consume 后文件消失，inotify 挂不上
+	[ -e "$vf" ] || {
+		: >"$vf" 2>/dev/null
+		chmod 0644 "$vf" 2>/dev/null || true
+	}
+	qsc_ps_xp_viewer_pending && return 0
+	if ! command -v inotifywait >/dev/null 2>&1; then
+		return 1
+	fi
+	(
+		qsc_ps_native_wait "$secs" "${QSC_PS_WAIT_FLOOR:-3}"
+	) &
+	qpid=$!
+	(
+		inotifywait -qq -t "$secs" \
+			-e modify,attrib,close_write,create,move \
+			"$vf" 2>/dev/null || true
+	) &
+	ipid=$!
+	# 任一先结束即可
+	while kill -0 "$qpid" 2>/dev/null && kill -0 "$ipid" 2>/dev/null; do
+		sleep 1
+	done
+	kill "$qpid" "$ipid" 2>/dev/null || true
+	wait "$qpid" 2>/dev/null || true
+	wait "$ipid" 2>/dev/null || true
+	return 0
+}
+
+# qscd 不可用时的睡眠：武装 XP / 简介边沿均可短片打断
 qsc_ps_fallback_sleep() {
 	local secs="${1:-3}" left chunk=3
 	case "$secs" in ""|*[!0-9]*) secs=3 ;; esac
-	if [ -f /data/system/qsc_xp_off ] || [ ! -f /data/system/qsc_xp_arm ]; then
+	# 简介边沿：不必武装也能打断（亮屏 enter）
+	if qsc_ps_xp_viewer_pending; then
+		return 0
+	fi
+	if [ -f /data/system/qsc_xp_off ]; then
 		sleep "$secs"
 		return 0
 	fi
-	if [ -f /data/system/qsc_xp_no_wake ]; then
+	# 有简介需求时始终用可打断睡眠；否则仅武装后才短片
+	_desc_wake=0
+	if type qsc_ps_desc_worker_wanted >/dev/null 2>&1 &&
+		qsc_ps_desc_worker_wanted; then
+		_desc_wake=1
+	elif type qsc_description_enabled >/dev/null 2>&1 &&
+		qsc_description_enabled; then
+		_desc_wake=1
+	fi
+	if [ "$_desc_wake" != "1" ] && [ ! -f /data/system/qsc_xp_arm ]; then
 		sleep "$secs"
 		return 0
 	fi
-	if qsc_ps_xp_wake_fresh || qsc_ps_xp_assist_fresh; then
+	if [ -f /data/system/qsc_xp_no_wake ] && [ "$_desc_wake" != "1" ]; then
+		sleep "$secs"
+		return 0
+	fi
+	if qsc_ps_xp_wake_fresh || qsc_ps_xp_assist_fresh || qsc_ps_xp_viewer_pending; then
 		rm -f /data/system/qsc_xp_wake 2>/dev/null || true
-		type qsc_xp_file_log >/dev/null 2>&1 &&
-			qsc_xp_file_log INFO "ok magisk: xp wake/assist consumed"
 		return 0
 	fi
 	left=$secs
 	while [ "$left" -gt 0 ] 2>/dev/null; do
-		chunk=3
+		chunk=5
+		[ "$_desc_wake" = "1" ] && chunk=8
 		[ "$left" -lt "$chunk" ] 2>/dev/null && chunk=$left
 		sleep "$chunk"
 		left=$((left - chunk))
-		if qsc_ps_xp_wake_fresh || qsc_ps_xp_assist_fresh; then
+		if qsc_ps_xp_wake_fresh || qsc_ps_xp_assist_fresh ||
+			qsc_ps_xp_viewer_pending; then
 			rm -f /data/system/qsc_xp_wake 2>/dev/null || true
-			type qsc_xp_file_log >/dev/null 2>&1 &&
-				qsc_xp_file_log INFO "ok magisk: xp wake/assist consumed"
 			return 0
 		fi
 	done
@@ -293,6 +349,19 @@ qsc_ps_wait() {
 			;;
 	esac
 	if qsc_ps_native_ready; then
+		# 动态简介开着：与 viewer 边沿竞速，避免亮屏 enter 卡到下一轮 idle 超时
+		_race=0
+		if type qsc_description_enabled >/dev/null 2>&1 &&
+			qsc_description_enabled &&
+			[ "${QSC_PS_PROFILE:-balanced}" != "aggressive" ]; then
+			_race=1
+		fi
+		if [ "$_race" = "1" ] && qsc_ps_wait_race_viewer "$secs"; then
+			QSC_PS_WAIT_HELPER_OK=1
+			QSC_PS_WAIT_FAILURES=0
+			QSC_PS_WAIT_NEXT_RETRY=0
+			return 0
+		fi
 		qsc_ps_native_wait "$secs" "$floor"
 		rc="$?"
 		if [ "$rc" -eq 0 ]; then

@@ -620,6 +620,14 @@ qsc_start_description_worker() {
 			qsc_description_restore_static
 		return 0
 	fi
+	# 已在跑则复用
+	_desc_pid="$(cat "$DATADIR/description_worker.pid" 2>/dev/null | tr -d ' \r\n')"
+	case "$_desc_pid" in
+		""|*[!0-9]*) ;;
+		*)
+			kill -0 "$_desc_pid" 2>/dev/null && return 0
+			;;
+	esac
 	qsc_stop_description_worker
 	if command -v setsid >/dev/null 2>&1; then
 		setsid sh "$BINDIR/description_worker.sh" "$$" \
@@ -631,7 +639,17 @@ qsc_start_description_worker() {
 	qsc_runtime_trace "H0" "description_worker_start" "$!"
 }
 
-qsc_start_description_worker
+# 按需：仅 enter 待消费 / 正在观看 / 无 XP 亮屏降级时启动
+if type qsc_ps_policy_refresh >/dev/null 2>&1; then
+	qsc_ps_now 2>/dev/null
+	qsc_ps_policy_refresh 2>/dev/null || true
+fi
+if type qsc_ps_desc_worker_wanted >/dev/null 2>&1 &&
+	qsc_ps_desc_worker_wanted; then
+	qsc_start_description_worker
+else
+	qsc_stop_description_worker
+fi
 
 # 尽早把管理器包名表同步到 /data/system，供 LSPosed 前台边沿合并（含隐藏 Magisk）
 if type qsc_manager_viewer_build_list >/dev/null 2>&1; then

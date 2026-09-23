@@ -407,11 +407,9 @@ qsc_ps_policy_edge_log() {
 	else
 		if [ "${QSC_PS_PARK_ACTIVE:-0}" = "1" ]; then
 			qsc_ps_park_session_end
-			# 离开驻停：仅亮屏且非压制时再拉简介 worker（防息屏误判反复启停）
-			if type qsc_ps_screen_is_off >/dev/null 2>&1 && qsc_ps_screen_is_off; then
-				:
-			elif type qsc_description_enabled >/dev/null 2>&1 &&
-				qsc_description_enabled; then
+			# 离开驻停：按需拉起（有 enter/观看才要）
+			if type qsc_ps_desc_worker_wanted >/dev/null 2>&1 &&
+				qsc_ps_desc_worker_wanted; then
 				type qsc_start_description_worker >/dev/null 2>&1 &&
 					qsc_start_description_worker
 			fi
@@ -591,8 +589,8 @@ qsc_ps_policy_refresh() {
 					QSC_PS_DESC_FORCE_STATIC=0
 					QSC_PS_SCREEN_OFF=0
 					QSC_PS_DEEP=0
-					if type qsc_description_enabled >/dev/null 2>&1 &&
-						qsc_description_enabled; then
+					if type qsc_ps_desc_worker_wanted >/dev/null 2>&1 &&
+						qsc_ps_desc_worker_wanted; then
 						type qsc_start_description_worker >/dev/null 2>&1 &&
 							qsc_start_description_worker
 					fi
@@ -618,5 +616,53 @@ qsc_ps_desc_suppressed() {
 	[ "${QSC_PS_PROFILE:-balanced}" = "aggressive" ] && return 0
 	[ "${QSC_PS_DEEP:-0}" = "1" ] && return 0
 	[ "${QSC_PS_SCREEN_OFF:-0}" = "1" ] && [ "${QSC_PS_SCREEN_OFF_SAVER:-0}" = "1" ] && return 0
+	return 1
+}
+
+# 是否应跑简介 worker（按需）。
+# 有 XP：仅 enter 待消费或正在观看时跑；leave/息屏后退出，空闲零进程。
+# 无 XP：仅 viewing 标记时跑（由 service 偶发 dumpsys 置位）。
+qsc_ps_desc_worker_wanted() {
+	type qsc_description_enabled >/dev/null 2>&1 || return 1
+	qsc_description_enabled || return 1
+	[ "${QSC_PS_PROFILE:-balanced}" = "aggressive" ] && return 1
+	case "${QSC_PS_MODE:-}" in
+		deep|screen_off)
+			# 滞回期已亮屏且有 enter/观看标记：仍要吃边沿
+			if type qsc_ps_screen_is_off >/dev/null 2>&1 &&
+				! qsc_ps_screen_is_off; then
+				:
+			else
+				return 1
+			fi
+			;;
+	esac
+	[ "${QSC_PS_PARK_ACTIVE:-0}" = "1" ] &&
+		type qsc_ps_screen_is_off >/dev/null 2>&1 &&
+		qsc_ps_screen_is_off &&
+		return 1
+
+	# 有待消费 enter：立刻要 worker
+	if type qsc_manager_viewer_xp_edge_pending >/dev/null 2>&1 &&
+		qsc_manager_viewer_xp_edge_pending; then
+		return 0
+	fi
+	# 观看中
+	if type qsc_desc_viewing_active >/dev/null 2>&1 &&
+		qsc_desc_viewing_active; then
+		# 息屏则收掉（亮屏再靠 enter 拉起）
+		if type qsc_ps_screen_is_off >/dev/null 2>&1 &&
+			qsc_ps_screen_is_off; then
+			type qsc_desc_viewing_clear >/dev/null 2>&1 &&
+				qsc_desc_viewing_clear
+			return 1
+		fi
+		return 0
+	fi
+
+	# 无 XP：不要常驻；由 service 偶发 dumpsys 置 viewing 后再拉
+	if type qsc_fg_xp_ready >/dev/null 2>&1 && qsc_fg_xp_ready; then
+		return 1
+	fi
 	return 1
 }

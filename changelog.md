@@ -8,7 +8,10 @@
 
 ### 修复
 
-- **Magisk↔XP 管理器边沿不协调**：`qsc_xp_viewer` 改为追加队列、Magisk `mv` 后整段消费，避免 enter 被 leave 覆盖；leave 第三列固定为管理器包名（不再写成 launcher/其它 App）；去掉离开后再等 90s；真正进出用 info，简介启停/补发/兜底用 debug。边沿新鲜窗 30s→60s。
+- **简介按需 worker**：有 XP 时无人看管理器不跑简介进程；`enter` 叫醒主服务后拉起，`leave`/息屏自行退出。空闲接近「仅主服务+qscd」。
+- **管理器息屏再亮简介卡静态**：软息屏不再杀简介 worker；主服务等待与 `qsc_xp_viewer` 竞速，亮屏 enter 可立刻醒；消费后保留空占位供 inotify；XP 息屏不再误发 leave。
+- **简介 worker 日用偏费电 / 「未读到新鲜 XP 边沿」误解**：XP 健康时曾定期 dumpsys「安全网」（日志像 XP 丢边沿，实为兜底）；边沿还有短新鲜窗，长睡后被当成过期再 dumpsys。改为：非空队列即待消费（不过期）；XP 健康不定期 dumpsys（仅离开息屏压制时最多一次）；空闲/息屏分片拉长，优先 inotify。
+- **Magisk↔XP 管理器边沿不协调**：`qsc_xp_viewer` 改为追加队列、Magisk `mv` 后整段消费，避免 enter 被 leave 覆盖；leave 第三列固定为管理器包名（不再写成 launcher/其它 App）；去掉离开后再等 90s；简介/管理器进出相关日志统一为 debug（默认不刷屏）。边沿新鲜窗 30s→60s。
 - **日用 Doze / 未插电**：lean 路径强制释放停充 `wake_lock`，避免残留锁挡系统 Deep Doze。
 - **审计跟进（续）**：观看中多信 XP leave + fg 轻量确认，少 poll/dumpsys；有 `inotifywait` 时边沿事件唤醒；lean 救 worker 时尊重驻停压制；FAQ 写明未插电耗电构成。
 - **审计跟进**：`poll` 先消费 XP 边沿再判息屏；lean idle 救活挂掉的简介 worker；驻滞回真亮屏时放开简介；停充维持轮去掉无意义 `sleep 3`；XP `screen` 信任窗 120s→15s；亮屏先写 `qsc_xp_screen` 再 pulse enter；写盘失败落 `qsc_xp_write_disabled` 供 Magisk 回退 dumpsys。
