@@ -112,9 +112,14 @@ qsc_hot_boot_charge_heal() {
 		fi
 		QSC_PS_DESC_FORCE=0
 		_now_ms="$(date +%s 2>/dev/null || echo 0)"
-		printf '%s\tenter\thot_update\n' "$_now_ms" \
-			>/data/system/qsc_xp_viewer 2>/dev/null || true
-		chmod 0644 /data/system/qsc_xp_viewer 2>/dev/null || true
+		if type qsc_xp_write_bus >/dev/null 2>&1; then
+			qsc_xp_write_bus /data/system/qsc_xp_viewer \
+				"$(printf '%s\tenter\thot_update\n' "$_now_ms")"
+		else
+			printf '%s\tenter\thot_update\n' "$_now_ms" \
+				>/data/system/qsc_xp_viewer 2>/dev/null || true
+			chmod 0666 /data/system/qsc_xp_viewer 2>/dev/null || true
+		fi
 	fi
 	rm -f "$DATADIR/hot_update_charge_dirty" 2>/dev/null
 	return 0

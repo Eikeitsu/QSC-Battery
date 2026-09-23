@@ -319,7 +319,7 @@ class QscXposedModule : XposedModule() {
      * 否则简介 worker 会停在静态文案。
      */
     private fun onInteractiveChanged(on: Boolean) {
-        if (writeDisabled.get()) return
+        if (!writesAllowed()) return
         if (File(XpPrefs.OFF_PATH).isFile) return
         if (File(XpPrefs.NO_VIEWER_PATH).isFile) return
         val prev = lastInteractive.getAndSet(on)
@@ -353,7 +353,7 @@ class QscXposedModule : XposedModule() {
     }
 
     private fun onForegroundPackage(pkg: String) {
-        if (writeDisabled.get()) return
+        if (!writesAllowed()) return
         if (File(XpPrefs.OFF_PATH).isFile) return
         if (File(XpPrefs.NO_VIEWER_PATH).isFile) return
         val clean = pkg.trim()
@@ -634,7 +634,7 @@ class QscXposedModule : XposedModule() {
     }
 
     private fun writeFg(pkg: String, notifyEdge: Boolean) {
-        if (writeDisabled.get()) return
+        if (!writesAllowed()) return
         val line = "${System.currentTimeMillis()}\t$pkg\n"
         val okFg = writeText(XpPrefs.FG_PATH, line, append = false)
         val okEdge = if (notifyEdge) {
@@ -722,8 +722,20 @@ class QscXposedModule : XposedModule() {
         return set
     }
 
+    private fun writesAllowed(): Boolean {
+        if (!writeDisabled.get()) return true
+        // Magisk 修好 0666 后会删掉熔断文件；本 boot 允许恢复，避免简介永久静默
+        if (!File(XpPrefs.WRITE_DISABLED_PATH).isFile) {
+            writeDisabled.set(false)
+            failStreak.set(0)
+            xpLog(Log.INFO, "write re-enabled (magisk cleared fuse)")
+            return true
+        }
+        return false
+    }
+
     private fun writeViewerEdge(edge: String, pkg: String) {
-        if (writeDisabled.get()) return
+        if (!writesAllowed()) return
         // 追加队列：Magisk 睡着时 enter+leave 都能保留，勿覆盖成只剩最后一条
         trimViewerQueueIfHuge()
         val ok = writeText(
@@ -768,7 +780,7 @@ class QscXposedModule : XposedModule() {
     }
 
     private fun onBatteryProcessed(service: Any?) {
-        if (writeDisabled.get()) return
+        if (!writesAllowed()) return
         if (File(XpPrefs.OFF_PATH).isFile) return
         if (File(XpPrefs.NO_WAKE_PATH).isFile) return
         if (!isArmedCached()) return
@@ -839,7 +851,7 @@ class QscXposedModule : XposedModule() {
     }
 
     private fun writeAliveOnce() {
-        if (writeDisabled.get()) return
+        if (!writesAllowed()) return
         val content = "${System.currentTimeMillis()}\talive\n"
         var ok = false
         for (path in ALIVE_PATHS) {
@@ -859,7 +871,7 @@ class QscXposedModule : XposedModule() {
     }
 
     private fun writeWake(reason: String) {
-        if (writeDisabled.get()) return
+        if (!writesAllowed()) return
         val ok = writeText(XpPrefs.WAKE_PATH, "${System.currentTimeMillis()}\t$reason\n", append = false)
         if (ok) {
             failStreak.set(0)
@@ -891,6 +903,11 @@ class QscXposedModule : XposedModule() {
             val parent = f.parentFile ?: return false
             if (!parent.exists() && !parent.mkdirs()) return false
             FileOutputStream(f, append).use { it.write(content.toByteArray()) }
+            // Magisk root 重建后也可能改成 0644；XP 自建时尽量放开，便于双方读写
+            runCatching {
+                f.setReadable(true, false)
+                f.setWritable(true, false)
+            }
             true
         } catch (_: Throwable) {
             false

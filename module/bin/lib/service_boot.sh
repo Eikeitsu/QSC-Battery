@@ -568,9 +568,14 @@ elif [ -f "$DATADIR/hot_update_at" ]; then
 	fi
 	# 补发 viewer enter，避免热更新空窗里 XP 边沿过期导致简介永不勤刷
 	_hu_now="$(date +%s 2>/dev/null || echo 0)"
-	printf '%s\tenter\thot_update\n' "$_hu_now" \
-		>/data/system/qsc_xp_viewer 2>/dev/null || true
-	chmod 0644 /data/system/qsc_xp_viewer 2>/dev/null || true
+	if type qsc_xp_write_bus >/dev/null 2>&1; then
+		qsc_xp_write_bus /data/system/qsc_xp_viewer \
+			"$(printf '%s\tenter\thot_update\n' "$_hu_now")"
+	else
+		printf '%s\tenter\thot_update\n' "$_hu_now" \
+			>/data/system/qsc_xp_viewer 2>/dev/null || true
+		chmod 0666 /data/system/qsc_xp_viewer 2>/dev/null || true
+	fi
 	rm -f "$DATADIR/hot_update_at"
 	# 不要等设备探测、兼容模块扫描和全量节点扫描完成后才刷新简介。
 	# 这些任务可能较慢，先用当前电量/温度/供电状态覆盖临时的「更新中」。

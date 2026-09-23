@@ -240,10 +240,15 @@ qsc_manager_viewer_consume_xp_edge() {
 		esac
 	done <"$tmp"
 	rm -f "$tmp" 2>/dev/null || true
-	# 占位空文件，供 inotify 继续挂接（仅 Android 有 /data/system）
+	# 占位空文件供 inotify；必须 0666，否则 system_server 无法再 append enter
 	if [ -d /data/system ]; then
-		: >/data/system/qsc_xp_viewer 2>/dev/null || true
-		chmod 0644 /data/system/qsc_xp_viewer 2>/dev/null || true
+		if type qsc_xp_touch_bus >/dev/null 2>&1; then
+			qsc_xp_touch_bus /data/system/qsc_xp_viewer
+		else
+			: >/data/system/qsc_xp_viewer 2>/dev/null || true
+			chmod 0666 /data/system/qsc_xp_viewer 2>/dev/null || true
+			rm -f /data/system/qsc_xp_write_disabled 2>/dev/null || true
+		fi
 	fi
 	[ "$got" = "1" ] || return 1
 	[ "${QSC_MANAGER_VIEWER_WAS:-0}" = "1" ]

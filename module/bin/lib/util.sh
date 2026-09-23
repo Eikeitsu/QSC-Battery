@@ -280,11 +280,66 @@ qsc_xp_file_log() {
 	fi
 }
 
+# system_server（XP）需写的总线文件：root 预建必须 0666。
+# 曾用 0644 → 消费/占位后 XP append 失败（viewer write failed），简介永不勤刷。
+qsc_xp_chmod_bus() {
+	local f="$1"
+	[ -n "$f" ] && [ -e "$f" ] || return 1
+	chmod 0666 "$f" 2>/dev/null || true
+}
+
+# 截断为空占位（consume / 补发 enter 前），并清写盘熔断标记
+qsc_xp_touch_bus() {
+	local f="$1"
+	[ -n "$f" ] || return 1
+	[ -d /data/system ] || return 1
+	: >"$f" 2>/dev/null || touch "$f" 2>/dev/null || return 1
+	qsc_xp_chmod_bus "$f"
+	rm -f /data/system/qsc_xp_write_disabled 2>/dev/null || true
+	return 0
+}
+
+# 不截断：仅保证存在且 XP 可写（inotify 挂接用）
+qsc_xp_ensure_bus() {
+	local f="$1"
+	[ -n "$f" ] || return 1
+	[ -d /data/system ] || return 1
+	if [ ! -e "$f" ]; then
+		: >"$f" 2>/dev/null || touch "$f" 2>/dev/null || return 1
+	fi
+	qsc_xp_chmod_bus "$f"
+	return 0
+}
+
+# 写入内容并保持 XP 可追加（热更新补发 enter 等）
+qsc_xp_write_bus() {
+	local f="$1"
+	shift
+	[ -n "$f" ] || return 1
+	[ -d /data/system ] || return 1
+	printf '%s' "$*" >"$f" 2>/dev/null || return 1
+	qsc_xp_chmod_bus "$f"
+	rm -f /data/system/qsc_xp_write_disabled 2>/dev/null || true
+	return 0
+}
+
 # 启动时：预置可写日志/存活落点 + 记录探活（不 cat 全量，避免重启重复；APP 会合并多路径）
 qsc_xp_bootstrap_logs() {
 	mkdir -p "$DATADIR" 2>/dev/null || true
 	touch /data/system/qsc_xp.log /data/local/tmp/qsc_xp.log 2>/dev/null || true
 	chmod 666 /data/system/qsc_xp.log /data/local/tmp/qsc_xp.log 2>/dev/null || true
+	# 边沿占位：必须 0666，否则 Magisk 重建后 system_server 写不进
+	if [ -d /data/system ]; then
+		type qsc_xp_ensure_bus >/dev/null 2>&1 && {
+			qsc_xp_ensure_bus /data/system/qsc_xp_viewer
+			qsc_xp_ensure_bus /data/system/qsc_xp_fg
+			qsc_xp_ensure_bus /data/system/qsc_xp_fg_edge
+			qsc_xp_ensure_bus /data/system/qsc_xp_wake
+			qsc_xp_ensure_bus /data/system/qsc_xp_screen
+		}
+		# 纠正历史 0644 残留，并允许 XP 从 write_disabled 恢复
+		rm -f /data/system/qsc_xp_write_disabled 2>/dev/null || true
+	fi
 	# 不要预建空的 alive 文件：空文件会被误判为已注入
 	_alive=0
 	for _p in /data/system/qsc_xp_alive /data/local/tmp/qsc_xp_alive \

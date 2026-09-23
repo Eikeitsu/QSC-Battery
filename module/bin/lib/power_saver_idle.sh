@@ -262,10 +262,14 @@ qsc_ps_wait_race_viewer() {
 	if ! command -v inotifywait >/dev/null 2>&1; then
 		return 1
 	fi
-	# 占位，否则 consume 后文件消失，inotify 挂不上
-	if [ ! -e "$vf" ]; then
+	# 占位，否则 consume 后文件消失，inotify 挂不上；0666 供 XP append
+	if type qsc_xp_ensure_bus >/dev/null 2>&1; then
+		qsc_xp_ensure_bus "$vf" || return 1
+	elif [ ! -e "$vf" ]; then
 		: >"$vf" 2>/dev/null || return 1
-		chmod 0644 "$vf" 2>/dev/null || true
+		chmod 0666 "$vf" 2>/dev/null || true
+	else
+		chmod 0666 "$vf" 2>/dev/null || true
 	fi
 	(
 		qsc_ps_native_wait "$secs" "$floor"

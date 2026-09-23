@@ -129,10 +129,12 @@ worker_wait_edges() {
 		_iw_paths=""
 		for _f in /data/system/qsc_xp_viewer /data/system/qsc_xp_fg_edge \
 			/data/system/qsc_xp_screen; do
-			[ -e "$_f" ] || {
-				: >"$_f" 2>/dev/null || true
-				chmod 0644 "$_f" 2>/dev/null || true
-			}
+			if type qsc_xp_ensure_bus >/dev/null 2>&1; then
+				qsc_xp_ensure_bus "$_f" || true
+			else
+				[ -e "$_f" ] || : >"$_f" 2>/dev/null || true
+				chmod 0666 "$_f" 2>/dev/null || true
+			fi
 			[ -e "$_f" ] && _iw_paths="${_iw_paths} ${_f}"
 		done
 		if [ -n "$_iw_paths" ]; then
