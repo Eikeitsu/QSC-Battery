@@ -300,56 +300,20 @@
   line-height: 1.2;
 }
 
-/* 行内更新/切换：不用 van-button mini（WebView 里易偏高、圆角/内边距错乱） */
+/* mini + round 默认左右 padding 过小，两字会挤成「小圆球」 */
 .action {
   flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
   box-sizing: border-box;
-  min-width: 52px;
-  height: 28px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-  line-height: 1;
-  color: #fff;
-  background: var(--van-primary-color, var(--qsc-primary, #1989fa));
-  cursor: pointer;
-  white-space: nowrap;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    transform 0.16s cubic-bezier(0.22, 0.61, 0.36, 1),
-    opacity 0.16s ease,
-    filter 0.16s ease;
+  min-width: 3.5em !important;
+  height: 28px !important;
+  padding: 0 14px !important;
+  font-size: 12px !important;
+  font-weight: 650 !important;
+  line-height: 1 !important;
 }
 
-.action:not(:disabled):active {
-  transform: scale(0.96);
-  filter: brightness(0.94);
-}
-
-.action:disabled {
-  opacity: 0.42;
-  cursor: not-allowed;
-}
-
-.action[aria-busy="true"] {
-  opacity: 0.85;
-}
-
-.action-spin {
-  width: 11px;
-  height: 11px;
-  border: 1.5px solid rgb(255 255 255 / 35%);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: qsc-spin 0.75s linear infinite;
-  flex-shrink: 0;
+.action :deep(.van-button__text) {
+  letter-spacing: 0.04em;
 }
 
 .row-err,
