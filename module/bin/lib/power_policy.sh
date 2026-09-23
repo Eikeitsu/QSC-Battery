@@ -79,7 +79,7 @@ qsc_ps_screen_is_off() {
 		*)
 			age=$((now - mt))
 			if [ "$mt" -gt 0 ] 2>/dev/null && [ "$age" -ge 0 ] 2>/dev/null &&
-				[ "$age" -le 120 ] 2>/dev/null; then
+				[ "$age" -le 15 ] 2>/dev/null; then
 				IFS= read -r line <"$f" 2>/dev/null || line=
 				state="$(printf '%s' "$line" | awk -F'\t' 'NF{print $NF; exit}' | tr -d ' \r\n')"
 				case "$state" in
@@ -98,8 +98,9 @@ qsc_ps_screen_is_off() {
 			;;
 		esac
 	fi
+	# sysfs 缓存不宜过长：亮屏后若仍沿用息屏结果，会把 XP enter 误判丢掉
 	if [ "$now" -gt 0 ] 2>/dev/null &&
-		[ "$((now - ${QSC_PS_SCREEN_CACHE_AT:-0}))" -lt 60 ] 2>/dev/null; then
+		[ "$((now - ${QSC_PS_SCREEN_CACHE_AT:-0}))" -lt 8 ] 2>/dev/null; then
 		[ "${QSC_PS_SCREEN_CACHE_VAL:-0}" = "1" ]
 		return $?
 	fi
@@ -568,18 +569,15 @@ qsc_ps_policy_refresh() {
 		fi
 	fi
 
-	# 将离开息屏加强/深睡：滞回，避免短暂误判亮屏就结算总结并拉起 worker
+	# 将离开息屏加强/深睡：滞回，避免短暂误判亮屏就结算总结
+	# idle 仍可按驻停拉长；真亮屏时放开简介，避免打开管理器还卡静态约 90s
 	case "${QSC_PS_MODE_WAS:-}" in
 		deep|screen_off)
 			if qsc_ps_policy_hold_park_exit; then
 				QSC_PS_MODE="${QSC_PS_MODE_WAS}"
-				QSC_PS_DESC_FORCE_STATIC=1
 				if [ "$QSC_PS_MODE" = "deep" ]; then
-					QSC_PS_DEEP=1
-					QSC_PS_SCREEN_OFF=1
 					QSC_PS_IDLE_EFF="${QSC_PS_DEEP_IDLE:-900}"
 				else
-					QSC_PS_SCREEN_OFF=1
 					QSC_PS_IDLE_EFF="$QSC_PS_IDLE"
 					qsc_ps_native_ready 2>/dev/null &&
 						[ "${QSC_PS_IDLE_NATIVE:-0}" -gt "$QSC_PS_IDLE_EFF" ] 2>/dev/null &&
@@ -588,6 +586,21 @@ qsc_ps_policy_refresh() {
 					[ "$QSC_PS_IDLE_EFF" -gt 900 ] 2>/dev/null && QSC_PS_IDLE_EFF=900
 				fi
 				QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+				QSC_PS_SCREEN_CACHE_AT=0
+				if type qsc_ps_screen_is_off >/dev/null 2>&1 && ! qsc_ps_screen_is_off; then
+					QSC_PS_DESC_FORCE_STATIC=0
+					QSC_PS_SCREEN_OFF=0
+					QSC_PS_DEEP=0
+					if type qsc_description_enabled >/dev/null 2>&1 &&
+						qsc_description_enabled; then
+						type qsc_start_description_worker >/dev/null 2>&1 &&
+							qsc_start_description_worker
+					fi
+				else
+					QSC_PS_DESC_FORCE_STATIC=1
+					QSC_PS_SCREEN_OFF=1
+					[ "$QSC_PS_MODE" = "deep" ] && QSC_PS_DEEP=1
+				fi
 				qsc_ps_policy_edge_log
 				return 0
 			fi

@@ -13,7 +13,8 @@ QSC_FG_SOURCE=""
 QSC_FG_XP_MISMATCH="${QSC_FG_XP_MISMATCH:-0}"
 
 qsc_fg_xp_disabled() {
-	[ -f /data/system/qsc_xp_off ] || [ -f /data/system/qsc_xp_no_viewer ]
+	[ -f /data/system/qsc_xp_off ] || [ -f /data/system/qsc_xp_no_viewer ] ||
+		[ -f /data/system/qsc_xp_write_disabled ]
 }
 
 # 前台总线策略空闲（简介/游戏/停充都关）

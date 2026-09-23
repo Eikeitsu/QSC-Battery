@@ -4,10 +4,14 @@
 
 ### 新增
 
-- **安装方式二选一**：音量上默认安装（全量可用组件；有旧配置则保留核心）；音量下自定义安装（逐项选择，流程与原先各选项一致）。无人值守（`install_auto`）逻辑不变。
+- **安装方式简化**：音量上默认安装（全量可用组件；有旧配置则保留核心）；音量下自定义安装（逐项选择，流程与原先各选项一致）。无人值守（`install_auto`）逻辑不变。
 
 ### 修复
 
+- **审计跟进（续）**：观看中多信 XP leave + fg 轻量确认，少 poll/dumpsys；有 `inotifywait` 时边沿事件唤醒；lean 救 worker 时尊重驻停压制；FAQ 写明未插电耗电构成。
+- **审计跟进**：`poll` 先消费 XP 边沿再判息屏；lean idle 救活挂掉的简介 worker；驻滞回真亮屏时放开简介；停充维持轮去掉无意义 `sleep 3`；XP `screen` 信任窗 120s→15s；亮屏先写 `qsc_xp_screen` 再 pulse enter；写盘失败落 `qsc_xp_write_disabled` 供 Magisk 回退 dumpsys。
+- **简介 worker 待机高频唤醒导致过夜耗电**：等 XP 边沿曾用 2s 短片轮询（息屏也醒），约 0.5Hz shell 唤醒；改为息屏/压制约 25s 一片（不超过边沿 30s 窗），亮屏空闲约 15s、观看约 8s 探边。XP 健康时 dumpsys 安全网降频；日志不再写「XP边沿缺失」（易误解为 LSP 坏了，实为兜底）。
+- **XP enter 被 Magisk 误判息屏丢掉 → 简介不及时**：消费 `qsc_xp_viewer` enter 时曾用最长约 60s 的息屏缓存否决边沿（日志「忽略管理器 XP enter（息屏）」），LSP 已写 enter 但简介不刷。改为信任 XP enter（仅 XP 刚报 screen=off≤3s 才丢），sysfs 息屏缓存改为约 8s。
 - **热更新后通用节点充不进电 / 简介卡住**：停服后先还原停充节点并打 `hot_update_charge_dirty`；新服务强制孤儿检查与简介刷新，并补发 viewer enter。`fake_stop` 清标记前先还原节点，避免留下无人管的孤儿停充。
 
 ## 2026.09.21
@@ -24,10 +28,10 @@
 - **停充维持 × 息屏/夜间**：非 MCA 息屏约 180s、夜间/深睡约 300s；MCA 仍按 `loop_interval_maintain_sec` 重申。
 - **夜间时段**：模板默认 `23:00-07:00`（跨天）；WebUI/APP 可编辑；开启「夜间省电」且无时段时自动写入该默认。
 - **简介按需刷新**：检测到 Magisk/KSU/APatch/MMRL 等管理器在前台时勤刷电量；无人看列表时几乎不更新电量（停充/插拔等状态仍即时写）。内置含 Alpha / Kitsune、KSU Next / SukiSU / ReSukiSU、APatch Next / FolkPatch、WebUI X 等活跃分支；可选 `desc_viewer_pkgs` 追加包名。
-- **LSPosed 管理器前台边沿**：系统框架 Hook Activity 恢复；进出各 3s 稳定，确认离开后再 90s 超时写 `qsc_xp_viewer` leave。无 XP 时仍 dumpsys 轮询降级。与既有插拔 `qsc_xp_wake`（仅 qscd 不可用）独立。
+- **LSPosed 管理器前台边沿**：系统框架 Hook Activity 恢复；进出各 **1.5s** 稳定，确认离开后再 90s 超时写 `qsc_xp_viewer` leave。无 XP 时仍 dumpsys 轮询降级。与既有插拔 `qsc_xp_wake`（仅 qscd 不可用）独立。
 - **LSPosed 前台包名总线**：每次前台切换写 `qsc_xp_fg`；简介 / 游戏旁路 / App 停充共用；有 XP 时跳过认前台用的 dumpsys，无 XP 再降级。
 - **LSPosed 辅助边沿（默认关）**：亮灭屏 → `qsc_xp_screen`（息屏策略优先读）；Doze → `qsc_xp_doze`；白名单广播 → `qsc_xp_bcast`（可改 `qsc_xp_bcast_actions`）。APP「LSPosed / XP」面板开关；武装时亦可打断 qscd 回退 sleep。
-- **XP 生效时事件驱动**：简介后台零轮询；管理器进出各 **3s 稳定** 后才确认，确认离开后再 **90s 超时** 才停刷；会话未结束时切回不重复强制刷。观看中约 45–60s 复刷。游戏限流：前台或进程命中（后台子进程也维持），再套约 **1s 进 / 30s 离** 墓碑；App 停充同间隔（有 XP 以前台为准）。
+- **XP 生效时事件驱动**：简介后台长睡等边沿（非绝对零轮询）；管理器进出各 **1.5s 稳定** 后才确认，确认离开后再 **90s 超时** 才停刷；会话未结束时切回不重复强制刷。观看中约 45–60s 复刷。游戏限流：前台或进程命中（后台子进程也维持），再套约 **1s 进 / 30s 离** 墓碑；App 停充同间隔（有 XP 以前台为准）。
 - **无 XP / XP 异常回退**：`alive` 缺失、软关、或与 dumpsys 连续不一致时写 `xp_fg_unreliable`，简介与认前台改 dumpsys/进程路径；边沿恢复后自动切回 XP。漏边沿时 dumpsys 安全网仍能发现管理器。
 - **省电诊断统计**：`touch data/diagnostic_on` 后按心跳写出 `service_power_stats` 与日志「省电统计」（skip/均睡/简介写盘/未插电 %/h）；默认关闭，避免调试本身耗电。
 - **策略边沿日志与驻停总结**：进入/退出息屏·夜间·深睡写 INFO；同段重合不重复结算；退出时总结唤醒次数、均睡、skip，并给出「接近少唤醒 / 偏勤」评判。管理器前台进出、配置热重载亦有日志。息屏加强须连续息屏约 90s 才进档；不足约 3 分钟的短驻停不写总结，减轻亮灭闪动刷屏。

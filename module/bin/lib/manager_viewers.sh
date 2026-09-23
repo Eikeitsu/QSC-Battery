@@ -130,12 +130,31 @@ qsc_manager_viewer_consume_xp_edge() {
 	prev="${QSC_MANAGER_VIEWER_WAS:-0}"
 	case "$edge" in
 		enter)
-			# 息屏时丢弃 enter（防残留焦点/误调度）
-			if type qsc_ps_screen_is_off >/dev/null 2>&1 && qsc_ps_screen_is_off; then
-				type qsc_log >/dev/null 2>&1 &&
-					qsc_log debug "忽略管理器 XP enter（息屏）"
-				return 1
+			# XP 写 enter 前已确认 isInteractive。Magisk 息屏探测有缓存，
+			# 若用缓存否决，刚亮屏打开管理器会被「忽略…（息屏）」丢掉，
+			# 简介长期不刷，只能等 dumpsys 安全网——表现为「XP 正常但边沿缺失」。
+			# 仅当 XP 自己刚写下 screen=off（≤3s）才丢弃；否则信任边沿并清息屏缓存。
+			if [ -f /data/system/qsc_xp_screen ] &&
+				[ -f /data/system/qsc_xp_want_screen ]; then
+				_mt="$(stat -c %Y /data/system/qsc_xp_screen 2>/dev/null || echo 0)"
+				_now="$(date +%s 2>/dev/null || echo 0)"
+				_st="$(awk -F'\t' 'NF{print $NF; exit}' /data/system/qsc_xp_screen 2>/dev/null | tr -d ' \r\n')"
+				case "$_mt:$_now" in
+					*[!0-9:]*) ;;
+					*)
+						if [ "$_st" = "off" ] &&
+							[ "$_mt" -gt 0 ] 2>/dev/null &&
+							[ "$((_now - _mt))" -ge 0 ] 2>/dev/null &&
+							[ "$((_now - _mt))" -le 3 ] 2>/dev/null; then
+							type qsc_log >/dev/null 2>&1 &&
+								qsc_log debug "忽略管理器 XP enter（XP 刚报息屏）"
+							return 1
+						fi
+						;;
+				esac
 			fi
+			QSC_PS_SCREEN_CACHE_AT=0
+			QSC_PS_SCREEN_CACHE_VAL=0
 			QSC_MANAGER_VIEWER_WAS=1
 			QSC_MANAGER_VIEWER_CACHE_VAL=1
 			QSC_MANAGER_VIEWER_CACHE_AT=0
@@ -171,7 +190,7 @@ qsc_manager_viewer_focus_hit() {
 	if type qsc_fg_pkg_in_list >/dev/null 2>&1 && qsc_fg_pkg_in_list "$list_file"; then
 		return 0
 	fi
-	# 仅简介策略不写 qsc_xp_fg：XP ready 时 fg 文件常缺，必须 dumpsys 才能认管理器
+	# 仅简介时 XP 仍会给管理器写 fg；文件缺失/空时再 dumpsys 认管理器
 	if type qsc_fg_xp_ready >/dev/null 2>&1 && qsc_fg_xp_ready &&
 		{ [ ! -f /data/system/qsc_xp_fg ] || [ ! -s /data/system/qsc_xp_fg ]; }; then
 		if type qsc_fg_dumpsys_read >/dev/null 2>&1; then
@@ -229,6 +248,15 @@ qsc_manager_viewer_poll() {
 	local prev="${QSC_MANAGER_VIEWER_WAS:-0}" cur=0
 	QSC_MANAGER_VIEWER_RISING=0
 	QSC_MANAGER_VIEWER_FALLING=0
+	# 先消费 XP 边沿：勿被 Magisk 息屏缓存挡在 consume 之前（enter 已信任 XP）
+	if type qsc_manager_viewer_consume_xp_edge >/dev/null 2>&1 &&
+		qsc_manager_viewer_xp_edge_pending; then
+		if qsc_manager_viewer_consume_xp_edge; then
+			return 0
+		fi
+		# leave 已消费：视为未在看
+		return 1
+	fi
 	# 息屏：强制视为未在看（并在曾为观看时发离开）
 	if type qsc_ps_screen_is_off >/dev/null 2>&1 && qsc_ps_screen_is_off; then
 		if [ "$prev" = "1" ]; then
@@ -237,14 +265,6 @@ qsc_manager_viewer_poll() {
 			QSC_MANAGER_VIEWER_CACHE_VAL=0
 			type qsc_log >/dev/null 2>&1 &&
 				qsc_log debug "已离开模块管理器（息屏）"
-		fi
-		return 1
-	fi
-	# 优先消费管理器专用边沿；其次用通用 fg 状态判断
-	if type qsc_manager_viewer_consume_xp_edge >/dev/null 2>&1 &&
-		qsc_manager_viewer_xp_edge_pending; then
-		if qsc_manager_viewer_consume_xp_edge; then
-			return 0
 		fi
 		return 1
 	fi

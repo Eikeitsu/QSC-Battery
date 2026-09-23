@@ -77,6 +77,30 @@ qsc_service_loop_once() {
 			# 配置变了才重做简介/XP；策略+idle 每轮都要（进深睡靠它）
 			if [ "${QSC_PS_CONF_RELOADED:-0}" = "1" ]; then
 				qsc_service_unplug_housekeep 0
+			else
+				# lean：救活挂掉的简介 worker；驻停压制时保持停掉
+				type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
+				if type qsc_description_enabled >/dev/null 2>&1 &&
+					qsc_description_enabled &&
+					{ ! type qsc_ps_desc_suppressed >/dev/null 2>&1 || ! qsc_ps_desc_suppressed; }; then
+					_desc_pid="$(cat "$DATADIR/description_worker.pid" 2>/dev/null | tr -d ' \r\n')"
+					case "$_desc_pid" in
+						""|*[!0-9]*)
+							type qsc_start_description_worker >/dev/null 2>&1 &&
+								qsc_start_description_worker
+							;;
+						*)
+							kill -0 "$_desc_pid" 2>/dev/null || {
+								type qsc_start_description_worker >/dev/null 2>&1 &&
+									qsc_start_description_worker
+							}
+							;;
+					esac
+				elif type qsc_ps_desc_suppressed >/dev/null 2>&1 &&
+					qsc_ps_desc_suppressed; then
+					type qsc_stop_description_worker >/dev/null 2>&1 &&
+						qsc_stop_description_worker
+				fi
 			fi
 			if type qsc_ps_idle_secs >/dev/null 2>&1; then
 				qsc_ps_idle_secs

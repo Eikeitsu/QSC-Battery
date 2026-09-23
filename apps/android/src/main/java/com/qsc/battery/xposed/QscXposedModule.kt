@@ -847,6 +847,8 @@ class QscXposedModule : XposedModule() {
         }
         if (ok) {
             failStreak.set(0)
+            writeDisabled.set(false)
+            runCatching { File(XpPrefs.WRITE_DISABLED_PATH).delete() }
         } else {
             onWriteFailed("alive")
             xpLog(Log.WARN, "alive write failed all paths")
@@ -869,6 +871,13 @@ class QscXposedModule : XposedModule() {
         val n = failStreak.incrementAndGet()
         if (n >= 2) {
             writeDisabled.set(true)
+            runCatching {
+                writeText(
+                    XpPrefs.WRITE_DISABLED_PATH,
+                    "${System.currentTimeMillis()}\t$what\n",
+                    append = false,
+                )
+            }
             xpLog(Log.WARN, "write disabled for this boot after failures ($what)")
         }
     }

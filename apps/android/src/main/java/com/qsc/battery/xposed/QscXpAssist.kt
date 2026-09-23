@@ -102,18 +102,21 @@ internal object QscXpAssist {
     }
 
     private fun onScreenChange(on: Boolean, log: (Int, String) -> Unit) {
+        refreshWants()
+        // 先落 screen 边沿，再回调 interactive→viewer enter，避免 Magisk 仍读到旧 off
+        if (wantScreen.get() && !xpOff()) {
+            val prev = lastScreenOn.getAndSet(on)
+            if (prev == null || prev != on) {
+                writeEdge(XpPrefs.SCREEN_PATH, if (on) "on" else "off", log, "screen")
+                maybeWake(if (on) "screen_on" else "screen_off", log)
+            }
+        }
         // 始终回调亮灭屏（不依赖 want_screen）：管理器前台息屏后再亮时需重发 viewer enter
         val prevNotify = lastInteractiveNotify.getAndSet(on)
         if (prevNotify == null || prevNotify != on) {
             runCatching { interactiveListener.get()?.invoke(on) }
                 .onFailure { log(Log.DEBUG, "assist interactive cb: ${it.message}") }
         }
-        refreshWants()
-        if (!wantScreen.get() || xpOff()) return
-        val prev = lastScreenOn.getAndSet(on)
-        if (prev != null && prev == on) return
-        writeEdge(XpPrefs.SCREEN_PATH, if (on) "on" else "off", log, "screen")
-        maybeWake(if (on) "screen_on" else "screen_off", log)
     }
 
     private fun onDozeChange(idle: Boolean, log: (Int, String) -> Unit) {

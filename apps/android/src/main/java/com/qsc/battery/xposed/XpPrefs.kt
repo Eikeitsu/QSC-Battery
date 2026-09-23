@@ -63,6 +63,9 @@ object XpPrefs {
     /** idle=1 时 touch；XP 热路径只做 exists，避免解析策略 */
     const val FG_IDLE_PATH = "/data/system/qsc_xp_fg_idle"
 
+    /** 写盘连续失败后标记；Magisk 见此文件则勿再信任 XP ready */
+    const val WRITE_DISABLED_PATH = "/data/system/qsc_xp_write_disabled"
+
     /** 游戏限流关注包（一行一个） */
     const val GAME_PKGS_PATH = "/data/system/qsc_xp_game_pkgs"
 

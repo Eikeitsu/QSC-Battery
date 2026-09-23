@@ -130,7 +130,8 @@ if [ "$charge_eval" = "1" ]; then
 				sleep "$power_stop_time"
 			fi
 		fi
-		sleep 3
+		# 仅首次停充后短等；维持轮再 sleep 3 只会加热、不提高成功率
+		[ "$first_stop" = "1" ] && sleep 3
 		# switch_batch_blind=1（默认）：每轮全量重申；=0：首次写节点，其后只重申生效节点
 		_batch="${QSCV_switch_batch_blind:-1}"
 		_batch="$(qsc_clamp_int "$_batch" 0 1 1)"
