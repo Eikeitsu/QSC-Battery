@@ -246,7 +246,7 @@ qsc_fg_xp_hit_cached() {
 }
 
 # 列表命中墓碑会话（游戏/App 停充）：约 1s 稳定进入，确认离开后 30s 宽限。
-# 管理器简介会话在 XP 侧另用 3s/90s，不走这里。
+# 管理器简介会话在 XP 侧另用 3s 进出稳定（leave 立即落盘），不走这里。
 # 状态文件：${prefix}.on ${prefix}.last ${prefix}.enter_at
 # in_list=1/0；可选第 3 参 sticky_file：业务标记已在（如 app_stop_flag）则跳过进入等待。
 # 返回 0=会话命中 1=未命中

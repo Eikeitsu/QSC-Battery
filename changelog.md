@@ -8,6 +8,7 @@
 
 ### 修复
 
+- **Magisk↔XP 管理器边沿不协调**：`qsc_xp_viewer` 改为追加队列、Magisk `mv` 后整段消费，避免 enter 被 leave 覆盖；leave 第三列固定为管理器包名（不再写成 launcher/其它 App）；去掉离开后再等 90s；真正进出用 info，简介启停/补发/兜底用 debug。边沿新鲜窗 30s→60s。
 - **日用 Doze / 未插电**：lean 路径强制释放停充 `wake_lock`，避免残留锁挡系统 Deep Doze。
 - **审计跟进（续）**：观看中多信 XP leave + fg 轻量确认，少 poll/dumpsys；有 `inotifywait` 时边沿事件唤醒；lean 救 worker 时尊重驻停压制；FAQ 写明未插电耗电构成。
 - **审计跟进**：`poll` 先消费 XP 边沿再判息屏；lean idle 救活挂掉的简介 worker；驻滞回真亮屏时放开简介；停充维持轮去掉无意义 `sleep 3`；XP `screen` 信任窗 120s→15s；亮屏先写 `qsc_xp_screen` 再 pulse enter；写盘失败落 `qsc_xp_write_disabled` 供 Magisk 回退 dumpsys。
@@ -29,10 +30,10 @@
 - **停充维持 × 息屏/夜间**：非 MCA 息屏约 180s、夜间/深睡约 300s；MCA 仍按 `loop_interval_maintain_sec` 重申。
 - **夜间时段**：模板默认 `23:00-07:00`（跨天）；WebUI/APP 可编辑；开启「夜间省电」且无时段时自动写入该默认。
 - **简介按需刷新**：检测到 Magisk/KSU/APatch/MMRL 等管理器在前台时勤刷电量；无人看列表时几乎不更新电量（停充/插拔等状态仍即时写）。内置含 Alpha / Kitsune、KSU Next / SukiSU / ReSukiSU、APatch Next / FolkPatch、WebUI X 等活跃分支；可选 `desc_viewer_pkgs` 追加包名。
-- **LSPosed 管理器前台边沿**：系统框架 Hook Activity 恢复；进出各 **1.5s** 稳定，确认离开后再 90s 超时写 `qsc_xp_viewer` leave。无 XP 时仍 dumpsys 轮询降级。与既有插拔 `qsc_xp_wake`（仅 qscd 不可用）独立。
+- **LSPosed 管理器前台边沿**：系统框架 Hook Activity 恢复；进出各 **3s** 稳定，确认离开后再 90s 超时写 `qsc_xp_viewer` leave。无 XP 时仍 dumpsys 轮询降级。与既有插拔 `qsc_xp_wake`（仅 qscd 不可用）独立。
 - **LSPosed 前台包名总线**：每次前台切换写 `qsc_xp_fg`；简介 / 游戏旁路 / App 停充共用；有 XP 时跳过认前台用的 dumpsys，无 XP 再降级。
 - **LSPosed 辅助边沿（默认关）**：亮灭屏 → `qsc_xp_screen`（息屏策略优先读）；Doze → `qsc_xp_doze`；白名单广播 → `qsc_xp_bcast`（可改 `qsc_xp_bcast_actions`）。APP「LSPosed / XP」面板开关；武装时亦可打断 qscd 回退 sleep。
-- **XP 生效时事件驱动**：简介后台长睡等边沿（非绝对零轮询）；管理器进出各 **1.5s 稳定** 后才确认，确认离开后再 **90s 超时** 才停刷；会话未结束时切回不重复强制刷。观看中约 45–60s 复刷。游戏限流：前台或进程命中（后台子进程也维持），再套约 **1s 进 / 30s 离** 墓碑；App 停充同间隔（有 XP 以前台为准）。
+- **XP 生效时事件驱动**：简介后台长睡等边沿（非绝对零轮询）；管理器进出各 **3s 稳定** 后才确认，确认离开后再 **90s 超时** 才停刷；会话未结束时切回不重复强制刷。观看中约 45–60s 复刷。游戏限流：前台或进程命中（后台子进程也维持），再套约 **1s 进 / 30s 离** 墓碑；App 停充同间隔（有 XP 以前台为准）。
 - **无 XP / XP 异常回退**：`alive` 缺失、软关、或与 dumpsys 连续不一致时写 `xp_fg_unreliable`，简介与认前台改 dumpsys/进程路径；边沿恢复后自动切回 XP。漏边沿时 dumpsys 安全网仍能发现管理器。
 - **省电诊断统计**：`touch data/diagnostic_on` 后按心跳写出 `service_power_stats` 与日志「省电统计」（skip/均睡/简介写盘/未插电 %/h）；默认关闭，避免调试本身耗电。
 - **策略边沿日志与驻停总结**：进入/退出息屏·夜间·深睡写 INFO；同段重合不重复结算；退出时总结唤醒次数、均睡、skip，并给出「接近少唤醒 / 偏勤」评判。管理器前台进出、配置热重载亦有日志。息屏加强须连续息屏约 90s 才进档；不足约 3 分钟的短驻停不写总结，减轻亮灭闪动刷屏。

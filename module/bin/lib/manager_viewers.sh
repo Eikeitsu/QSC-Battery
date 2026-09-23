@@ -102,84 +102,86 @@ qsc_manager_viewer_build_list() {
 	[ -s "$f" ]
 }
 
-# LSPosed 前台边沿文件是否待处理（近 30s 内；不看 unreliable，便于异常后恢复）
+# LSPosed 管理器边沿队列是否待处理（近 60s；追加队列可能含多行）
 qsc_manager_viewer_xp_edge_pending() {
 	local f=/data/system/qsc_xp_viewer mt now
 	[ -f /data/system/qsc_xp_off ] && return 1
 	[ -f /data/system/qsc_xp_no_viewer ] && return 1
-	[ -f "$f" ] || return 1
+	[ -f "$f" ] && [ -s "$f" ] || return 1
 	mt="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
 	now="$(date +%s 2>/dev/null || echo 0)"
 	case "$mt:$now" in *[!0-9:]*) return 1 ;; esac
-	[ "$mt" -gt 0 ] 2>/dev/null && [ "$((now - mt))" -le 30 ] 2>/dev/null
+	[ "$mt" -gt 0 ] 2>/dev/null && [ "$((now - mt))" -le 60 ] 2>/dev/null
 }
 
-# 消费 XP 边沿：设置 RISING/FALLING/WAS；0=当前应视为在看
+# 原子消费整段边沿队列：先 mv 再逐行处理，避免 enter 被 leave 覆盖漏掉。
+# 返回 0=消费后应视为在看；1=未在看 / 无有效边沿
 qsc_manager_viewer_consume_xp_edge() {
-	local f=/data/system/qsc_xp_viewer line edge pkg prev
+	local f=/data/system/qsc_xp_viewer tmp line edge pkg
+	local got=0
 	QSC_MANAGER_VIEWER_RISING=0
 	QSC_MANAGER_VIEWER_FALLING=0
 	qsc_manager_viewer_xp_edge_pending || return 1
-	IFS= read -r line <"$f" 2>/dev/null || true
-	rm -f "$f" 2>/dev/null || true
-	# timestamp\tenter|leave\tpkg
-	edge="$(printf '%s' "$line" | awk -F'\t' 'NF>=2{print $2; exit}')"
-	pkg="$(printf '%s' "$line" | awk -F'\t' 'NF>=3{print $3; exit}')"
-	edge="$(printf '%s' "$edge" | tr -d ' \r\n')"
-	pkg="$(printf '%s' "$pkg" | tr -d ' \r\n')"
-	prev="${QSC_MANAGER_VIEWER_WAS:-0}"
-	case "$edge" in
-		enter)
-			# XP 写 enter 前已确认 isInteractive。Magisk 息屏探测有缓存，
-			# 若用缓存否决，刚亮屏打开管理器会被「忽略…（息屏）」丢掉，
-			# 简介长期不刷，只能等 dumpsys 安全网——表现为「XP 正常但边沿缺失」。
-			# 仅当 XP 自己刚写下 screen=off（≤3s）才丢弃；否则信任边沿并清息屏缓存。
-			if [ -f /data/system/qsc_xp_screen ] &&
-				[ -f /data/system/qsc_xp_want_screen ]; then
-				_mt="$(stat -c %Y /data/system/qsc_xp_screen 2>/dev/null || echo 0)"
-				_now="$(date +%s 2>/dev/null || echo 0)"
-				_st="$(awk -F'\t' 'NF{print $NF; exit}' /data/system/qsc_xp_screen 2>/dev/null | tr -d ' \r\n')"
-				case "$_mt:$_now" in
-					*[!0-9:]*) ;;
-					*)
-						if [ "$_st" = "off" ] &&
-							[ "$_mt" -gt 0 ] 2>/dev/null &&
-							[ "$((_now - _mt))" -ge 0 ] 2>/dev/null &&
-							[ "$((_now - _mt))" -le 3 ] 2>/dev/null; then
-							type qsc_log >/dev/null 2>&1 &&
-								qsc_log debug "忽略管理器 XP enter（XP 刚报息屏）"
-							return 1
-						fi
-						;;
-				esac
-			fi
-			QSC_PS_SCREEN_CACHE_AT=0
-			QSC_PS_SCREEN_CACHE_VAL=0
-			QSC_MANAGER_VIEWER_WAS=1
-			QSC_MANAGER_VIEWER_CACHE_VAL=1
-			QSC_MANAGER_VIEWER_CACHE_AT=0
-			if [ "$prev" != "1" ]; then
-				QSC_MANAGER_VIEWER_RISING=1
-				type qsc_log >/dev/null 2>&1 &&
-					qsc_log debug "模块管理器在前台（XP边沿${pkg:+: $pkg}）"
-			fi
-			return 0
-			;;
-		leave)
-			QSC_MANAGER_VIEWER_WAS=0
-			QSC_MANAGER_VIEWER_CACHE_VAL=0
-			QSC_MANAGER_VIEWER_CACHE_AT=0
-			if [ "$prev" = "1" ]; then
-				QSC_MANAGER_VIEWER_FALLING=1
-				type qsc_log >/dev/null 2>&1 &&
-					qsc_log debug "已离开模块管理器（XP边沿${pkg:+: $pkg}）"
-			fi
-			return 1
-			;;
-		*)
-			return 1
-			;;
-	esac
+	tmp="$f.consume.$$"
+	mv -f "$f" "$tmp" 2>/dev/null || return 1
+	while IFS= read -r line || [ -n "$line" ]; do
+		[ -n "$line" ] || continue
+		edge="$(printf '%s' "$line" | awk -F'\t' 'NF>=2{print $2; exit}')"
+		pkg="$(printf '%s' "$line" | awk -F'\t' 'NF>=3{print $3; exit}')"
+		edge="$(printf '%s' "$edge" | tr -d ' \r\n')"
+		pkg="$(printf '%s' "$pkg" | tr -d ' \r\n')"
+		case "$edge" in
+			enter)
+				# 仅当 XP 刚报 screen=off 才丢这条 enter
+				if [ -f /data/system/qsc_xp_screen ] &&
+					[ -f /data/system/qsc_xp_want_screen ]; then
+					_mt="$(stat -c %Y /data/system/qsc_xp_screen 2>/dev/null || echo 0)"
+					_now="$(date +%s 2>/dev/null || echo 0)"
+					_st="$(awk -F'\t' 'NF{print $NF; exit}' /data/system/qsc_xp_screen 2>/dev/null | tr -d ' \r\n')"
+					if [ "$_st" = "off" ] &&
+						[ "$_mt" -gt 0 ] 2>/dev/null &&
+						[ "$((_now - _mt))" -ge 0 ] 2>/dev/null &&
+						[ "$((_now - _mt))" -le 3 ] 2>/dev/null; then
+						type qsc_log >/dev/null 2>&1 &&
+							qsc_log debug "跳过队列中 XP enter（XP 刚报息屏${pkg:+: $pkg}）"
+						continue
+					fi
+				fi
+				got=1
+				QSC_PS_SCREEN_CACHE_AT=0
+				QSC_PS_SCREEN_CACHE_VAL=0
+				if [ "${QSC_MANAGER_VIEWER_WAS:-0}" != "1" ]; then
+					QSC_MANAGER_VIEWER_RISING=1
+					# 用 info：默认日志可见，与 XP INFO 对齐（勿藏在 debug_on 后）
+					type qsc_log >/dev/null 2>&1 &&
+						qsc_log info "模块管理器在前台（XP${pkg:+: $pkg}）"
+				else
+					type qsc_log >/dev/null 2>&1 &&
+						qsc_log debug "模块管理器仍在前台（XP 补发${pkg:+: $pkg}）"
+				fi
+				QSC_MANAGER_VIEWER_WAS=1
+				QSC_MANAGER_VIEWER_CACHE_VAL=1
+				QSC_MANAGER_VIEWER_CACHE_AT=0
+				;;
+			leave)
+				got=1
+				if [ "${QSC_MANAGER_VIEWER_WAS:-0}" = "1" ]; then
+					QSC_MANAGER_VIEWER_FALLING=1
+					type qsc_log >/dev/null 2>&1 &&
+						qsc_log info "已离开模块管理器（XP${pkg:+: $pkg}）"
+				else
+					type qsc_log >/dev/null 2>&1 &&
+						qsc_log debug "收到 XP leave（本地未在观看${pkg:+: $pkg}）"
+				fi
+				QSC_MANAGER_VIEWER_WAS=0
+				QSC_MANAGER_VIEWER_CACHE_VAL=0
+				QSC_MANAGER_VIEWER_CACHE_AT=0
+				;;
+		esac
+	done <"$tmp"
+	rm -f "$tmp" 2>/dev/null || true
+	[ "$got" = "1" ] || return 1
+	[ "${QSC_MANAGER_VIEWER_WAS:-0}" = "1" ]
 }
 
 # 焦点/前台是否命中列表中任一包。0=命中
@@ -264,7 +266,7 @@ qsc_manager_viewer_poll() {
 			QSC_MANAGER_VIEWER_WAS=0
 			QSC_MANAGER_VIEWER_CACHE_VAL=0
 			type qsc_log >/dev/null 2>&1 &&
-				qsc_log debug "已离开模块管理器（息屏）"
+				qsc_log info "已离开模块管理器（息屏）"
 		fi
 		return 1
 	fi
@@ -282,11 +284,11 @@ qsc_manager_viewer_poll() {
 	if [ "$cur" = "1" ] && [ "$prev" != "1" ]; then
 		QSC_MANAGER_VIEWER_RISING=1
 		type qsc_log >/dev/null 2>&1 &&
-			qsc_log debug "模块管理器在前台（简介将勤刷）"
+			qsc_log info "模块管理器在前台（简介将勤刷）"
 	elif [ "$cur" != "1" ] && [ "$prev" = "1" ]; then
 		QSC_MANAGER_VIEWER_FALLING=1
 		type qsc_log >/dev/null 2>&1 &&
-			qsc_log debug "已离开模块管理器（简介恢复按需）"
+			qsc_log info "已离开模块管理器（简介恢复按需）"
 	fi
 	QSC_MANAGER_VIEWER_WAS="$cur"
 	[ "$cur" = "1" ]

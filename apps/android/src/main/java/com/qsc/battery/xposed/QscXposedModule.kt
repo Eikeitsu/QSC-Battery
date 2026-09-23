@@ -21,8 +21,8 @@ import java.util.concurrent.atomic.AtomicReference
  * 2) 前台包名总线 [XpPrefs.FG_PATH] + 管理器进出 [XpPrefs.VIEWER_PATH]
  *    Magisk 写 [XpPrefs.FG_POLICY_PATH] 门禁：无简介/游戏/停充则 idle，XP 不写盘。
  *    分级：仅简介→管理器；游戏/停充→各自列表；离开关注包仍写一次。
- *    管理器会话：进出各经 1.5s 稳定；确认离开后再等 90s 超时才发 leave。
- *    宽限期内回到管理器会补发 enter，避免简介 worker 停刷。
+ *    管理器会话：进出各经 3s 稳定；离开稳定后立即写 leave（包名为管理器）。
+ *    边沿文件追加队列，避免 enter 被 leave 覆盖。切回管理器会补发 enter。
  * 3) 可选辅助边沿（默认关）：亮灭屏 / Doze / 白名单广播 → [QscXpAssist]
  * 不写充电节点。
  */
@@ -46,11 +46,14 @@ class QscXposedModule : XposedModule() {
     /** 上一前台是否属于策略关注包（用于离开时仍写一次 fg） */
     private val lastWasWatch = AtomicBoolean(false)
 
-    /** 已确认的管理器观看会话（含离开后的 90s 宽限，直到 leave 落盘） */
+    /** 已确认的管理器观看会话（含离开防抖，直到 leave 落盘） */
     private val managerSession = AtomicBoolean(false)
     private val enterPending = AtomicBoolean(false)
     private val leavePending = AtomicBoolean(false)
-    private val pendingLeavePkg = AtomicReference<String?>(null)
+    /** 离开管线里暂存「切去的包」；leave 边沿仍写 [lastManagerPkg] */
+    private val pendingLeaveToPkg = AtomicReference<String?>(null)
+    /** 最近一次确认 enter 的管理器包名（leave 日志/边沿用它，勿写成 launcher） */
+    private val lastManagerPkg = AtomicReference<String?>(null)
     private val viewerPkgsCacheAt = AtomicLong(0L)
     private val viewerPkgsCached = AtomicReference<Set<String>>(emptySet())
     private val viewerPkgsMtime = AtomicLong(-1L)
@@ -70,7 +73,6 @@ class QscXposedModule : XposedModule() {
     private val fgHandler = Handler(Looper.getMainLooper())
     private var enterStableRunnable: Runnable? = null
     private var leaveStableRunnable: Runnable? = null
-    private var leaveTimeoutRunnable: Runnable? = null
     private var fgStableRunnable: Runnable? = null
 
     override fun onModuleLoaded(param: ModuleLoadedParam) {
@@ -340,6 +342,7 @@ class QscXposedModule : XposedModule() {
             cancelFgStableDebounce()
             if (managerSession.get()) {
                 writeManagerFg(pkg)
+                lastManagerPkg.set(pkg)
                 writeViewerEdge("enter", pkg)
                 lastWasWatch.set(true)
                 xpLog(Log.DEBUG, "viewer pulse enter on screen on ($pkg)")
@@ -407,6 +410,7 @@ class QscXposedModule : XposedModule() {
                 // 否则 worker 若已因 poll 失败退出观看循环，简介会一直停住。
                 writeManagerFg(clean)
                 writeViewerEdge("enter", clean)
+                lastManagerPkg.set(clean)
                 lastWasWatch.set(true)
                 xpLog(
                     Log.DEBUG,
@@ -534,11 +538,9 @@ class QscXposedModule : XposedModule() {
 
     private fun cancelLeavePipeline() {
         leaveStableRunnable?.let { fgHandler.removeCallbacks(it) }
-        leaveTimeoutRunnable?.let { fgHandler.removeCallbacks(it) }
         leaveStableRunnable = null
-        leaveTimeoutRunnable = null
         leavePending.set(false)
-        pendingLeavePkg.set(null)
+        pendingLeaveToPkg.set(null)
     }
 
     private fun cancelFgStableDebounce() {
@@ -564,6 +566,7 @@ class QscXposedModule : XposedModule() {
             if (!isManagerPackage(cur)) return@Runnable
             if (!managerSession.compareAndSet(false, true)) return@Runnable
             val p = loadFgPolicy()
+            lastManagerPkg.set(cur)
             writeManagerFg(cur)
             if (needFgBus(p)) writeFg(cur, notifyEdge = true)
             writeViewerEdge("enter", cur)
@@ -576,54 +579,41 @@ class QscXposedModule : XposedModule() {
     }
 
     /**
-     * 离开管理器：先稳定确认离开，再等 [MANAGER_LEAVE_TIMEOUT_MS] 超时才写 leave。
-     * 宽限期内切回管理器会 cancel 并补发 enter，会话不中断。
+     * 离开管理器：经 [MANAGER_STABLE_MS] 确认后立即写 leave。
+     * 边沿第三列始终为管理器包名（不是切去的 launcher/其它 App）。
+     * 短暂误切再回来：cancelLeave + pulse enter，会话不中断。
      */
-    private fun scheduleLeavePipeline(pkg: String) {
-        pendingLeavePkg.set(pkg)
+    private fun scheduleLeavePipeline(toPkg: String) {
+        pendingLeaveToPkg.set(toPkg)
         if (leavePending.get()) {
             return
         }
         leavePending.set(true)
         val stable = Runnable {
             leaveStableRunnable = null
-            val leavePkg = pendingLeavePkg.get() ?: pkg
+            val to = pendingLeaveToPkg.getAndSet(null) ?: toPkg
+            leavePending.set(false)
             val cur = lastFgPkg.get()
             if (cur != null && isManagerPackage(cur)) {
-                leavePending.set(false)
-                pendingLeavePkg.set(null)
                 return@Runnable
             }
-            if (!managerSession.get()) {
-                leavePending.set(false)
-                pendingLeavePkg.set(null)
+            if (!managerSession.compareAndSet(true, false)) {
                 return@Runnable
             }
-            xpLog(Log.DEBUG, "viewer leave stable, timeout ${MANAGER_LEAVE_TIMEOUT_MS}ms ($leavePkg)")
-            val timeout = Runnable {
-                leaveTimeoutRunnable = null
-                leavePending.set(false)
-                val finalPkg = pendingLeavePkg.getAndSet(null) ?: leavePkg
-                val now = lastFgPkg.get()
-                if (now != null && isManagerPackage(now)) return@Runnable
-                if (managerSession.compareAndSet(true, false)) {
-                    val p = loadFgPolicy()
-                    // 离开后 fg 指到当前前台（非管理器），避免简介 poll 假阳性
-                    writeFg(finalPkg, notifyEdge = needFgBus(p))
-                    writeViewerEdge("leave", finalPkg)
-                    lastWasWatch.set(
-                        (p.game && isGamePackage(finalPkg)) ||
-                            (p.appStop && isStopPackage(finalPkg)),
-                    )
-                    xpLog(Log.DEBUG, "viewer leave timeout ($finalPkg)")
-                }
-            }
-            leaveTimeoutRunnable = timeout
-            fgHandler.postDelayed(timeout, MANAGER_LEAVE_TIMEOUT_MS)
+            val mgr = lastManagerPkg.get()?.takeIf { it.isNotBlank() } ?: "manager"
+            val p = loadFgPolicy()
+            // fg 指到当前前台（非管理器），便于 Magisk 用 fg 立刻判定已离开
+            writeFg(to, notifyEdge = needFgBus(p))
+            writeViewerEdge("leave", mgr)
+            lastWasWatch.set(
+                (p.game && isGamePackage(to)) ||
+                    (p.appStop && isStopPackage(to)),
+            )
+            xpLog(Log.DEBUG, "viewer leave stable ($mgr → $to)")
         }
         leaveStableRunnable = stable
         fgHandler.postDelayed(stable, MANAGER_STABLE_MS)
-        xpLog(Log.DEBUG, "viewer leave stable scheduled ${MANAGER_STABLE_MS}ms ($pkg)")
+        xpLog(Log.DEBUG, "viewer leave stable scheduled ${MANAGER_STABLE_MS}ms (to=$toPkg)")
     }
 
     private fun scheduleFgStableDebounce(pkg: String) {
@@ -735,18 +725,32 @@ class QscXposedModule : XposedModule() {
 
     private fun writeViewerEdge(edge: String, pkg: String) {
         if (writeDisabled.get()) return
+        // 追加队列：Magisk 睡着时 enter+leave 都能保留，勿覆盖成只剩最后一条
+        trimViewerQueueIfHuge()
         val ok = writeText(
             XpPrefs.VIEWER_PATH,
             "${System.currentTimeMillis()}\t$edge\t$pkg\n",
-            append = false,
+            append = true,
         )
         if (ok) {
             failStreak.set(0)
-            // 管理器进出：INFO，但对相同文案做短去抖，避免亮灭闪一下刷两行
+            // leave 第三列是管理器包；INFO 去抖避免亮灭闪一下刷两行
             logViewerInfoOnce("ok viewer $edge $pkg")
         } else {
             onWriteFailed("viewer:$edge")
             xpLog(Log.WARN, "viewer write failed ($edge $pkg)")
+        }
+    }
+
+    /** Magisk 长期未消费时防止队列膨胀；保留尾部若干行 */
+    private fun trimViewerQueueIfHuge() {
+        runCatching {
+            val f = File(XpPrefs.VIEWER_PATH)
+            if (!f.isFile || f.length() <= VIEWER_QUEUE_MAX_BYTES) return
+            val lines = f.readLines()
+            if (lines.size <= VIEWER_QUEUE_KEEP_LINES) return
+            val keep = lines.takeLast(VIEWER_QUEUE_KEEP_LINES).joinToString("\n", postfix = "\n")
+            writeText(XpPrefs.VIEWER_PATH, keep, append = false)
         }
     }
 
@@ -939,16 +943,15 @@ class QscXposedModule : XposedModule() {
         private const val FG_IDLE_CACHE_MS = 10_000L
         private const val VIEWER_LOG_DEBOUNCE_MS = 2_000L
 
-        /** 进出管理器边沿稳定时间（防抖）；略短于旧 3s，进入后更快开始刷简介 */
-        private const val MANAGER_STABLE_MS = 1_500L
-
-        /** 确认离开后再等此时长才发 leave（会话超时） */
-        private const val MANAGER_LEAVE_TIMEOUT_MS = 90_000L
+        /** 进出管理器边沿稳定时间（防抖） */
+        private const val MANAGER_STABLE_MS = 3_000L
 
         /** 普通 App 前台落盘稳定时间（≈800ms，与列表墓碑进入对齐） */
         private const val FG_STABLE_DEBOUNCE_MS = 800L
         private const val LOG_MAX_BYTES = 48_000L
         private const val LOG_KEEP_BYTES = 24_000
+        private const val VIEWER_QUEUE_MAX_BYTES = 4_096L
+        private const val VIEWER_QUEUE_KEEP_LINES = 16
 
         private val LOG_PATHS = listOf(
             "/data/system/qsc_xp.log",

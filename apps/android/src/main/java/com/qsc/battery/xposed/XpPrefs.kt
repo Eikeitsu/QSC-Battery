@@ -48,7 +48,7 @@ object XpPrefs {
     /** 前台切换边沿通知（worker 打断睡眠用），内容同 FG 一行 */
     const val FG_EDGE_PATH = "/data/system/qsc_xp_fg_edge"
 
-    /** 管理器前台边沿：timestamp\\tenter|leave\\tpkg（不依赖 qsc_xp_arm） */
+    /** 管理器前台边沿队列：每行 timestamp\\tenter|leave\\tpkg（追加；leave 的 pkg 为管理器） */
     const val VIEWER_PATH = "/data/system/qsc_xp_viewer"
 
     /** shell 同步的管理器包名列表（一行一个），供 XP 合并内置表 */

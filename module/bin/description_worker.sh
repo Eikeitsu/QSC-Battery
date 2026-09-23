@@ -1,9 +1,9 @@
 #!/system/bin/sh
 
 # 独立简介刷新进程。
-# 有 XP 且健康：空闲长睡等边沿（chunk≈15s，边沿新鲜窗 30s）；管理器会话经 XP
-# 稳定后 enter，观看中温和复刷；确认离开后再经超时才 leave。
-# 亮屏边沿会补发 enter（防息屏后卡住静态文案）。
+# 有 XP 且健康：空闲长睡等边沿（chunk≈15–20s，边沿新鲜窗 60s）；管理器会话经 XP
+# 3s 稳定后 enter，离开再经 3s 稳定立即 leave（第三列为管理器包名）。
+# 边沿文件为追加队列，Magisk 一次消费整段。亮屏边沿会补发 enter。
 # 无 XP / XP 异常：dumpsys 降级；边沿恢复后自动切回 XP。
 # 注意：切勿用 1–2s 短片轮询等边沿——会把「事件驱动」打回成高频 shell 唤醒。
 MODDIR=${0%/*}
@@ -146,11 +146,11 @@ worker_wait_edges() {
 		fi
 	fi
 
-	# 息屏/简介压制：不必高频探边沿，但也不能一次睡死超过边沿新鲜窗（~30s），
+	# 息屏/简介压制：不必高频探边沿，但也不能一次睡死超过边沿新鲜窗（~60s），
 	# 否则亮屏后 XP 已写 enter，worker 仍在长睡 → 边沿过期 → 简介不及时。
 	if { type qsc_ps_screen_is_off >/dev/null 2>&1 && qsc_ps_screen_is_off; } ||
 		{ type qsc_ps_desc_suppressed >/dev/null 2>&1 && qsc_ps_desc_suppressed; }; then
-		chunk=25
+		chunk=40
 		left=$secs
 		while [ "$left" -gt 0 ] 2>/dev/null; do
 			step=$chunk
@@ -173,8 +173,8 @@ worker_wait_edges() {
 		done
 		return 0
 	fi
-	# 边沿新鲜窗口约 30s：空闲用 ~15s，观看间隔较短时用 ~8s
-	chunk=15
+	# 边沿新鲜窗口约 60s：空闲用 ~20s，观看间隔较短时用 ~8s
+	chunk=20
 	[ "$secs" -le 60 ] 2>/dev/null && chunk=8
 	left=$secs
 	while [ "$left" -gt 0 ] 2>/dev/null; do
@@ -401,6 +401,10 @@ while worker_parent_alive; do
 					fi
 					_view_miss=$((_view_miss + 1))
 					if [ "$_view_miss" -ge 3 ] 2>/dev/null; then
+						QSC_MANAGER_VIEWER_WAS=0
+						QSC_MANAGER_VIEWER_FALLING=1
+						type qsc_log >/dev/null 2>&1 &&
+							qsc_log info "已离开模块管理器（前台确认）"
 						type qsc_log >/dev/null 2>&1 &&
 							qsc_log debug "简介：管理器已不在前台，停止刷新"
 						break

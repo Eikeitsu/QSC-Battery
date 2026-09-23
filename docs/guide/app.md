@@ -35,8 +35,8 @@
 3. **框架已注入**：`/data/system/qsc_xp_alive` 或 `runningTargets` 含 system_server
 
 - **作用**：
-  1. **前台包名总线**：`qsc_xp_fg`（+ edge）；简介 / 游戏旁路 / App 停充共用。**门禁**：三者全关时 XP 不写盘。**分级**：仅简介→管理器；游戏/停充→各自包名列表。管理器 **1.5s 稳定 + 90s 离开超时**；列表约 **1s 进 / 30s 离**（游戏另认进程）。普通 App fg 落盘 **800ms**。无 XP、软关或策略空闲/异常时回退 dumpsys，边沿恢复后再切回
-  2. **管理器边沿**：`qsc_xp_viewer` enter/leave（经稳定 + 离开超时）
+  1. **前台包名总线**：`qsc_xp_fg`（+ edge）；简介 / 游戏旁路 / App 停充共用。**门禁**：三者全关时 XP 不写盘。**分级**：仅简介→管理器；游戏/停充→各自包名列表。管理器 **进出各 3s 稳定**，离开后立即写 leave（第三列为管理器包名）；列表约 **1s 进 / 30s 离**（游戏另认进程）。普通 App fg 落盘 **800ms**。无 XP、软关或策略空闲/异常时回退 dumpsys，边沿恢复后再切回
+  2. **管理器边沿队列**：`qsc_xp_viewer` 追加多行 enter/leave，Magisk 一次原子消费整段（避免 enter 被 leave 覆盖）
   3. **插拔边沿**：仅 qscd 不可用且已武装时写 `qsc_xp_wake`
   4. **辅助边沿（默认关）**：`want_screen` / `want_doze` / `want_bcast` → 分别写 `qsc_xp_screen` / `qsc_xp_doze` / `qsc_xp_bcast`；息屏策略优先读 screen；武装时亦可打断 sleep。广播动作列表见 `qsc_xp_bcast_actions`（空则用内置 SCREEN/IDLE/插拔）
 - **通道**：`/data/system/`；`qsc_xp_off` 全关；`qsc_xp_no_wake` 仅关插拔唤醒；`qsc_xp_no_viewer` 关前台总线
