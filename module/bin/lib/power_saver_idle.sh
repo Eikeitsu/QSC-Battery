@@ -249,23 +249,26 @@ qsc_ps_xp_assist_fresh() {
 	return 1
 }
 
-# 简介开时：qscd/长睡与 viewer 边沿竞速，亮屏 enter 能立刻醒主服务/救 worker
+# 简介开时：qscd 与 viewer 边沿竞速。
+# 返回：0=viewer 打断或 native 成功；1=无法竞速（调用方走普通 native）；其它=native 失败码
 qsc_ps_wait_race_viewer() {
-	local secs="$1" vf=/data/system/qsc_xp_viewer
-	local qpid ipid
+	local secs="$1" floor="${2:-3}" vf=/data/system/qsc_xp_viewer
+	local qpid ipid rc=0
 	case "$secs" in ""|*[!0-9]*) secs=30 ;; esac
 	[ "$secs" -lt 1 ] 2>/dev/null && secs=1
-	# 占位，否则 consume 后文件消失，inotify 挂不上
-	[ -e "$vf" ] || {
-		: >"$vf" 2>/dev/null
-		chmod 0644 "$vf" 2>/dev/null || true
-	}
+	# CI / 非 Android：无 /data/system 则不竞速
+	[ -d /data/system ] || return 1
 	qsc_ps_xp_viewer_pending && return 0
 	if ! command -v inotifywait >/dev/null 2>&1; then
 		return 1
 	fi
+	# 占位，否则 consume 后文件消失，inotify 挂不上
+	if [ ! -e "$vf" ]; then
+		: >"$vf" 2>/dev/null || return 1
+		chmod 0644 "$vf" 2>/dev/null || true
+	fi
 	(
-		qsc_ps_native_wait "$secs" "${QSC_PS_WAIT_FLOOR:-3}"
+		qsc_ps_native_wait "$secs" "$floor"
 	) &
 	qpid=$!
 	(
@@ -274,14 +277,22 @@ qsc_ps_wait_race_viewer() {
 			"$vf" 2>/dev/null || true
 	) &
 	ipid=$!
-	# 任一先结束即可
 	while kill -0 "$qpid" 2>/dev/null && kill -0 "$ipid" 2>/dev/null; do
 		sleep 1
 	done
-	kill "$qpid" "$ipid" 2>/dev/null || true
-	wait "$qpid" 2>/dev/null || true
+	if kill -0 "$qpid" 2>/dev/null; then
+		# viewer/inotify 先结束：打断 native
+		kill "$qpid" "$ipid" 2>/dev/null || true
+		wait "$qpid" 2>/dev/null || true
+		wait "$ipid" 2>/dev/null || true
+		return 0
+	fi
+	# native 先结束：带回其退出码（失败须落盘）
+	wait "$qpid" 2>/dev/null
+	rc=$?
+	kill "$ipid" 2>/dev/null || true
 	wait "$ipid" 2>/dev/null || true
-	return 0
+	return "$rc"
 }
 
 # qscd 不可用时的睡眠：武装 XP / 简介边沿均可短片打断
@@ -349,21 +360,35 @@ qsc_ps_wait() {
 			;;
 	esac
 	if qsc_ps_native_ready; then
-		# 动态简介开着：与 viewer 边沿竞速，避免亮屏 enter 卡到下一轮 idle 超时
+		# 动态简介开着：与 viewer 边沿竞速（失败码须原样处理，勿吞掉）
 		_race=0
+		_race_rc=1
 		if type qsc_description_enabled >/dev/null 2>&1 &&
 			qsc_description_enabled &&
 			[ "${QSC_PS_PROFILE:-balanced}" != "aggressive" ]; then
 			_race=1
 		fi
-		if [ "$_race" = "1" ] && qsc_ps_wait_race_viewer "$secs"; then
+		if [ "$_race" = "1" ]; then
+			qsc_ps_wait_race_viewer "$secs" "$floor"
+			_race_rc="$?"
+		fi
+		if [ "$_race" = "1" ] && [ "$_race_rc" -eq 0 ] 2>/dev/null; then
+			if [ "$QSC_PS_WAIT_FAILURES" -gt 0 ] 2>/dev/null; then
+				qsc_log info "事件等待器已恢复（${QSC_PS_NATIVE_MODE:-wait}）"
+			fi
 			QSC_PS_WAIT_HELPER_OK=1
 			QSC_PS_WAIT_FAILURES=0
 			QSC_PS_WAIT_NEXT_RETRY=0
+			rm -f "$DATADIR/qscd_unusable" /data/system/qsc_xp_arm 2>/dev/null
+			qsc_log_once_clear qscd
 			return 0
 		fi
-		qsc_ps_native_wait "$secs" "$floor"
-		rc="$?"
+		if [ "$_race" = "1" ] && [ "$_race_rc" -ne 1 ] 2>/dev/null; then
+			rc="$_race_rc"
+		else
+			qsc_ps_native_wait "$secs" "$floor"
+			rc="$?"
+		fi
 		if [ "$rc" -eq 0 ]; then
 			if [ "$QSC_PS_WAIT_FAILURES" -gt 0 ] 2>/dev/null; then
 				qsc_log info "事件等待器已恢复（${QSC_PS_NATIVE_MODE:-wait}）"

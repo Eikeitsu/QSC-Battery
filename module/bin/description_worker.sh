@@ -124,13 +124,13 @@ worker_wait_edges() {
 	case "$secs" in ""|*[!0-9]*) secs=3600 ;; esac
 
 	# 有 inotifywait 时事件唤醒（Magisk busybox 常见）；失败再退回分片 sleep
-	# 占位空文件，避免 consume 后路径消失导致挂不上 inotify
-	if command -v inotifywait >/dev/null 2>&1; then
+	# 占位空文件，避免 consume 后路径消失导致挂不上 inotify（仅 Android）
+	if command -v inotifywait >/dev/null 2>&1 && [ -d /data/system ]; then
 		_iw_paths=""
 		for _f in /data/system/qsc_xp_viewer /data/system/qsc_xp_fg_edge \
 			/data/system/qsc_xp_screen; do
 			[ -e "$_f" ] || {
-				: >"$_f" 2>/dev/null
+				: >"$_f" 2>/dev/null || true
 				chmod 0644 "$_f" 2>/dev/null || true
 			}
 			[ -e "$_f" ] && _iw_paths="${_iw_paths} ${_f}"

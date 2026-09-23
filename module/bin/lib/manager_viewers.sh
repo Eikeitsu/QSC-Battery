@@ -204,9 +204,11 @@ qsc_manager_viewer_consume_xp_edge() {
 		esac
 	done <"$tmp"
 	rm -f "$tmp" 2>/dev/null || true
-	# 占位空文件，供 inotify 继续挂接（mv 消费后否则路径消失）
-	: >/data/system/qsc_xp_viewer 2>/dev/null
-	chmod 0644 /data/system/qsc_xp_viewer 2>/dev/null || true
+	# 占位空文件，供 inotify 继续挂接（仅 Android 有 /data/system）
+	if [ -d /data/system ]; then
+		: >/data/system/qsc_xp_viewer 2>/dev/null || true
+		chmod 0644 /data/system/qsc_xp_viewer 2>/dev/null || true
+	fi
 	[ "$got" = "1" ] || return 1
 	[ "${QSC_MANAGER_VIEWER_WAS:-0}" = "1" ]
 }
