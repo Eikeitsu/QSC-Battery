@@ -79,7 +79,20 @@ worker_xp_mode() {
 worker_poll_viewer() {
 	QSC_MANAGER_VIEWER_CACHE_AT=0
 	type qsc_manager_viewer_poll >/dev/null 2>&1 || return 1
-	qsc_manager_viewer_poll
+	if qsc_manager_viewer_poll; then
+		return 0
+	fi
+	# 主服务可能已 consume 边沿并写下 viewing；worker 进程不共享 WAS 内存
+	if type qsc_desc_viewing_active >/dev/null 2>&1 &&
+		qsc_desc_viewing_active; then
+		if type qsc_ps_screen_is_off >/dev/null 2>&1 &&
+			qsc_ps_screen_is_off; then
+			return 1
+		fi
+		QSC_MANAGER_VIEWER_WAS=1
+		return 0
+	fi
+	return 1
 }
 
 worker_do_refresh() {
@@ -316,7 +329,7 @@ while worker_parent_alive; do
 		fi
 
 		type qsc_log >/dev/null 2>&1 &&
-			qsc_log debug "简介：管理器前台，开始刷新"
+			qsc_log info "简介：管理器前台，开始刷新"
 		type qsc_desc_viewing_set >/dev/null 2>&1 && qsc_desc_viewing_set
 		worker_do_refresh 1
 		_view_miss=0
@@ -354,7 +367,7 @@ while worker_parent_alive; do
 							type qsc_description_restore_static >/dev/null 2>&1 &&
 								qsc_description_restore_static
 							type qsc_log >/dev/null 2>&1 &&
-								qsc_log debug "简介：已离开管理器，按需退出"
+								qsc_log info "简介：已离开管理器，按需退出"
 							worker_state 0
 							exit 0
 						fi

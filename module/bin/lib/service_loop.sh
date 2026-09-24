@@ -6,6 +6,15 @@
 qsc_service_desc_ondemand_sync() {
 	# 先刷策略，再按需启停 worker
 	type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
+	# XP enter 待消费：主服务先吃边沿（设 viewing），勿只靠 worker 才 consume
+	if type qsc_manager_viewer_xp_edge_pending >/dev/null 2>&1 &&
+		qsc_manager_viewer_xp_edge_pending; then
+		QSC_PS_SCREEN_CACHE_AT=0
+		type qsc_ps_now >/dev/null 2>&1 && qsc_ps_now
+		if type qsc_manager_viewer_consume_xp_edge >/dev/null 2>&1; then
+			qsc_manager_viewer_consume_xp_edge || true
+		fi
+	fi
 	_desc_want=0
 	if type qsc_ps_desc_worker_wanted >/dev/null 2>&1; then
 		qsc_ps_desc_worker_wanted && _desc_want=1
@@ -90,7 +99,9 @@ qsc_service_loop_once() {
 			_wait_rc="$?"
 			qsc_runtime_trace "H1" "wait_exit" "$_wait_rc"
 			# endregion
-			# 等待被 viewer enter 打断：立刻按需拉起 worker
+			# 等待返回：刷新时钟/息屏缓存，再立刻按需拉起（XP enter 可能刚打断）
+			QSC_PS_SCREEN_CACHE_AT=0
+			type qsc_ps_now >/dev/null 2>&1 && qsc_ps_now
 			if type qsc_service_desc_ondemand_sync >/dev/null 2>&1; then
 				qsc_service_desc_ondemand_sync
 			fi
@@ -140,6 +151,10 @@ qsc_service_loop_once() {
 			_wait_rc="$?"
 			qsc_runtime_trace "H1" "wait_exit" "$_wait_rc"
 			# endregion
+			QSC_PS_SCREEN_CACHE_AT=0
+			type qsc_ps_now >/dev/null 2>&1 && qsc_ps_now
+			type qsc_service_desc_ondemand_sync >/dev/null 2>&1 &&
+				qsc_service_desc_ondemand_sync
 			return 0
 		fi
 		QSC_SERVICE_LEAN_IDLE=0

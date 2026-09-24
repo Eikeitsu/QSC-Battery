@@ -8,6 +8,7 @@
 
 ### 修复
 
+- **Magisk↔XP 配合迟钝**：主服务长睡时 XP 已写 enter，但 `worker_wanted` 先被 deep/park 挡掉、无 inotify 时整段 native 盲等；且仅 worker 才 consume。改为 pending enter 优先启 worker、主服务先吃边沿再拉起、无 inotify 改短片可打断、竞速立刻 kill native；上升沿写 info 日志便于对照 XP。
 - **Magisk 消费 viewer 后 XP 写失败 → 简介完全不动**：`mv` 后 root 以 `0644` 重建 `/data/system/qsc_xp_viewer`，`system_server` 无法 append（日志 `viewer write failed (enter …)`），按需 worker 永远收不到 enter。改为总线文件 `0666`（与 `qsc_xp.log` 一致），启动/占位/消费统一 `qsc_xp_touch_bus`；并清 `qsc_xp_write_disabled`，XP 侧可在本 boot 恢复写盘。
 - **简介按需 worker**：有 XP 时无人看管理器不跑简介进程；`enter` 叫醒主服务后拉起，`leave`/息屏自行退出。无 XP 时亮屏允许 dumpsys 降级 worker（约数十秒响应），息屏仍停，避免过夜常驻。
 - **KSU/SukiSU 随机包名**：管理器列表发现增加 `ksud debug package` 与已装 `libksud.so` 兜底，兼容 Spoofed Manager；仍可用 `desc_viewer_pkgs` 手写追加。

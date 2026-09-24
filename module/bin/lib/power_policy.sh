@@ -626,9 +626,28 @@ qsc_ps_desc_worker_wanted() {
 	type qsc_description_enabled >/dev/null 2>&1 || return 1
 	qsc_description_enabled || return 1
 	[ "${QSC_PS_PROFILE:-balanced}" = "aggressive" ] && return 1
+
+	# —— XP 边沿优先于 deep/park ——
+	# 否则主服务被 inotify 叫醒后仍因 MODE=deep 拒启 worker，队列干晾到整段 idle 结束。
+	if type qsc_manager_viewer_xp_edge_pending >/dev/null 2>&1 &&
+		qsc_manager_viewer_xp_edge_pending; then
+		return 0
+	fi
+	if type qsc_desc_viewing_active >/dev/null 2>&1 &&
+		qsc_desc_viewing_active; then
+		# 息屏则收掉（亮屏再靠 enter 拉起）；有 pending 上面已 return 0
+		if type qsc_ps_screen_is_off >/dev/null 2>&1 &&
+			qsc_ps_screen_is_off; then
+			type qsc_desc_viewing_clear >/dev/null 2>&1 &&
+				qsc_desc_viewing_clear
+			return 1
+		fi
+		return 0
+	fi
+
 	case "${QSC_PS_MODE:-}" in
 		deep|screen_off)
-			# 滞回期已亮屏且有 enter/观看标记：仍要吃边沿
+			# 滞回期已亮屏：仍可走无 XP dumpsys 降级
 			if type qsc_ps_screen_is_off >/dev/null 2>&1 &&
 				! qsc_ps_screen_is_off; then
 				:
@@ -641,24 +660,6 @@ qsc_ps_desc_worker_wanted() {
 		type qsc_ps_screen_is_off >/dev/null 2>&1 &&
 		qsc_ps_screen_is_off &&
 		return 1
-
-	# 有待消费 enter：立刻要 worker
-	if type qsc_manager_viewer_xp_edge_pending >/dev/null 2>&1 &&
-		qsc_manager_viewer_xp_edge_pending; then
-		return 0
-	fi
-	# 观看中
-	if type qsc_desc_viewing_active >/dev/null 2>&1 &&
-		qsc_desc_viewing_active; then
-		# 息屏则收掉（亮屏再靠 enter 拉起）
-		if type qsc_ps_screen_is_off >/dev/null 2>&1 &&
-			qsc_ps_screen_is_off; then
-			type qsc_desc_viewing_clear >/dev/null 2>&1 &&
-				qsc_desc_viewing_clear
-			return 1
-		fi
-		return 0
-	fi
 
 	# 无 XP：亮屏降级常驻（息屏/驻停仍停），避免「打开管理器要等好几分钟」
 	if type qsc_fg_xp_ready >/dev/null 2>&1 && qsc_fg_xp_ready; then

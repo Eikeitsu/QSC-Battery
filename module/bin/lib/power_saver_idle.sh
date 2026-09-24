@@ -250,7 +250,7 @@ qsc_ps_xp_assist_fresh() {
 }
 
 # 简介开时：qscd 与 viewer 边沿竞速。
-# 返回：0=viewer 打断或 native 成功；1=无法竞速（调用方走普通 native）；其它=native 失败码
+# 返回：0=viewer 打断或 native 成功；1=无法竞速（调用方走可打断短片，勿整段盲等）；其它=native 失败码
 qsc_ps_wait_race_viewer() {
 	local secs="$1" floor="${2:-3}" vf=/data/system/qsc_xp_viewer
 	local qpid ipid rc=0
@@ -279,23 +279,24 @@ qsc_ps_wait_race_viewer() {
 		inotifywait -qq -t "$secs" \
 			-e modify,attrib,close_write,create,move \
 			"$vf" 2>/dev/null || true
+		# 边沿到：立刻打断 native，勿再 sleep 1 轮询
+		kill "$qpid" 2>/dev/null || true
 	) &
 	ipid=$!
-	while kill -0 "$qpid" 2>/dev/null && kill -0 "$ipid" 2>/dev/null; do
-		sleep 1
-	done
-	if kill -0 "$qpid" 2>/dev/null; then
-		# viewer/inotify 先结束：打断 native
-		kill "$qpid" "$ipid" 2>/dev/null || true
-		wait "$qpid" 2>/dev/null || true
-		wait "$ipid" 2>/dev/null || true
-		return 0
-	fi
-	# native 先结束：带回其退出码（失败须落盘）
 	wait "$qpid" 2>/dev/null
 	rc=$?
 	kill "$ipid" 2>/dev/null || true
 	wait "$ipid" 2>/dev/null || true
+	# inotify 先到会杀 native（非 0）；以 pending 为准
+	if qsc_ps_xp_viewer_pending; then
+		return 0
+	fi
+	# native 正常睡满
+	[ "$rc" -eq 0 ] 2>/dev/null && return 0
+	# 被 inotify 杀掉但文件已被其它路径消费完：仍算成功打断
+	case "$rc" in
+		130|137|143) return 0 ;;
+	esac
 	return "$rc"
 }
 
@@ -334,8 +335,9 @@ qsc_ps_fallback_sleep() {
 	fi
 	left=$secs
 	while [ "$left" -gt 0 ] 2>/dev/null; do
+		# 简介边沿：短片轮询，避免无 inotify 时要等整段 idle 才发现 enter
 		chunk=5
-		[ "$_desc_wake" = "1" ] && chunk=8
+		[ "$_desc_wake" = "1" ] && chunk=3
 		[ "$left" -lt "$chunk" ] 2>/dev/null && chunk=$left
 		sleep "$chunk"
 		left=$((left - chunk))
@@ -385,6 +387,11 @@ qsc_ps_wait() {
 			QSC_PS_WAIT_NEXT_RETRY=0
 			rm -f "$DATADIR/qscd_unusable" /data/system/qsc_xp_arm 2>/dev/null
 			qsc_log_once_clear qscd
+			return 0
+		fi
+		# 无法竞速（无 inotify 等）：短片可打断，勿整段 native 盲等丢 enter
+		if [ "$_race" = "1" ] && [ "$_race_rc" -eq 1 ] 2>/dev/null; then
+			qsc_ps_fallback_sleep "$secs"
 			return 0
 		fi
 		if [ "$_race" = "1" ] && [ "$_race_rc" -ne 1 ] 2>/dev/null; then
