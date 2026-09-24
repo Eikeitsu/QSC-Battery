@@ -8,9 +8,18 @@
 
 ### 修复
 
-- **管理器前台简介不更新**：息屏/驻停 `restore_static` 后内存指纹 `QSC_PS_DESC_SIG` 未清，进管理器虽识别前台却因「电量未变」跳过写 `module.prop`，简介一直停在静态文案。改为还原静态时清指纹；`FORCE` 刷新不再被指纹短路；有 XP 时观看标记不被 Magisk 息屏误判清掉。
-- **管理器前台日志**：进出不再写入默认 `log.log`（改 `qsc_dbg`，需开详细调试）；去掉「简介将勤刷」等口语。
-- **管理器前台日志弱化**：进出相关 INFO 全部降为 DEBUG；默认仅保留上升沿/离开少量 `[DEBUG]`，补发/息屏/worker 细节改走 `qsc_dbg`（需开详细调试）。XP `ok viewer` 改为 DEBUG，须开 LSP「详细日志」才可见。
+- **管理器进出日志**：彻底去掉「模块管理器在前台/已离开」等写入 `log.log` 的文案（含 debug）；默认日志不再出现。
+- **简介识别前台仍不更新**：消费边沿后强制刷 prop；离开恢复静态；有 XP 时必停遗留 worker；清观看不再强依赖 `want_screen`。
+- **App/温控停充充不回**：无 `battery_switch` 时不再套用电量门闩（仅孤儿无标记才保守拦截）。
+- **无 inotify 竞速失败**：改回 `native_wait`，不再盲 `sleep` 丢插拔。
+- **fallback 整夜 5s**：仅 pending/观看才短片，不再因「开了简介但无 XP」高频醒。
+- **lean 省电**：遗留 worker / pending / 观看才 sync；首轮进 lean 同样按需。
+- **race kill 伪装成功**：去掉 130/137/143 当成功。
+- **Rust qscd**：插电判定对齐 shell；`watch`/`wait-event` 支持 `--wake-file`（features 含 `wake-file`），与 viewer 同 poll，省 shell inotify 竞速。
+- **C qscd（轻量）**：`poll` + 事件 burst drain，不照搬 Rust 全套。
+- **其它**：dumpsys status 归一数字；MCA 重申接受非普通文件节点。
+- **未插电 lean 省电**：① 息屏驻停且无 pending/观看时不与 viewer 竞速；② lean 按需跑简介管家。
+- **管理器前台简介不更新（指纹）**：`restore_static` 清 `QSC_PS_DESC_SIG`；`FORCE` 不受指纹短路。
 - **Magisk↔XP 配合迟钝**：主服务长睡时 XP 已写 enter，但 `worker_wanted` 先被 deep/park 挡掉、无 inotify 时整段 native 盲等；且仅 worker 才 consume。改为 pending enter 优先、主服务先吃边沿再刷简介、无 inotify 改短片可打断、竞速立刻 kill native。
 - **Magisk 消费 viewer 后 XP 写失败 → 简介完全不动**：`mv` 后 root 以 `0644` 重建 `/data/system/qsc_xp_viewer`，`system_server` 无法 append（日志 `viewer write failed (enter …)`），按需 worker 永远收不到 enter。改为总线文件 `0666`（与 `qsc_xp.log` 一致），启动/占位/消费统一 `qsc_xp_touch_bus`；并清 `qsc_xp_write_disabled`，XP 侧可在本 boot 恢复写盘。
 - **简介按需 worker**：无 XP 时亮屏 dumpsys 降级 worker（约数十秒响应），息屏仍停。有 XP 时不启 worker，由主服务刷简介（见上条）。

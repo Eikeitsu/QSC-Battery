@@ -19,12 +19,16 @@ if [ -f "$DATADIR/power_switch" ] && [ "$module_off" != "1" ]; then
 				battery_ready=0
 			fi
 		fi
-	elif [ "$power_stop" -le "100" -a "$power_stop" -gt "$power_start" -a "$battery_level" -gt "$power_start" ]; then
-		# 无原因标记的旧状态保守按电量停充处理，避免升级后在高电量误恢复
-		if qsc_power_stop_schedule_active; then
-			battery_ready=0
+	elif [ ! -f "$DATADIR/temp_switch" ] && [ ! -f "$DATADIR/app_stop_flag" ]; then
+		# 无任何原因标记：旧版孤儿停充，保守按电量门闩，避免高电量误恢复
+		if [ "$power_stop" -le "100" -a "$power_stop" -gt "$power_start" -a "$battery_level" -gt "$power_start" ]; then
+			if qsc_power_stop_schedule_active; then
+				battery_ready=0
+			fi
 		fi
 	fi
+	# 有 temp_switch / app_stop_flag 但无 battery_switch：不套用电量门闩，
+	# 否则 App/温控停充后条件消失仍要等到电量≤power_start 才能恢复。
 	if [ -f "$DATADIR/app_stop_flag" ]; then
 		if [ "$app_stop" = "1" ] && [ "$app_stop_hit" = "1" ]; then
 			app_ready=0

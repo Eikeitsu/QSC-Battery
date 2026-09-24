@@ -208,12 +208,6 @@ qsc_manager_viewer_consume_xp_edge() {
 				QSC_PS_SCREEN_CACHE_VAL=0
 				if [ "${QSC_MANAGER_VIEWER_WAS:-0}" != "1" ]; then
 					QSC_MANAGER_VIEWER_RISING=1
-					# 默认不写 log.log；开「详细调试日志」可见
-					type qsc_dbg >/dev/null 2>&1 &&
-						qsc_dbg "模块管理器在前台（XP${pkg:+: $pkg}）"
-				else
-					type qsc_dbg >/dev/null 2>&1 &&
-						qsc_dbg "模块管理器仍在前台（XP 补发${pkg:+: $pkg}）"
 				fi
 				QSC_MANAGER_VIEWER_WAS=1
 				QSC_MANAGER_VIEWER_CACHE_VAL=1
@@ -226,11 +220,6 @@ qsc_manager_viewer_consume_xp_edge() {
 					{ type qsc_desc_viewing_active >/dev/null 2>&1 &&
 						qsc_desc_viewing_active; }; then
 					QSC_MANAGER_VIEWER_FALLING=1
-					type qsc_dbg >/dev/null 2>&1 &&
-						qsc_dbg "已离开模块管理器（XP${pkg:+: $pkg}）"
-				else
-					type qsc_dbg >/dev/null 2>&1 &&
-						qsc_dbg "收到 XP leave（本地未在观看${pkg:+: $pkg}）"
 				fi
 				QSC_MANAGER_VIEWER_WAS=0
 				QSC_MANAGER_VIEWER_CACHE_VAL=0
@@ -340,8 +329,6 @@ qsc_manager_viewer_poll() {
 			QSC_MANAGER_VIEWER_WAS=0
 			QSC_MANAGER_VIEWER_CACHE_VAL=0
 			type qsc_desc_viewing_clear >/dev/null 2>&1 && qsc_desc_viewing_clear
-			type qsc_dbg >/dev/null 2>&1 &&
-				qsc_dbg "已离开模块管理器（息屏）"
 		fi
 		return 1
 	fi
@@ -358,12 +345,8 @@ qsc_manager_viewer_poll() {
 	fi
 	if [ "$cur" = "1" ] && [ "$prev" != "1" ]; then
 		QSC_MANAGER_VIEWER_RISING=1
-		type qsc_dbg >/dev/null 2>&1 &&
-			qsc_dbg "模块管理器在前台"
 	elif [ "$cur" != "1" ] && [ "$prev" = "1" ]; then
 		QSC_MANAGER_VIEWER_FALLING=1
-		type qsc_dbg >/dev/null 2>&1 &&
-			qsc_dbg "已离开模块管理器"
 	fi
 	QSC_MANAGER_VIEWER_WAS="$cur"
 	if [ "$cur" = "1" ]; then

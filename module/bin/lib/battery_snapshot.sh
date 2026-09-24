@@ -119,6 +119,25 @@ qsc_battery_snapshot_read() {
 			Discharging) QSC_BATTERY_STATUS=3 ;;
 			"Not charging") QSC_BATTERY_STATUS=4 ;;
 		esac
+	else
+		# dumpsys 可能仍是英文 status，归一成与 sysfs 一致的数字
+		_st_norm="$(printf '%s' "$QSC_BATTERY_STATUS" | tr -d ' \r\n')"
+		case "$_st_norm" in
+			2|3|4|5) ;;
+			Charging|charging) QSC_BATTERY_STATUS=2 ;;
+			Full|full) QSC_BATTERY_STATUS=5 ;;
+			Discharging|discharging) QSC_BATTERY_STATUS=3 ;;
+			Notcharging|not_charging|NotCharging|"Notcharging") QSC_BATTERY_STATUS=4 ;;
+			1) QSC_BATTERY_STATUS=1 ;;
+			*)
+				case "$_st_norm" in
+					*"Notcharging"*|*"not_charging"*) QSC_BATTERY_STATUS=4 ;;
+					*"Charging"*|*"charging"*) QSC_BATTERY_STATUS=2 ;;
+					*"Full"*|*"full"*) QSC_BATTERY_STATUS=5 ;;
+					*"Discharging"*|*"discharging"*) QSC_BATTERY_STATUS=3 ;;
+				esac
+				;;
+		esac
 	fi
 	# 插电以端口交叉判定为准：勿仅凭 status=Charging；一加等机型
 	# dumpsys 也可能误报 powered:true，无 online/present 证据时清掉。

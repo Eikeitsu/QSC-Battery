@@ -32,6 +32,7 @@
 mod common;
 mod diagnose;
 mod plugged;
+mod wake;
 mod watch;
 
 use std::env;
@@ -39,7 +40,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use common::{
-    parse_secs, wait_event, BatterySnapshot, PowerState, SnapshotFailure, SnapshotSource,
+    parse_secs, wait_event_with_wake, BatterySnapshot, PowerState, SnapshotFailure, SnapshotSource,
     UeventSocket, EXIT_NO_HIT, EXIT_OK, EXIT_UNUSABLE, WAIT_FLOOR_DEFAULT, WAIT_MAX_CAP,
     WAIT_MAX_DEFAULT,
 };
@@ -48,7 +49,7 @@ use plugged::plugged;
 use watch::{parse_watch_args, watch};
 
 /// 支持的扩展子命令；features 子命令原样打印
-const FEATURES: &str = "watch pkgs selftest plugged diagnose";
+const FEATURES: &str = "watch pkgs selftest plugged diagnose wake-file";
 
 /// 判断包名列表里有没有包在跑主进程。
 /// 匹配规则是「cmdline 首字段与包名完全相等」：Android 应用主进程的 cmdline
@@ -167,17 +168,32 @@ fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     match args.get(1).map(String::as_str) {
         Some("wait-event") => {
-            let max = parse_secs(
-                args.get(2).map(String::as_str),
-                WAIT_MAX_DEFAULT,
-                WAIT_MAX_CAP,
-            );
-            let floor = parse_secs(
-                args.get(3).map(String::as_str),
-                WAIT_FLOOR_DEFAULT,
-                max.max(1),
-            );
-            ExitCode::from(wait_event(max, floor))
+            let mut max = WAIT_MAX_DEFAULT;
+            let mut floor = WAIT_FLOOR_DEFAULT;
+            let mut wake_files: Vec<String> = Vec::new();
+            let mut positionals: Vec<&str> = Vec::new();
+            let mut i = 2;
+            while i < args.len() {
+                if args[i] == "--wake-file" {
+                    if let Some(p) = args.get(i + 1) {
+                        let t = p.trim();
+                        if !t.is_empty() {
+                            wake_files.push(t.to_string());
+                        }
+                    }
+                    i += 2;
+                } else {
+                    positionals.push(args[i].as_str());
+                    i += 1;
+                }
+            }
+            if let Some(m) = positionals.first() {
+                max = parse_secs(Some(m), WAIT_MAX_DEFAULT, WAIT_MAX_CAP);
+            }
+            if let Some(f) = positionals.get(1) {
+                floor = parse_secs(Some(f), WAIT_FLOOR_DEFAULT, max.max(1));
+            }
+            ExitCode::from(wait_event_with_wake(max, floor, &wake_files))
         }
         Some("watch") => {
             let (max, floor, th) = parse_watch_args(&args[2..]);

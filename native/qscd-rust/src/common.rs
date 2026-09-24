@@ -52,6 +52,10 @@ impl UeventSocket {
         Some(sock)
     }
 
+    pub(crate) fn raw_fd(&self) -> libc::c_int {
+        self.fd
+    }
+
     pub(crate) fn set_recv_timeout(&self, dur: Duration) -> Option<()> {
         let tv = libc::timeval {
             tv_sec: dur.as_secs() as libc::time_t,
@@ -67,6 +71,24 @@ impl UeventSocket {
             None
         } else {
             Some(())
+        }
+    }
+
+    /// 非阻塞收一包：Some(true)=power_supply；Some(false)=其它；None=暂无数据
+    pub(crate) fn recv_nonblock(&self, buf: &mut [u8]) -> std::io::Result<Option<bool>> {
+        let ptr = buf.as_mut_ptr() as *mut libc::c_void;
+        // SAFETY: ptr 与长度来自同一 buf
+        let n = unsafe { libc::recv(self.fd, ptr, buf.len(), libc::MSG_DONTWAIT) };
+        if n > 0 {
+            return Ok(Some(is_power_supply_event(&buf[..n as usize])));
+        }
+        if n == 0 {
+            return Ok(Some(false));
+        }
+        let err = std::io::Error::last_os_error();
+        match err.raw_os_error() {
+            Some(libc::EAGAIN) | Some(libc::EINTR) => Ok(None),
+            _ => Err(err),
         }
     }
 
@@ -100,21 +122,7 @@ impl UeventSocket {
                 Err(err)
             };
         }
-        let ptr = buf.as_mut_ptr() as *mut libc::c_void;
-        // SAFETY: ptr 与长度来自同一 buf，recv 最多写入 buf.len() 字节。
-        let n = unsafe { libc::recv(self.fd, ptr, buf.len(), libc::MSG_DONTWAIT) };
-        if n > 0 {
-            return Ok(Some(is_power_supply_event(&buf[..n as usize])));
-        }
-        if n == 0 {
-            return Ok(Some(false));
-        }
-        // EAGAIN=收满超时；EINTR=被信号打断。两者都只是本次没拿到事件。
-        let err = std::io::Error::last_os_error();
-        match err.raw_os_error() {
-            Some(libc::EAGAIN) | Some(libc::EINTR) => Ok(None),
-            _ => Err(err),
-        }
+        self.recv_nonblock(buf)
     }
 
     /// 命中一个事件后短暂排空同一波事件，避免充电器一次状态变化唤醒多轮 shell。
@@ -166,6 +174,12 @@ pub(crate) fn is_power_supply_event(payload: &[u8]) -> bool {
 }
 
 pub(crate) fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
+    wait_event_with_wake(max_secs, floor_secs, &[])
+}
+
+pub(crate) fn wait_event_with_wake(max_secs: u64, floor_secs: u64, wake_files: &[String]) -> u8 {
+    use crate::wake::{poll_uevent_or_wake, WakeSource, WakeWatch};
+
     let floor = floor_secs.min(max_secs);
     if floor > 0 {
         std::thread::sleep(Duration::from_secs(floor));
@@ -179,32 +193,25 @@ pub(crate) fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
         eprintln!("qscd: reason=netlink_open");
         return EXIT_UNUSABLE;
     };
+    let wake = WakeWatch::open(wake_files);
 
     let deadline = Instant::now() + Duration::from_secs(remaining);
     let mut buf = [0u8; RECV_BUF];
     loop {
-        // poll 一次设满剩余时间：整段等待只在截止时刻醒一次。
-        // 早先按固定 2 秒切片轮流复查截止时间，30 秒窗口要醒 15 次，
-        // 白让 CPU 进不了深层 idle，而事件到达本来就是立即返回、与超时无关。
         let left = deadline.saturating_duration_since(Instant::now());
         if left < RECV_MIN_TIMEOUT {
             return EXIT_OK;
         }
-        match sock.poll_once(&mut buf, left) {
-            Ok(Some(true)) => {
+        match poll_uevent_or_wake(&sock, wake.as_ref(), &mut buf, left) {
+            Ok(WakeSource::File) | Ok(WakeSource::Power) => {
                 if sock.drain_event_burst(&mut buf).is_err() {
                     eprintln!("qscd: reason=event_drain");
                     return EXIT_UNUSABLE;
                 }
-                // 正常路径：只靠 exit code 0 叫醒 shell，不再额外刷高频 stderr 日志
                 return EXIT_OK;
             }
-            // 超时或与电池无关的事件：回到循环按新的剩余时间重设超时。
-            // 保留 "wake=timeout" 诊断字串用于热更契约扫描；线上默认不打印，
-            // 仅当 QSCD_DEBUG 环境变量显式打开时写一次 stderr。
-            Ok(Some(false)) | Ok(None) => {
+            Ok(WakeSource::Timeout) => {
                 if std::env::var_os("QSCD_DEBUG").is_some() {
-                    // wake=timeout (debug only; keep keyword for hot-update contract)
                     eprintln!("qscd: wake=timeout 等待超时，继续监听供电事件");
                 }
             }
@@ -345,11 +352,9 @@ impl PowerState {
     }
 
     fn looks_discharging(base: &str) -> bool {
+        // 与 shell qsc_ps_looks_discharging 对齐：仅 Discharging + |I|>10mA
         let st = read_text(&format!("{base}/battery/status")).unwrap_or_default();
-        if !matches!(
-            st.as_str(),
-            "Discharging" | "discharging" | "Not charging" | "Notcharging" | "not_charging"
-        ) {
+        if !matches!(st.as_str(), "Discharging" | "discharging") {
             return false;
         }
         for name in ["battery", "bms", "soc"] {
@@ -360,38 +365,63 @@ impl PowerState {
         false
     }
 
+    fn charging_current_live(base: &str) -> bool {
+        for name in ["battery", "bms", "soc"] {
+            if let Some(cur) = read_int(&format!("{base}/{name}/current_now")) {
+                return cur.unsigned_abs() >= 150_000;
+            }
+        }
+        false
+    }
+
     pub(crate) fn read(root: &str) -> Self {
         let base = format!("{root}/sys/class/power_supply");
 
-        for name in ["usb", "qc_usb", "ac", "dc", "wireless"] {
+        for name in ["usb", "qc_usb", "ac", "dc", "wireless", "charger"] {
             if read_int(&format!("{base}/{name}/online")) == Some(1) {
                 return Self { plugged: true };
             }
         }
+        if read_int(&format!("{base}/battery/charger_online")) == Some(1) {
+            return Self { plugged: true };
+        }
 
         for name in ["usb", "qc_usb", "wireless", "ac"] {
             if read_int(&format!("{base}/{name}/present")) == Some(1) {
-                if Self::looks_discharging(&base) {
-                    continue;
-                }
+                // VBUS/类型优先：停充后会放电，不能先因放电否决真插电
                 if Self::vbus_live(&base) || Self::type_live(&base) {
                     return Self { plugged: true };
+                }
+                if Self::looks_discharging(&base) {
+                    continue;
                 }
             }
         }
 
-        if Self::type_live(&base) && !Self::looks_discharging(&base) {
+        // 类型 / VBUS 是强证据（与 shell 一致，不因放电否决）
+        if Self::type_live(&base) {
             return Self { plugged: true };
         }
-
-        if Self::vbus_live(&base) && !Self::looks_discharging(&base) {
+        if Self::vbus_live(&base) {
             return Self { plugged: true };
         }
 
         if matches!(
             read_text(&format!("{base}/battery/status")).as_deref(),
             Some("Charging" | "Full")
-        ) && read_int(&format!("{base}/battery/online")) == Some(1)
+        ) {
+            if read_int(&format!("{base}/battery/online")) == Some(1) {
+                return Self { plugged: true };
+            }
+            if Self::charging_current_live(&base) {
+                return Self { plugged: true };
+            }
+        }
+
+        if matches!(
+            read_text(&format!("{base}/battery/status")).as_deref(),
+            Some("Not charging" | "Notcharging" | "not_charging")
+        ) && Self::charging_current_live(&base)
         {
             return Self { plugged: true };
         }

@@ -130,8 +130,19 @@ qsc_ps_native_exec() {
 # uevent 由它自己吞掉，不再每轮叫醒 shell；插拔与跨阈值仍立即返回。
 # 未插电 / 停充维持：只关心插拔（哨兵 --temp-stop 999），不把电流温度噪声当事件。
 qsc_ps_native_wait() {
-	local secs="$1" floor="$2" rc error_file
+	local secs="$1" floor="$2" rc error_file wake_args=""
 	error_file="$DATADIR/qscd_wait_error.$$"
+	# Rust：简介开着时把 viewer 边沿并进 qscd poll，省掉 shell inotify 竞速
+	if type qsc_native_has >/dev/null 2>&1 && qsc_native_has wake-file &&
+		type qsc_description_enabled >/dev/null 2>&1 &&
+		qsc_description_enabled &&
+		[ "${QSC_PS_PROFILE:-balanced}" != "aggressive" ] &&
+		[ -d /data/system ]; then
+		if type qsc_xp_ensure_bus >/dev/null 2>&1; then
+			qsc_xp_ensure_bus /data/system/qsc_xp_viewer || true
+		fi
+		wake_args="--wake-file /data/system/qsc_xp_viewer"
+	fi
 	qsc_dbg "qscd wait 进入 secs=$secs floor=$floor watch=$([ -x "$BINDIR/qscd" ] && qsc_ps_watch_supported && echo 1 || echo 0) switch=$([ -f "$DATADIR/power_switch" ] && echo 1 || echo 0)"
 	if qsc_ps_watch_supported; then
 		QSC_PS_NATIVE_MODE=watch
@@ -140,18 +151,15 @@ qsc_ps_native_wait() {
 			qsc_runtime_trace "H3" "native_wait_enter" "$QSC_PS_NATIVE_MODE:$secs:$floor"
 		# endregion
 		if [ ! -f "$DATADIR/power_switch" ] && qsc_ps_plugged; then
-			# 插电充电：按阈值过滤，远离停充点的 uevent 由守护吞掉
+			# shellcheck disable=SC2086
 			qsc_ps_native_exec "$secs" "$BINDIR/qscd" watch --max "$secs" --floor "$floor" \
 				--stop "${QSC_PS_STOP:-101}" --near "${QSC_PS_NEAR:-3}" \
-				--temp-stop "${QSC_PS_TEMP_STOP:-999}" > /dev/null 2>"$error_file"
+				--temp-stop "${QSC_PS_TEMP_STOP:-999}" $wake_args > /dev/null 2>"$error_file"
 			rc="$?"
 		else
-			# 未插电 / 停充维持：旧逻辑不传阈值 → watch 退化为「任意 power_supply
-			# 事件都返回」。充满拔线后电流/电压/温度 uevent 仍很密，会整夜叫醒
-			# shell、打断 Doze。传哨兵温控阈值让 Thresholds 非空，只在插拔变化
-			# 或 --max 到期时返回（手机不会到 996°C）。
+			# shellcheck disable=SC2086
 			qsc_ps_native_exec "$secs" "$BINDIR/qscd" watch --max "$secs" --floor "$floor" \
-				--temp-stop 999 > /dev/null 2>"$error_file"
+				--temp-stop 999 $wake_args > /dev/null 2>"$error_file"
 			rc="$?"
 		fi
 	else
@@ -310,10 +318,7 @@ qsc_ps_wait_race_viewer() {
 	fi
 	# native 正常睡满
 	[ "$rc" -eq 0 ] 2>/dev/null && return 0
-	# 被 inotify 杀掉但文件已被其它路径消费完：仍算成功打断
-	case "$rc" in
-		130|137|143) return 0 ;;
-	esac
+	# 被 inotify 杀掉但无 pending：当作竞速失败交还调用方，勿伪装成成功
 	return "$rc"
 }
 
@@ -330,13 +335,11 @@ qsc_ps_fallback_sleep() {
 	fi
 	# 简介边沿：仅 pending/观看才短片；勿因「开了动态简介」整夜高频醒
 	_desc_wake=0
-	if type qsc_desc_viewing_active >/dev/null 2>&1 &&
-		qsc_desc_viewing_active; then
+	if type qsc_ps_xp_viewer_pending >/dev/null 2>&1 &&
+		qsc_ps_xp_viewer_pending; then
 		_desc_wake=1
-	elif type qsc_fg_xp_ready >/dev/null 2>&1 && ! qsc_fg_xp_ready &&
-		type qsc_description_enabled >/dev/null 2>&1 &&
-		qsc_description_enabled; then
-		# 无 XP：降级路径需要可打断，否则 dumpsys 周期会拖很久
+	elif type qsc_desc_viewing_active >/dev/null 2>&1 &&
+		qsc_desc_viewing_active; then
 		_desc_wake=1
 	fi
 	if [ "$_desc_wake" != "1" ] && [ ! -f /data/system/qsc_xp_arm ]; then
@@ -366,6 +369,40 @@ qsc_ps_fallback_sleep() {
 	done
 }
 
+# 息屏驻停中：过夜应纯 qscd，勿挂 viewer 竞速/短片睡
+qsc_ps_wait_parked_screen_off() {
+	type qsc_ps_screen_is_off >/dev/null 2>&1 || return 1
+	qsc_ps_screen_is_off || return 1
+	case "${QSC_PS_MODE:-}" in
+		deep|screen_off) return 0 ;;
+	esac
+	[ "${QSC_PS_PARK_ACTIVE:-0}" = "1" ] && return 0
+	[ "${QSC_PS_DESC_FORCE_STATIC:-0}" = "1" ] && return 0
+	[ "${QSC_PS_DEEP:-0}" = "1" ] && return 0
+	return 1
+}
+
+# 是否与 viewer 竞速：仅 pending/观看/非驻停息屏时；驻停息屏纯事件睡。
+# qscd 已支持 --wake-file 时不必再挂 shell inotify。
+qsc_ps_wait_should_race_viewer() {
+	type qsc_description_enabled >/dev/null 2>&1 || return 1
+	qsc_description_enabled || return 1
+	[ "${QSC_PS_PROFILE:-balanced}" = "aggressive" ] && return 1
+	if type qsc_native_has >/dev/null 2>&1 && qsc_native_has wake-file; then
+		return 1
+	fi
+	if type qsc_ps_xp_viewer_pending >/dev/null 2>&1 &&
+		qsc_ps_xp_viewer_pending; then
+		return 0
+	fi
+	if type qsc_desc_viewing_active >/dev/null 2>&1 &&
+		qsc_desc_viewing_active; then
+		return 0
+	fi
+	qsc_ps_wait_parked_screen_off && return 1
+	return 0
+}
+
 qsc_ps_wait() {
 	local secs="${1:-30}" floor fallback_secs
 	local rc backoff now
@@ -383,12 +420,9 @@ qsc_ps_wait() {
 			;;
 	esac
 	if qsc_ps_native_ready; then
-		# 动态简介开着：与 viewer 边沿竞速（失败码须原样处理，勿吞掉）
 		_race=0
 		_race_rc=1
-		if type qsc_description_enabled >/dev/null 2>&1 &&
-			qsc_description_enabled &&
-			[ "${QSC_PS_PROFILE:-balanced}" != "aggressive" ]; then
+		if qsc_ps_wait_should_race_viewer; then
 			_race=1
 		fi
 		if [ "$_race" = "1" ]; then
@@ -406,12 +440,11 @@ qsc_ps_wait() {
 			qsc_log_once_clear qscd
 			return 0
 		fi
-		# 无法竞速（无 inotify 等）：短片可打断，勿整段 native 盲等丢 enter
+		# 无法竞速（无 inotify 等）：一律改走 native，勿盲 sleep 丢掉插拔与 enter
 		if [ "$_race" = "1" ] && [ "$_race_rc" -eq 1 ] 2>/dev/null; then
-			qsc_ps_fallback_sleep "$secs"
-			return 0
-		fi
-		if [ "$_race" = "1" ] && [ "$_race_rc" -ne 1 ] 2>/dev/null; then
+			qsc_ps_native_wait "$secs" "$floor"
+			rc="$?"
+		elif [ "$_race" = "1" ] && [ "$_race_rc" -ne 1 ] 2>/dev/null; then
 			rc="$_race_rc"
 		else
 			qsc_ps_native_wait "$secs" "$floor"

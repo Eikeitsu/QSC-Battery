@@ -3,23 +3,66 @@
 
 # XP 路径：主服务消费边沿 + 刷简介；停掉遗留 worker。
 # 无 XP：按需启停 dumpsys 降级 worker。
+
+# lean 醒来是否需要跑简介管家（有边沿/观看/需启停或停掉遗留 worker）
+qsc_service_desc_work_needed() {
+	if type qsc_manager_viewer_xp_edge_pending >/dev/null 2>&1 &&
+		qsc_manager_viewer_xp_edge_pending; then
+		return 0
+	fi
+	if type qsc_desc_viewing_active >/dev/null 2>&1 &&
+		qsc_desc_viewing_active; then
+		return 0
+	fi
+	# 遗留 worker 仍在跑：有 XP 也必须 sync 去停掉，避免双写/偷吃 enter
+	_desc_pid="$(cat "$DATADIR/description_worker.pid" 2>/dev/null | tr -d ' \r\n')"
+	case "$_desc_pid" in
+		""|*[!0-9]*) ;;
+		*)
+			if kill -0 "$_desc_pid" 2>/dev/null; then
+				return 0
+			fi
+			;;
+	esac
+	# 有 XP：仅 pending/观看/遗留 worker
+	if type qsc_fg_xp_ready >/dev/null 2>&1 && qsc_fg_xp_ready; then
+		return 1
+	fi
+	# 无 XP：需要拉起或停掉降级 worker 时才跑
+	if type qsc_description_enabled >/dev/null 2>&1 &&
+		! qsc_description_enabled; then
+		return 1
+	fi
+	if type qsc_ps_desc_worker_wanted >/dev/null 2>&1 &&
+		qsc_ps_desc_worker_wanted; then
+		return 0
+	fi
+	return 1
+}
+
 qsc_service_desc_ondemand_sync() {
-	local _rising=0 _viewing=0 _xp=0 _rc
+	local _rising=0 _viewing=0 _xp=0 _rc _was_viewing=0
 	type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
 
 	if type qsc_fg_xp_ready >/dev/null 2>&1 && qsc_fg_xp_ready; then
 		_xp=1
 	fi
 
+	if type qsc_desc_viewing_active >/dev/null 2>&1 &&
+		qsc_desc_viewing_active; then
+		_was_viewing=1
+	fi
+
 	# XP enter/leave 待消费：主服务先吃边沿
+	_had_edge=0
 	if type qsc_manager_viewer_xp_edge_pending >/dev/null 2>&1 &&
 		qsc_manager_viewer_xp_edge_pending; then
+		_had_edge=1
 		QSC_PS_SCREEN_CACHE_AT=0
 		type qsc_ps_now >/dev/null 2>&1 && qsc_ps_now
 		if type qsc_manager_viewer_consume_xp_edge >/dev/null 2>&1; then
-			if qsc_manager_viewer_consume_xp_edge; then
-				_rising=1
-			fi
+			qsc_manager_viewer_consume_xp_edge || true
+			[ "${QSC_MANAGER_VIEWER_RISING:-0}" = "1" ] && _rising=1
 		fi
 	fi
 
@@ -27,24 +70,28 @@ qsc_service_desc_ondemand_sync() {
 		qsc_desc_viewing_active; then
 		_viewing=1
 	fi
+	# 刚消费到边沿且仍在看：强制写简介（含补发 enter，避免指纹卡住）
+	if [ "$_had_edge" = "1" ] && [ "$_viewing" = "1" ]; then
+		_rising=1
+	fi
 
-	# 息屏清观看：有 XP 时只信 XP 的 screen=off；无 XP 才用 Magisk 息屏探测
+	# 息屏清观看：XP 报 screen=off，或未开辅助时用 Magisk 息屏探测
 	if [ "$_viewing" = "1" ]; then
 		_clear_view=0
-		if [ "$_xp" = "1" ]; then
-			if [ -f /data/system/qsc_xp_screen ] &&
-				[ -f /data/system/qsc_xp_want_screen ]; then
-				_mt="$(stat -c %Y /data/system/qsc_xp_screen 2>/dev/null || echo 0)"
-				_nows="$(date +%s 2>/dev/null || echo 0)"
-				_st="$(awk -F'\t' 'NF{print $NF; exit}' /data/system/qsc_xp_screen 2>/dev/null | tr -d ' \r\n')"
-				if [ "$_st" = "off" ] &&
-					[ "$_mt" -gt 0 ] 2>/dev/null &&
-					[ "$((_nows - _mt))" -ge 0 ] 2>/dev/null &&
-					[ "$((_nows - _mt))" -le 8 ] 2>/dev/null; then
-					_clear_view=1
-				fi
+		if [ -f /data/system/qsc_xp_screen ]; then
+			_mt="$(stat -c %Y /data/system/qsc_xp_screen 2>/dev/null || echo 0)"
+			_nows="$(date +%s 2>/dev/null || echo 0)"
+			_st="$(awk -F'\t' 'NF{print $NF; exit}' /data/system/qsc_xp_screen 2>/dev/null | tr -d ' \r\n')"
+			if [ "$_st" = "off" ] &&
+				[ "$_mt" -gt 0 ] 2>/dev/null &&
+				[ "$((_nows - _mt))" -ge 0 ] 2>/dev/null &&
+				[ "$((_nows - _mt))" -le 8 ] 2>/dev/null; then
+				_clear_view=1
 			fi
-		elif type qsc_ps_screen_is_off >/dev/null 2>&1 &&
+		fi
+		if [ "$_clear_view" != "1" ] &&
+			{ [ "$_xp" != "1" ] || [ ! -f /data/system/qsc_xp_want_screen ]; } &&
+			type qsc_ps_screen_is_off >/dev/null 2>&1 &&
 			qsc_ps_screen_is_off; then
 			_clear_view=1
 		fi
@@ -56,16 +103,20 @@ qsc_service_desc_ondemand_sync() {
 	fi
 
 	if [ "$_xp" = "1" ]; then
-		# 有 XP：绝不跑第二进程
+		# 有 XP：绝不跑第二进程（含遗留 worker）
 		type qsc_stop_description_worker >/dev/null 2>&1 &&
 			qsc_stop_description_worker
+		# 刚离开：恢复静态简介，避免列表卡在旧电量
+		if [ "$_was_viewing" = "1" ] && [ "$_viewing" != "1" ]; then
+			type qsc_description_restore_static >/dev/null 2>&1 &&
+				qsc_description_restore_static
+		fi
 		if [ "$_viewing" = "1" ] &&
 			type qsc_ps_refresh_desc >/dev/null 2>&1; then
 			type qsc_ps_now >/dev/null 2>&1 && qsc_ps_now
 			if [ "$_rising" = "1" ]; then
 				QSC_PS_DESC_FORCE=1
 				QSC_PS_DESC_MIN_GAP=15
-				# 进管理器必须重写：清指纹，避免卡在 restore_static 后的静态文案
 				QSC_PS_DESC_SIG=""
 				QSC_PS_DESC_STATE_SIG=""
 				QSC_PS_DESC_TS=0
@@ -77,10 +128,10 @@ qsc_service_desc_ondemand_sync() {
 			QSC_PS_DESC_FORCE=0
 			if [ "$_rising" = "1" ] && [ "$_rc" -eq 0 ] 2>/dev/null; then
 				type qsc_dbg >/dev/null 2>&1 &&
-					qsc_dbg "简介：管理器前台，已更新电量/温度"
+					qsc_dbg "desc refreshed after manager enter"
 			elif [ "$_rising" = "1" ]; then
 				type qsc_dbg >/dev/null 2>&1 &&
-					qsc_dbg "简介：管理器前台，刷新失败 rc=${_rc}"
+					qsc_dbg "desc refresh failed rc=${_rc}"
 			fi
 		fi
 		return 0
@@ -97,6 +148,10 @@ qsc_service_desc_ondemand_sync() {
 	else
 		type qsc_stop_description_worker >/dev/null 2>&1 &&
 			qsc_stop_description_worker
+		if [ "$_was_viewing" = "1" ] && [ "$_viewing" != "1" ]; then
+			type qsc_description_restore_static >/dev/null 2>&1 &&
+				qsc_description_restore_static
+		fi
 	fi
 }
 
@@ -157,11 +212,12 @@ qsc_service_loop_once() {
 			# 未插电强制放锁，避免残留 wake_lock 挡系统 Doze
 			type qsc_stop_wakelock_release >/dev/null 2>&1 &&
 				qsc_stop_wakelock_release
-			# 配置变了才重做简介/XP；策略+idle 每轮都要（进深睡靠它）
+			# 配置变了才重做简介/XP；策略+idle 每轮都要（进深睡靠 idle_secs）
 			if [ "${QSC_PS_CONF_RELOADED:-0}" = "1" ]; then
 				qsc_service_unplug_housekeep 0
-			else
-				# lean：XP 边沿/观看由主服务刷简介；无 XP 则启停降级 worker
+			elif type qsc_service_desc_work_needed >/dev/null 2>&1 &&
+				qsc_service_desc_work_needed; then
+				# 仅 pending/观看/无 XP worker 启停时跑简介管家
 				qsc_service_desc_ondemand_sync
 			fi
 			if type qsc_ps_idle_secs >/dev/null 2>&1; then
@@ -175,10 +231,12 @@ qsc_service_loop_once() {
 			_wait_rc="$?"
 			qsc_runtime_trace "H1" "wait_exit" "$_wait_rc"
 			# endregion
-			# 等待返回：刷新时钟/息屏缓存，再立刻按需拉起（XP enter 可能刚打断）
+			# 等待返回：有边沿/观看才立刻 sync（XP enter 可能刚打断）
 			QSC_PS_SCREEN_CACHE_AT=0
 			type qsc_ps_now >/dev/null 2>&1 && qsc_ps_now
-			if type qsc_service_desc_ondemand_sync >/dev/null 2>&1; then
+			if type qsc_service_desc_work_needed >/dev/null 2>&1 &&
+				qsc_service_desc_work_needed &&
+				type qsc_service_desc_ondemand_sync >/dev/null 2>&1; then
 				qsc_service_desc_ondemand_sync
 			fi
 			return 0
@@ -229,8 +287,11 @@ qsc_service_loop_once() {
 			# endregion
 			QSC_PS_SCREEN_CACHE_AT=0
 			type qsc_ps_now >/dev/null 2>&1 && qsc_ps_now
-			type qsc_service_desc_ondemand_sync >/dev/null 2>&1 &&
+			if type qsc_service_desc_work_needed >/dev/null 2>&1 &&
+				qsc_service_desc_work_needed &&
+				type qsc_service_desc_ondemand_sync >/dev/null 2>&1; then
 				qsc_service_desc_ondemand_sync
+			fi
 			return 0
 		fi
 		QSC_SERVICE_LEAN_IDLE=0

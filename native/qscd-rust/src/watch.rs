@@ -4,6 +4,7 @@ use crate::common::{
     parse_secs, BatterySnapshot, UeventSocket, EXIT_OK, EXIT_UNUSABLE, RECV_BUF, RECV_MIN_TIMEOUT,
     WAIT_FLOOR_DEFAULT, WAIT_MAX_CAP, WAIT_MAX_DEFAULT,
 };
+use crate::wake::{poll_uevent_or_wake, WakeSource, WakeWatch};
 
 /// watch 的阈值参数。None = 该项不参与判断
 #[derive(Default, Debug, PartialEq)]
@@ -16,6 +17,8 @@ pub(crate) struct Thresholds {
     pub(crate) temp_stop: Option<i64>,
     /// 假 sysfs 根，仅测试用；线上为空
     pub(crate) root: String,
+    /// 旁路唤醒文件（如 qsc_xp_viewer）；内容变化即叫醒
+    pub(crate) wake_files: Vec<String>,
 }
 
 impl Thresholds {
@@ -66,6 +69,14 @@ pub(crate) fn parse_watch_args(args: &[String]) -> (u64, u64, Thresholds) {
             "--near" => th.near = val.and_then(|v| v.trim().parse::<i64>().ok()).unwrap_or(3),
             "--temp-stop" => th.temp_stop = val.and_then(|v| v.trim().parse::<i64>().ok()),
             "--sysfs-root" => th.root = val.unwrap_or("").trim_end_matches('/').to_string(),
+            "--wake-file" => {
+                if let Some(v) = val {
+                    let p = v.trim();
+                    if !p.is_empty() {
+                        th.wake_files.push(p.to_string());
+                    }
+                }
+            }
             _ => {
                 i += 1;
                 continue;
@@ -93,6 +104,7 @@ pub(crate) fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
         eprintln!("qscd: reason=netlink_open");
         return EXIT_UNUSABLE;
     };
+    let wake = WakeWatch::open(&th.wake_files);
     let plugged_at_start = BatterySnapshot::read(&th.root).plugged;
     let deadline = Instant::now() + Duration::from_secs(remaining);
     let mut buf = [0u8; RECV_BUF];
@@ -101,20 +113,21 @@ pub(crate) fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
         if left < RECV_MIN_TIMEOUT {
             return EXIT_OK;
         }
-        match sock.poll_once(&mut buf, left) {
-            // 命中电池事件：只有确实需要 shell 干活时才返回
-            Ok(Some(true)) => {
+        match poll_uevent_or_wake(&sock, wake.as_ref(), &mut buf, left) {
+            Ok(WakeSource::File) => {
+                eprintln!("qscd: wake=file");
+                return EXIT_OK;
+            }
+            Ok(WakeSource::Power) => {
                 if th.wake_reason(plugged_at_start).is_some() {
                     if sock.drain_event_burst(&mut buf).is_err() {
                         eprintln!("qscd: reason=event_drain");
                         return EXIT_UNUSABLE;
                     }
-                    // 精简：正常叫醒路径不再额外写 wake=* 的高频 stderr 日志，
-                    // 只保留 exit code；异常原因继续输出，便于运维定位。
                     return EXIT_OK;
                 }
             }
-            Ok(Some(false)) | Ok(None) => {}
+            Ok(WakeSource::Timeout) => {}
             Err(_) => {
                 eprintln!("qscd: reason=netlink_recv");
                 return EXIT_UNUSABLE;

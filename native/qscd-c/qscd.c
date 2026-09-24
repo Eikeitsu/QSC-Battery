@@ -2,8 +2,8 @@
  * 事件等待器（C 实现）：阻塞在内核 power_supply uevent 上，
  * 让 shell 主循环不再需要定时唤醒。
  *
- * 与 native/qscd（Rust 实现）行为逐字对齐：同样的子命令、同样的退出码、
- * 同样的钳位范围。两者可互换安装，模块只认 bin/qscd 这一个名字。
+ * C 版刻意保持轻量：仅 wait-event / probe / selftest / cat / stat。
+ * 阈值过滤、pkgs、wake-file 等扩展见 Rust 版。
  *
  * 用法
  *   qscd wait-event <最长秒数> [最短秒数]
@@ -21,6 +21,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -132,21 +133,60 @@ static int uevent_socket_open(void) {
   return fd;
 }
 
-/* 1=命中 power_supply 事件；0=本次超时或事件无关；-1=套接字不可用 */
-static int uevent_poll_once(int fd, char *buf, size_t cap) {
-  ssize_t n = recv(fd, buf, cap, 0);
+static int uevent_poll_once(int fd, char *buf, size_t cap, int timeout_ms) {
+  struct pollfd pfd;
+  ssize_t n;
+  int ready;
 
+  pfd.fd = fd;
+  pfd.events = POLLIN;
+  pfd.revents = 0;
+  if (timeout_ms < 0) {
+    timeout_ms = 0;
+  }
+  ready = poll(&pfd, 1, timeout_ms);
+  if (ready == 0) {
+    return 0;
+  }
+  if (ready < 0) {
+    if (errno == EINTR) {
+      return 0;
+    }
+    return -1;
+  }
+  n = recv(fd, buf, cap, MSG_DONTWAIT);
   if (n > 0) {
     return payload_matches(buf, (size_t)n);
   }
   if (n == 0) {
     return 0;
   }
-  /* EAGAIN=收满超时；EINTR=被信号打断。两者都只是本次没拿到事件 */
   if (errno == EAGAIN || errno == EINTR) {
     return 0;
   }
   return -1;
+}
+
+/* 命中后短暂排空同波事件，少叫醒 shell */
+static void drain_event_burst(int fd, char *buf, size_t cap) {
+  struct timespec start, now;
+  if (clock_gettime(CLOCK_MONOTONIC, &start) != 0) {
+    return;
+  }
+  for (;;) {
+    long elapsed_ms;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+      return;
+    }
+    elapsed_ms = (long)((now.tv_sec - start.tv_sec) * 1000L +
+                        (now.tv_nsec - start.tv_nsec) / 1000000L);
+    if (elapsed_ms >= 50) {
+      return;
+    }
+    if (uevent_poll_once(fd, buf, cap, 0) <= 0) {
+      return;
+    }
+  }
 }
 
 /* 成功写入 *out 并返回 1；时钟不可用返回 0（调用方必须视为不可用，
@@ -200,11 +240,8 @@ static int wait_event(unsigned long max_secs, unsigned long floor_secs) {
   for (;;) {
     long left;
     int rc;
+    int timeout_ms;
 
-    /* 接收超时一次设满剩余时间：整段等待只在截止时刻醒一次。
-     * 早先按固定 2 秒切片轮流复查截止时间，30 秒窗口要醒 15 次，
-     * 白让 CPU 进不了深层 idle，而事件到达本来就是立即返回、与超时无关。
-     * 时钟读失败必须退出：截止时间失效会让本进程一直挂在 recv 上。 */
     if (!monotonic_sec(&now)) {
       fprintf(stderr, "qscd: reason=monotonic_clock\n");
       close(fd);
@@ -214,19 +251,14 @@ static int wait_event(unsigned long max_secs, unsigned long floor_secs) {
     if (left <= 0) {
       break;
     }
-    /* SO_RCVTIMEO 传 0 表示永不超时，所以 left 必须严格为正 */
-    if (!set_recv_timeout(fd, left)) {
-      fprintf(stderr, "qscd: reason=netlink_recv\n");
-      close(fd);
-      return EXIT_UNUSABLE;
+    if (left > 2147483) {
+      left = 2147483;
     }
-
-    rc = uevent_poll_once(fd, buf, sizeof(buf));
+    timeout_ms = (int)(left * 1000);
+    rc = uevent_poll_once(fd, buf, sizeof(buf), timeout_ms);
     if (rc > 0) {
-      /* 保留 "wake=event" 诊断字串用于热更契约扫描；
-       * 线上默认不打印，仅 QSCD_DEBUG 显式打开时写一次 stderr。 */
+      drain_event_burst(fd, buf, sizeof(buf));
       if (getenv("QSCD_DEBUG") != NULL) {
-        /* wake=event (debug only; keep keyword for hot-update contract) */
         fprintf(stderr, "qscd: wake=event 收到供电事件，准备检查\n");
       }
       close(fd);
@@ -237,7 +269,6 @@ static int wait_event(unsigned long max_secs, unsigned long floor_secs) {
       close(fd);
       return EXIT_UNUSABLE;
     }
-    /* 超时或与电池无关的事件：回到循环按新的剩余时间重设超时 */
   }
   close(fd);
   return EXIT_OK;

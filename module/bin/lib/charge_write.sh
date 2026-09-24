@@ -277,7 +277,16 @@ qsc_reaffirm_active_stop() {
 	entry="$(cat "$DATADIR/active_switch" 2>/dev/null | tr -d ' \r\n')"
 	[ -n "$entry" ] || return 1
 	route="$(echo "$entry" | sed -n 's/,start=.*//g;$p')"
-	[ -f "$route" ] || return 1
+	# MCA handle_state 等可能不是普通文件；写路径曾用 -e/qsc_mca_node_ok，重申勿更严
+	if [ ! -f "$route" ]; then
+		if type qsc_mca_node_ok >/dev/null 2>&1 && qsc_mca_node_ok "$route"; then
+			:
+		elif [ -e "$route" ]; then
+			:
+		else
+			return 1
+		fi
+	fi
 	val="$(echo "$entry" | sed -n 's/.*,stop=//g;s/_/ /g;$p')"
 	[ -n "$val" ] || return 1
 	case "$route" in
