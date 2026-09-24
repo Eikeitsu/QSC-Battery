@@ -20,6 +20,23 @@ qsc_ps_native_ready() {
 qsc_ps_idle_secs() {
 	QSC_PS_IDLE_EFF="${QSC_PS_IDLE:-30}"
 	QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+	# 正在看管理器：主服务短睡自己刷简介（有 XP 时无 worker）
+	if type qsc_desc_viewing_active >/dev/null 2>&1 &&
+		qsc_desc_viewing_active; then
+		if type qsc_ps_screen_is_off >/dev/null 2>&1 &&
+			qsc_ps_screen_is_off; then
+			type qsc_desc_viewing_clear >/dev/null 2>&1 &&
+				qsc_desc_viewing_clear
+		else
+			if type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged; then
+				QSC_PS_IDLE_EFF=45
+			else
+				QSC_PS_IDLE_EFF=60
+			fi
+			QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+			return 0
+		fi
+	fi
 	qsc_ps_native_ready || {
 		type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
 		[ -n "${QSC_PS_IDLE_EFF:-}" ] && QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
@@ -304,7 +321,6 @@ qsc_ps_wait_race_viewer() {
 qsc_ps_fallback_sleep() {
 	local secs="${1:-3}" left chunk=3
 	case "$secs" in ""|*[!0-9]*) secs=3 ;; esac
-	# 简介边沿：不必武装也能打断（亮屏 enter）
 	if qsc_ps_xp_viewer_pending; then
 		return 0
 	fi
@@ -312,13 +328,15 @@ qsc_ps_fallback_sleep() {
 		sleep "$secs"
 		return 0
 	fi
-	# 有简介需求时始终用可打断睡眠；否则仅武装后才短片
+	# 简介边沿：仅 pending/观看才短片；勿因「开了动态简介」整夜高频醒
 	_desc_wake=0
-	if type qsc_ps_desc_worker_wanted >/dev/null 2>&1 &&
-		qsc_ps_desc_worker_wanted; then
+	if type qsc_desc_viewing_active >/dev/null 2>&1 &&
+		qsc_desc_viewing_active; then
 		_desc_wake=1
-	elif type qsc_description_enabled >/dev/null 2>&1 &&
+	elif type qsc_fg_xp_ready >/dev/null 2>&1 && ! qsc_fg_xp_ready &&
+		type qsc_description_enabled >/dev/null 2>&1 &&
 		qsc_description_enabled; then
+		# 无 XP：降级路径需要可打断，否则 dumpsys 周期会拖很久
 		_desc_wake=1
 	fi
 	if [ "$_desc_wake" != "1" ] && [ ! -f /data/system/qsc_xp_arm ]; then
@@ -335,9 +353,8 @@ qsc_ps_fallback_sleep() {
 	fi
 	left=$secs
 	while [ "$left" -gt 0 ] 2>/dev/null; do
-		# 简介边沿：短片轮询，避免无 inotify 时要等整段 idle 才发现 enter
-		chunk=5
-		[ "$_desc_wake" = "1" ] && chunk=3
+		chunk=15
+		[ "$_desc_wake" = "1" ] && chunk=5
 		[ "$left" -lt "$chunk" ] 2>/dev/null && chunk=$left
 		sleep "$chunk"
 		left=$((left - chunk))

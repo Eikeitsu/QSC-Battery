@@ -1,20 +1,67 @@
 #!/system/bin/sh
 # service: one loop iteration (defined as function so `return` replaces sourced `continue`)
 
-# 未插电管家：简介 worker / XP 门禁 / 简介快照（不含策略；策略由 idle_secs 统一刷）
-# $1=1 时顺带 flush 充电历史 pending（仅拔电后首轮）
+# XP 路径：主服务消费边沿 + 刷简介；停掉遗留 worker。
+# 无 XP：按需启停 dumpsys 降级 worker。
 qsc_service_desc_ondemand_sync() {
-	# 先刷策略，再按需启停 worker
+	local _rising=0 _viewing=0 _xp=0 _rc
 	type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
-	# XP enter 待消费：主服务先吃边沿（设 viewing），勿只靠 worker 才 consume
+
+	if type qsc_fg_xp_ready >/dev/null 2>&1 && qsc_fg_xp_ready; then
+		_xp=1
+	fi
+
+	# XP enter/leave 待消费：主服务先吃边沿
 	if type qsc_manager_viewer_xp_edge_pending >/dev/null 2>&1 &&
 		qsc_manager_viewer_xp_edge_pending; then
 		QSC_PS_SCREEN_CACHE_AT=0
 		type qsc_ps_now >/dev/null 2>&1 && qsc_ps_now
 		if type qsc_manager_viewer_consume_xp_edge >/dev/null 2>&1; then
-			qsc_manager_viewer_consume_xp_edge || true
+			if qsc_manager_viewer_consume_xp_edge; then
+				_rising=1
+			fi
 		fi
 	fi
+
+	if type qsc_desc_viewing_active >/dev/null 2>&1 &&
+		qsc_desc_viewing_active; then
+		_viewing=1
+	fi
+
+	# 息屏：清观看标记（亮屏靠新 enter）
+	if [ "$_viewing" = "1" ] &&
+		type qsc_ps_screen_is_off >/dev/null 2>&1 &&
+		qsc_ps_screen_is_off; then
+		type qsc_desc_viewing_clear >/dev/null 2>&1 && qsc_desc_viewing_clear
+		_viewing=0
+		_rising=0
+	fi
+
+	if [ "$_xp" = "1" ]; then
+		# 有 XP：绝不跑第二进程
+		type qsc_stop_description_worker >/dev/null 2>&1 &&
+			qsc_stop_description_worker
+		if [ "$_viewing" = "1" ] &&
+			type qsc_ps_refresh_desc >/dev/null 2>&1; then
+			type qsc_ps_now >/dev/null 2>&1 && qsc_ps_now
+			if [ "$_rising" = "1" ]; then
+				QSC_PS_DESC_FORCE=1
+				QSC_PS_DESC_MIN_GAP=15
+			else
+				QSC_PS_DESC_MIN_GAP=45
+			fi
+			qsc_ps_refresh_desc "${QSC_PS_NOW:-0}"
+			_rc="$?"
+			QSC_PS_DESC_FORCE=0
+			if [ "$_rising" = "1" ] && [ "$_rc" -eq 0 ] 2>/dev/null; then
+				type qsc_dbg >/dev/null 2>&1 &&
+					qsc_dbg "简介：管理器前台，已刷新电量/温度"
+			fi
+		fi
+		return 0
+	fi
+
+	# 无 XP：dumpsys 降级 worker
 	_desc_want=0
 	if type qsc_ps_desc_worker_wanted >/dev/null 2>&1; then
 		qsc_ps_desc_worker_wanted && _desc_want=1
@@ -50,8 +97,12 @@ qsc_service_unplug_housekeep() {
 	if type qsc_description_enabled >/dev/null 2>&1; then
 		qsc_service_desc_ondemand_sync
 	fi
+	# XP 观看中已在 ondemand 刷过；此处仅补无人看时的状态变化简介
 	if type qsc_ps_refresh_desc >/dev/null 2>&1; then
-		qsc_ps_refresh_desc "$_now"
+		if ! type qsc_desc_viewing_active >/dev/null 2>&1 ||
+			! qsc_desc_viewing_active; then
+			qsc_ps_refresh_desc "$_now"
+		fi
 	fi
 	if [ "$do_flush" = "1" ] &&
 		type qsc_history_flush_pending >/dev/null 2>&1; then
@@ -85,7 +136,7 @@ qsc_service_loop_once() {
 			if [ "${QSC_PS_CONF_RELOADED:-0}" = "1" ]; then
 				qsc_service_unplug_housekeep 0
 			else
-				# lean：按需启停简介 worker（enter / 观看才跑）
+				# lean：XP 边沿/观看由主服务刷简介；无 XP 则启停降级 worker
 				qsc_service_desc_ondemand_sync
 			fi
 			if type qsc_ps_idle_secs >/dev/null 2>&1; then

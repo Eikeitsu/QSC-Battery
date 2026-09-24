@@ -61,8 +61,8 @@ qsc_fg_clear_unreliable() {
 	[ -f "$QSC_FG_UNRELIABLE" ] || return 0
 	rm -f "$QSC_FG_UNRELIABLE" 2>/dev/null
 	QSC_FG_XP_MISMATCH=0
-	type qsc_log >/dev/null 2>&1 &&
-		qsc_log info "前台XP已恢复，重新走边沿"
+	type qsc_dbg >/dev/null 2>&1 &&
+		qsc_dbg "前台XP已恢复，重新走边沿"
 }
 
 # dumpsys 取前台包（贵）；结果缓存 — 提前定义供 health_check 使用

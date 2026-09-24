@@ -654,7 +654,7 @@ class QscXposedModule : XposedModule() {
                     else -> xpLog(Log.INFO, "ok fg-bus ready")
                 }
             } else if (verbose) {
-                // 详细模式才逐条打前台切换；关注进出已有 viewer INFO
+                // 详细模式才逐条打前台切换；管理器进出见 viewer DEBUG
                 xpLog(Log.DEBUG, "fg $pkg")
             }
         } else {
@@ -745,8 +745,8 @@ class QscXposedModule : XposedModule() {
         )
         if (ok) {
             failStreak.set(0)
-            // leave 第三列是管理器包；INFO 去抖避免亮灭闪一下刷两行
-            logViewerInfoOnce("ok viewer $edge $pkg")
+            // leave 第三列是管理器包；默认 DEBUG（详细日志），去抖避免亮灭刷两行
+            logViewerDebugOnce("ok viewer $edge $pkg")
         } else {
             onWriteFailed("viewer:$edge")
             xpLog(Log.WARN, "viewer write failed ($edge $pkg)")
@@ -765,18 +765,17 @@ class QscXposedModule : XposedModule() {
         }
     }
 
-    /** 相同 INFO 在 VIEWER_LOG_DEBOUNCE_MS 内只落一次 */
-    private fun logViewerInfoOnce(msg: String) {
+    /** 管理器进出：默认仅 DEBUG（须开详细日志可见）；去抖避免亮灭连刷 */
+    private fun logViewerDebugOnce(msg: String) {
         val now = System.currentTimeMillis()
         if (msg == lastViewerLogMsg.get() &&
             now - lastViewerLogAt.get() < VIEWER_LOG_DEBOUNCE_MS
         ) {
-            xpLog(Log.DEBUG, "dup $msg")
             return
         }
         lastViewerLogMsg.set(msg)
         lastViewerLogAt.set(now)
-        xpLog(Log.INFO, msg)
+        xpLog(Log.DEBUG, msg)
     }
 
     private fun onBatteryProcessed(service: Any?) {

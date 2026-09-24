@@ -8,9 +8,10 @@
 
 ### 修复
 
-- **Magisk↔XP 配合迟钝**：主服务长睡时 XP 已写 enter，但 `worker_wanted` 先被 deep/park 挡掉、无 inotify 时整段 native 盲等；且仅 worker 才 consume。改为 pending enter 优先启 worker、主服务先吃边沿再拉起、无 inotify 改短片可打断、竞速立刻 kill native；上升沿写 info 日志便于对照 XP。
+- **管理器前台日志弱化**：进出相关 INFO 全部降为 DEBUG；默认仅保留上升沿/离开少量 `[DEBUG]`，补发/息屏/worker 细节改走 `qsc_dbg`（需开详细调试）。XP `ok viewer` 改为 DEBUG，须开 LSP「详细日志」才可见。
+- **Magisk↔XP 配合迟钝**：主服务长睡时 XP 已写 enter，但 `worker_wanted` 先被 deep/park 挡掉、无 inotify 时整段 native 盲等；且仅 worker 才 consume。改为 pending enter 优先、主服务先吃边沿再刷简介、无 inotify 改短片可打断、竞速立刻 kill native。
 - **Magisk 消费 viewer 后 XP 写失败 → 简介完全不动**：`mv` 后 root 以 `0644` 重建 `/data/system/qsc_xp_viewer`，`system_server` 无法 append（日志 `viewer write failed (enter …)`），按需 worker 永远收不到 enter。改为总线文件 `0666`（与 `qsc_xp.log` 一致），启动/占位/消费统一 `qsc_xp_touch_bus`；并清 `qsc_xp_write_disabled`，XP 侧可在本 boot 恢复写盘。
-- **简介按需 worker**：有 XP 时无人看管理器不跑简介进程；`enter` 叫醒主服务后拉起，`leave`/息屏自行退出。无 XP 时亮屏允许 dumpsys 降级 worker（约数十秒响应），息屏仍停，避免过夜常驻。
+- **简介按需 worker**：无 XP 时亮屏 dumpsys 降级 worker（约数十秒响应），息屏仍停。有 XP 时不启 worker，由主服务刷简介（见上条）。
 - **KSU/SukiSU 随机包名**：管理器列表发现增加 `ksud debug package` 与已装 `libksud.so` 兜底，兼容 Spoofed Manager；仍可用 `desc_viewer_pkgs` 手写追加。
 - **管理器息屏再亮简介卡静态**：软息屏不再杀简介 worker；主服务等待与 `qsc_xp_viewer` 竞速，亮屏 enter 可立刻醒；消费后保留空占位供 inotify；XP 息屏不再误发 leave。
 - **简介 worker 日用偏费电 / 「未读到新鲜 XP 边沿」误解**：XP 健康时曾定期 dumpsys「安全网」（日志像 XP 丢边沿，实为兜底）；边沿还有短新鲜窗，长睡后被当成过期再 dumpsys。改为：非空队列即待消费（不过期）；XP 健康不定期 dumpsys（仅离开息屏压制时最多一次）；空闲/息屏分片拉长，优先 inotify。

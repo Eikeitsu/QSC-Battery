@@ -620,34 +620,20 @@ qsc_ps_desc_suppressed() {
 }
 
 # 是否应跑简介 worker（按需）。
-# 有 XP：仅 enter 待消费或正在观看时跑；leave/息屏后退出，空闲零进程。
-# 无 XP：亮屏且未驻停时允许跑（dumpsys 降级，约数十秒级响应，不过夜常驻）。
+# 有 XP：主服务吃 enter/leave 并刷简介，永不启第二进程（避免双写/假刷新）。
+# 无 XP：亮屏 dumpsys 降级 worker（约数十秒级响应，不过夜常驻）。
 qsc_ps_desc_worker_wanted() {
 	type qsc_description_enabled >/dev/null 2>&1 || return 1
 	qsc_description_enabled || return 1
 	[ "${QSC_PS_PROFILE:-balanced}" = "aggressive" ] && return 1
 
-	# —— XP 边沿优先于 deep/park ——
-	# 否则主服务被 inotify 叫醒后仍因 MODE=deep 拒启 worker，队列干晾到整段 idle 结束。
-	if type qsc_manager_viewer_xp_edge_pending >/dev/null 2>&1 &&
-		qsc_manager_viewer_xp_edge_pending; then
-		return 0
-	fi
-	if type qsc_desc_viewing_active >/dev/null 2>&1 &&
-		qsc_desc_viewing_active; then
-		# 息屏则收掉（亮屏再靠 enter 拉起）；有 pending 上面已 return 0
-		if type qsc_ps_screen_is_off >/dev/null 2>&1 &&
-			qsc_ps_screen_is_off; then
-			type qsc_desc_viewing_clear >/dev/null 2>&1 &&
-				qsc_desc_viewing_clear
-			return 1
-		fi
-		return 0
+	# XP 健康：简介交给主循环，worker 一律不要
+	if type qsc_fg_xp_ready >/dev/null 2>&1 && qsc_fg_xp_ready; then
+		return 1
 	fi
 
 	case "${QSC_PS_MODE:-}" in
 		deep|screen_off)
-			# 滞回期已亮屏：仍可走无 XP dumpsys 降级
 			if type qsc_ps_screen_is_off >/dev/null 2>&1 &&
 				! qsc_ps_screen_is_off; then
 				:
@@ -661,10 +647,6 @@ qsc_ps_desc_worker_wanted() {
 		qsc_ps_screen_is_off &&
 		return 1
 
-	# 无 XP：亮屏降级常驻（息屏/驻停仍停），避免「打开管理器要等好几分钟」
-	if type qsc_fg_xp_ready >/dev/null 2>&1 && qsc_fg_xp_ready; then
-		return 1
-	fi
 	if type qsc_ps_screen_is_off >/dev/null 2>&1 && qsc_ps_screen_is_off; then
 		return 1
 	fi

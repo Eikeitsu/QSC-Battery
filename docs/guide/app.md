@@ -36,12 +36,12 @@
 
 - **作用**：
   1. **前台包名总线**：`qsc_xp_fg`（+ edge）；简介 / 游戏旁路 / App 停充共用。**门禁**：三者全关时 XP 不写盘。**分级**：仅简介→管理器；游戏/停充→各自包名列表。管理器 **进出各 3s 稳定**，离开后立即写 leave（第三列为管理器包名）；列表约 **1s 进 / 30s 离**（游戏另认进程）。普通 App fg 落盘 **800ms**。无 XP、软关或策略空闲/异常时回退 dumpsys，边沿恢复后再切回
-  2. **管理器边沿队列**：`qsc_xp_viewer` 追加多行 enter/leave；Magisk 主服务被边沿叫醒后先原子消费并拉起简介 worker（pending 优先于 deep/park），避免长睡丢配合
+  2. **管理器边沿队列**：`qsc_xp_viewer` 追加 enter/leave；有 XP 时主服务直接消费并刷 `module.prop`（不启简介 worker），观看中约 45–60s 一轮；无 XP 才用 dumpsys 降级 worker
   3. **插拔边沿**：仅 qscd 不可用且已武装时写 `qsc_xp_wake`
   4. **辅助边沿（默认关）**：`want_screen` / `want_doze` / `want_bcast` → 分别写 `qsc_xp_screen` / `qsc_xp_doze` / `qsc_xp_bcast`；息屏策略优先读 screen；武装时亦可打断 sleep。广播动作列表见 `qsc_xp_bcast_actions`（空则用内置 SCREEN/IDLE/插拔）
 - **通道**：`/data/system/`；`qsc_xp_off` 全关；`qsc_xp_no_wake` 仅关插拔唤醒；`qsc_xp_no_viewer` 关前台总线
 - **停充**始终由 Magisk 模块负责
-- 排查：动态页 LSP Tab，或 `adb logcat -s QscXp`；成功可见 `ok fg` / `ok viewer enter|leave` / `ok assist`。Magisk 日志对应 `模块管理器在前台（XP: …）` / `简介：管理器前台，开始刷新`
+- 排查：开 LSP「详细日志」后 `adb logcat -s QscXp` 可见 `ok viewer enter|leave`；Magisk 开「详细调试日志」可见补发/息屏等细节，进出上升沿为少量 `[DEBUG]`
 
 ## 安装
 

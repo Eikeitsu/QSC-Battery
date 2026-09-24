@@ -190,7 +190,7 @@ fun XpPanelScreen(
                 ChargeToggleRow(
                     title = "详细日志",
                     checked = toggles.verboseLog,
-                    summary = "DEBUG 级 XP 日志（默认仅关键事件）",
+                    summary = "默认几乎静默；开关后输出 DEBUG（含管理器进出）",
                     enabled = !busy,
                     onCheckedChange = { vm.setVerboseLog(it) },
                 )

@@ -54,6 +54,14 @@ qsc_ps_refresh_desc() {
 	if type qsc_manager_viewer_active >/dev/null 2>&1 && qsc_manager_viewer_active; then
 		viewer=1
 		QSC_PS_VIEWER_HITS=$((${QSC_PS_VIEWER_HITS:-0} + 1))
+	elif type qsc_desc_viewing_active >/dev/null 2>&1 &&
+		qsc_desc_viewing_active; then
+		# 主服务已消费 XP enter：勿再要求 fg/dumpsys，否则会误 restore_static
+		if ! type qsc_ps_screen_is_off >/dev/null 2>&1 ||
+			! qsc_ps_screen_is_off; then
+			viewer=1
+			QSC_PS_VIEWER_HITS=$((${QSC_PS_VIEWER_HITS:-0} + 1))
+		fi
 	fi
 
 	# 息屏/深睡/强力档默认写静态；但管理器已在前台时仍刷动态电量（人在看）

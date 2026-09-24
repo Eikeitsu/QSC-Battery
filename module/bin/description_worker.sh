@@ -1,8 +1,7 @@
 #!/system/bin/sh
 
-# 独立简介刷新进程（按需）。
-# 有 XP：仅 enter/观看时跑，离开或息屏退出。
-# 无 XP：亮屏 dumpsys 降级轮询（约 20–30s），息屏退出。
+# 独立简介刷新进程（仅无 XP 时 dumpsys 降级）。
+# 有 XP：主服务吃 enter/leave 并刷 module.prop，不启本进程。
 MODDIR=${0%/*}
 MODDIR=${MODDIR%/*}
 PARENT_PID="${1:-0}"
@@ -323,13 +322,13 @@ while worker_parent_alive; do
 			type qsc_description_restore_static >/dev/null 2>&1 &&
 				qsc_description_restore_static
 			worker_state 0
-			type qsc_log >/dev/null 2>&1 &&
-				qsc_log debug "简介：按需退出（无管理器前台）"
+			type qsc_dbg >/dev/null 2>&1 &&
+				qsc_dbg "简介：按需退出（无管理器前台）"
 			exit 0
 		fi
 
-		type qsc_log >/dev/null 2>&1 &&
-			qsc_log info "简介：管理器前台，开始刷新"
+		type qsc_dbg >/dev/null 2>&1 &&
+			qsc_dbg "简介：管理器前台，开始刷新"
 		type qsc_desc_viewing_set >/dev/null 2>&1 && qsc_desc_viewing_set
 		worker_do_refresh 1
 		_view_miss=0
@@ -342,8 +341,8 @@ while worker_parent_alive; do
 					qsc_desc_viewing_clear
 				type qsc_description_restore_static >/dev/null 2>&1 &&
 					qsc_description_restore_static
-				type qsc_log >/dev/null 2>&1 &&
-					qsc_log debug "简介：息屏按需退出"
+				type qsc_dbg >/dev/null 2>&1 &&
+					qsc_dbg "简介：息屏按需退出"
 				worker_state 0
 				exit 0
 			fi
@@ -366,8 +365,8 @@ while worker_parent_alive; do
 								qsc_desc_viewing_clear
 							type qsc_description_restore_static >/dev/null 2>&1 &&
 								qsc_description_restore_static
-							type qsc_log >/dev/null 2>&1 &&
-								qsc_log info "简介：已离开管理器，按需退出"
+							type qsc_dbg >/dev/null 2>&1 &&
+								qsc_dbg "简介：已离开管理器，按需退出"
 							worker_state 0
 							exit 0
 						fi
@@ -406,8 +405,8 @@ while worker_parent_alive; do
 						qsc_desc_viewing_clear
 					type qsc_description_restore_static >/dev/null 2>&1 &&
 						qsc_description_restore_static
-					type qsc_log >/dev/null 2>&1 &&
-						qsc_log debug "简介：管理器已不在前台，按需退出"
+					type qsc_dbg >/dev/null 2>&1 &&
+						qsc_dbg "简介：管理器已不在前台，按需退出"
 					worker_state 0
 					exit 0
 				fi
