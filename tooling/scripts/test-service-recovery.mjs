@@ -79,6 +79,8 @@ if (!shell) {
   const fakeRoot = join(dir, "fake-sysfs");
   mkdirSync(dataDir, { recursive: true });
   mkdirSync(join(moduleDir, "config"), { recursive: true });
+  // 动态简介默认开时会走 viewer 竞速；无 /data/system 时只 fallback_sleep，测不到 qscd 失败落盘
+  writeFileSync(join(moduleDir, "config", "power.conf"), "description_enable=0\n");
   cpSync(join(root, "module/bin"), join(moduleDir, "bin"), { recursive: true });
 
   const fakeDaemon = join(moduleDir, "bin/qscd");
