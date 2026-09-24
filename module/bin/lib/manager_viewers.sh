@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# 模块管理器「正在看列表」检测：有人前台才勤刷动态简介电量。
+# 模块管理器「正在看列表」检测：有人前台才缩短动态简介刷新间隔。
 # 优先焦点/前台 Activity；失败再弱退回进程命中。结果缓存约 50s。
 
 # 内置常见管理器（Magisk / KSU 系 / APatch 系 / MMRL / WebUI 壳）
@@ -208,9 +208,9 @@ qsc_manager_viewer_consume_xp_edge() {
 				QSC_PS_SCREEN_CACHE_VAL=0
 				if [ "${QSC_MANAGER_VIEWER_WAS:-0}" != "1" ]; then
 					QSC_MANAGER_VIEWER_RISING=1
-					# 少量 DEBUG（默认 INFO 不可见）；补发等细节仅详细日志
-					type qsc_log >/dev/null 2>&1 &&
-						qsc_log debug "模块管理器在前台（XP${pkg:+: $pkg}）"
+					# 默认不写 log.log；开「详细调试日志」可见
+					type qsc_dbg >/dev/null 2>&1 &&
+						qsc_dbg "模块管理器在前台（XP${pkg:+: $pkg}）"
 				else
 					type qsc_dbg >/dev/null 2>&1 &&
 						qsc_dbg "模块管理器仍在前台（XP 补发${pkg:+: $pkg}）"
@@ -226,8 +226,8 @@ qsc_manager_viewer_consume_xp_edge() {
 					{ type qsc_desc_viewing_active >/dev/null 2>&1 &&
 						qsc_desc_viewing_active; }; then
 					QSC_MANAGER_VIEWER_FALLING=1
-					type qsc_log >/dev/null 2>&1 &&
-						qsc_log debug "已离开模块管理器（XP${pkg:+: $pkg}）"
+					type qsc_dbg >/dev/null 2>&1 &&
+						qsc_dbg "已离开模块管理器（XP${pkg:+: $pkg}）"
 				else
 					type qsc_dbg >/dev/null 2>&1 &&
 						qsc_dbg "收到 XP leave（本地未在观看${pkg:+: $pkg}）"
@@ -358,12 +358,12 @@ qsc_manager_viewer_poll() {
 	fi
 	if [ "$cur" = "1" ] && [ "$prev" != "1" ]; then
 		QSC_MANAGER_VIEWER_RISING=1
-		type qsc_log >/dev/null 2>&1 &&
-			qsc_log debug "模块管理器在前台（简介将勤刷）"
+		type qsc_dbg >/dev/null 2>&1 &&
+			qsc_dbg "模块管理器在前台"
 	elif [ "$cur" != "1" ] && [ "$prev" = "1" ]; then
 		QSC_MANAGER_VIEWER_FALLING=1
-		type qsc_log >/dev/null 2>&1 &&
-			qsc_log debug "已离开模块管理器（简介恢复按需）"
+		type qsc_dbg >/dev/null 2>&1 &&
+			qsc_dbg "已离开模块管理器"
 	fi
 	QSC_MANAGER_VIEWER_WAS="$cur"
 	if [ "$cur" = "1" ]; then

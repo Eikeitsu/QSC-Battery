@@ -28,13 +28,31 @@ qsc_service_desc_ondemand_sync() {
 		_viewing=1
 	fi
 
-	# 息屏：清观看标记（亮屏靠新 enter）
-	if [ "$_viewing" = "1" ] &&
-		type qsc_ps_screen_is_off >/dev/null 2>&1 &&
-		qsc_ps_screen_is_off; then
-		type qsc_desc_viewing_clear >/dev/null 2>&1 && qsc_desc_viewing_clear
-		_viewing=0
-		_rising=0
+	# 息屏清观看：有 XP 时只信 XP 的 screen=off；无 XP 才用 Magisk 息屏探测
+	if [ "$_viewing" = "1" ]; then
+		_clear_view=0
+		if [ "$_xp" = "1" ]; then
+			if [ -f /data/system/qsc_xp_screen ] &&
+				[ -f /data/system/qsc_xp_want_screen ]; then
+				_mt="$(stat -c %Y /data/system/qsc_xp_screen 2>/dev/null || echo 0)"
+				_nows="$(date +%s 2>/dev/null || echo 0)"
+				_st="$(awk -F'\t' 'NF{print $NF; exit}' /data/system/qsc_xp_screen 2>/dev/null | tr -d ' \r\n')"
+				if [ "$_st" = "off" ] &&
+					[ "$_mt" -gt 0 ] 2>/dev/null &&
+					[ "$((_nows - _mt))" -ge 0 ] 2>/dev/null &&
+					[ "$((_nows - _mt))" -le 8 ] 2>/dev/null; then
+					_clear_view=1
+				fi
+			fi
+		elif type qsc_ps_screen_is_off >/dev/null 2>&1 &&
+			qsc_ps_screen_is_off; then
+			_clear_view=1
+		fi
+		if [ "$_clear_view" = "1" ]; then
+			type qsc_desc_viewing_clear >/dev/null 2>&1 && qsc_desc_viewing_clear
+			_viewing=0
+			_rising=0
+		fi
 	fi
 
 	if [ "$_xp" = "1" ]; then
@@ -47,6 +65,10 @@ qsc_service_desc_ondemand_sync() {
 			if [ "$_rising" = "1" ]; then
 				QSC_PS_DESC_FORCE=1
 				QSC_PS_DESC_MIN_GAP=15
+				# 进管理器必须重写：清指纹，避免卡在 restore_static 后的静态文案
+				QSC_PS_DESC_SIG=""
+				QSC_PS_DESC_STATE_SIG=""
+				QSC_PS_DESC_TS=0
 			else
 				QSC_PS_DESC_MIN_GAP=45
 			fi
@@ -55,7 +77,10 @@ qsc_service_desc_ondemand_sync() {
 			QSC_PS_DESC_FORCE=0
 			if [ "$_rising" = "1" ] && [ "$_rc" -eq 0 ] 2>/dev/null; then
 				type qsc_dbg >/dev/null 2>&1 &&
-					qsc_dbg "简介：管理器前台，已刷新电量/温度"
+					qsc_dbg "简介：管理器前台，已更新电量/温度"
+			elif [ "$_rising" = "1" ]; then
+				type qsc_dbg >/dev/null 2>&1 &&
+					qsc_dbg "简介：管理器前台，刷新失败 rc=${_rc}"
 			fi
 		fi
 		return 0

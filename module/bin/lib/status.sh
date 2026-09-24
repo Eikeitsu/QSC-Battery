@@ -29,6 +29,11 @@ qsc_description_restore_static() {
 	# 只改 description=，不动 version 等其它字段
 	type qsc_write_module_description >/dev/null 2>&1 || return 0
 	qsc_write_module_description "充电控制" "" "${DESC_STATIC:-$DESC_INTRO}"
+	# 文件已是静态文案，必须清掉内存指纹，否则下次刷新会因「电量未变」跳过写入，
+	# 管理器前台仍一直显示静态简介。
+	QSC_PS_DESC_SIG=""
+	QSC_PS_DESC_STATE_SIG=""
+	QSC_PS_DESC_TS=0
 }
 
 # $1=大状态  $2=括号内子状态（可空）  $3=括号外说明（必填，可空则回退 DESC_INTRO）

@@ -8,6 +8,8 @@
 
 ### 修复
 
+- **管理器前台简介不更新**：息屏/驻停 `restore_static` 后内存指纹 `QSC_PS_DESC_SIG` 未清，进管理器虽识别前台却因「电量未变」跳过写 `module.prop`，简介一直停在静态文案。改为还原静态时清指纹；`FORCE` 刷新不再被指纹短路；有 XP 时观看标记不被 Magisk 息屏误判清掉。
+- **管理器前台日志**：进出不再写入默认 `log.log`（改 `qsc_dbg`，需开详细调试）；去掉「简介将勤刷」等口语。
 - **管理器前台日志弱化**：进出相关 INFO 全部降为 DEBUG；默认仅保留上升沿/离开少量 `[DEBUG]`，补发/息屏/worker 细节改走 `qsc_dbg`（需开详细调试）。XP `ok viewer` 改为 DEBUG，须开 LSP「详细日志」才可见。
 - **Magisk↔XP 配合迟钝**：主服务长睡时 XP 已写 enter，但 `worker_wanted` 先被 deep/park 挡掉、无 inotify 时整段 native 盲等；且仅 worker 才 consume。改为 pending enter 优先、主服务先吃边沿再刷简介、无 inotify 改短片可打断、竞速立刻 kill native。
 - **Magisk 消费 viewer 后 XP 写失败 → 简介完全不动**：`mv` 后 root 以 `0644` 重建 `/data/system/qsc_xp_viewer`，`system_server` 无法 append（日志 `viewer write failed (enter …)`），按需 worker 永远收不到 enter。改为总线文件 `0666`（与 `qsc_xp.log` 一致），启动/占位/消费统一 `qsc_xp_touch_bus`；并清 `qsc_xp_write_disabled`，XP 侧可在本 boot 恢复写盘。

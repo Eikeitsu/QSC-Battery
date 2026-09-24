@@ -56,12 +56,10 @@ qsc_ps_refresh_desc() {
 		QSC_PS_VIEWER_HITS=$((${QSC_PS_VIEWER_HITS:-0} + 1))
 	elif type qsc_desc_viewing_active >/dev/null 2>&1 &&
 		qsc_desc_viewing_active; then
-		# 主服务已消费 XP enter：勿再要求 fg/dumpsys，否则会误 restore_static
-		if ! type qsc_ps_screen_is_off >/dev/null 2>&1 ||
-			! qsc_ps_screen_is_off; then
-			viewer=1
-			QSC_PS_VIEWER_HITS=$((${QSC_PS_VIEWER_HITS:-0} + 1))
-		fi
+		# 主服务/XP 已写下观看标记：直接信任，勿再用 Magisk 息屏探测否决
+		#（否决后走 restore_static，且旧指纹会跳过写回，简介永久卡静态）
+		viewer=1
+		QSC_PS_VIEWER_HITS=$((${QSC_PS_VIEWER_HITS:-0} + 1))
 	fi
 
 	# 息屏/深睡/强力档默认写静态；但管理器已在前台时仍刷动态电量（人在看）
@@ -148,11 +146,12 @@ qsc_ps_refresh_desc() {
 
 	state_sig="${off}:${plugged}:${stopped}"
 	sig="${state_sig}:${lv}:${temp}"
-	[ "$sig" = "$QSC_PS_DESC_SIG" ] && {
+	# FORCE：即使指纹相同也写（常见于 restore_static 后指纹未与文件同步）
+	if [ "${QSC_PS_DESC_FORCE:-0}" != "1" ] && [ "$sig" = "$QSC_PS_DESC_SIG" ]; then
 		QSC_PS_DESC_STATE_SIG="$state_sig"
 		QSC_PS_DESC_IDLE_SKIPS=$((${QSC_PS_DESC_IDLE_SKIPS:-0} + 1))
 		return 0
-	}
+	fi
 
 	# 该函数也由 service.sh 在满轮前调用，不能假定一定是未插电。
 	battery_level="$lv"

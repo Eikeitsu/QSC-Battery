@@ -41,7 +41,7 @@
   4. **辅助边沿（默认关）**：`want_screen` / `want_doze` / `want_bcast` → 分别写 `qsc_xp_screen` / `qsc_xp_doze` / `qsc_xp_bcast`；息屏策略优先读 screen；武装时亦可打断 sleep。广播动作列表见 `qsc_xp_bcast_actions`（空则用内置 SCREEN/IDLE/插拔）
 - **通道**：`/data/system/`；`qsc_xp_off` 全关；`qsc_xp_no_wake` 仅关插拔唤醒；`qsc_xp_no_viewer` 关前台总线
 - **停充**始终由 Magisk 模块负责
-- 排查：开 LSP「详细日志」后 `adb logcat -s QscXp` 可见 `ok viewer enter|leave`；Magisk 开「详细调试日志」可见补发/息屏等细节，进出上升沿为少量 `[DEBUG]`
+- 排查：开 LSP「详细日志」后 `adb logcat -s QscXp` 可见 `ok viewer enter|leave`；Magisk 开「详细调试日志」可见管理器进出与简介刷新细节（默认 `log.log` 不记这些）
 
 ## 安装
 
