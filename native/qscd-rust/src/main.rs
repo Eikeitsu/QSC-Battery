@@ -455,6 +455,7 @@ mod tests {
             near: 3,
             temp_stop,
             root: root.to_string_lossy().to_string(),
+            wake_files: Vec::new(),
         }
     }
 

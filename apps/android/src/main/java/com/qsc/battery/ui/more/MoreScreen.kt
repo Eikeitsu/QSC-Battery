@@ -146,6 +146,16 @@ fun MoreScreen(
                     summary = "写入 log.log：插电/停充/涓流/电流/qscd 等；随开随关，日常请关",
                     onCheckedChange = { vm.setDebugOn(it) },
                 )
+                ChargeDivider()
+                ChargeListRow(
+                    title = if (ui.exporting) "正在打包日志…" else "导出日志",
+                    summary = "打包 zip（log / 事件 / XP / 配置）并用系统分享发出",
+                    onClick = {
+                        if (!ui.exporting) {
+                            vm.exportLogs { snackbar.showSnackbar(it) }
+                        }
+                    },
+                )
             }
 
             ChargeSection(title = "权限与增强") {

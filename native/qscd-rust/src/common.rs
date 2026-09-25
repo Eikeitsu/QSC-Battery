@@ -173,6 +173,7 @@ pub(crate) fn is_power_supply_event(payload: &[u8]) -> bool {
     subsystem && (power_path || supply_name)
 }
 
+#[cfg(test)]
 pub(crate) fn wait_event(max_secs: u64, floor_secs: u64) -> u8 {
     wait_event_with_wake(max_secs, floor_secs, &[])
 }

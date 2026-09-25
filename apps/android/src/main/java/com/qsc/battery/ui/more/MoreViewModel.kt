@@ -17,6 +17,7 @@ data class MoreUiState(
     val permHint: String = "",
     val xpStatus: XpRuntime.Status? = null,
     val debugOn: Boolean = false,
+    val exporting: Boolean = false,
 )
 
 class MoreViewModel(
@@ -60,6 +61,23 @@ class MoreViewModel(
             if (ok) {
                 _ui.update { it.copy(debugOn = enabled) }
             }
+        }
+    }
+
+    fun exportLogs(onResult: suspend (String) -> Unit) {
+        if (_ui.value.exporting) return
+        viewModelScope.launch {
+            _ui.update { it.copy(exporting = true) }
+            val result = container.logRepository.exportLogsZip()
+            _ui.update { it.copy(exporting = false) }
+            result.fold(
+                onSuccess = { file ->
+                    runCatching { container.logRepository.shareExportedLogs(file) }
+                        .onSuccess { onResult("已打开分享：${file.name}") }
+                        .onFailure { onResult("分享失败：${it.message ?: "未知错误"}") }
+                },
+                onFailure = { onResult("导出失败：${it.message ?: "未知错误"}") },
+            )
         }
     }
 

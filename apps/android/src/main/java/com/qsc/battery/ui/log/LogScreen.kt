@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,7 +43,7 @@ import com.qsc.battery.ui.design.charge.ChargeTopBar
 import com.qsc.battery.ui.design.charge.chargeEventTypeLabel
 
 @Composable
-fun LogScreen(container: AppContainer) {
+fun LogScreen(container: AppContainer, snackbar: SnackbarHostState) {
     val factory = remember(container) { AppViewModelFactory(container) }
     val vm: LogViewModel = viewModel(factory = factory)
     val ui by vm.ui.collectAsStateWithLifecycle()
@@ -52,6 +53,11 @@ fun LogScreen(container: AppContainer) {
     val xpLines = ui.xpLines
     val events = ui.events
     val loading = ui.loading
+    val exporting = ui.exporting
+
+    LaunchedEffect(Unit) {
+        vm.toast.collect { snackbar.showSnackbar(it) }
+    }
 
     LaunchedEffect(Unit) {
         val key = container.consumePendingLogTab()
@@ -136,6 +142,12 @@ fun LogScreen(container: AppContainer) {
                             else -> vm.refresh()
                         }
                     },
+                )
+                ChargeSecondaryButton(
+                    text = if (exporting) "打包中…" else "导出",
+                    equalHeight = true,
+                    modifier = Modifier.weight(1f),
+                    onClick = { if (!exporting) vm.exportAndShare() },
                 )
                 ChargeSecondaryButton(
                     text = "清空",

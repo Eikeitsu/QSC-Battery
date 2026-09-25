@@ -2,7 +2,6 @@
 //! 典型用途：`--wake-file /data/system/qsc_xp_viewer`（管理器 enter/leave）。
 
 use std::ffi::CString;
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::time::Duration;
 

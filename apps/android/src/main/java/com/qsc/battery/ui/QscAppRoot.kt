@@ -115,7 +115,7 @@ fun QscAppRoot(container: AppContainer) {
                     onOpenAdvanced = { nav.navigate("config/advanced") },
                 )
             }
-            composable(QscTab.Log.route) { LogScreen(container) }
+            composable(QscTab.Log.route) { LogScreen(container, snackbar) }
             composable(QscTab.More.route) {
                 MoreScreen(
                     container = container,

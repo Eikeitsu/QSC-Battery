@@ -5,8 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.ChargeEvent
 import com.qsc.battery.data.model.LogLine
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -20,6 +23,7 @@ data class LogUiState(
     val xpLines: List<LogLine> = emptyList(),
     val events: List<ChargeEvent> = emptyList(),
     val loading: Boolean = true,
+    val exporting: Boolean = false,
 )
 
 /** 动态页：Magisk 运行/事件日志 + XP 稀疏日志（只读，不写充电节点）。 */
@@ -28,6 +32,9 @@ class LogViewModel(
 ) : ViewModel() {
     private val _ui = MutableStateFlow(LogUiState())
     val ui: StateFlow<LogUiState> = _ui.asStateFlow()
+
+    private val _toast = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val toast: SharedFlow<String> = _toast.asSharedFlow()
 
     fun setTab(tab: LogTab) {
         _ui.update { it.copy(tab = tab) }
@@ -91,6 +98,23 @@ class LogViewModel(
                 LogTab.Lsp -> refreshXp()
                 else -> refresh()
             }
+        }
+    }
+
+    fun exportAndShare() {
+        if (_ui.value.exporting) return
+        viewModelScope.launch {
+            _ui.update { it.copy(exporting = true) }
+            val result = container.logRepository.exportLogsZip()
+            _ui.update { it.copy(exporting = false) }
+            result.fold(
+                onSuccess = { file ->
+                    runCatching { container.logRepository.shareExportedLogs(file) }
+                        .onFailure { _toast.tryEmit("分享失败：${it.message ?: "未知错误"}") }
+                        .onSuccess { _toast.tryEmit("已打开分享：${file.name}") }
+                },
+                onFailure = { _toast.tryEmit("导出失败：${it.message ?: "未知错误"}") },
+            )
         }
     }
 }
