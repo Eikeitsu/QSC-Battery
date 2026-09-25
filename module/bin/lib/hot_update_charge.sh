@@ -8,7 +8,7 @@ qsc_hot_mark_charge_dirty() {
 	mkdir -p "$root/data" 2>/dev/null
 	touch "$root/data/hot_update_charge_dirty" 2>/dev/null
 	# 强制新服务首轮再跑孤儿检查（即使本函数已尝试还原）
-	rm -f "$root/data/.orphan_checked" 2>/dev/null
+	rm -f "$root/data/.orphan_checked" "$root/data/.orphan_checked_at" 2>/dev/null
 	return 0
 }
 
@@ -91,10 +91,14 @@ qsc_hot_boot_charge_heal() {
 				qsc_log error "热更新启动自愈：还原失败，将持续重试"
 		fi
 	fi
-	rm -f "$DATADIR/.orphan_checked" 2>/dev/null
+	rm -f "$DATADIR/.orphan_checked" "$DATADIR/.orphan_checked_at" 2>/dev/null
 	if type qsc_orphan_stop_check >/dev/null 2>&1; then
-		touch "$DATADIR/.orphan_checked" 2>/dev/null
 		qsc_orphan_stop_check || true
+		_o_now="$(date +%s 2>/dev/null | tr -d ' \r\n')"
+		case "$_o_now" in ""|*[!0-9]*) ;; *)
+			printf '%s\n' "$_o_now" >"$DATADIR/.orphan_checked_at" 2>/dev/null
+			;;
+		esac
 	fi
 
 	# 简介：强制写一版，并补发 viewer enter（XP 边沿可能在空窗过期）

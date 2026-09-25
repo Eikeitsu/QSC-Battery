@@ -641,7 +641,7 @@ sleep 1
 # 服务已停：打 dirty + 尽量还原停充节点（worker 为独立脚本，逻辑内联）
 mkdir -p "$OLD/data" 2>/dev/null
 touch "$OLD/data/hot_update_charge_dirty" 2>/dev/null
-rm -f "$OLD/data/.orphan_checked" 2>/dev/null
+rm -f "$OLD/data/.orphan_checked" "$OLD/data/.orphan_checked_at" 2>/dev/null
 if [ -f "$OLD/bin/common.sh" ]; then
 	(
 		MODDIR="$OLD"

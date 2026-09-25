@@ -213,11 +213,28 @@ if type qsc_hot_boot_charge_heal >/dev/null 2>&1; then
 	qsc_hot_boot_charge_heal || true
 fi
 
-# 每次开机（服务启动）检查一轮残留停充节点。标记由 service.sh 启动时清掉，
-# 所以这段每个开机周期只跑一次，不进热路径。
-if [ ! -f "$DATADIR/.orphan_checked" ] && type qsc_orphan_stop_check >/dev/null 2>&1; then
-	touch "$DATADIR/.orphan_checked"
-	qsc_orphan_stop_check || true
+# 残留停充：插电满轮节流复检（约 3 分钟），不只开机一次。
+# 未插电不打时间戳，避免拔线期间耗尽窗口、插上后要再等 3 分钟。
+if type qsc_orphan_stop_check >/dev/null 2>&1; then
+	_orphan_now="$(date +%s 2>/dev/null | tr -d ' \r\n')"
+	_orphan_last="$(cat "$DATADIR/.orphan_checked_at" 2>/dev/null | tr -d ' \r\n')"
+	case "$_orphan_now" in ""|*[!0-9]*) _orphan_now=0 ;; esac
+	case "$_orphan_last" in ""|*[!0-9]*) _orphan_last=0 ;; esac
+	_orphan_due=0
+	if [ "$_orphan_now" -eq 0 ] || [ "$((_orphan_now - _orphan_last))" -ge 180 ] 2>/dev/null; then
+		_orphan_due=1
+	fi
+	if [ "$_orphan_due" = "1" ]; then
+		_orphan_plugged=1
+		if type qsc_ps_plugged >/dev/null 2>&1 && ! qsc_ps_plugged; then
+			_orphan_plugged=0
+		fi
+		if [ "$_orphan_plugged" = "1" ]; then
+			[ "$_orphan_now" -gt 0 ] &&
+				printf '%s\n' "$_orphan_now" >"$DATADIR/.orphan_checked_at" 2>/dev/null
+			qsc_orphan_stop_check || true
+		fi
+	fi
 fi
 
 # 关掉总开关时先把充电节点还原，再罢工。

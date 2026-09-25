@@ -460,7 +460,8 @@ qsc_maintain_stop_while_plugged() {
 				_keep_full=0
 				[ -f "$DATADIR/charge_full_done" ] && _keep_full=1
 				rm -f "$DATADIR/power_switch" "$DATADIR/active_switch" \
-					"$DATADIR/power_on" "$DATADIR/power_off" 2>/dev/null
+					"$DATADIR/power_on" "$DATADIR/power_off" \
+					"$DATADIR/.orphan_checked_at" 2>/dev/null
 				[ "$_keep_full" = "1" ] && touch "$DATADIR/charge_full_done" 2>/dev/null
 				qsc_stop_wakelock_release
 				return 1

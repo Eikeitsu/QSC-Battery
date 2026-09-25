@@ -65,13 +65,8 @@ impl WakeWatch {
         let mut buf = [0u8; 4096];
         loop {
             // SAFETY: buf 有效
-            let n = unsafe {
-                libc::read(
-                    self.fd,
-                    buf.as_mut_ptr() as *mut libc::c_void,
-                    buf.len(),
-                )
-            };
+            let n =
+                unsafe { libc::read(self.fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
             if n <= 0 {
                 break;
             }

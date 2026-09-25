@@ -533,7 +533,7 @@ export const cases = [
 
   {
     // 节点停在停充值但标记已丢失：没有任何常规流程会管它
-    name: "残留停充节点（无标记）→ 开机首轮回收",
+    name: "残留停充节点（无标记）→ 插电满轮回收",
     sysfs: {
       "battery/capacity": "50",
       "battery/status": "Charging",
@@ -545,7 +545,7 @@ export const cases = [
     node: { initial: "1", stop: "1", start: "0" },
     expect: {
       node: "0",
-      files: { power_switch: false, ".orphan_checked": true },
+      files: { power_switch: false, ".orphan_checked_at": true },
       logIncludes: "发现残留停充节点",
     },
   },

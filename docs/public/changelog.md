@@ -34,6 +34,8 @@
 
 ### 修复
 
+- **ShellCheck SC2221/2222**：`battery_snapshot.sh` dumpsys 状态归一先匹配 Discharging，再匹配 Charging；去掉冗余 `Notcharging` 模式。
+- **残留停充复检**：不再只开机查一次；插电满轮约每 3 分钟复检，未插电跳过（避免与小米 OEM 省电节点打架）；假停充清标记后强制下一轮复检。
 - **管理器前台息屏后再亮简介卡静态**：亮灭屏边沿补发 viewer enter（不依赖 want_screen）；仅简介策略无 `qsc_xp_fg` 时 dumpsys 认管理器；观看循环每轮复核、离开息屏压制后立即安全网，避免一直停在静态文案。
 - **停充基线对齐 v2026.08.14**：机型相关停充以 0814 为准（MCA 仅 `mca=1`、写成功即认、非 MCA 不抢 `handle_state`）。保留优化：全量盲写、假停充自愈、插电多信号、MCA raw echo、详细调试日志。事后电流硬复核改为 `switch_hard_verify`（**默认关**；App/WebUI「冷门/实验」可开）。
 - **XP 前台门禁与分级**：Magisk 同步 `qsc_xp_fg_policy`；简介/游戏限流/App 停充全关时 XP 不写前台盘（`qsc_xp_fg_idle` 热路径快判）。仅简介→只处理管理器且**不写** `qsc_xp_fg`（只要 viewer）；游戏/停充→列表包（离开再写一次）。**未插电时游戏/停充不纳入 XP**。非详细日志下 DEBUG 不进 logcat。

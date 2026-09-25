@@ -80,10 +80,17 @@ qsc_charger_really_gone() {
 # 进程在写完节点、还没 touch 标记之前被杀；data 目录被清过；旧版本留下的残留。
 # 判定按「节点当前值 == 该条目的停充值」精确比对，不用 qsc_charge_looks_stopped：
 # 后者在未插电时恒为真，会把没停充的机器也误判成停充。
+# 未插电时跳过：小米等 OEM 省电/电池健康也会把节点写成停充值，还原只会反复 WARN。
 # 返回 0 = 发现并处理了孤儿节点
 qsc_orphan_stop_check() {
 	local i route stop_val _sv cur hit=0
 	[ -f "$DATADIR/power_switch" ] && return 1
+	# 只在「可能想充电」时处理：已插电，或侧路仍显示 VBUS/类型
+	if type qsc_ps_plugged >/dev/null 2>&1; then
+		qsc_ps_plugged || return 1
+	elif type qsc_ps_vbus_live >/dev/null 2>&1; then
+		qsc_ps_vbus_live || return 1
+	fi
 	for i in $switch_list $QSC_USER_SWITCHES; do
 		route="$(echo "$i" | sed -n 's/,start=.*//g;$p')"
 		[ -n "$route" ] && [ -f "$route" ] || continue
