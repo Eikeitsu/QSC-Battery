@@ -1,8 +1,8 @@
 {
-  "version": "2026.09.24.ci.9",
-  "versionCode": 2026092127,
-  "rustVersion": "2026.09.24.ci.9",
-  "rustVersionCode": 2026092127,
+  "version": "2026.09.25.ci.10",
+  "versionCode": 2026092129,
+  "rustVersion": "2026.09.25.ci.10",
+  "rustVersionCode": 2026092129,
   "cVersion": "2026.09.24.ci.9",
   "cVersionCode": 2026092127,
   "channel": "ci",
