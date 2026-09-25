@@ -4,35 +4,17 @@
 
 ### 新增
 
-- **安装方式简化**：音量上默认安装（全量可用组件；有旧配置则保留核心）；音量下自定义安装（逐项选择，流程与原先各选项一致）。无人值守（`install_auto`）逻辑不变。
+- **安装方式简化**：音量上默认安装（全量可用组件；有旧配置则保留核心）；音量下自定义安装（逐项选择）。无人值守（`install_auto`）不变。
+- **App 导出日志**：动态页 /「我的 → 排障」打包 zip（运行日志、事件、XP、配置与标记）并走系统分享，方便反馈。
+- **简介 × LSPosed**：边沿改为队列消费、总线文件权限可写；主服务可直接刷简介；息屏再亮、KSU 随机包名、无 XP 降级等一并打通，减少「在前台但不更新」。
+- **事件守护**：Rust `watch`/`wait-event` 支持 `--wake-file`（与 viewer 同 poll）；C 版仅做轻量 `poll` + burst drain。
 
 ### 修复
 
-- **管理器进出日志**：彻底去掉「模块管理器在前台/已离开」等写入 `log.log` 的文案（含 debug）；默认日志不再出现。
-- **简介识别前台仍不更新**：消费边沿后强制刷 prop；离开恢复静态；有 XP 时必停遗留 worker；清观看不再强依赖 `want_screen`。
-- **App/温控停充充不回**：无 `battery_switch` 时不再套用电量门闩（仅孤儿无标记才保守拦截）。
-- **无 inotify 竞速失败**：改回 `native_wait`，不再盲 `sleep` 丢插拔。
-- **fallback 整夜 5s**：仅 pending/观看才短片，不再因「开了简介但无 XP」高频醒。
-- **lean 省电**：遗留 worker / pending / 观看才 sync；首轮进 lean 同样按需。
-- **race kill 伪装成功**：去掉 130/137/143 当成功。
-- **Rust qscd**：插电判定对齐 shell；`watch`/`wait-event` 支持 `--wake-file`（features 含 `wake-file`），与 viewer 同 poll，省 shell inotify 竞速。
-- **C qscd（轻量）**：`poll` + 事件 burst drain，不照搬 Rust 全套。
-- **其它**：dumpsys status 归一数字；MCA 重申接受非普通文件节点。
-- **未插电 lean 省电**：① 息屏驻停且无 pending/观看时不与 viewer 竞速；② lean 按需跑简介管家。
-- **管理器前台简介不更新（指纹）**：`restore_static` 清 `QSC_PS_DESC_SIG`；`FORCE` 不受指纹短路。
-- **Magisk↔XP 配合迟钝**：主服务长睡时 XP 已写 enter，但 `worker_wanted` 先被 deep/park 挡掉、无 inotify 时整段 native 盲等；且仅 worker 才 consume。改为 pending enter 优先、主服务先吃边沿再刷简介、无 inotify 改短片可打断、竞速立刻 kill native。
-- **Magisk 消费 viewer 后 XP 写失败 → 简介完全不动**：`mv` 后 root 以 `0644` 重建 `/data/system/qsc_xp_viewer`，`system_server` 无法 append（日志 `viewer write failed (enter …)`），按需 worker 永远收不到 enter。改为总线文件 `0666`（与 `qsc_xp.log` 一致），启动/占位/消费统一 `qsc_xp_touch_bus`；并清 `qsc_xp_write_disabled`，XP 侧可在本 boot 恢复写盘。
-- **简介按需 worker**：无 XP 时亮屏 dumpsys 降级 worker（约数十秒响应），息屏仍停。有 XP 时不启 worker，由主服务刷简介（见上条）。
-- **KSU/SukiSU 随机包名**：管理器列表发现增加 `ksud debug package` 与已装 `libksud.so` 兜底，兼容 Spoofed Manager；仍可用 `desc_viewer_pkgs` 手写追加。
-- **管理器息屏再亮简介卡静态**：软息屏不再杀简介 worker；主服务等待与 `qsc_xp_viewer` 竞速，亮屏 enter 可立刻醒；消费后保留空占位供 inotify；XP 息屏不再误发 leave。
-- **简介 worker 日用偏费电 / 「未读到新鲜 XP 边沿」误解**：XP 健康时曾定期 dumpsys「安全网」（日志像 XP 丢边沿，实为兜底）；边沿还有短新鲜窗，长睡后被当成过期再 dumpsys。改为：非空队列即待消费（不过期）；XP 健康不定期 dumpsys（仅离开息屏压制时最多一次）；空闲/息屏分片拉长，优先 inotify。
-- **Magisk↔XP 管理器边沿不协调**：`qsc_xp_viewer` 改为追加队列、Magisk `mv` 后整段消费，避免 enter 被 leave 覆盖；leave 第三列固定为管理器包名（不再写成 launcher/其它 App）；去掉离开后再等 90s；简介/管理器进出相关日志统一为 debug（默认不刷屏）。边沿新鲜窗 30s→60s。
-- **日用 Doze / 未插电**：lean 路径强制释放停充 `wake_lock`，避免残留锁挡系统 Deep Doze。
-- **审计跟进（续）**：观看中多信 XP leave + fg 轻量确认，少 poll/dumpsys；有 `inotifywait` 时边沿事件唤醒；lean 救 worker 时尊重驻停压制；FAQ 写明未插电耗电构成。
-- **审计跟进**：`poll` 先消费 XP 边沿再判息屏；lean idle 救活挂掉的简介 worker；驻滞回真亮屏时放开简介；停充维持轮去掉无意义 `sleep 3`；XP `screen` 信任窗 120s→15s；亮屏先写 `qsc_xp_screen` 再 pulse enter；写盘失败落 `qsc_xp_write_disabled` 供 Magisk 回退 dumpsys。
-- **简介 worker 待机高频唤醒导致过夜耗电**：等 XP 边沿曾用 2s 短片轮询（息屏也醒），约 0.5Hz shell 唤醒；改为息屏/压制约 25s 一片（不超过边沿 30s 窗），亮屏空闲约 15s、观看约 8s 探边。XP 健康时 dumpsys 安全网降频；日志不再写「XP边沿缺失」（易误解为 LSP 坏了，实为兜底）。
-- **XP enter 被 Magisk 误判息屏丢掉 → 简介不及时**：消费 `qsc_xp_viewer` enter 时曾用最长约 60s 的息屏缓存否决边沿（日志「忽略管理器 XP enter（息屏）」），LSP 已写 enter 但简介不刷。改为信任 XP enter（仅 XP 刚报 screen=off≤3s 才丢），sysfs 息屏缓存改为约 8s。
-- **热更新后通用节点充不进电 / 简介卡住**：停服后先还原停充节点并打 `hot_update_charge_dirty`；新服务强制孤儿检查与简介刷新，并补发 viewer enter。`fake_stop` 清标记前先还原节点，避免留下无人管的孤儿停充。
+- **App / 温控停充后充不回**：无 `battery_switch` 时不再误套用电量门闩。
+- **热更新 / 假停充留下孤儿停充**：清标记前先还原节点；插电周期性复检残留（未插电跳过，避免与 OEM 打架）。
+- **未插电过勤 / 挡 Doze**：去掉盲 `sleep` 丢插拔与「无 XP 也整夜 5s」；lean 释放残留 `wake_lock`；race kill 不再把 130/137/143 当成功。
+- **默认日志**：去掉管理器进出等刷屏文案。
 
 ## 2026.09.21
 
@@ -68,8 +50,6 @@
 
 ### 修复
 
-- **Rust clippy**：补全 `Thresholds.wake_files` 测试构造；移除未用 `OsStrExt`；`wait_event` 仅测试编译。
-- **App 导出日志**：动态页「导出」与「我的 → 排障 → 导出日志」打包 zip（log / 事件 / XP / 配置与标记）并打开系统分享面板。
 - **管理器前台息屏后再亮简介卡静态**：亮灭屏边沿补发 viewer enter（不依赖 want_screen）；仅简介策略无 `qsc_xp_fg` 时 dumpsys 认管理器；观看循环每轮复核、离开息屏压制后立即安全网，避免一直停在静态文案。
 - **停充基线对齐 v2026.08.14**：机型相关停充以 0814 为准（MCA 仅 `mca=1`、写成功即认、非 MCA 不抢 `handle_state`）。保留优化：全量盲写、假停充自愈、插电多信号、MCA raw echo、详细调试日志。事后电流硬复核改为 `switch_hard_verify`（**默认关**；App/WebUI「冷门/实验」可开）。
 - **XP 前台门禁与分级**：Magisk 同步 `qsc_xp_fg_policy`；简介/游戏限流/App 停充全关时 XP 不写前台盘（`qsc_xp_fg_idle` 热路径快判）。仅简介→只处理管理器且**不写** `qsc_xp_fg`（只要 viewer）；游戏/停充→列表包（离开再写一次）。**未插电时游戏/停充不纳入 XP**。非详细日志下 DEBUG 不进 logcat。

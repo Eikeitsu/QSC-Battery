@@ -40,8 +40,7 @@ class LogRepository(
         }.toList()
     }
 
-    suspend fun clearLog(): Boolean =
-        root.exec(": > '${ModulePaths.LOG_FILE}' 2>/dev/null || rm -f '${ModulePaths.LOG_FILE}'").ok
+    suspend fun clearLog(): Boolean = root.exec(": > '${ModulePaths.LOG_FILE}' 2>/dev/null || rm -f '${ModulePaths.LOG_FILE}'").ok
 
     suspend fun loadEvents(maxLines: Int = 80): List<ChargeEvent> {
         val r = root.exec("tail -n $maxLines '${ModulePaths.CHARGE_EVENTS}' 2>/dev/null")
@@ -66,8 +65,7 @@ class LogRepository(
         }.sortedByDescending { it.ts }.toList()
     }
 
-    suspend fun clearEvents(): Boolean =
-        root.exec(": > '${ModulePaths.CHARGE_EVENTS}' 2>/dev/null || rm -f '${ModulePaths.CHARGE_EVENTS}'").ok
+    suspend fun clearEvents(): Boolean = root.exec(": > '${ModulePaths.CHARGE_EVENTS}' 2>/dev/null || rm -f '${ModulePaths.CHARGE_EVENTS}'").ok
 
     /**
      * 本模块 XP 文件日志：合并多候选路径（system / tmp / cache / 模块镜像）。
