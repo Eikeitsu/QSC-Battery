@@ -52,8 +52,7 @@ class ChargeFullTileService : TileService() {
         super.onDestroy()
     }
 
-    private suspend fun ready(): Boolean =
-        root.isRootAvailable() && root.exists(ModulePaths.MODULE_PROP) && root.exists(ModulePaths.QSC_SH)
+    private suspend fun ready(): Boolean = root.isRootAvailable() && root.exists(ModulePaths.MODULE_PROP) && root.exists(ModulePaths.QSC_SH)
 
     private suspend fun cliCfgGet(key: String): String {
         val r = root.exec("sh '${ModulePaths.QSC_SH}' cfg get '$key' 2>/dev/null")
@@ -62,8 +61,7 @@ class ChargeFullTileService : TileService() {
             .trim()
     }
 
-    private suspend fun cliCfgSet(key: String, value: String): Boolean =
-        root.exec("sh '${ModulePaths.QSC_SH}' cfg set '$key' '$value'").ok
+    private suspend fun cliCfgSet(key: String, value: String): Boolean = root.exec("sh '${ModulePaths.QSC_SH}' cfg set '$key' '$value'").ok
 
     private suspend fun isChargeFullOn(): Boolean {
         val full = cliCfgGet("charge_full")

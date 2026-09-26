@@ -66,16 +66,18 @@ fun ImmersiveBottomBar(
     modifier: Modifier = Modifier,
     content: @Composable RowScope.() -> Unit,
 ) {
+    // 顶部圆角：略收左右边距，圆角外侧阴影才看得见
     val shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .padding(start = 6.dp, end = 6.dp, top = 16.dp)
             .shadow(
-                elevation = 10.dp,
+                elevation = 24.dp,
                 shape = shape,
                 clip = false,
-                ambientColor = Color.Black.copy(alpha = 0.10f),
-                spotColor = Color.Black.copy(alpha = 0.14f),
+                ambientColor = Color.Black.copy(alpha = 0.32f),
+                spotColor = Color.Black.copy(alpha = 0.42f),
             )
             .clip(shape)
             .background(ChargeTheme.colors.surface),

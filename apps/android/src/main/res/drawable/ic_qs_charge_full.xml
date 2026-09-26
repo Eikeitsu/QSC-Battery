@@ -1,16 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- QS 用：备用充电圆环图标的简化白底版（24dp） -->
+<!-- QS：路径取自 ic_launcher_fg_alt（同心 54,54），绕中心放大以适配磁贴安全区 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <!-- 外环（开口弧，示意充满进度） -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M12,3.2A8.8,8.8 0 1,1 5.2,16.4l1.35,-0.55A7.3,7.3 0 1,0 12,4.7z" />
-    <!-- 内实心圆 -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M12,8.2a3.8,3.8 0 1,1 0,7.6a3.8,3.8 0 1,1 0,-7.6z" />
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="1.22"
+        android:scaleY="1.22">
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.12"
+            android:pathData="M54,24 a30,30 0 1,1 0,60 a30,30 0 1,1 0,-60 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.22"
+            android:pathData="M54.000,23.750 A30.250,30.250 0 1 1 53.947,23.750 L53.955,28.250 A25.750,25.750 0 1 0 54.000,28.250 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.88"
+            android:pathData="M54.000,23.750 A30.250,30.250 0 1 1 25.242,63.383 L29.520,61.987 A25.750,25.750 0 1 0 54.000,28.250 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.50"
+            android:pathData="M54,38 a16,16 0 1,1 0,32 a16,16 0 1,1 0,-32 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M56.40,39.60 L46.80,54.48 L53.52,54.48 L49.68,68.40 L62.16,51.60 L55.44,51.60 Z" />
+    </group>
 </vector>
