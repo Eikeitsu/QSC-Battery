@@ -25,6 +25,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -69,16 +70,16 @@ fun ImmersiveBottomBar(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .shadow(
+                elevation = 10.dp,
+                shape = shape,
+                clip = false,
+                ambientColor = Color.Black.copy(alpha = 0.10f),
+                spotColor = Color.Black.copy(alpha = 0.14f),
+            )
             .clip(shape)
             .background(ChargeTheme.colors.surface),
     ) {
-        // 顶部分割线：干净收口，不叠半透明蒙层
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(ChargeTheme.colors.stroke),
-        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()

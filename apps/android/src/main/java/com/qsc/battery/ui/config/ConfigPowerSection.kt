@@ -10,10 +10,11 @@ import com.qsc.battery.ui.design.charge.ChargeToggleRow
 
 @Composable
 internal fun ConfigPowerSection(
-    v: (String) -> String,
+    conf: Map<String, String>,
     setLocal: (String, String) -> Unit,
     onEdit: (ConfigEditField) -> Unit,
 ) {
+    fun v(key: String) = conf[key].orEmpty()
     ChargeSection(title = "电量停充") {
         ChargeChoiceRow(
             title = "停止充电",

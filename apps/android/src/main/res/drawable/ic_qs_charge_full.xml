@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- QS 用：备用充电圆环图标的简化白底版（24dp） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 外环（开口弧，示意充满进度） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,3.2A8.8,8.8 0 1,1 5.2,16.4l1.35,-0.55A7.3,7.3 0 1,0 12,4.7z" />
+    <!-- 内实心圆 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,8.2a3.8,3.8 0 1,1 0,7.6a3.8,3.8 0 1,1 0,-7.6z" />
+</vector>

@@ -45,7 +45,7 @@ class ConfigRepository(private val root: RootBridge) {
                 }
             }
         }
-        return map
+        return map.toMap()
     }
 
     suspend fun setConfValue(key: String, value: String): Boolean {

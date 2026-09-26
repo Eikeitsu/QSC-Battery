@@ -37,7 +37,24 @@ class ConfigViewModel(
 
     fun setLocal(key: String, value: String) {
         _ui.update { st ->
-            st.copy(conf = st.conf.toMutableMap().apply { put(key, value) })
+            // 不可变拷贝，保证 StateFlow/Compose 能感知 conf 变化并立刻重绘
+            if (st.conf[key] == value) st else st.copy(conf = st.conf + (key to value))
+        }
+    }
+
+    /** 同一帧合并多项，避免连续 setLocal 时中间态闪一下 */
+    fun setLocals(vararg pairs: Pair<String, String>) {
+        if (pairs.isEmpty()) return
+        _ui.update { st ->
+            var next = st.conf
+            var changed = false
+            for ((k, v) in pairs) {
+                if (next[k] != v) {
+                    next = next + (k to v)
+                    changed = true
+                }
+            }
+            if (changed) st.copy(conf = next) else st
         }
     }
 

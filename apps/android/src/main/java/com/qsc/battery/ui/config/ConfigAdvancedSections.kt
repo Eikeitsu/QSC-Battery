@@ -23,17 +23,23 @@ import com.qsc.battery.ui.design.charge.ChargeToggleRow
 internal fun ConfigAdvancedSections(
     vm: ConfigViewModel,
     ui: ConfigUiState,
-    v: (String) -> String,
     setLocal: (String, String) -> Unit,
-    notifyKinds: Set<String>,
     onEdit: (ConfigEditField) -> Unit,
     onEditNightSchedules: () -> Unit = {},
 ) {
+    val conf = ui.conf
+    fun v(key: String) = conf[key].orEmpty()
     val current = ui.current
     val stopSchedules = ui.stopSchedules
     val quietSchedules = ui.quietSchedules
     val nightSchedules = ui.nightSchedules
     val daemonStatus = ui.daemonStatus
+    val notifyKinds = v("notify_charge_kinds")
+        .split(',')
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .toSet()
+        .ifEmpty { setOf("stop", "resume", "fail") }
 
     ChargeSection(title = "省电策略") {
         ChargeToggleRow("省电模式", v("power_saver") != "0") {
@@ -49,17 +55,24 @@ internal fun ConfigAdvancedSections(
             selectedId = v("power_profile").ifBlank { "balanced" },
             summary = "强力过夜更省；自定义可调秒数",
             onSelect = {
-                setLocal("power_profile", it)
                 when (it) {
                     "aggressive" -> {
-                        setLocal("loop_interval_idle_native_sec", "900")
-                        setLocal("heartbeat_sec", "600")
+                        vm.setLocals(
+                            "power_profile" to it,
+                            "loop_interval_idle_native_sec" to "900",
+                            "heartbeat_sec" to "600",
+                        )
                     }
 
                     "balanced" -> {
-                        setLocal("loop_interval_idle_native_sec", "600")
-                        setLocal("heartbeat_sec", "180")
+                        vm.setLocals(
+                            "power_profile" to it,
+                            "loop_interval_idle_native_sec" to "600",
+                            "heartbeat_sec" to "180",
+                        )
                     }
+
+                    else -> setLocal("power_profile", it)
                 }
             },
         )

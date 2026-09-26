@@ -16,5 +16,7 @@
     <string name="icon_switch_summary">切换应用在桌面上显示的图标</string>
     <string name="tile_label">充电控制</string>
     <string name="tile_description">查看或切换模块软开关</string>
+    <string name="tile_charge_full_label">充满再停</string>
+    <string name="tile_charge_full_description">切换充满再停（需 Root）</string>
     <string name="xposed_description">可选：系统框架(system)——前台包名总线（简介/游戏旁路/App停充）；qscd 不可用时插拔边沿唤醒。不写充电节点</string>
 </resources>

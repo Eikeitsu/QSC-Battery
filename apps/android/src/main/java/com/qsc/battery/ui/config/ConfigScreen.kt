@@ -45,8 +45,8 @@ fun ConfigScreen(
     var edit by remember { mutableStateOf<ConfigEditField?>(null) }
     var editNight by remember { mutableStateOf(false) }
 
-    fun v(key: String) = vm.v(key)
-    fun setLocal(key: String, value: String) = vm.setLocal(key, value)
+    // 直接订阅 ui.conf / ui.current：编辑草稿必须从 Compose 状态读，否则芯片/开关不重绘
+    val conf = ui.conf
 
     LaunchedEffect(Unit) { vm.reload() }
     LaunchedEffect(ui.lastSaveMessage) {
@@ -65,14 +65,6 @@ fun ConfigScreen(
     val ready = ui.ready
     val rootOk = ui.rootOk
     val moduleOk = ui.moduleOk
-
-    val notifyKinds = v("notify_charge_kinds")
-        .split(',')
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-        .toSet()
-        .ifEmpty { setOf("stop", "resume", "fail") }
-
     val showSave = ready && rootOk && moduleOk
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -104,8 +96,16 @@ fun ConfigScreen(
                 !moduleOk -> ChargeBanner("模块未安装", BannerTone.Warn)
 
                 !advancedOnly -> {
-                    ConfigPowerSection(v = ::v, setLocal = ::setLocal, onEdit = { edit = it })
-                    ConfigTempSection(v = ::v, setLocal = ::setLocal, onEdit = { edit = it })
+                    ConfigPowerSection(
+                        conf = conf,
+                        setLocal = vm::setLocal,
+                        onEdit = { edit = it },
+                    )
+                    ConfigTempSection(
+                        conf = conf,
+                        setLocal = vm::setLocal,
+                        onEdit = { edit = it },
+                    )
                     ChargeSection(title = "更多") {
                         ChargeListRow(
                             title = "进阶策略",
@@ -119,9 +119,7 @@ fun ConfigScreen(
                     ConfigAdvancedSections(
                         vm = vm,
                         ui = ui,
-                        v = ::v,
-                        setLocal = ::setLocal,
-                        notifyKinds = notifyKinds,
+                        setLocal = vm::setLocal,
                         onEdit = { edit = it },
                         onEditNightSchedules = { editNight = true },
                     )

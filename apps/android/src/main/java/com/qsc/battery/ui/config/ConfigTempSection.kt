@@ -9,10 +9,11 @@ import com.qsc.battery.ui.design.charge.ChargeToggleRow
 
 @Composable
 internal fun ConfigTempSection(
-    v: (String) -> String,
+    conf: Map<String, String>,
     setLocal: (String, String) -> Unit,
     onEdit: (ConfigEditField) -> Unit,
 ) {
+    fun v(key: String) = conf[key].orEmpty()
     ChargeSection(title = "温度") {
         ChargeToggleRow("温度停充", v("temperature_switch") == "1") {
             setLocal("temperature_switch", if (it) "1" else "0")

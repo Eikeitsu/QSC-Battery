@@ -32,6 +32,7 @@ object ModulePaths {
     const val POWER_SWITCH_FLAG = "$DATADIR/power_switch"
     const val MODULE_PROP = "$MODDIR/module.prop"
     const val COMMON_SH = "$MODDIR/bin/common.sh"
+    const val QSC_SH = "$MODDIR/bin/qsc.sh"
     const val BATTERY_INFO = "$MODDIR/bin/lib/battery_info.sh"
     const val QSCD_FETCH = "$MODDIR/bin/qscd_fetch.sh"
     const val QSCD = "$MODDIR/bin/qscd"

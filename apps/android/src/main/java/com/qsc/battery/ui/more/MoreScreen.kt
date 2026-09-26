@@ -178,7 +178,7 @@ fun MoreScreen(
                 ChargeDivider()
                 ChargeListRow(
                     title = "快捷设置磁贴",
-                    summary = "添加系统磁贴以切换模块软开关",
+                    summary = "模块软开关 / 充满再停（系统磁贴）",
                     onClick = { tileSheet = true },
                 )
             }
@@ -203,7 +203,7 @@ fun MoreScreen(
             onDismissRequest = { tileSheet = false },
             title = { Text("快捷设置磁贴") },
             text = {
-                Text("在系统「编辑磁贴」中添加「充电控制」。点击磁贴可切换模块软开关（需 Root）。")
+                Text("在系统「编辑磁贴」中添加「充电控制」（模块软开关）或「充满再停」。点击即可切换（需 Root）。")
             },
             confirmButton = {
                 TextButton(onClick = { tileSheet = false }) { Text("知道了") }

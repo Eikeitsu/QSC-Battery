@@ -1,7 +1,9 @@
 package com.qsc.battery.tile
 
+import android.graphics.drawable.Icon
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
+import com.qsc.battery.R
 import com.qsc.battery.core.ModulePaths
 import com.qsc.battery.core.RootBridge
 import kotlinx.coroutines.CoroutineScope
@@ -11,8 +13,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * 快捷设置磁贴：需要 Root + 已安装模块时，切换 module_off 软开关。
- * 不常驻后台循环；仅在磁贴可见/点击时执行。
+ * 快捷设置磁贴：切换 module_off 软开关（模块总开关）。
+ * 不常驻后台；仅磁贴可见/点击时执行。
  */
 class ChargeControlTileService : TileService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -45,6 +47,7 @@ class ChargeControlTileService : TileService() {
 
     private suspend fun refresh() {
         val tile = qsTile ?: return
+        tile.icon = Icon.createWithResource(this, R.drawable.ic_qs_tile)
         if (!root.isRootAvailable()) {
             tile.state = Tile.STATE_UNAVAILABLE
             tile.subtitle = "无 Root"
