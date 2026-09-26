@@ -8,8 +8,8 @@
     <group
         android:pivotX="54"
         android:pivotY="54"
-        android:scaleX="1.58"
-        android:scaleY="1.58">
+        android:scaleX="1.82"
+        android:scaleY="1.82">
         <!-- 电极帽 -->
         <path
             android:fillColor="#FFFFFF"
