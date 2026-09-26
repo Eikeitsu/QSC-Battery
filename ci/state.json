@@ -1,7 +1,7 @@
 {
   "channel": "ci",
-  "sourceSha": "d6d944e7a0fe7f6720ba1e6112e39f7812258363",
+  "sourceSha": "2c3ffdc79b6cf6b12cbd6ebd602a057b3f9e846d",
   "daemonSourceSha": "7353bedfc7770feba0af511ba16d66e0e351aca2",
-  "appSourceSha": "d6d944e7a0fe7f6720ba1e6112e39f7812258363",
+  "appSourceSha": "2c3ffdc79b6cf6b12cbd6ebd602a057b3f9e846d",
   "moduleSourceSha": "d6d944e7a0fe7f6720ba1e6112e39f7812258363"
 }
