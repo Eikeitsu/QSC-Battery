@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- QS：路径取自 ic_launcher_fg_alt（同心 54,54），绕中心放大以适配磁贴安全区 -->
+<!-- QS：对齐 App 圆环图标；无外柔光；进度弧+中心圆+闪电挖空；放大适配磁贴 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
@@ -8,26 +8,21 @@
     <group
         android:pivotX="54"
         android:pivotY="54"
-        android:scaleX="1.22"
-        android:scaleY="1.22">
+        android:scaleX="1.48"
+        android:scaleY="1.48">
+        <!-- 轨道环 -->
         <path
             android:fillColor="#FFFFFF"
-            android:fillAlpha="0.12"
-            android:pathData="M54,24 a30,30 0 1,1 0,60 a30,30 0 1,1 0,-60 Z" />
-        <path
-            android:fillColor="#FFFFFF"
-            android:fillAlpha="0.22"
+            android:fillAlpha="0.35"
             android:pathData="M54.000,23.750 A30.250,30.250 0 1 1 53.947,23.750 L53.955,28.250 A25.750,25.750 0 1 0 54.000,28.250 Z" />
+        <!-- 进度弧 -->
         <path
             android:fillColor="#FFFFFF"
-            android:fillAlpha="0.88"
             android:pathData="M54.000,23.750 A30.250,30.250 0 1 1 25.242,63.383 L29.520,61.987 A25.750,25.750 0 1 0 54.000,28.250 Z" />
+        <!-- 中心圆 + 闪电挖空 -->
         <path
             android:fillColor="#FFFFFF"
-            android:fillAlpha="0.50"
-            android:pathData="M54,38 a16,16 0 1,1 0,32 a16,16 0 1,1 0,-32 Z" />
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M56.40,39.60 L46.80,54.48 L53.52,54.48 L49.68,68.40 L62.16,51.60 L55.44,51.60 Z" />
+            android:fillType="evenOdd"
+            android:pathData="M54,38 a16,16 0 1,1 0,32 a16,16 0 1,1 0,-32 Z M56.40,39.60 L46.80,54.48 L53.52,54.48 L49.68,68.40 L62.16,51.60 L55.44,51.60 Z" />
     </group>
 </vector>
