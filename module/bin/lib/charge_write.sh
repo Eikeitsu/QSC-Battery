@@ -199,28 +199,58 @@ qsc_clear_active_switch() {
 }
 
 # 粗判是否已停充（供 verify / 调试 / 假停充自愈）。
-# 不能单信 status=Not charging（插电充电时也可能报）；电流明显偏大视为仍在充。
+# 注意：不能对 current_now 取绝对值后当「仍在充」——停充后手机负载放电常 >150mA，
+# 小米等还会把符号反着报（本机日志：充电为负、放电为正）。Discharging = 未从适配器取电。
 qsc_charge_looks_stopped() {
-	local st cur
-	cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
-	case "$cur" in
-		""|*[!0-9]*) ;;
-		*)
-			# ≥150mA：仍在充（即使 status=Not charging）
-			if [ "$cur" -ge 150000 ] 2>/dev/null; then
-				return 1
-			fi
-			# <80mA：几乎无充电电流
-			if [ "$cur" -lt 80000 ] 2>/dev/null; then
-				return 0
-			fi
+	local st abs
+	st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
+	abs="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
+	case "$st" in
+		Discharging)
+			# 放电态：大电流是负载耗电，不是假停充
+			return 0
+			;;
+		"Not charging"|Full)
+			# 多数 OEM 停充后落此态；仅当仍报很大电流且状态又变回 Charging 才另论
+			return 0
+			;;
+		Charging)
+			case "$abs" in
+				""|*[!0-9]*) return 1 ;;
+				*)
+					# 浮充/涓流：接近 0 视为已停住
+					[ "$abs" -lt 80000 ] 2>/dev/null && return 0
+					# 仍有明显电流且 status=Charging → 未停住
+					[ "$abs" -ge 150000 ] 2>/dev/null && return 1
+					return 1
+					;;
+			esac
 			;;
 	esac
-	st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
-	case "$st" in
-		"Not charging"|Discharging|Full) return 0 ;;
+	# 未知 status：退回电流幅度（保守：大电流当未停）
+	case "$abs" in
+		""|*[!0-9]*) return 1 ;;
+		*)
+			[ "$abs" -lt 80000 ] 2>/dev/null && return 0
+			[ "$abs" -ge 150000 ] 2>/dev/null && return 1
+			;;
 	esac
 	return 1
+}
+
+# active_switch 节点是否仍停在停充值（假停充自愈前先看，避免误还原）
+qsc_active_stop_node_holds() {
+	local entry route stop_val cur
+	[ -f "$DATADIR/active_switch" ] || return 1
+	entry="$(cat "$DATADIR/active_switch" 2>/dev/null | tr -d ' \r\n')"
+	[ -n "$entry" ] || return 1
+	route="$(echo "$entry" | sed -n 's/,start=.*//g;$p')"
+	stop_val="$(echo "$entry" | sed -n 's/.*,stop=//g;s/_/ /g;$p')"
+	[ -n "$route" ] && [ -n "$stop_val" ] || return 1
+	[ -e "$route" ] || return 1
+	cur="$(cat "$route" 2>/dev/null | tr -d ' \r\n')"
+	[ -n "$cur" ] || return 1
+	[ "$cur" = "$stop_val" ]
 }
 
 # 事后电流硬复核开关（默认关，对齐 0814 写成功即认）。
@@ -240,14 +270,14 @@ qsc_mca_stop_verify() {
 	[ -n "$_vd" ] || _vd="${QSCV_switch_verify_sec:-1}"
 	_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
 	[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
-	_cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
+	_cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n')"
 	_st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
 	if qsc_charge_looks_stopped; then
 		qsc_dbg "MCA verify OK cur=${_cur:-?} status=${_st:-?}"
 		return 0
 	fi
 	sleep 1
-	_cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
+	_cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n')"
 	_st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
 	if qsc_charge_looks_stopped; then
 		qsc_dbg "MCA verify OK after retry cur=${_cur:-?} status=${_st:-?}"
@@ -405,7 +435,7 @@ qsc_device_is_mca() {
 
 # 插电且处于停充态：仅 MCA/preferred 持续重申（非 MCA 停充成功后不再写节点，避免小米 OS2 闪充）
 qsc_maintain_stop_while_plugged() {
-	local online _ts _now _cur _st
+	local online _ts _now _cur _st _age _grace _node_hold _as_entry _as_route _as_val _keep_full
 	[ -f "$DATADIR/power_switch" ] || {
 		qsc_stop_wakelock_release
 		return 1
@@ -432,26 +462,41 @@ qsc_maintain_stop_while_plugged() {
 	}
 
 	# 假停充自愈：
-	# 标记已超过数秒但电流仍大 → 清标记，让主循环重新走完整停充分支。
+	# 标记已超过数秒且仍像在充 → 清标记，让主循环重新走完整停充分支。
 	# 停充后短时间内 OEM（尤其 input_suspend）常仍报 Charging / 中等电流，
 	# 若立刻还原会「停充几秒又恢复」；充满再停还会丢掉已满足条件又重等 wait_sec。
 	# 宽限期内只重申，不清标记；已有 charge_full_done 时同样只重申。
+	# 节点仍停在 stop 值 / status=Discharging：视为真停充（负载放电≠假停充）。
 	_ts="$(cat "$DATADIR/power_stop_ts" 2>/dev/null | tr -d ' \r\n')"
 	_now="$(date +%s 2>/dev/null | tr -d ' \r\n')"
 	case "$_ts" in ""|*[!0-9]*) _ts=0 ;; esac
 	case "$_now" in ""|*[!0-9]*) _now=0 ;; esac
 	if [ "$_now" -gt 0 ] && [ "$_ts" -gt 0 ] && [ $((_now - _ts)) -ge 8 ]; then
-		_cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
+		_cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n')"
 		_st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
 		_age=$((_now - _ts))
 		_grace=120
-		if ! qsc_charge_looks_stopped; then
+		_node_hold=0
+		_as_route= _as_val=
+		if [ -f "$DATADIR/active_switch" ]; then
+			_as_entry="$(cat "$DATADIR/active_switch" 2>/dev/null | tr -d ' \r\n')"
+			_as_route="$(echo "$_as_entry" | sed -n 's/,start=.*//g;$p')"
+			[ -n "$_as_route" ] && [ -e "$_as_route" ] &&
+				_as_val="$(cat "$_as_route" 2>/dev/null | tr -d ' \r\n')"
+		fi
+		if qsc_active_stop_node_holds; then
+			_node_hold=1
+		fi
+		if [ "$_node_hold" = "1" ]; then
+			# 节点还停着：即使电流偏大也只重申（放电负载常见）
+			qsc_dbg "maintain：节点仍停充 age=${_age}s cur=${_cur:-?} status=${_st:-?} node=${_as_route:-?}=${_as_val:-?}"
+		elif ! qsc_charge_looks_stopped; then
 			if [ "$_age" -lt "$_grace" ] 2>/dev/null || [ -f "$DATADIR/charge_full_done" ]; then
-				qsc_dbg "假停充可疑但宽限/闩锁中：仅重申 age=${_age}s cur=${_cur:-?} status=${_st:-?}"
+				qsc_dbg "假停充可疑但宽限/闩锁中：仅重申 age=${_age}s cur=${_cur:-?} status=${_st:-?} node=${_as_route:-?}=${_as_val:-?}"
 			else
 				qsc_log_once fake_stop warn \
 					"假停充：已标记停充但电流仍高，先还原节点再清标记并重试停充"
-				qsc_dbg "fake_stop 触发 age=${_age}s cur=${_cur:-?} status=${_st:-?}"
+				qsc_dbg "fake_stop 触发 age=${_age}s cur=${_cur:-?} status=${_st:-?} node=${_as_route:-?}=${_as_val:-?} hold=0"
 				# 必须先还原：只清 power_switch 会留下孤儿停充，热更新/杀进程后更难自愈
 				if type qsc_power_start >/dev/null 2>&1; then
 					qsc_power_start
@@ -467,7 +512,7 @@ qsc_maintain_stop_while_plugged() {
 				return 1
 			fi
 		else
-			qsc_dbg "maintain：停充态正常 age=${_age}s cur=${_cur:-?} status=${_st:-?}"
+			qsc_dbg "maintain：停充态正常 age=${_age}s cur=${_cur:-?} status=${_st:-?} node=${_as_route:-?}=${_as_val:-?}"
 		fi
 	fi
 

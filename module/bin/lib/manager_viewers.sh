@@ -13,6 +13,7 @@ com.rifsxd.ksunext
 me.weishu.kernelsu
 com.tiann.kernelsu
 com.sukisu.ultra
+org.bakasu.bakasu
 com.resukisu.resukisu
 me.bmax.apatch
 me.garfieldhan.apatch.next
