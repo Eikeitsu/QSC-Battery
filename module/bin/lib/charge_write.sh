@@ -477,7 +477,8 @@ qsc_maintain_stop_while_plugged() {
 		_age=$((_now - _ts))
 		_grace=120
 		_node_hold=0
-		_as_route= _as_val=
+		_as_route=''
+		_as_val=''
 		if [ -f "$DATADIR/active_switch" ]; then
 			_as_entry="$(cat "$DATADIR/active_switch" 2>/dev/null | tr -d ' \r\n')"
 			_as_route="$(echo "$_as_entry" | sed -n 's/,start=.*//g;$p')"
