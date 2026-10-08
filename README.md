@@ -4,20 +4,42 @@
 
 模块显示名：**充电控制** · 模块 id：`QSC_Battery` · 仓库：[Eikeitsu/QSC-Battery](https://github.com/Eikeitsu/QSC-Battery)
 
+[![Release](https://img.shields.io/github/v/release/Eikeitsu/QSC-Battery?style=flat-square&label=Release)](https://github.com/Eikeitsu/QSC-Battery/releases)
+[![Android](https://img.shields.io/badge/Android-8%2B-3DDC84?style=flat-square&logo=android&logoColor=white)](https://eikeitsu.github.io/QSC-Battery/)
+[![Root](https://img.shields.io/badge/Root-Magisk%20%7C%20KSU%20%7C%20APatch-orange?style=flat-square)](https://eikeitsu.github.io/QSC-Battery/)
+[![Docs](https://img.shields.io/badge/Docs-GitHub%20Pages-222?style=flat-square&logo=githubpages&logoColor=white)](https://eikeitsu.github.io/QSC-Battery/)
+
 - **在线文档**：[eikeitsu.github.io/QSC-Battery](https://eikeitsu.github.io/QSC-Battery/)
 - **Releases**：[下载模块 / APP / 守护](https://github.com/Eikeitsu/QSC-Battery/releases)
+
+<div align="center">
+  <img src="https://skillicons.dev/icons?i=vue,typescript,vite,kotlin,androidstudio,rust,c,bash,nodejs,sass,githubactions" alt="Tech stack" />
+</div>
 
 > 早期曾基于「定量停充」思路起步，当前代码与交互已独立演进为完整产品，请以本仓库文档为准。
 
 ## 产品组成
 
-| 组件             | 作用                                                         |
-| ---------------- | ------------------------------------------------------------ |
-| Magisk 模块      | 真正执行停充 / 限流 / 日志；开机 `service.sh` 常驻           |
-| WebUI（可选）    | 模块管理器内改配置、看曲线与日志                             |
-| 伴侣 APP（可选） | Compose 客户端：状态、策略、动态、主题；可内嵌进模块包       |
-| qscd（可选）     | 只读 `power_supply` 事件守护，降低未插电轮询                 |
-| CLI              | `/data/adb/qsc/bin/qsc`（`help` / `stats` / `diagnostic` …） |
+| 组件             | 作用                                                         | 说明                               |
+| ---------------- | ------------------------------------------------------------ | ---------------------------------- |
+| Magisk 模块      | 真正执行停充 / 限流 / 日志；开机 `service.sh` 常驻           | [`module/`](./module/)             |
+| WebUI（可选）    | 模块管理器内改配置、看曲线与日志                             | [`apps/webui/`](./apps/webui/)     |
+| 伴侣 APP（可选） | Compose 客户端：状态、策略、动态、主题；可内嵌进模块包       | [`apps/android/`](./apps/android/) |
+| qscd（可选）     | 只读 `power_supply` 事件守护，降低未插电轮询                 | [`native/`](./native/)             |
+| CLI              | `/data/adb/qsc/bin/qsc`（`help` / `stats` / `diagnostic` …） | 模块内 / `native/qsc-cli`          |
+
+## 技术栈
+
+| 区域        | 技术                                                                                                        |
+| ----------- | ----------------------------------------------------------------------------------------------------------- |
+| WebUI       | Vue 3 · TypeScript · Vite · Pinia · Vue Router · Vant · Sass                                                |
+| 伴侣 APP    | Kotlin · Jetpack Compose · Material 3 · DataStore · libsu · OkHttp · libxposed · MaterialKolor              |
+| Magisk 模块 | POSIX shell · Magisk / KernelSU / APatch 模块脚本                                                           |
+| Native      | Rust（qscd）· C（qscdc / qsc-cli）· Android NDK 交叉编译                                                    |
+| 文档        | VitePress → GitHub Pages                                                                                    |
+| 工具链      | Node.js · ESLint · Stylelint · ShellCheck · Prettier · Vitest · Python · Spotless / ktlint · GitHub Actions |
+
+图标来自 [Skill Icons](https://skillicons.dev)；徽章来自 [Shields.io](https://shields.io)。
 
 ## WebUI 预览
 
