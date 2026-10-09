@@ -5,17 +5,15 @@
     "MD033": false,
     "MD041": false,
     "MD024": {
-      "siblings_only": true
-    }
+      "siblings_only": true,
+    },
   },
-  "globs": [
-    "**/*.md"
-  ],
+  "globs": ["**/*.md"],
   "ignores": [
     "**/node_modules/**",
     "**/.build/**",
     "**/archives/**",
     "**/docs/.vitepress/dist/**",
-    "**/docs/public/changelog.md"
-  ]
+    "**/docs/public/changelog.md",
+  ],
 }
