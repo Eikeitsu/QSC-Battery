@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Rewrite AndroidManifest activity-aliases for battery icon buckets."""
+
 from pathlib import Path
 
 p = Path(r"d:\Xuyingjie_wb\Downloads\magisk\QSC-Battery\app\app\src\main\AndroidManifest.xml")

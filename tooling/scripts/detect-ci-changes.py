@@ -7,19 +7,16 @@ Prints KEY=VALUE lines for shell eval.
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from version_code import UPDATES_RAW, read_json_url  # noqa: E402
+from version_code import UPDATES_RAW, read_json_url
 
 REPO = Path(__file__).resolve().parents[2]
 

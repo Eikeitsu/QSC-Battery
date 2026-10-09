@@ -68,8 +68,7 @@ static int payload_matches(const char *buf, size_t len) {
 }
 
 /* 解析秒数：非法或缺省取 fallback，最终钳到 [0, cap] */
-static unsigned long parse_secs(const char *arg, unsigned long fallback,
-                                unsigned long cap) {
+static unsigned long parse_secs(const char *arg, unsigned long fallback, unsigned long cap) {
   unsigned long value = 0;
   int digits = 0;
   const char *p = arg;
@@ -178,8 +177,8 @@ static void drain_event_burst(int fd, char *buf, size_t cap) {
     if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
       return;
     }
-    elapsed_ms = (long)((now.tv_sec - start.tv_sec) * 1000L +
-                        (now.tv_nsec - start.tv_nsec) / 1000000L);
+    elapsed_ms =
+        (long)((now.tv_sec - start.tv_sec) * 1000L + (now.tv_nsec - start.tv_nsec) / 1000000L);
     if (elapsed_ms >= 50) {
       return;
     }
@@ -286,9 +285,11 @@ static int cmd_cat(const char *path) {
   int fd;
   ssize_t n;
 
-  if (path == NULL || *path == '\0') return EXIT_UNUSABLE;
+  if (path == NULL || *path == '\0')
+    return EXIT_UNUSABLE;
   fd = open(path, O_RDONLY | O_CLOEXEC);
-  if (fd < 0) return EXIT_UNUSABLE;
+  if (fd < 0)
+    return EXIT_UNUSABLE;
 
   for (;;) {
     size_t remain = cap - total;
@@ -299,11 +300,13 @@ static int cmd_cat(const char *path) {
     }
     n = read(fd, buf, want);
     if (n < 0) {
-      if (errno == EINTR) continue;
+      if (errno == EINTR)
+        continue;
       close(fd);
       return EXIT_UNUSABLE;
     }
-    if (n == 0) break;
+    if (n == 0)
+      break;
     total += (size_t)n;
     if (fwrite(buf, 1, (size_t)n, stdout) != (size_t)n) {
       close(fd);
@@ -326,7 +329,8 @@ static int cmd_stat(const char *path) {
   int fd;
   int rc;
 
-  if (path == NULL || *path == '\0') return EXIT_UNUSABLE;
+  if (path == NULL || *path == '\0')
+    return EXIT_UNUSABLE;
   rc = stat(path, &st);
   if (rc < 0) {
     printf("exists=0\nreadable=0\nsize=0\nfirst_line=missing\n");
@@ -334,8 +338,7 @@ static int cmd_stat(const char *path) {
   }
   fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0) {
-    printf("exists=1\nreadable=0\nsize=%lld\nfirst_line=missing\n",
-           (long long)st.st_size);
+    printf("exists=1\nreadable=0\nsize=%lld\nfirst_line=missing\n", (long long)st.st_size);
     return EXIT_UNUSABLE;
   }
   got = read(fd, head, 80);
@@ -354,7 +357,8 @@ static int cmd_stat(const char *path) {
     }
     /* 首末白空格 trim：前 */
     size_t s = 0;
-    while (s < len && (head[s] == ' ' || head[s] == '\t')) s++;
+    while (s < len && (head[s] == ' ' || head[s] == '\t'))
+      s++;
     memmove(head, head + s, len - s + 1);
     /* 尾 */
     len = strlen(head);
@@ -362,28 +366,25 @@ static int cmd_stat(const char *path) {
       head[len - 1] = '\0';
       len--;
     }
-    printf("exists=1\nreadable=1\nsize=%lld\nfirst_line=%s\n",
-           (long long)st.st_size, head);
+    printf("exists=1\nreadable=1\nsize=%lld\nfirst_line=%s\n", (long long)st.st_size, head);
   } else {
-    printf("exists=1\nreadable=1\nsize=%lld\nfirst_line=--\n",
-           (long long)st.st_size);
+    printf("exists=1\nreadable=1\nsize=%lld\nfirst_line=--\n", (long long)st.st_size);
   }
   return EXIT_OK;
 }
 
 /* 与 Rust 版的 #[cfg(test)] 用例一一对应，CI 在宿主机上跑 */
 static int selftest(void) {
-  static const char hit[] =
-      "change@/devices/battery\0ACTION=change\0SUBSYSTEM=power_supply\0";
+  static const char hit[] = "change@/devices/battery\0ACTION=change\0SUBSYSTEM=power_supply\0";
   static const char miss[] = "change@/devices/net\0ACTION=change\0SUBSYSTEM=net\0";
   int fails = 0;
 
-#define CHECK(cond)                                                            \
-  do {                                                                         \
-    if (!(cond)) {                                                             \
-      fprintf(stderr, "selftest failed: %s (line %d)\n", #cond, __LINE__);      \
-      fails++;                                                                 \
-    }                                                                          \
+#define CHECK(cond)                                                                                \
+  do {                                                                                             \
+    if (!(cond)) {                                                                                 \
+      fprintf(stderr, "selftest failed: %s (line %d)\n", #cond, __LINE__);                         \
+      fails++;                                                                                     \
+    }                                                                                              \
   } while (0)
 
   CHECK(payload_matches(hit, sizeof(hit) - 1));
@@ -424,10 +425,9 @@ int main(int argc, char **argv) {
   const char *cmd = argc > 1 ? argv[1] : NULL;
 
   if (cmd != NULL && strcmp(cmd, "wait-event") == 0) {
-    unsigned long max = parse_secs(argc > 2 ? argv[2] : NULL, WAIT_MAX_DEFAULT,
-                                   WAIT_MAX_CAP);
-    unsigned long floor = parse_secs(argc > 3 ? argv[3] : NULL,
-                                     WAIT_FLOOR_DEFAULT, max > 0 ? max : 1);
+    unsigned long max = parse_secs(argc > 2 ? argv[2] : NULL, WAIT_MAX_DEFAULT, WAIT_MAX_CAP);
+    unsigned long floor =
+        parse_secs(argc > 3 ? argv[3] : NULL, WAIT_FLOOR_DEFAULT, max > 0 ? max : 1);
 
     return wait_event(max, floor);
   }
@@ -456,8 +456,7 @@ int main(int argc, char **argv) {
   if (cmd != NULL && strcmp(cmd, "stat") == 0) {
     return cmd_stat(argc > 2 ? argv[2] : NULL);
   }
-  fprintf(stderr,
-          "usage: qscd wait-event <max_secs> [floor_secs] | qscd probe | "
-          "qscd cat <path> | qscd stat <path>\n");
+  fprintf(stderr, "usage: qscd wait-event <max_secs> [floor_secs] | qscd probe | "
+                  "qscd cat <path> | qscd stat <path>\n");
   return EXIT_UNUSABLE;
 }

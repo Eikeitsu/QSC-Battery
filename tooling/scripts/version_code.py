@@ -36,7 +36,7 @@ def read_code_from_prop(path: Path) -> int | None:
     if not path.is_file():
         return None
     text = path.read_text(encoding="utf-8")
-    m = re.search(r"^versionCode=(.+)$", text, re.M)
+    m = re.search(r"^versionCode=(.+)$", text, re.MULTILINE)
     if not m:
         return None
     raw = m.group(1).strip()

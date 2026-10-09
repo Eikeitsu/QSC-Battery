@@ -1,0 +1,10 @@
+# Ruff for tooling Python under tooling/scripts
+target-version = "py311"
+line-length = 100
+
+[lint]
+# EXE001: Windows / git often drops +x; scripts are invoked via `python3 path.py`
+ignore = ["EXE001"]
+
+[format]
+quote-style = "double"

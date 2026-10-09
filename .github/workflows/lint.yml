@@ -78,15 +78,19 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: ./.github/actions/setup-node-npm
+
       - name: Setup Rust
         run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
 
-      - name: Rust fmt / clippy / test (qscd)
+      - name: Rust fmt / clippy
+        run: npm run lint:rust
+        env:
+          REQUIRE_RUST_LINT: "1"
+
+      - name: Rust test (qscd)
         working-directory: native/qscd-rust
-        run: |
-          cargo fmt --check
-          cargo clippy --all-targets -- -D warnings
-          cargo test
+        run: cargo test
 
   kotlin:
     name: Kotlin (Spotless / ktlint)
@@ -94,11 +98,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: ./.github/actions/setup-node-npm
+
       - uses: ./.github/actions/setup-android
 
       - name: Spotless check (ktlint)
-        working-directory: apps/android
-        run: ./gradlew spotlessCheck --stacktrace
+        run: npm run lint:kotlin
+        env:
+          REQUIRE_KOTLIN_LINT: "1"
 
   c:
     name: C (host selftest)
@@ -114,10 +121,34 @@ jobs:
           clang -std=gnu11 -Os -Wall -Wextra -Werror -o /tmp/qscd-host qscd.c
           /tmp/qscd-host selftest
 
+  tooling:
+    name: Tooling (python / clang)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup-node-npm
+
+      - name: Install ruff + clang-format
+        run: |
+          python3 -m pip install --user ruff clang-format
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          clang-format --version
+
+      - name: Ruff (Python)
+        run: npm run lint:py
+        env:
+          REQUIRE_RUFF: "1"
+
+      - name: clang-format (native)
+        run: npm run lint:clang
+        env:
+          REQUIRE_CLANG_FORMAT: "1"
+
   lint:
     name: Lint gate
     runs-on: ubuntu-latest
-    needs: [web, shell, rust, kotlin, c]
+    needs: [web, shell, rust, kotlin, c, tooling]
     if: always()
     steps:
       - name: Require all jobs success
@@ -127,8 +158,10 @@ jobs:
           echo "rust=${{ needs.rust.result }}"
           echo "kotlin=${{ needs.kotlin.result }}"
           echo "c=${{ needs.c.result }}"
+          echo "tooling=${{ needs.tooling.result }}"
           test "${{ needs.web.result }}" = "success"
           test "${{ needs.shell.result }}" = "success"
           test "${{ needs.rust.result }}" = "success"
           test "${{ needs.kotlin.result }}" = "success"
           test "${{ needs.c.result }}" = "success"
+          test "${{ needs.tooling.result }}" = "success"

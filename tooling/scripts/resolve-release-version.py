@@ -20,14 +20,14 @@ import os
 import re
 import sys
 import tempfile
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from version_code import (  # noqa: E402
+from version_code import (
     REPO_ROOT,
     allocate_aligned_version_code,
     code_from_ymd_rev,
@@ -42,8 +42,8 @@ def only_digits(s: str) -> str:
 
 def strip_channel_suffix(raw: str) -> str:
     s = raw.strip().lstrip("vV")
-    s = re.sub(r"\.(pre|ci)(\.\d+)?$", "", s, flags=re.I)
-    s = re.sub(r"-(pre|ci)$", "", s, flags=re.I)
+    s = re.sub(r"\.(pre|ci)(\.\d+)?$", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"-(pre|ci)$", "", s, flags=re.IGNORECASE)
     return s
 
 
@@ -52,7 +52,7 @@ def parse_display_key(raw: str) -> tuple[int, int] | None:
     s = raw.strip().lstrip("vV")
     if not s:
         return None
-    if re.search(r"(^|[.\-])ci($|[.\-])", s, flags=re.I):
+    if re.search(r"(^|[.\-])ci($|[.\-])", s, flags=re.IGNORECASE):
         return None
     s = strip_channel_suffix(s)
     parts = [p for p in re.split(r"[.\-_/]", s) if p != ""]
@@ -149,7 +149,7 @@ def bump_display_version(
     pre: bool = False,
 ) -> str:
     """按「＜当天首版→当天首版；≥当天首版→当前+1」升展示版号。"""
-    day = today or datetime.now(timezone.utc).date()
+    day = today or datetime.now(UTC).date()
     today_ymd = int(day.strftime("%Y%m%d"))
     today_first = (today_ymd, 1)
     cur = parse_display_key(current) if current else None
@@ -212,7 +212,7 @@ def discover_current_display_version(
 
     prop = root / "module" / "module.prop"
     if prop.is_file():
-        m = re.search(r"^version=(.+)$", prop.read_text(encoding="utf-8"), re.M)
+        m = re.search(r"^version=(.+)$", prop.read_text(encoding="utf-8"), re.MULTILINE)
         if m:
             consider(m.group(1).strip())
 
@@ -302,7 +302,11 @@ def main() -> int:
     if "--self-test" in sys.argv:
         self_test()
         return 0
-    raw = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else os.environ.get("RAW", "")
+    raw = (
+        sys.argv[1]
+        if len(sys.argv) > 1 and not sys.argv[1].startswith("-")
+        else os.environ.get("RAW", "")
+    )
     fetch = os.environ.get("QSC_FETCH_REMOTE_CODES", "1") != "0"
     channel = os.environ.get("QSC_CHANNEL", "stable").strip().lower() or "stable"
     version, code = resolve(raw, fetch_remote=fetch, channel=channel)

@@ -15,14 +15,14 @@ import argparse
 import os
 import re
 import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from version_code import next_version_code  # noqa: E402
+from version_code import next_version_code
 
 
 def ymd_int(d: date) -> int:
@@ -33,7 +33,10 @@ def parse_ymd(raw: int | str) -> date:
     s = str(raw)
     if len(s) != 8 or not s.isdigit():
         raise SystemExit(f"invalid date YYYYmmdd: {raw}")
-    return datetime.strptime(s, "%Y%m%d").date()
+    try:
+        return date(int(s[0:4]), int(s[4:6]), int(s[6:8]))
+    except ValueError as e:
+        raise SystemExit(f"invalid date YYYYmmdd: {raw}") from e
 
 
 def format_ci_version(today_ymd: int, run_number: int) -> str:
@@ -42,17 +45,17 @@ def format_ci_version(today_ymd: int, run_number: int) -> str:
 
 
 def stamp_prop_text(prop_text: str, version: str, version_code: int) -> str:
-    if not re.search(r"^version=", prop_text, re.M):
+    if not re.search(r"^version=", prop_text, re.MULTILINE):
         raise SystemExit("module.prop missing version=")
-    if not re.search(r"^versionCode=", prop_text, re.M):
+    if not re.search(r"^versionCode=", prop_text, re.MULTILINE):
         raise SystemExit("module.prop missing versionCode=")
-    out = re.sub(r"^version=.*$", f"version={version}", prop_text, count=1, flags=re.M)
+    out = re.sub(r"^version=.*$", f"version={version}", prop_text, count=1, flags=re.MULTILINE)
     out = re.sub(
         r"^versionCode=.*$",
         f"versionCode={version_code}",
         out,
         count=1,
-        flags=re.M,
+        flags=re.MULTILINE,
     )
     return out
 
@@ -61,7 +64,9 @@ def self_test() -> None:
     import tempfile
 
     assert format_ci_version(20260913, 42) == "2026.09.13.ci.42"
-    sample = "id=x\nversion=2026.09.12\nversionCode=2026091201\nupdateJson=https://example/update.json\n"
+    sample = (
+        "id=x\nversion=2026.09.12\nversionCode=2026091201\nupdateJson=https://example/update.json\n"
+    )
     stamped = stamp_prop_text(sample, "2026.09.13.ci.1", 2026091202)
     assert "version=2026.09.13.ci.1" in stamped
     assert "versionCode=2026091202" in stamped
@@ -108,14 +113,12 @@ def main() -> int:
         if env_run.isdigit() and int(env_run) >= 1:
             run = int(env_run)
         else:
-            raise SystemExit(
-                "missing run number: set GITHUB_RUN_NUMBER or pass --run N"
-            )
+            raise SystemExit("missing run number: set GITHUB_RUN_NUMBER or pass --run N")
 
     if args.date:
         today = parse_ymd(args.date)
     else:
-        today = datetime.now(timezone.utc).date()
+        today = datetime.now(UTC).date()
     today_ymd = ymd_int(today)
 
     fetch = args.fetch_remote or os.environ.get("QSC_FETCH_REMOTE_CODES", "1") != "0"

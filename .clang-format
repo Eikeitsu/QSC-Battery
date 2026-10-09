@@ -1,0 +1,6 @@
+# Clang-format for native C/C++ under native/
+BasedOnStyle: LLVM
+IndentWidth: 2
+ColumnLimit: 100
+SortIncludes: true
+AllowShortFunctionsOnASingleLine: Inline

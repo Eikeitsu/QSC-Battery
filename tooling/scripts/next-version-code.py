@@ -17,7 +17,7 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
-from version_code import collect_codes, next_version_code  # noqa: E402
+from version_code import collect_codes, next_version_code
 
 
 def self_test() -> None:

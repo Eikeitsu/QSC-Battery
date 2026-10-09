@@ -43,15 +43,22 @@ npm run build:docs        # 构建文档站点
 
 ### Lint 矩阵
 
-| 命令               | 覆盖                                                             |
-| ------------------ | ---------------------------------------------------------------- |
-| `lint:js`          | `webui` Vue/TS、`tooling` 脚本、VitePress 配置                   |
-| `lint:style`       | `webui` SCSS / Vue `<style>`（Stylelint）                        |
-| `lint:md`          | Markdown（markdownlint-cli2）                                    |
-| `lint:shell`       | `module/**/*.sh`（shellcheck；本机未安装则跳过，CI 强制）        |
-| husky `commit-msg` | Conventional Commits（commitlint）                               |
-| husky `pre-commit` | lint-staged：只处理**暂存文件**（eslint / stylelint / prettier） |
-| husky `pre-push`   | `npm run check`（全量；部分 GUI / `--no-verify` 不会跑）         |
+| 命令                    | 覆盖                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------ |
+| `lint:js`               | `webui` Vue/TS、`tooling` 脚本、VitePress 配置                                       |
+| `lint:style`            | `webui` SCSS / Vue `<style>`（Stylelint）                                            |
+| `lint:md`               | Markdown（markdownlint-cli2）                                                        |
+| `lint:shell`            | `module/**/*.sh`（shellcheck；本机未安装则跳过，CI 强制）                            |
+| `lint:py`               | `tooling/scripts/**/*.py`（ruff；本机未安装则跳过，CI 强制）                         |
+| `lint:clang`            | `native/**/*.{c,h,…}`（clang-format；本机未安装则跳过，CI 强制）                     |
+| `lint:rust`             | `native/qscd-rust`（`cargo fmt` + clippy；本机无 cargo 则跳过，CI 强制）             |
+| `lint:kotlin`           | 伴侣 APP Spotless / ktlint（本机无 JDK 则跳过，CI 强制）                             |
+| `format` / `format:all` | Prettier；`format:all` = Prettier + 各 `lint:*:fix`（含 Rust fmt / Kotlin Spotless） |
+| husky `commit-msg`      | Conventional Commits（commitlint）                                                   |
+| husky `pre-commit`      | lint-staged（含 py / C / Rust / Kotlin / shell）                                     |
+| husky `pre-push`        | `npm run check`（全量；部分 GUI / `--no-verify` 不会跑）                             |
+
+未单独接工具链的类型：`*.xml`（大量为启动器自适应图标生成物）、`*.toml` / `*.conf` / `*.prop`（体积小、手改少）。
 
 提交被拦或 CI 红了时：
 
@@ -139,15 +146,15 @@ sh 主包没有这个二进制也必须行为一致，阈值判定的唯一真�
 
 ## 工作流职责
 
-| 工作流           | 触发                        | 职责                                                                   |
-| ---------------- | --------------------------- | ---------------------------------------------------------------------- |
-| `Lint`           | push / PR                   | ESLint、Stylelint、Markdown、Shellcheck、typecheck、Prettier 等        |
-| `Build Web`      | `apps/webui/**` 等          | Vite 构建 → Artifact + `dist-web`（普通推送，保留历史）                |
-| `Build qscd`     | `native/**` 等              | 编守护 → `ci-dist/qscd/` + `updates/ci/qscd/manifest.json`             |
-| `App`            | `apps/android/**` 等        | 编 APK → `ci-dist/app/` + `updates/ci/app-update.json`                 |
-| `Build Docs`     | `docs/**`                   | 构建并部署 GitHub Pages                                                |
-| `Package Module` | `module/**`；Web 成功后串联 | 拉取最新 APK/qscd/webroot → 打 zip → `ci-dist/module/` + `update.json` |
-| `Release Module` | 手动 / `v*` 标签            | 发版 zip + GitHub Release                                              |
+| 工作流           | 触发                        | 职责                                                                      |
+| ---------------- | --------------------------- | ------------------------------------------------------------------------- |
+| `Lint`           | push / PR                   | Web / Shell / Rust / Kotlin / C selftest / Tooling（ruff + clang-format） |
+| `Build Web`      | `apps/webui/**` 等          | Vite 构建 → Artifact + `dist-web`（普通推送，保留历史）                   |
+| `Build qscd`     | `native/**` 等              | 编守护 → `ci-dist/qscd/` + `updates/ci/qscd/manifest.json`                |
+| `App`            | `apps/android/**` 等        | 编 APK → `ci-dist/app/` + `updates/ci/app-update.json`                    |
+| `Build Docs`     | `docs/**`                   | 构建并部署 GitHub Pages                                                   |
+| `Package Module` | `module/**`；Web 成功后串联 | 拉取最新 APK/qscd/webroot → 打 zip → `ci-dist/module/` + `update.json`    |
+| `Release Module` | 手动 / `v*` 标签            | 发版 zip + GitHub Release                                                 |
 
 各产品**按路径各自触发**；未改的产品不重建、不升 `versionCode`。`ci-dist` / `updates` / `dist-web` **禁止 force-push**，历史提交保留。
 

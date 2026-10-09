@@ -6,6 +6,7 @@ Launcher icons cannot tint at runtime on the home screen — Android only
 switches discrete activity-alias resources. Buckets are ~10% steps;
 charge state uses a yellow bolt from the same generator logic.
 """
+
 from __future__ import annotations
 
 import math
@@ -56,7 +57,7 @@ def path(d: str, color: str, fill_alpha: float | None = None) -> str:
     if fill_alpha is not None:
         alpha = f'\n        android:fillAlpha="{fill_alpha}"'
     return (
-        f'    <path\n'
+        f"    <path\n"
         f'        android:fillColor="{color}"{alpha}\n'
         f'        android:pathData="{d}" />\n'
     )

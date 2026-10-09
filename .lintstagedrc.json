@@ -8,6 +8,11 @@
     "prettier --write --ignore-unknown"
   ],
   "*.vue": ["stylelint --fix --allow-empty-input"],
-  "*.md": ["prettier --write --ignore-unknown"],
-  "*.{json,html,yml,yaml}": ["prettier --write --ignore-unknown"]
+  "*.{json,html,yml,yaml}": ["prettier --write --ignore-unknown"],
+  "*.md": ["prettier --write --ignore-unknown", "markdownlint-cli2 --fix"],
+  "*.py": ["node tooling/scripts/lint-py.mjs --fix"],
+  "*.{c,cc,cpp,h,hpp}": ["node tooling/scripts/lint-clang.mjs --fix"],
+  "*.rs": ["node tooling/scripts/lint-rust.mjs --fix"],
+  "*.{kt,kts}": ["node tooling/scripts/lint-kotlin.mjs --fix"],
+  "*.sh": ["node tooling/scripts/lint-shell.mjs"]
 }
