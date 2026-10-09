@@ -3,10 +3,27 @@
 # 返回：0=音量上，1=音量下，2=超时或无法读取
 # 可选参数：超时秒数（默认 20）
 #
-# - 只认 KEY_* DOWN（认 UP 会把松手当成新选择）
-# - 先短时 drain 残留按键，避免提示未看清就选中
-# - 用剩余整段时间阻塞等下一条，减少轮询漏键
-# - 等待过程不刷屏；仅结果输出（上/下/超时）
+# 优先 bin/volkey（EVIOCGRAB）：管理器若不吞键（如 BakaSU）也不会弹系统音量条。
+# SukiSU 管理器常自吞 KeyEvent，即使 getevent 也不弹条。缺 volkey 时回退 getevent。
+
+qsc_volume_volkey_bin() {
+	_base="${MODPATH:-${MODDIR:-}}/bin"
+	[ -d "$_base" ] || return 1
+	_name=
+	case "${ARCH:-}" in
+		arm64 | arm64-v8a) _name=volkey-arm64 ;;
+		arm | armeabi-v7a | armeabi) _name=volkey-arm ;;
+		*)
+			case "$(getprop ro.product.cpu.abi 2>/dev/null)" in
+				arm64*) _name=volkey-arm64 ;;
+				armeabi* | arm*) _name=volkey-arm ;;
+				*) return 1 ;;
+			esac
+			;;
+	esac
+	[ -x "$_base/$_name" ] || return 1
+	echo "$_base/$_name"
+}
 
 qsc_volume_getevent_bin() {
 	if [ -x /system/bin/getevent ]; then
@@ -36,7 +53,7 @@ qsc_volume_read_one() {
 	w=0
 
 	case "$max_sec" in
-		""|*[!0-9]*) max_sec=1 ;;
+		"" | *[!0-9]*) max_sec=1 ;;
 	esac
 	[ "$max_sec" -ge 1 ] || max_sec=1
 
@@ -61,7 +78,6 @@ qsc_volume_read_one() {
 	return 0
 }
 
-# 约 1s 内吞掉残留按键
 qsc_volume_drain() {
 	ge="$1"
 	event_file="$2"
@@ -83,7 +99,7 @@ qsc_volume_drain() {
 	rm -f "$event_file"
 }
 
-qsc_volume_choice() {
+qsc_volume_choice_getevent() {
 	timeout_sec="${1:-20}"
 	event_file=""
 	ge=""
@@ -91,11 +107,6 @@ qsc_volume_choice() {
 	now_ts=0
 	elapsed=0
 	remaining=0
-
-	case "$timeout_sec" in
-		""|*[!0-9]*) timeout_sec=20 ;;
-	esac
-	[ "$timeout_sec" -ge 3 ] || timeout_sec=3
 
 	event_file="${TMPDIR:-/data/local/tmp}/qsc-key-events.$$"
 	ge="$(qsc_volume_getevent_bin)" || return 2
@@ -138,4 +149,34 @@ qsc_volume_choice() {
 	rm -f "$event_file"
 	echo "  → 等待超时"
 	return 2
+}
+
+qsc_volume_choice() {
+	timeout_sec="${1:-20}"
+	case "$timeout_sec" in
+		"" | *[!0-9]*) timeout_sec=20 ;;
+	esac
+	[ "$timeout_sec" -ge 3 ] || timeout_sec=3
+
+	vk="$(qsc_volume_volkey_bin 2>/dev/null)" || vk=
+	if [ -n "$vk" ] && [ -x "$vk" ]; then
+		"$vk" "$timeout_sec"
+		_vk_rc=$?
+		case "$_vk_rc" in
+			0)
+				echo "  → 音量上"
+				return 0
+				;;
+			1)
+				echo "  → 音量下"
+				return 1
+				;;
+			*)
+				echo "  → 等待超时"
+				return 2
+				;;
+		esac
+	fi
+
+	qsc_volume_choice_getevent "$timeout_sec"
 }

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **音量键 volkey**：`bin/volkey`（`EVIOCGRAB`）供安装 customize 与 Action 共用，避免 BakaSU 等管理器不吞键时弹出系统音量条；SukiSU 管理器常自吞 KeyEvent。缺二进制时回退 `getevent`
+
 ## 2026.10.08
 
 - **修复停充后反复「插入 / 再停」**：假停充自愈误把放电负载电流（status=Discharging、|I| 仍大）当成「没停住」，还原 `input_suspend` 后又触发停充。现以 Discharging/Not charging 为准；节点仍为停充值时只重申不还原；调试日志带符号电流与节点当前值。

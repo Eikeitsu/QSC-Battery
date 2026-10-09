@@ -17,14 +17,16 @@
 
 </div>
 
-| 路径         | 产物                        |
-| ------------ | --------------------------- |
-| `qscd-rust/` | `qscd-arm64` / `qscd-arm`   |
-| `qscd-c/`    | `qscdc-arm64` / `qscdc-arm` |
-| `qsc-cli/`   | 可选 native CLI             |
+| 路径         | 产物                                                     |
+| ------------ | -------------------------------------------------------- |
+| `qscd-rust/` | `qscd-arm64` / `qscd-arm`                                |
+| `qscd-c/`    | `qscdc-arm64` / `qscdc-arm`                              |
+| `qsc-cli/`   | 可选 native CLI                                          |
+| `volkey/`    | `volkey-arm64` / `volkey-arm`（安装 + Action，防音量条） |
 
 ```bash
 npm run build:native
 npm run build:native:c
 npm run build:native:cli
+npm run build:volkey
 ```

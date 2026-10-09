@@ -188,6 +188,18 @@ function ensureNative() {
     log("native qsc cli: skip (QSC_SKIP_BUILD_NATIVE=1)");
   }
 
+  // 音量键 volkey：安装 + Action 共用，进 bin/（EVIOCGRAB，避免 BakaSU 弹音量条）
+  const volkeyScript = join(repoRoot, "tooling", "scripts", "build-volkey.mjs");
+  const volkeyBins = ["volkey-arm64", "volkey-arm"];
+  if (volkeyBins.every((name) => existsSync(join(moduleRoot, "bin", name)))) {
+    log("native volkey up to date");
+  } else if (existsSync(volkeyScript) && process.env.QSC_SKIP_BUILD_NATIVE !== "1") {
+    log("building native volkey");
+    execSync(`node ${JSON.stringify(volkeyScript)}`, { cwd: repoRoot, stdio: "inherit" });
+  } else if (process.env.QSC_SKIP_BUILD_NATIVE === "1") {
+    log("native volkey: skip (QSC_SKIP_BUILD_NATIVE=1)");
+  }
+
   const wanted = new Set(variantOpts.bins);
   if (!wanted.size) {
     log(`native qscd: ${variant} 变体不带守护，跳过构建`);
@@ -317,6 +329,16 @@ log(`bin/lib: ${libFiles.join(", ")}`);
     log(`cli: ${cliBins.join(", ")}`);
   } else {
     log("cli: missing qsc-arm64/arm — 安装时退回 shell 包装");
+  }
+
+  const volkeyBins = ["volkey-arm64", "volkey-arm"].filter((name) =>
+    existsSync(join(moduleRoot, "bin", name)),
+  );
+  for (const name of volkeyBins) copyFromModule(join("bin", name));
+  if (volkeyBins.length) {
+    log(`volkey: ${volkeyBins.join(", ")}（安装 + Action）`);
+  } else {
+    log("volkey: missing — 回退 getevent（BakaSU 等可能弹系统音量条）");
   }
 }
 if (includeDebug) {
