@@ -7,3 +7,4 @@ description=[🔎启动中 | 等待开机就绪] 电量/温度停充；电流控
 updateJson=https://eikeitsu.github.io/QSC-Battery/update.json
 webuiIcon=icon.png
 actionIcon=icon.png
+banner=banner.png

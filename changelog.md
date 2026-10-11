@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **KernelSU Next 模块横幅**：`module.prop` 增加 `banner=banner.png`；仓库根目录增加 `module.yaml`（便于提交 modules.kernelsu.org）
 - **音量键 volkey**：`bin/volkey`（`EVIOCGRAB`）供安装 customize 与 Action 共用，避免 BakaSU 等管理器不吞键时弹出系统音量条；SukiSU 管理器常自吞 KeyEvent。缺二进制时回退 `getevent`
 - **Lint**：接入 `lint:py`（ruff）、`lint:clang`、`lint:rust`、`lint:kotlin`（缺工具本机跳过 / CI 强制）；`format:all` 与 lint-staged 覆盖 py / C / Rust / Kotlin
 

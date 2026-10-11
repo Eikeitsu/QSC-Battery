@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/KernelSU-Modules/tools/main/schemas/module.schema.json
+schemaVersion: 1
+id: QSC_Battery
+name: 充电控制
+summary: 电量/温度停充与可选电流控制，附 WebUI、伴侣 APP 与可选守护进程。
+description: README.md
+homepage: https://eikeitsu.github.io/QSC-Battery/
+support: https://github.com/Eikeitsu/QSC-Battery/issues
+tags: [system, battery, tools]
+icon: module/icon.png
+metamodule: false
+
+authors:
+  - name: top大佬
+  - name: 许小墨
+    url: https://github.com/Eikeitsu
+
+compatibility:
+  androidMinApi: 26
+  architectures: [arm64-v8a, armeabi-v7a]
+
+# Release 含 -full / -lite / 守护与 APK 等；只选 Magisk 在线更新默认的 -full 模块包
+release:
+  assetPattern: "QSC-Battery_*-full.zip"

@@ -29,6 +29,7 @@ const ROOT_FILES = [
   "uninstall.sh",
   "hotinstall.sh",
   "icon.png",
+  "banner.png",
 ];
 /** 正式包：核心 + 只读诊断（不含 testing/diag2） */
 const BIN_RELEASE = [
