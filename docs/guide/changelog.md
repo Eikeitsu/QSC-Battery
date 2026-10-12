@@ -1,5 +1,12 @@
 # 更新日志
 
+## 2026.10.12
+
+- **KernelSU Next 模块横幅**：增加模块背景横幅，使用ksu next管理器开启模块背景横幅可以给模块增加图片背景；
+- **KernelSU 模块仓库**：仓库根目录增加 `module.yaml`（便于提交 modules.kernelsu.org），为将模块提交至ksu官方模块仓库做准备
+- **音量键 volkey**：`bin/volkey`（`EVIOCGRAB`）供安装 customize 与 Action 共用，避免 BakaSU 等管理器不吞键时弹出系统音量条；SukiSU 管理器常自吞 KeyEvent。缺二进制时回退 `getevent`
+- **Lint**：接入 `lint:py`（ruff）、`lint:clang`、`lint:rust`、`lint:kotlin`（缺工具本机跳过 / CI 强制）；`format:all` 与 lint-staged 覆盖 py / C / Rust / Kotlin
+
 ## 2026.10.08
 
 - **修复停充后反复「插入 / 再停」**：假停充自愈误把放电负载电流（status=Discharging、|I| 仍大）当成「没停住」，还原 `input_suspend` 后又触发停充。现以 Discharging/Not charging 为准；节点仍为停充值时只重申不还原；调试日志带符号电流与节点当前值。

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2026.10.12
+
 - **KernelSU Next 模块横幅**：增加模块背景横幅，使用ksu next管理器开启模块背景横幅可以给模块增加图片背景；
 - **KernelSU 模块仓库**：仓库根目录增加 `module.yaml`（便于提交 modules.kernelsu.org），为将模块提交至ksu官方模块仓库做准备
 - **音量键 volkey**：`bin/volkey`（`EVIOCGRAB`）供安装 customize 与 Action 共用，避免 BakaSU 等管理器不吞键时弹出系统音量条；SukiSU 管理器常自吞 KeyEvent。缺二进制时回退 `getevent`
