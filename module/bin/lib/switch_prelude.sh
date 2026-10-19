@@ -74,16 +74,19 @@ _raw_temp_stop="$temperature_switch_stop"
 _raw_temp_start="$temperature_switch_start"
 
 # 配置兜底：拒非法/天文数字，避免误伤设备
+# 范围须与 WebUI LIMITS（apps/webui/src/shared/config/limits/constants.ts）一致
 charge_full="$(qsc_clamp_int "$charge_full" 0 1 0)"
 case "$charge_full_mode" in
 	time|TIME) charge_full_mode="time" ;;
 	auto|AUTO) charge_full_mode="auto" ;;
 	*) charge_full_mode="current" ;;
 esac
+# LIMITS.chargeFullWaitMin/Max
 charge_full_wait_sec="$(qsc_clamp_int "${charge_full_wait_sec:-600}" 60 3600 600)"
 power_reset="$(qsc_clamp_int "$power_reset" 0 1 0)"
 unplug_restore="$(qsc_clamp_int "${unplug_restore:-1}" 0 1 1)"
 shut_down="$(qsc_clamp_int "$shut_down" 0 20 0)"
+# LIMITS.levelMin/Max/Off
 power_stop="$(qsc_clamp_level_or_off "$power_stop" 100)"
 power_start="$(qsc_clamp_int "$power_start" 1 100 95)"
 if [ "$power_stop" -le 100 ] 2>/dev/null && [ "$power_stop" -le "$power_start" ] 2>/dev/null; then
@@ -94,6 +97,7 @@ if [ "$power_stop" -le 100 ] 2>/dev/null && [ "$power_stop" -le "$power_start" ]
 	fi
 fi
 temperature_switch="$(qsc_clamp_int "$temperature_switch" 0 1 1)"
+# LIMITS.tempSwitchMin/Max
 temperature_switch_stop="$(qsc_clamp_int "$temperature_switch_stop" 25 70 60)"
 temperature_switch_start="$(qsc_clamp_int "$temperature_switch_start" 25 70 50)"
 if [ "$temperature_switch_stop" -le "$temperature_switch_start" ] 2>/dev/null; then

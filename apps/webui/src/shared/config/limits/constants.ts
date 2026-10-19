@@ -1,4 +1,8 @@
-/** 统一数值范围（前后端口径一致） */
+/**
+ * 统一数值范围（前后端口径一致）。
+ * Shell 侧对应：`module/bin/lib/switch_prelude.sh`、`power_saver_core.sh` 的 qsc_clamp_*；
+ * 改这里时请同步改 shell 注释里的同名范围。
+ */
 export const LIMITS = {
   levelMin: 1,
   levelMax: 100,
@@ -11,6 +15,9 @@ export const LIMITS = {
   currentTempMax: 60,
   safetyTempMin: 40,
   safetyTempMax: 55,
+  /** 充满再停等待秒数（与 shell charge_full_wait_sec 一致） */
+  chargeFullWaitMin: 60,
+  chargeFullWaitMax: 3600,
   /** 微安：0.1A–10A */
   uaMin: 100_000,
   uaMax: 10_000_000,

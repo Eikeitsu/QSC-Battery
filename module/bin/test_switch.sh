@@ -22,6 +22,10 @@ qsc_batt_status() {
 }
 
 qsc_is_plugged() {
+	if type qsc_ps_plugged >/dev/null 2>&1; then
+		qsc_ps_plugged
+		return $?
+	fi
 	local s o
 	s="$(qsc_batt_status)"
 	case "$s" in
@@ -51,6 +55,19 @@ qsc_switch_entry_safe() {
 }
 
 qsc_parse_entry() {
+	ENTRY_PATH=
+	ENTRY_START=
+	ENTRY_STOP=
+	if type qsc_parse_normalized_switch_entry >/dev/null 2>&1 &&
+		qsc_parse_normalized_switch_entry "$1"; then
+		ENTRY_PATH="$QSC_SW_ROUTE"
+		ENTRY_START="$QSC_SW_START"
+		ENTRY_STOP="$QSC_SW_STOP"
+		case "$ENTRY_START" in
+			*_*) ENTRY_START="$(printf '%s' "$ENTRY_START" | tr '_' ' ')" ;;
+		esac
+		return 0
+	fi
 	ENTRY_PATH="$(echo "$1" | sed -n 's/,start=.*//g;$p')"
 	ENTRY_START="$(echo "$1" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
 	ENTRY_STOP="$(echo "$1" | sed -n 's/.*,stop=//g;s/_/ /g;$p')"

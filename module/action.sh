@@ -32,6 +32,10 @@ qsc_volume_choice 5
 _vol_rc=$?
 
 qsc_action_is_plugged() {
+	if type qsc_ps_plugged >/dev/null 2>&1; then
+		qsc_ps_plugged
+		return $?
+	fi
 	local s o
 	s="$(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d ' \r\n')"
 	case "$s" in
@@ -70,27 +74,49 @@ qsc_action_refresh() {
 		echo "模块: 开启"
 	fi
 
-	_cap=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null | tr -d ' \r\n')
-	_temp_raw=$(cat /sys/class/power_supply/battery/temp 2>/dev/null | tr -d ' \r\n')
-	_batt_st=$(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d ' \r\n')
-	_usb=$(cat /sys/class/power_supply/usb/online 2>/dev/null | tr -d ' \r\n')
+	_cap=""
+	_temp_c=""
+	_batt_st=""
+	if type qsc_battery_snapshot_read >/dev/null 2>&1 && qsc_battery_snapshot_read; then
+		_cap="$QSC_BATTERY_LEVEL"
+		_temp_raw="$QSC_BATTERY_TEMP"
+		case "$QSC_BATTERY_STATUS" in
+			2) _batt_st=Charging ;;
+			3) _batt_st=Discharging ;;
+			4) _batt_st="Not charging" ;;
+			5) _batt_st=Full ;;
+			*) _batt_st="$QSC_BATTERY_STATUS" ;;
+		esac
+		case "$_temp_raw" in
+			""|*[!0-9-]*) _temp_c="" ;;
+			*)
+				# snapshot 温度多为十分之一度整数；>200 视为需 /10
+				if [ "$_temp_raw" -gt 200 ] 2>/dev/null; then
+					_temp_c=$((_temp_raw / 10))
+				else
+					_temp_c="$_temp_raw"
+				fi
+				;;
+		esac
+	else
+		_cap=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null | tr -d ' \r\n')
+		_temp_raw=$(cat /sys/class/power_supply/battery/temp 2>/dev/null | tr -d ' \r\n')
+		_batt_st=$(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d ' \r\n')
+		case "$_temp_raw" in
+			""|*[!0-9-]*) _temp_c="" ;;
+			*) _temp_c=$((_temp_raw / 10)) ;;
+		esac
+	fi
 	_curr=$(cat /sys/class/power_supply/battery/current_now 2>/dev/null | tr -d ' \r\n')
 
 	_live=""
-	_temp_c=""
 	[ -n "$_cap" ] && _live="电量 ${_cap}%"
-	if [ -n "$_temp_raw" ]; then
-		case "$_temp_raw" in
-			*[!0-9-]*) ;;
-			*)
-				_temp_c=$((_temp_raw / 10))
-				_live="${_live}${_live:+ · }${_temp_c}°C"
-				;;
-		esac
-	fi
+	[ -n "$_temp_c" ] && _live="${_live}${_live:+ · }${_temp_c}°C"
 	[ -n "$_batt_st" ] && _live="${_live}${_live:+ · }${_batt_st}"
 	[ -n "$_live" ] && echo "电池: $_live"
-	[ "$_usb" = "1" ] && echo "USB: 已连接"
+	if qsc_action_is_plugged; then
+		echo "供电: 已连接"
+	fi
 	if [ -n "$_curr" ]; then
 		case "$_curr" in
 			*[!0-9-]*) ;;

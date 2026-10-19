@@ -4,7 +4,7 @@
 # 可选参数：超时秒数（默认 20）
 #
 # 优先 bin/volkey（EVIOCGRAB）：管理器若不吞键（如 BakaSU）也不会弹系统音量条。
-# SukiSU 管理器常自吞 KeyEvent，即使 getevent 也不弹条。缺 volkey 时回退 getevent。
+# 缺 volkey 时：有 Magisk chooseport 则用之，否则薄 getevent 回退。
 
 qsc_volume_volkey_bin() {
 	_base="${MODPATH:-${MODDIR:-}}/bin"
@@ -21,6 +21,9 @@ qsc_volume_volkey_bin() {
 			esac
 			;;
 	esac
+	[ -f "$_base/$_name" ] || return 1
+	# zip 若漏标可执行位，装机时补上，避免静默回退 getevent 弹音量条
+	chmod 0755 "$_base/$_name" 2>/dev/null || true
 	[ -x "$_base/$_name" ] || return 1
 	echo "$_base/$_name"
 }
@@ -37,110 +40,55 @@ qsc_volume_getevent_bin() {
 	command -v getevent 2>/dev/null
 }
 
-qsc_volume_match_up() {
-	grep -qE 'KEY_VOLUMEUP[[:space:]]+DOWN|[[:space:]]0073[[:space:]]+00000001' "$1" 2>/dev/null
-}
-
-qsc_volume_match_down() {
-	grep -qE 'KEY_VOLUMEDOWN[[:space:]]+DOWN|[[:space:]]0072[[:space:]]+00000001' "$1" 2>/dev/null
-}
-
-qsc_volume_read_one() {
-	out="$1"
-	ge="$2"
-	max_sec="$3"
-	pid=""
-	w=0
-
-	case "$max_sec" in
-		"" | *[!0-9]*) max_sec=1 ;;
-	esac
-	[ "$max_sec" -ge 1 ] || max_sec=1
-
-	rm -f "$out"
-	: >"$out"
-
-	if command -v timeout >/dev/null 2>&1; then
-		timeout "$max_sec" "$ge" -lqc 1 >"$out" 2>/dev/null || true
-		return 0
-	fi
-
-	"$ge" -lqc 1 >"$out" 2>/dev/null &
-	pid=$!
-	while [ "$w" -lt "$max_sec" ]; do
-		kill -0 "$pid" 2>/dev/null || break
-		[ -s "$out" ] && break
-		sleep 1
-		w=$((w + 1))
-	done
-	kill "$pid" 2>/dev/null || true
-	wait "$pid" 2>/dev/null || true
-	return 0
-}
-
-qsc_volume_drain() {
-	ge="$1"
-	event_file="$2"
-	until_ts=0
-	now_ts=0
-
-	until_ts=$(date +%s 2>/dev/null) || until_ts=0
-	if [ "$until_ts" -gt 0 ]; then
-		until_ts=$((until_ts + 1))
-		while true; do
-			now_ts=$(date +%s 2>/dev/null) || break
-			[ "$now_ts" -ge "$until_ts" ] && break
-			qsc_volume_read_one "$event_file" "$ge" 1
-			[ -s "$event_file" ] || break
-		done
-	else
-		qsc_volume_read_one "$event_file" "$ge" 1
-	fi
-	rm -f "$event_file"
-}
-
+# 薄 getevent：单次 -lqc 1 + 超时循环
 qsc_volume_choice_getevent() {
 	timeout_sec="${1:-20}"
-	event_file=""
-	ge=""
-	start_ts=0
-	now_ts=0
-	elapsed=0
-	remaining=0
-
 	event_file="${TMPDIR:-/data/local/tmp}/qsc-key-events.$$"
 	ge="$(qsc_volume_getevent_bin)" || return 2
 	[ -n "$ge" ] || return 2
 
-	qsc_volume_drain "$ge" "$event_file"
-
 	start_ts=$(date +%s 2>/dev/null) || start_ts=0
 	elapsed=0
+	"$ge" -lqc 1 >/dev/null 2>&1 &
+	_drain=$!
+	sleep 0.2 2>/dev/null || true
+	kill "$_drain" 2>/dev/null || true
+	wait "$_drain" 2>/dev/null || true
 
 	while [ "$elapsed" -lt "$timeout_sec" ]; do
 		remaining=$((timeout_sec - elapsed))
 		[ "$remaining" -lt 1 ] && remaining=1
-		qsc_volume_read_one "$event_file" "$ge" "$remaining"
+		rm -f "$event_file"
+		if command -v timeout >/dev/null 2>&1; then
+			timeout "$remaining" "$ge" -lqc 1 >"$event_file" 2>/dev/null || true
+		else
+			"$ge" -lqc 1 >"$event_file" 2>/dev/null &
+			_pid=$!
+			w=0
+			while [ "$w" -lt "$remaining" ]; do
+				kill -0 "$_pid" 2>/dev/null || break
+				[ -s "$event_file" ] && break
+				sleep 1
+				w=$((w + 1))
+			done
+			kill "$_pid" 2>/dev/null || true
+			wait "$_pid" 2>/dev/null || true
+		fi
 		if [ -s "$event_file" ]; then
-			if qsc_volume_match_up "$event_file"; then
+			if grep -qE 'KEY_VOLUMEUP[[:space:]]+DOWN|[[:space:]]0073[[:space:]]+00000001' "$event_file" 2>/dev/null; then
 				rm -f "$event_file"
 				echo "  → 音量上"
 				return 0
 			fi
-			if qsc_volume_match_down "$event_file"; then
+			if grep -qE 'KEY_VOLUMEDOWN[[:space:]]+DOWN|[[:space:]]0072[[:space:]]+00000001' "$event_file" 2>/dev/null; then
 				rm -f "$event_file"
 				echo "  → 音量下"
 				return 1
 			fi
 		fi
-
 		if [ "$start_ts" -gt 0 ]; then
 			now_ts=$(date +%s 2>/dev/null) || now_ts=0
-			if [ "$now_ts" -gt 0 ]; then
-				elapsed=$((now_ts - start_ts))
-			else
-				elapsed=$((elapsed + 1))
-			fi
+			[ "$now_ts" -gt 0 ] && elapsed=$((now_ts - start_ts)) || elapsed=$((elapsed + 1))
 		else
 			elapsed=$((elapsed + 1))
 		fi
@@ -163,6 +111,25 @@ qsc_volume_choice() {
 		"$vk" "$timeout_sec"
 		_vk_rc=$?
 		case "$_vk_rc" in
+			0)
+				echo "  → 音量上"
+				return 0
+				;;
+			1)
+				echo "  → 音量下"
+				return 1
+				;;
+			*)
+				echo "  → 等待超时"
+				return 2
+				;;
+		esac
+	fi
+
+	if type chooseport >/dev/null 2>&1; then
+		chooseport "$timeout_sec"
+		_cp=$?
+		case "$_cp" in
 			0)
 				echo "  → 音量上"
 				return 0

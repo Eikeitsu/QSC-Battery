@@ -9,7 +9,10 @@ export type StatusRefreshCtx = {
   status: StatusState;
 };
 
-export async function refreshStatusInternal(ctx: StatusRefreshCtx): Promise<boolean> {
+export async function refreshStatusInternal(
+  ctx: StatusRefreshCtx,
+  priority: api.ExecPriority = "high",
+): Promise<boolean> {
   const { bridgeOk, deviceName, status } = ctx;
 
   if (!api.hasBridge()) {
@@ -20,7 +23,7 @@ export async function refreshStatusInternal(ctx: StatusRefreshCtx): Promise<bool
     return false;
   }
 
-  const { value: bundle, result: statusResult } = await api.loadStatusBundle();
+  const { value: bundle, result: statusResult } = await api.loadStatusBundle(priority);
 
   if (statusResult.errno === -2) {
     status.badge = "状态读取超时，下拉重试";
@@ -133,30 +136,38 @@ export async function refreshStatusInternal(ctx: StatusRefreshCtx): Promise<bool
 export function createStatusRefresh(ctx: StatusRefreshCtx) {
   let refreshInFlight: Promise<boolean> | null = null;
   let refreshTipPending = false;
+  let refreshDirty = false;
 
   async function refreshStatus(showTip = false): Promise<void> {
     if (showTip) refreshTipPending = true;
-    if (refreshInFlight) {
-      await refreshInFlight;
-      return;
-    }
-
-    const request = refreshStatusInternal(ctx);
-    refreshInFlight = request;
-    try {
-      const ok = await request;
-      if (refreshTipPending) {
-        refreshTipPending = false;
-        if (ok) showSuccessToast({ message: "状态已刷新", duration: 1200 });
-        else showToast("状态读取超时");
+    // 合并并发请求：打脏标；持有者补刷，避免叠桥或丢掉最新
+    refreshDirty = true;
+    while (refreshDirty || refreshInFlight) {
+      if (refreshInFlight) {
+        await refreshInFlight;
+        if (!refreshDirty) return;
+        continue;
       }
-    } catch {
-      if (refreshTipPending) {
-        refreshTipPending = false;
-        showToast("状态读取失败");
+      if (!refreshDirty) return;
+      refreshDirty = false;
+      const priority = refreshTipPending ? "high" : "low";
+      const request = refreshStatusInternal(ctx, priority);
+      refreshInFlight = request;
+      try {
+        const ok = await request;
+        if (refreshTipPending) {
+          refreshTipPending = false;
+          if (ok) showSuccessToast({ message: "状态已刷新", duration: 1200 });
+          else showToast("状态读取超时");
+        }
+      } catch {
+        if (refreshTipPending) {
+          refreshTipPending = false;
+          showToast("状态读取失败");
+        }
+      } finally {
+        if (refreshInFlight === request) refreshInFlight = null;
       }
-    } finally {
-      if (refreshInFlight === request) refreshInFlight = null;
     }
   }
 

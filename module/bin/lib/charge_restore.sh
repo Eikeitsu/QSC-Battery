@@ -4,9 +4,13 @@ qsc_restore_switches_from_list() {
 	local i route start_val
 	[ -f "$LIST_SWITCH" ] || return 1
 	for i in $(cat "$LIST_SWITCH"); do
-		route="$(echo "$i" | sed -n 's/,start=.*//g;$p')"
+		qsc_parse_normalized_switch_entry "$i" || continue
+		route="$QSC_SW_ROUTE"
 		if [ -f "$route" ]; then
-			start_val="$(echo "$i" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
+			start_val="$QSC_SW_START"
+			case "$start_val" in
+				*_*) start_val="$(printf '%s' "$start_val" | tr '_' ' ')" ;;
+			esac
 			echo "$start_val" > "$route" 2>/dev/null
 		fi
 	done

@@ -125,10 +125,7 @@ qsc_power_stop() {
 	stop_nodes=""
 	local _batch
 	qsc_load_device_profile 2>/dev/null || true
-	_batch="${QSCV_switch_batch_blind:-}"
-	[ -n "$_batch" ] ||
-		_batch="$(echo "${config_conf:-}" | egrep '^switch_batch_blind=' | sed -n 's/switch_batch_blind=//g;$p')"
-	_batch="$(qsc_clamp_int "${_batch:-1}" 0 1 1)"
+	_batch="$(qsc_clamp_int "${QSCV_switch_batch_blind:-1}" 0 1 1)"
 	qsc_dbg "power_stop 开始 batch=$_batch mca=${QSC_MCA:-?} mca_path=${QSC_MCA_PATH:-?}"
 	# MCA 最先（仅 MCA=1）；对齐 0814 写成功即返回
 	if qsc_mca_write stop; then
@@ -193,8 +190,16 @@ qsc_power_start() {
 	fi
 	if [ -f "$DATADIR/active_switch" ]; then
 		_as="$(cat "$DATADIR/active_switch" 2>/dev/null | tr -d ' \r\n')"
-		_ar="$(echo "$_as" | sed -n 's/,start=.*//g;$p')"
-		_av="$(echo "$_as" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
+		if qsc_parse_normalized_switch_entry "$_as"; then
+			_ar="$QSC_SW_ROUTE"
+			_av="$QSC_SW_START"
+			case "$_av" in
+				*_*) _av="$(printf '%s' "$_av" | tr '_' ' ')" ;;
+			esac
+		else
+			_ar=
+			_av=
+		fi
 		if [ -n "$_ar" ] && [ -f "$_ar" ] && [ -n "$_av" ]; then
 			# MCA 节点不用 chmod
 			case "$_ar" in

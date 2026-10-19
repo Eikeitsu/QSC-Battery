@@ -42,9 +42,13 @@ export async function loadBatterySnapshot(): Promise<{
   value: BatterySnapshot;
   result: ExecResult;
 }> {
+  // 轻量 snapshot 模式，勿 source 整份 common.sh
   const result = await exec(
-    `MODDIR='${PATHS.MODDIR}'; . '${PATHS.MODDIR}/bin/common.sh' && qsc_battery_snapshot_print`,
+    `MODDIR='${PATHS.MODDIR}' sh '${PATHS.MODDIR}/bin/qsc_status.sh' snapshot`,
+    8000,
+    "low",
   );
   if (result.errno !== 0) return { value: EMPTY_SNAPSHOT, result };
-  return { value: parseBatterySnapshot(result.stdout), result };
+  const body = result.stdout.replace(/^__QSC_SNAPSHOT__\r?\n?/, "");
+  return { value: parseBatterySnapshot(body), result };
 }

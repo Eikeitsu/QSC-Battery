@@ -22,6 +22,28 @@ qsc_mca_raw_echo() {
 	return 0
 }
 
+# 解析已规范化的 entry（path,start=X,stop=Y）→ QSC_SW_ROUTE / QSC_SW_START / QSC_SW_STOP
+# 避免各处重复 echo|sed；stop 值里遗留的 _ 转空格（与历史 normalize 一致）
+qsc_parse_normalized_switch_entry() {
+	QSC_SW_ROUTE=
+	QSC_SW_START=
+	QSC_SW_STOP=
+	local e="$1" rest
+	case "$e" in
+		*,start=*,stop=*) ;;
+		*) return 1 ;;
+	esac
+	QSC_SW_ROUTE="${e%%,start=*}"
+	rest="${e#*,start=}"
+	QSC_SW_START="${rest%%,stop=*}"
+	QSC_SW_STOP="${rest#*,stop=}"
+	case "$QSC_SW_STOP" in
+		*_*) QSC_SW_STOP="$(printf '%s' "$QSC_SW_STOP" | tr '_' ' ')" ;;
+	esac
+	[ -n "$QSC_SW_ROUTE" ] || return 1
+	return 0
+}
+
 # 将一行配置规范为 path,start=X,stop=Y（兼容 [] 与 :: 空格写法）
 qsc_normalize_power_switch_entry() {
 	local raw="$1"
@@ -112,7 +134,8 @@ qsc_write_switch_list() {
 	local allow_policy="${4:-}"
 	local i route val start_val _wrote _is_mca
 	for i in $list; do
-		route="$(echo "$i" | sed -n 's/,start=.*//g;$p')"
+		qsc_parse_normalized_switch_entry "$i" || continue
+		route="$QSC_SW_ROUTE"
 		_is_mca=0
 		if qsc_is_mca_switch_node "$route"; then
 			# 非 MCA 机型跳过列表里的 handle_state（避免误写/白耗校验）
@@ -126,7 +149,7 @@ qsc_write_switch_list() {
 			continue
 		fi
 		if [ "$mode" = "stop" ]; then
-			val="$(echo "$i" | sed -n 's/.*,stop=//g;s/_/ /g;$p')"
+			val="$QSC_SW_STOP"
 			_wrote=0
 			if [ "$_is_mca" = "1" ]; then
 				qsc_mca_raw_echo "$route" "$val" && _wrote=1
@@ -143,11 +166,13 @@ qsc_write_switch_list() {
 						continue
 					fi
 				elif [ "$_is_mca" != "1" ] && [ "$first_only" = "verify" ]; then
-					_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
-					_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
+					_vd="$(qsc_clamp_int "${QSCV_switch_verify_sec:-1}" 0 5 1)"
 					[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
 					if ! qsc_charge_looks_stopped; then
-						start_val="$(echo "$i" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
+						start_val="$QSC_SW_START"
+						case "$start_val" in
+							*_*) start_val="$(printf '%s' "$start_val" | tr '_' ' ')" ;;
+						esac
 						qsc_write_node "$route" "$start_val" 2>/dev/null || true
 						qsc_log_once "sw_ineff_${route##*/}" warn "节点写入成功但未停充，已跳过 $route"
 						qsc_dbg "列表节点 verify 失败已回滚 $route"
@@ -168,7 +193,10 @@ qsc_write_switch_list() {
 				fi
 			fi
 		else
-			val="$(echo "$i" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
+			val="$QSC_SW_START"
+			case "$val" in
+				*_*) val="$(printf '%s' "$val" | tr '_' ' ')" ;;
+			esac
 			_wrote=0
 			if [ "$_is_mca" = "1" ]; then
 				qsc_mca_raw_echo "$route" "$val" && _wrote=1
@@ -244,8 +272,9 @@ qsc_active_stop_node_holds() {
 	[ -f "$DATADIR/active_switch" ] || return 1
 	entry="$(cat "$DATADIR/active_switch" 2>/dev/null | tr -d ' \r\n')"
 	[ -n "$entry" ] || return 1
-	route="$(echo "$entry" | sed -n 's/,start=.*//g;$p')"
-	stop_val="$(echo "$entry" | sed -n 's/.*,stop=//g;s/_/ /g;$p')"
+	qsc_parse_normalized_switch_entry "$entry" || return 1
+	route="$QSC_SW_ROUTE"
+	stop_val="$QSC_SW_STOP"
 	[ -n "$route" ] && [ -n "$stop_val" ] || return 1
 	[ -e "$route" ] || return 1
 	cur="$(cat "$route" 2>/dev/null | tr -d ' \r\n')"
@@ -256,19 +285,13 @@ qsc_active_stop_node_holds() {
 # 事后电流硬复核开关（默认关，对齐 0814 写成功即认）。
 # switch_hard_verify=1 时：MCA/列表 MCA 名节点写后看电流，失败则拉黑并改试其它节点。
 qsc_switch_hard_verify_on() {
-	local v="${QSCV_switch_hard_verify:-}"
-	if [ -z "$v" ] && [ -n "${config_conf:-}" ]; then
-		v="$(echo "$config_conf" | egrep '^switch_hard_verify=' | sed -n 's/switch_hard_verify=//g;$p')"
-	fi
-	[ "$(qsc_clamp_int "${v:-0}" 0 1 0)" = "1" ]
+	[ "$(qsc_clamp_int "${QSCV_switch_hard_verify:-0}" 0 1 0)" = "1" ]
 }
 
 # MCA 停充复核：等待后看电流；仍大则失败（仅 switch_hard_verify=1 时由调用方采纳）
 qsc_mca_stop_verify() {
 	local _vd _cur _st
-	_vd="$(echo "${config_conf:-}" | egrep '^switch_verify_sec=' | sed -n 's/switch_verify_sec=//g;$p')"
-	[ -n "$_vd" ] || _vd="${QSCV_switch_verify_sec:-1}"
-	_vd="$(qsc_clamp_int "${_vd:-1}" 0 5 1)"
+	_vd="$(qsc_clamp_int "${QSCV_switch_verify_sec:-1}" 0 5 1)"
 	[ "$_vd" -gt 0 ] 2>/dev/null && sleep "$_vd"
 	_cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n')"
 	_st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
@@ -306,7 +329,8 @@ qsc_reaffirm_active_stop() {
 	[ -f "$DATADIR/active_switch" ] || return 1
 	entry="$(cat "$DATADIR/active_switch" 2>/dev/null | tr -d ' \r\n')"
 	[ -n "$entry" ] || return 1
-	route="$(echo "$entry" | sed -n 's/,start=.*//g;$p')"
+	qsc_parse_normalized_switch_entry "$entry" || return 1
+	route="$QSC_SW_ROUTE"
 	# MCA handle_state 等可能不是普通文件；写路径曾用 -e/qsc_mca_node_ok，重申勿更严
 	if [ ! -f "$route" ]; then
 		if type qsc_mca_node_ok >/dev/null 2>&1 && qsc_mca_node_ok "$route"; then
@@ -317,7 +341,7 @@ qsc_reaffirm_active_stop() {
 			return 1
 		fi
 	fi
-	val="$(echo "$entry" | sed -n 's/.*,stop=//g;s/_/ /g;$p')"
+	val="$QSC_SW_STOP"
 	[ -n "$val" ] || return 1
 	case "$route" in
 		*handle_state*|*stop_handle_charge*)
@@ -335,12 +359,10 @@ qsc_reaffirm_active_stop() {
 
 # 停充且仍插电时可选持有内核 wakelock，避免深睡后节点被改回 → 回充亮屏死循环（魅族等）
 QSC_WAKELOCK_NAME="qsc_stop_chg"
-qsc_stop_wakelock_wanted() {
-	local mode brand manufacturer f
-	mode=""
-	if [ -n "${config_conf:-}" ]; then
-		mode="$(echo "$config_conf" | egrep '^stop_hold_wakelock=' | sed -n 's/stop_hold_wakelock=//g;$p')"
-	fi
+
+# 解析 stop_hold_wakelock：优先 QSCV_*（qsc_conf_scan），缺省 auto
+qsc_stop_wakelock_mode() {
+	local mode="${QSCV_stop_hold_wakelock:-}" f
 	if [ -z "$mode" ]; then
 		for f in "${POWER_CONF:-}" "$CONF"; do
 			[ -n "$f" ] && [ -f "$f" ] || continue
@@ -348,7 +370,12 @@ qsc_stop_wakelock_wanted() {
 			[ -n "$mode" ] && break
 		done
 	fi
-	[ -n "$mode" ] || mode="auto"
+	echo "${mode:-auto}"
+}
+
+qsc_stop_wakelock_wanted() {
+	local mode brand manufacturer
+	mode="$(qsc_stop_wakelock_mode)"
 	case "$mode" in
 		1|on|true) return 0 ;;
 		0|off|false) return 1 ;;
@@ -372,24 +399,12 @@ qsc_stop_wakelock_wanted() {
 }
 
 qsc_stop_wakelock_acquire() {
-	local mode _f
+	local mode
 	[ -f /sys/power/wake_lock ] || return 1
 	qsc_stop_wakelock_wanted || return 1
 	# auto：仅息屏/夜间持锁（深睡回充风险在息屏）；亮屏释放，避免日用一直挡 Doze。
 	# 强制开(1)仍持续持锁。探测失败当作亮屏（少持锁）；宁可不挡 Doze，靠 maintain 重申。
-	mode=""
-	if [ -n "${config_conf:-}" ]; then
-		mode="$(echo "$config_conf" | egrep '^stop_hold_wakelock=' | sed -n 's/stop_hold_wakelock=//g;$p')"
-	fi
-	[ -n "$mode" ] || mode="${QSCV_stop_hold_wakelock:-}"
-	if [ -z "$mode" ]; then
-		for _f in "${POWER_CONF:-}" "$CONF"; do
-			[ -n "$_f" ] && [ -f "$_f" ] || continue
-			mode="$(sed -n 's/^stop_hold_wakelock=//p' "$_f" 2>/dev/null | head -n1 | tr -d ' \r\n')"
-			[ -n "$mode" ] && break
-		done
-	fi
-	[ -n "$mode" ] || mode="auto"
+	mode="$(qsc_stop_wakelock_mode)"
 	case "$mode" in
 		1|on|true) ;;
 		auto|*)
@@ -440,17 +455,7 @@ qsc_maintain_stop_while_plugged() {
 		qsc_stop_wakelock_release
 		return 1
 	}
-	# 小米等停充后 dumpsys 可能短暂无 powered:true，改用 usb/online / 完整插电判定
-	if [ -z "$battery_powered" ]; then
-		for online in "$PSDIR/usb/online" "$PSDIR/qc_usb/online" \
-			"$PSDIR/wireless/online" "$PSDIR/charger/online"; do
-			if [ -f "$online" ] && [ "$(cat "$online" 2>/dev/null | tr -d ' \r\n')" = "1" ]; then
-				battery_powered="powered: true"
-				qsc_dbg "maintain：online 兜底仍插电 $online"
-				break
-			fi
-		done
-	fi
+	# 停充后 dumpsys 可能短暂无 powered:true；统一走 qsc_ps_plugged（已含 online 扫）
 	if [ -z "$battery_powered" ] && type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged; then
 		battery_powered="powered: true"
 		qsc_dbg "maintain：qsc_ps_plugged 兜底仍插电"
@@ -481,9 +486,11 @@ qsc_maintain_stop_while_plugged() {
 		_as_val=''
 		if [ -f "$DATADIR/active_switch" ]; then
 			_as_entry="$(cat "$DATADIR/active_switch" 2>/dev/null | tr -d ' \r\n')"
-			_as_route="$(echo "$_as_entry" | sed -n 's/,start=.*//g;$p')"
-			[ -n "$_as_route" ] && [ -e "$_as_route" ] &&
-				_as_val="$(cat "$_as_route" 2>/dev/null | tr -d ' \r\n')"
+			if qsc_parse_normalized_switch_entry "$_as_entry"; then
+				_as_route="$QSC_SW_ROUTE"
+				[ -n "$_as_route" ] && [ -e "$_as_route" ] &&
+					_as_val="$(cat "$_as_route" 2>/dev/null | tr -d ' \r\n')"
+			fi
 		fi
 		if qsc_active_stop_node_holds; then
 			_node_hold=1

@@ -92,10 +92,14 @@ qsc_orphan_stop_check() {
 		qsc_ps_vbus_live || return 1
 	fi
 	for i in $switch_list $QSC_USER_SWITCHES; do
-		route="$(echo "$i" | sed -n 's/,start=.*//g;$p')"
+		qsc_parse_normalized_switch_entry "$i" || continue
+		route="$QSC_SW_ROUTE"
 		[ -n "$route" ] && [ -f "$route" ] || continue
-		stop_val="$(echo "$i" | sed -n 's/.*,stop=//g;s/_/ /g;$p')"
-		_sv="$(echo "$i" | sed -n 's/.*,start=//g;s/,stop=.*//g;s/_/ /g;$p')"
+		stop_val="$QSC_SW_STOP"
+		_sv="$QSC_SW_START"
+		case "$_sv" in
+			*_*) _sv="$(printf '%s' "$_sv" | tr '_' ' ')" ;;
+		esac
 		[ -n "$stop_val" ] && [ -n "$_sv" ] || continue
 		# 停充值与恢复值相同的条目无法区分状态，跳过
 		[ "$stop_val" = "$_sv" ] && continue

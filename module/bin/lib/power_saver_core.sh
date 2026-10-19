@@ -228,6 +228,7 @@ qsc_ps_load_conf() {
 		*) QSC_PS_PROFILE=balanced ;;
 	esac
 
+	# 省电轮询钳位；温控上下限与 WebUI LIMITS.tempSwitchMin/Max 对齐
 	QSC_PS_ENABLE="$(qsc_clamp_int "$QSC_PS_ENABLE" 0 1 1)"
 	QSC_PS_IDLE="$(qsc_clamp_int "$QSC_PS_IDLE" 3 300 90)"
 	QSC_PS_IDLE_NATIVE="$(qsc_clamp_int "$QSC_PS_IDLE_NATIVE" 0 900 600)"

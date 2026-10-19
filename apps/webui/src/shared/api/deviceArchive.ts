@@ -36,8 +36,11 @@ async function archiveExec(cmd: string): Promise<{
   errno: number;
   stdout: string;
 }> {
+  // 只拉 archive.sh，勿 source 整份 common.sh
   return exec(
-    `set -- 2>/dev/null; MODDIR='${PATHS.MODDIR}'; . '${PATHS.MODDIR}/bin/common.sh' 2>/dev/null; [ -f '${PATHS.MODDIR}/bin/lib/archive.sh' ] && . '${PATHS.MODDIR}/bin/lib/archive.sh'; QSC_ARCHIVE_DIR='${PATHS.PROFILES_DIR}' ${cmd}`,
+    `MODDIR='${PATHS.MODDIR}'; DATADIR='$MODDIR/data'; DEVICE_PROFILE='$DATADIR/device.profile'; ` +
+      `QSC_ARCHIVE_DIR='${PATHS.PROFILES_DIR}'; ` +
+      `. '$MODDIR/bin/lib/archive.sh' 2>/dev/null; ${cmd}`,
   );
 }
 

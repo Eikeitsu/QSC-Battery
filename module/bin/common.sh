@@ -51,7 +51,7 @@ if [ ! -d "$LIBDIR" ]; then
 fi
 
 . "$LIBDIR/util.sh"
-# keys.sh 仅安装 customize 使用；Action / service 不需要
+# keys.sh 由 customize / action 按需 . 引入，不在此加载
 . "$LIBDIR/battery_info.sh"
 . "$LIBDIR/profile.sh"
 . "$LIBDIR/charge.sh"

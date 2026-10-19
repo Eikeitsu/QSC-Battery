@@ -45,7 +45,12 @@ switch_list="$switch_list $QSC_FALLBACK_SWITCHES \
 /sys/devices/platform/soc/mca_business_charger/handle_state,start=0,stop=1 \
 /sys/devices/platform/soc/mca_charger/handle_state,start=0,stop=1"
 for i in $switch_list ; do
-	power_switch_route="$(echo "$i" | sed -n 's/,start=.*//g;$p')"
+	if type qsc_parse_normalized_switch_entry >/dev/null 2>&1 &&
+		qsc_parse_normalized_switch_entry "$i"; then
+		power_switch_route="$QSC_SW_ROUTE"
+	else
+		power_switch_route="${i%%,start=*}"
+	fi
 	if [ -f "$power_switch_route" ]; then
 		power_switch_data="$(cat "$power_switch_route")"
 		power_list="$power_switch_route,$power_switch_data,$power_list"

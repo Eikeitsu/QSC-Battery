@@ -23,7 +23,9 @@ function unixFileMode(unixPath) {
     base === "update-binary" ||
     base === "updater-script" ||
     // 原生二进制：qscd/qscdc 守护 + qsc CLI（均可带 -arm64/-arm 后缀）
-    /^qsc(d|dc)?(-[a-z0-9]+)?$/.test(base);
+    /^qsc(d|dc)?(-[a-z0-9]+)?$/.test(base) ||
+    // volkey：必须可执行，否则 keys.sh -x 失败会回退 getevent（弹音量条）
+    /^volkey(-[a-z0-9]+)?$/.test(base);
   return exec ? 0o100755 : 0o100644;
 }
 

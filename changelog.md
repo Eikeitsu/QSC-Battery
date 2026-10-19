@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **安装/Action 音量键**：zip 为 `volkey-*` 写入可执行位；`keys.sh` 装机时再 `chmod 0755`，避免无 +x 静默回退 `getevent` 弹出系统音量条
+- **停充开关解析**：统一 `qsc_parse_normalized_switch_entry`，去掉散落的 sed 切字段
+- **WebUI 减卡顿**：`qsc_status.sh` 不再 source 整份 `common.sh`（仅 util + snapshot）；状态轮询走 low 优先级并合并并发刷新；配置一次 cat 三个 conf；档案 API 只加载 `archive.sh`
+- **热路径**：停充 verify/wakelock/batch 只用 `QSCV_*`；wakelock mode 单处解析；maintain 插电只走 `qsc_ps_plugged`
+- **Action / 测开关**：刷新复用 snapshot；测开关解析复用 helper；音量键 getevent 精简并优先 `chooseport`
+- **配置钳位同源**：WebUI `LIMITS` 增补 `chargeFullWait*`；shell `switch_prelude` / `power_saver_core` 注明与 LIMITS 对齐
+
 ## 2026.10.12
 
 - **KernelSU Next 模块横幅**：增加模块背景横幅，使用ksu next管理器开启模块背景横幅可以给模块增加图片背景；

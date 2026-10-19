@@ -1,22 +1,41 @@
 #!/system/bin/sh
 # APP / WebUI 共用的状态快照输出。分段标记: __QSC_*__
+# 故意不 source 整份 common.sh（会拉 charge/history/省电等），轮询否则易卡 WebUI 桥。
 MODDIR="${MODDIR:-/data/adb/modules/QSC_Battery}"
+case "$MODDIR" in
+	*/bin) MODDIR="${MODDIR%/*}" ;;
+esac
+BINDIR="$MODDIR/bin"
+LIBDIR="$BINDIR/lib"
 DATADIR="$MODDIR/data"
+PSDIR="${QSC_SYSFS_ROOT:-}/sys/class/power_supply"
 
-if [ -f "$MODDIR/bin/common.sh" ]; then
-	# shellcheck disable=SC1090
-	. "$MODDIR/bin/common.sh"
-fi
+# shellcheck disable=SC1090
+[ -f "$LIBDIR/util.sh" ] && . "$LIBDIR/util.sh"
+# shellcheck disable=SC1090
+[ -f "$LIBDIR/battery_snapshot.sh" ] && . "$LIBDIR/battery_snapshot.sh"
 
-printf '__QSC_SNAPSHOT__\n'
-if command -v qsc_battery_snapshot_print >/dev/null 2>&1; then
-	qsc_battery_snapshot_print
-else
-	echo "level=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null)"
-	echo "temp=$(cat /sys/class/power_supply/battery/temp 2>/dev/null)"
-	echo "status=$(cat /sys/class/power_supply/battery/status 2>/dev/null)"
-	echo "plugged=$(cat /sys/class/power_supply/battery/online 2>/dev/null)"
-fi
+_qsc_status_print_snapshot() {
+	printf '__QSC_SNAPSHOT__\n'
+	if type qsc_battery_snapshot_print >/dev/null 2>&1; then
+		qsc_battery_snapshot_print
+	else
+		echo "level=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null)"
+		echo "temp=$(cat /sys/class/power_supply/battery/temp 2>/dev/null)"
+		echo "status=$(cat /sys/class/power_supply/battery/status 2>/dev/null)"
+		echo "plugged=$(cat /sys/class/power_supply/battery/online 2>/dev/null)"
+	fi
+}
+
+# WebUI 仅需快照时：`qsc_status.sh snapshot`（更少 IO）
+case "${1:-}" in
+	snapshot)
+		_qsc_status_print_snapshot
+		exit 0
+		;;
+esac
+
+_qsc_status_print_snapshot
 
 printf '__QSC_MODULE_OFF__\n'
 if [ -f "$DATADIR/module_off" ] || [ -f "$MODDIR/disable" ]; then

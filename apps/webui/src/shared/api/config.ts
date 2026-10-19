@@ -22,21 +22,23 @@ export async function getConf(key: string): Promise<string> {
   return result.stdout.trim();
 }
 
-/** 一次读取三个 conf，合并键（后读的同名键覆盖——通常不会重叠） */
+/** 一次 shell 读三个 conf，合并键（后读的同名键覆盖——通常不会重叠） */
 export async function loadConfigValues(
   keys: readonly string[],
 ): Promise<Record<string, string>> {
   const wanted = new Set(keys);
   const values: Record<string, string> = {};
-  const files = [PATHS.CONF, PATHS.POWER_CONF, PATHS.NOTIFY_CONF];
-  for (const file of files) {
-    const result = await exec(`cat '${file}' 2>/dev/null`);
-    for (const line of result.stdout.split(/\r?\n/)) {
-      const index = line.indexOf("=");
-      if (index <= 0) continue;
-      const key = line.slice(0, index);
-      if (wanted.has(key)) values[key] = line.slice(index + 1).trim();
-    }
+  const result = await exec(
+    `printf '%s\\n' "---" ; cat '${PATHS.CONF}' 2>/dev/null; ` +
+      `printf '%s\\n' "---" ; cat '${PATHS.POWER_CONF}' 2>/dev/null; ` +
+      `printf '%s\\n' "---" ; cat '${PATHS.NOTIFY_CONF}' 2>/dev/null`,
+  );
+  for (const line of result.stdout.split(/\r?\n/)) {
+    if (line === "---") continue;
+    const index = line.indexOf("=");
+    if (index <= 0) continue;
+    const key = line.slice(0, index);
+    if (wanted.has(key)) values[key] = line.slice(index + 1).trim();
   }
   return values;
 }

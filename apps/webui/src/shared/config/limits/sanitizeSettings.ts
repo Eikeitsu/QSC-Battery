@@ -49,8 +49,8 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   if (next.charge_full_mode !== String(input.charge_full_mode || "auto")) mark(true);
   const fullWait = clampInt(
     next.charge_full_wait_sec,
-    60,
-    3600,
+    LIMITS.chargeFullWaitMin,
+    LIMITS.chargeFullWaitMax,
     Number(DEFAULTS.charge_full_wait_sec),
   );
   if (String(fullWait) !== String(input.charge_full_wait_sec)) mark(true);
