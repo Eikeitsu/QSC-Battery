@@ -5,7 +5,7 @@
  * 这组门禁不依赖 Android 或 POSIX shell，专门防止以后重构时误删：
  * 1. 外部完整副本；
  * 2. 复制后的关键文件校验；
- * 3. 失败时保留标准重启更新；
+ * 3. 失败且暂存目录完整时保留标准重启更新；没有完整暂存时不能留下 update；
  * 4. 成功与卸载时的临时资源清理。
  */
 import {
@@ -91,6 +91,32 @@ function requireOrder(text, first, second, label) {
   }
 }
 
+// 成功路径必须等校验器确认后才清 update。失败分支只有在没有完整
+// modules_update 时才能删，否则管理器开关会一直不可点。
+function assertUpdateClearedOnlyWithoutStaging(hotinstall, name) {
+  const marker = 'rm -f "$MODDIR/update"';
+  let from = 0;
+  let clears = 0;
+  while (from < hotinstall.length) {
+    const at = hotinstall.indexOf(marker, from);
+    if (at < 0) break;
+    clears += 1;
+    const window = hotinstall.slice(Math.max(0, at - 280), at);
+    if (!window.includes("[ -f /data/adb/modules_update/QSC_Battery/module.prop ]")) {
+      throw new Error(`${name} hotinstall clears update without a staging check`);
+    }
+    const branch = window.lastIndexOf("else");
+    const stagingIf = window.lastIndexOf("module.prop");
+    if (branch < 0 || branch < stagingIf) {
+      throw new Error(`${name} hotinstall clears update while a staging package exists`);
+    }
+    from = at + marker.length;
+  }
+  if (clears < 1) {
+    throw new Error(`${name} hotinstall never drops a stuck update marker`);
+  }
+}
+
 function simulateHotUpdateContract() {
   const root = mkdtempSync(join(tmpdir(), "qsc-release-contract-"));
   const oldDir = join(root, "modules/QSC-Battery");
@@ -162,9 +188,7 @@ for (const mod of modules) {
     "hot_update_start_verifier",
     `${mod.name} service takeover verifier launch`,
   );
-  if (hotinstall.includes('rm -f "$MODDIR/update"')) {
-    throw new Error(`${mod.name} hotinstall clears update before verification`);
-  }
+  assertUpdateClearedOnlyWithoutStaging(hotinstall, mod.name);
   requireText(hot, mod.payload, `${mod.name} external payload`);
   requireText(hot, "hot_update_transaction_write", `${mod.name} transaction prepare`);
   requireText(hot, mod.transaction, `${mod.name} transaction directory`);
@@ -181,12 +205,11 @@ for (const mod of modules) {
     `${mod.name} payload cleanup`,
   );
   requireText(hot, mod.worker, `${mod.name} worker cleanup`);
-  requireOrder(
-    hot,
-    "hu_txn_state commit",
-    'rm -f "$OLD/update"',
-    `${mod.name} commit before marker cleanup`,
-  );
+  const commitAt = hot.indexOf("hu_txn_state commit");
+  const successClear = hot.indexOf('rm -f "$OLD/update"', commitAt);
+  if (commitAt < 0 || successClear < commitAt) {
+    throw new Error(`${mod.name} commit before marker cleanup`);
+  }
 
   requireText(
     uninstall,
