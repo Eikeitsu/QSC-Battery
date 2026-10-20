@@ -1,9 +1,50 @@
 #!/system/bin/sh
 # hot_update: finalize / verify
+# 管理器只在开机早期把 modules_update 换进 modules。服务若已跑起来而 update
+# 还在，说明这次替换没发生；继续留着标记只会让模块开关一直不可点。
+qsc_hot_clear_stuck_markers() {
+	local reason="$1" level="${2:-warn}"
+	rm -f "$MODDIR/update" "$MODDIR/remove" \
+		"$DATADIR/hot_update_fallback_reboot" \
+		"$DATADIR/hot_update_at" \
+		"$DATADIR/hot_update_fin_tries" 2>/dev/null
+	rm -rf "/data/adb/qsc/hot_update/transactions/QSC_Battery" \
+		"/data/adb/qsc/hot_update/payload/QSC_Battery" 2>/dev/null
+	rm -f /data/adb/qsc/hot_update/worker.sh \
+		/data/adb/qsc/hot_update/verify.sh 2>/dev/null
+	rmdir /data/adb/qsc/hot_update/payload \
+		/data/adb/qsc/hot_update/transactions \
+		/data/adb/qsc/hot_update 2>/dev/null
+	if [ "$level" = "info" ]; then
+		qsc_log info "$reason"
+	else
+		qsc_log warn "已清除无法完成的更新标记：${reason}"
+	fi
+}
+
+qsc_hot_spawn_bounded() {
+	local modid="$1" source="$2" note="$3" tries
+	tries="$(cat "$DATADIR/hot_update_fin_tries" 2>/dev/null | tr -d ' \r\n')"
+	case "$tries" in ""|*[!0-9]*) tries=0 ;; esac
+	if [ "$tries" -ge 3 ] 2>/dev/null; then
+		qsc_hot_clear_stuck_markers "已重试 ${tries} 次仍未完成（${note}）"
+		return 0
+	fi
+	printf '%s\n' "$((tries + 1))" >"$DATADIR/hot_update_fin_tries" 2>/dev/null
+	if hot_update_spawn_worker "$modid" hotinstall.sh "$source"; then
+		qsc_log info "重新拉起热更新（${note}，第 $((tries + 1)) 次）"
+		return 0
+	fi
+	qsc_hot_clear_stuck_markers "无法重新拉起热更新（${note}）"
+	return 0
+}
+
 qsc_hot_finalize() {
-	local modid new payload source mine theirs f
+	local modid new payload source mine theirs f mismatch
 	[ -f "$MODDIR/update" ] ||
 		[ -d "/data/adb/qsc/hot_update/payload/QSC_Battery" ] ||
+		[ -f "/data/adb/qsc/hot_update/transactions/QSC_Battery/state" ] ||
+		[ -f "$DATADIR/hot_update_fallback_reboot" ] ||
 		return 1
 	modid="$(sed -n 's/^id=//p' "$MODDIR/module.prop" 2>/dev/null | head -n1 | tr -d ' \r')"
 	[ -n "$modid" ] || return 1
@@ -12,56 +53,61 @@ qsc_hot_finalize() {
 	mine="$(hot_update_versioncode "$MODDIR/module.prop")"
 	case "$mine" in "" | *[!0-9]*) return 1 ;; esac
 	theirs=""
-	source="$payload"
-	[ -f "$new/module.prop" ] && source="$new"
-	[ -f "$source/module.prop" ] && theirs="$(hot_update_versioncode "$source/module.prop")"
+	source=""
+	if [ -f "$new/module.prop" ]; then
+		source="$new"
+	elif [ -f "$payload/module.prop" ]; then
+		source="$payload"
+	fi
+	[ -n "$source" ] && theirs="$(hot_update_versioncode "$source/module.prop")"
 	case "$theirs" in *[!0-9]*) theirs="" ;; esac
 
 	if [ -n "$theirs" ] && [ "$theirs" -gt "$mine" ] 2>/dev/null; then
 		for f in module.prop service.sh bin/common.sh hotinstall.sh; do
 			if [ ! -f "$source/$f" ]; then
-				qsc_log_once hot_fin warn "更新源缺少 $f，保留标准更新流程"
-				return 1
+				qsc_hot_clear_stuck_markers "更新源缺少 $f"
+				return 0
 			fi
 		done
-		if hot_update_spawn_worker "$modid" hotinstall.sh "$source"; then
-			qsc_log info "检测到未完成的免重启更新（更新源 $theirs > 当前 $mine），已重新拉起收尾作业"
-			return 0
-		fi
-		return 1
-	fi
-
-	# worker 可能恰好在复制完成后被杀掉：当前版本已更新，但清理还没执行。
-	# 只有关键文件与完整更新源逐一一致时，才允许完成清理。
-	if [ -n "$theirs" ] && [ "$theirs" = "$mine" ]; then
-		for f in module.prop service.sh bin/common.sh hotinstall.sh; do
-			if [ ! -f "$source/$f" ] || hot_update_path_changed "$MODDIR" "$source" "$f"; then
-				qsc_log_once hot_fin_verify warn "当前模块与同版本更新源不一致，保留标准更新流程"
-				return 1
-			fi
-		done
-		if [ "$source" = "$new" ] && [ -e "$new" ]; then
-			rm -rf "$new" 2>/dev/null || return 1
-			[ ! -e "$new" ] || return 1
-		fi
-		if [ -f "$MODDIR/update" ]; then
-			rm -f "$MODDIR/update" 2>/dev/null || return 1
-			[ ! -e "$MODDIR/update" ] || return 1
-		fi
-		if [ "$source" = "$payload" ]; then
-			rm -rf "$payload" 2>/dev/null
-			rmdir /data/adb/qsc/hot_update/payload 2>/dev/null
-		fi
-		rm -f /data/adb/qsc/hot_update/worker.sh 2>/dev/null
-		rmdir /data/adb/qsc/hot_update/transactions 2>/dev/null
-		rmdir /data/adb/qsc/hot_update 2>/dev/null
-		qsc_log info "已确认热更新完成并清理残留标记（版本 $mine）"
+		qsc_hot_spawn_bounded "$modid" "$source" "更新源 $theirs > 当前 $mine"
 		return 0
 	fi
 
-	qsc_log_once hot_fin_pending debug \
-		"未确认热更新完成：更新源版本=${theirs:-无} 当前=$mine，保留标准更新标记"
-	return 1
+	# 热复制已经把新文件盖进正在运行的目录时，版本相同。
+	# 管理器若没在开机时替换目录，不能再把 update 留着。
+	if [ -n "$theirs" ] && [ "$theirs" = "$mine" ]; then
+		mismatch=0
+		# module.prop 的 description 会被服务改掉，不能拿整文件摘要比较
+		for f in service.sh bin/common.sh hotinstall.sh; do
+			if [ ! -f "$MODDIR/$f" ] || [ ! -f "$source/$f" ] ||
+				hot_update_path_changed "$MODDIR" "$source" "$f"; then
+				mismatch=1
+				break
+			fi
+		done
+		if [ "$mismatch" = 1 ]; then
+			qsc_hot_spawn_bounded "$modid" "$source" "同版本但关键文件不一致"
+			return 0
+		fi
+		if [ "$source" = "$new" ] && [ -e "$new" ]; then
+			rm -rf "$new" 2>/dev/null || {
+				qsc_hot_clear_stuck_markers "无法删除 modules_update"
+				return 0
+			}
+			if [ -e "$new" ]; then
+				qsc_hot_clear_stuck_markers "modules_update 删除后仍在"
+				return 0
+			fi
+		fi
+		qsc_hot_clear_stuck_markers "已确认更新完成并清理残留标记（版本 $mine）" info
+		return 0
+	fi
+
+	if [ -d "$new" ] && [ ! -f "$new/module.prop" ]; then
+		rm -rf "$new" 2>/dev/null || true
+	fi
+	qsc_hot_clear_stuck_markers "更新源版本=${theirs:-无} 当前=$mine，开机未能替换模块"
+	return 0
 }
 
 # 返回: 0=已请求热更；1=需重启 / 首次安装

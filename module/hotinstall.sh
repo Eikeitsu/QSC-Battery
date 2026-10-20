@@ -46,7 +46,12 @@ if [ -f "$MODDIR/bin/lib/hot_update.sh" ]; then
 		! hot_update_migrate_legacy_paths; then
 		sed -i 's/^state=.*/state=fallback/' \
 			/data/adb/qsc/hot_update/transactions/QSC_Battery/state 2>/dev/null || true
-		touch "$MODDIR/data/hot_update_fallback_reboot" "$MODDIR/update" 2>/dev/null
+		touch "$MODDIR/data/hot_update_fallback_reboot" 2>/dev/null
+		if [ -f /data/adb/modules_update/QSC_Battery/module.prop ]; then
+			touch "$MODDIR/update" 2>/dev/null
+		else
+			rm -f "$MODDIR/update" 2>/dev/null
+		fi
 		qsc_write_module_description "⚠️热更新未完成" "请重启设备完成更新" \
 			"外部恢复目录迁移失败，已保留旧副本"
 		exit 0
@@ -95,9 +100,16 @@ if type hot_update_start_verifier >/dev/null 2>&1; then
 	if ! hot_update_start_verifier "$MODDIR" QSC_Battery; then
 		sed -i 's/^state=.*/state=fallback/' \
 			/data/adb/qsc/hot_update/transactions/QSC_Battery/state 2>/dev/null || true
-		touch "$MODDIR/data/hot_update_fallback_reboot" "$MODDIR/update" 2>/dev/null
-		qsc_write_module_description "⚠️热更新未完成" "请重启设备完成更新" \
-			"接管校验器启动失败，已保留标准更新流程"
+		touch "$MODDIR/data/hot_update_fallback_reboot" 2>/dev/null
+		if [ -f /data/adb/modules_update/QSC_Battery/module.prop ]; then
+			touch "$MODDIR/update" 2>/dev/null
+			qsc_write_module_description "⚠️热更新未完成" "请重启设备完成更新" \
+				"接管校验器启动失败，已保留标准更新流程"
+		else
+			rm -f "$MODDIR/update" 2>/dev/null
+			qsc_write_module_description "⚠️热更新未完成" "请重新安装模块" \
+				"接管校验器启动失败，且没有可重启安装的更新包"
+		fi
 	fi
 fi
 

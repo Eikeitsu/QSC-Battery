@@ -26,6 +26,9 @@ qsc_description_enabled() {
 }
 
 qsc_description_restore_static() {
+	# 热更新失败后的「请重启」文案要留住。息屏、离开管理器都会走这里，
+	# 不拦住的话开机不久就会被默认简介盖掉，标记却还在。
+	[ -f "$DATADIR/hot_update_fallback_reboot" ] && return 0
 	# 只改 description=，不动 version 等其它字段
 	type qsc_write_module_description >/dev/null 2>&1 || return 0
 	qsc_write_module_description "充电控制" "" "${DESC_STATIC:-$DESC_INTRO}"

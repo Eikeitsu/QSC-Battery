@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **热更新失败后开关一直灰、重启也不走标准更新**：接管失败时只有完整的 `modules_update` 才留下 `update`；服务启动时若发现失败事务，会在写简介前对上版本并清掉 `update` / 事务 /「请重启」标记。没有更新源时不再把开关锁死。电流探测和机型档案改到后台，避免主循环迟迟不开始导致接管校验超时。失败文案带具体原因，且在标记还在时不会被默认简介盖掉
 - **安装/Action 音量键**：zip 为 `volkey-*` 写入可执行位；`keys.sh` 装机时再 `chmod 0755`，避免无 +x 静默回退 `getevent` 弹出系统音量条
 - **停充开关解析**：统一 `qsc_parse_normalized_switch_entry`，去掉散落的 sed 切字段
 - **WebUI 减卡顿**：`qsc_status.sh` 不再 source 整份 `common.sh`（仅 util + snapshot）；状态轮询走 low 优先级并合并并发刷新；配置一次 cat 三个 conf；档案 API 只加载 `archive.sh`

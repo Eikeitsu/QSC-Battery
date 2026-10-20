@@ -7,7 +7,10 @@ if [ -f "$LIBDIR/hot_update.sh" ]; then
 	. "$LIBDIR/hot_update.sh" 2>/dev/null || true
 	if type hot_update_migrate_legacy_paths >/dev/null 2>&1 &&
 		! hot_update_migrate_legacy_paths; then
-		touch "$MODDIR/data/hot_update_fallback_reboot" "$MODDIR/update" 2>/dev/null
+		touch "$MODDIR/data/hot_update_fallback_reboot" 2>/dev/null
+		if [ -f /data/adb/modules_update/QSC_Battery/module.prop ]; then
+			touch "$MODDIR/update" 2>/dev/null
+		fi
 		qsc_write_module_description "⚠️热更新未完成" "请重启设备完成更新" \
 			"外部恢复目录迁移失败，已保留旧副本"
 	fi
@@ -17,6 +20,10 @@ mkdir -p "$DATADIR"
 QSC_SERVICE_BOOT_AT="$(date +%s 2>/dev/null)"
 case "$QSC_SERVICE_BOOT_AT" in ""|*[!0-9]*) QSC_SERVICE_BOOT_AT=0 ;; esac
 printf '%s\n' "$$" >"$DATADIR/service_pid" 2>/dev/null
+# 立刻清掉上一进程的 loop_count。热更新校验在主循环开始前就会读它，
+# 残留的旧计数会让校验误判已经接管。
+printf '0\n' >"$DATADIR/service_loop_count" 2>/dev/null
+printf '%s\n' "$QSC_SERVICE_BOOT_AT" >"$DATADIR/service_heartbeat" 2>/dev/null
 printf 'pid=%s\nstarted_at=%s\nstate=starting\n' "$$" "$QSC_SERVICE_BOOT_AT" \
 	>"$DATADIR/service_start.state.tmp" 2>/dev/null &&
 	mv -f "$DATADIR/service_start.state.tmp" "$DATADIR/service_start.state" 2>/dev/null
@@ -172,14 +179,23 @@ qsc_start_switch_scan() {
 }
 
 qsc_start_switch_scan
-# 插电后电流节点探测（未在充则跳过，主循环会重试）
+# 电流探测和机型档案都可能扫很久。热更新要在两分钟内看到主循环，
+# 不能让它们堵住 service 进入循环；未插电时主循环本来就会重试。
 if [ -f "$BINDIR/list_current.sh" ]; then
 	chmod 0755 "$BINDIR/list_current.sh" 2>/dev/null
-	"$BINDIR/list_current.sh" > /dev/null 2>&1 || true
+	if command -v setsid >/dev/null 2>&1; then
+		setsid sh "$BINDIR/list_current.sh" </dev/null >/dev/null 2>&1 &
+	else
+		sh "$BINDIR/list_current.sh" </dev/null >/dev/null 2>&1 &
+	fi
 fi
 # 按本机节点生成/刷新 device.profile（MCA 等能力动态启用）
 if [ -f "$BINDIR/detect_device.sh" ]; then
-	"$BINDIR/detect_device.sh" > /dev/null 2>&1
+	if command -v setsid >/dev/null 2>&1; then
+		setsid sh "$BINDIR/detect_device.sh" </dev/null >/dev/null 2>&1 &
+	else
+		sh "$BINDIR/detect_device.sh" </dev/null >/dev/null 2>&1 &
+	fi
 else
 	qsc_detect_and_write_profile > /dev/null 2>&1 || true
 	qsc_log warn "缺少 detect_device.sh，使用内置机型探测"
@@ -224,8 +240,11 @@ if [ -f "$QSC_HOT_TXN_STATE" ] && [ ! -f "$DATADIR/hot_update_at" ]; then
 	_hot_state="$(sed -n 's/^state=//p' "$QSC_HOT_TXN_STATE" 2>/dev/null | head -n1 | tr -d ' \r')"
 	case "$_hot_state" in
 		prepare|apply)
-			sed -i 's/^state=.*/state=fallback/' "$QSC_HOT_TXN_STATE" 2>/dev/null || true
-			touch "$DATADIR/hot_update_fallback_reboot" 2>/dev/null
+			# 收尾作业还拿着锁时不要改成失败，避免和正在复制的 worker 打架
+			if [ ! -d /data/adb/qsc/hot_update/lock ]; then
+				sed -i 's/^state=.*/state=fallback/' "$QSC_HOT_TXN_STATE" 2>/dev/null || true
+				touch "$DATADIR/hot_update_fallback_reboot" 2>/dev/null
+			fi
 			;;
 	esac
 fi
@@ -558,6 +577,43 @@ qsc_service_heartbeat() {
 		QSC_SERVICE_DIAG_LAST="$now"
 	fi
 }
+
+# 写简介之前先收尾。失败的热更新会留下 update，管理器因此把模块开关灰掉；
+# 若等简介写完再清标记，用户会先看到「请重启」，随后默认文案又把提示盖掉。
+QSC_HOT_FIN_TS=0
+QSC_HOT_FIN_TRIES=0
+
+qsc_hot_finalize_maybe() {
+	local now state txn
+	txn="/data/adb/qsc/hot_update/transactions/QSC_Battery/state"
+	if [ -f "$txn" ]; then
+		state="$(sed -n 's/^state=//p' "$txn" 2>/dev/null | head -n1 | tr -d ' \r')"
+		case "$state" in
+			prepare|apply)
+				# 正在热切换：交给 worker / verifier，不要抢先删 update
+				[ -f "$DATADIR/hot_update_fallback_reboot" ] || return 0
+				;;
+		esac
+	fi
+	[ -f "$MODDIR/update" ] ||
+		[ -d "/data/adb/qsc/hot_update/payload/QSC_Battery" ] ||
+		[ -f "$txn" ] ||
+		[ -f "$DATADIR/hot_update_fallback_reboot" ] || return 0
+	type qsc_hot_finalize >/dev/null 2>&1 || return 0
+	[ "$QSC_HOT_FIN_TRIES" -ge 5 ] 2>/dev/null && return 0
+	now="$(date +%s 2>/dev/null)" || now=0
+	case "$now" in "" | *[!0-9]*) now=0 ;; esac
+	if [ "$now" -gt 0 ] && [ "$QSC_HOT_FIN_TS" -gt 0 ] \
+		&& [ "$((now - QSC_HOT_FIN_TS))" -lt 60 ] 2>/dev/null; then
+		return 0
+	fi
+	QSC_HOT_FIN_TS="$now"
+	QSC_HOT_FIN_TRIES=$((QSC_HOT_FIN_TRIES + 1))
+	qsc_hot_finalize || true
+}
+
+qsc_hot_finalize_maybe
+
 if [ -f "$DATADIR/hot_update_fallback_reboot" ]; then
 	qsc_write_module_description "⚠️热更新未完成" "请重启设备完成更新" \
 		"服务接管未确认，已保留标准更新流程"
@@ -673,37 +729,6 @@ fi
 echo 3 >"$DATADIR/loop_sleep" 2>/dev/null
 
 QSC_PS_LAST_FULL=0
-
-# 免重启更新的运行期兜底。第三方安装器（InstallX 等）会连带杀掉安装时
-# 脱离出去的收尾作业，留下 modules_update 暂存与 update 标记，用户就看到
-# 「还是要重启」。常驻服务活得比任何安装器都久，由它复查一遍最稳。
-# 热路径只多一次 [ -f update ] 判断，命中才做后面那些事。
-QSC_HOT_FIN_TS=0
-QSC_HOT_FIN_TRIES=0
-
-qsc_hot_finalize_maybe() {
-	local now
-	# 热更新事务由外部 worker 负责 verify/commit；服务不能在首轮运行时
-	# 抢先清掉 update 和 payload，否则失败后就失去标准重启来源。
-	[ -f "/data/adb/qsc/hot_update/transactions/QSC_Battery/state" ] &&
-		return 0
-	[ -f "$MODDIR/update" ] || \
-		[ -d "/data/adb/qsc/hot_update/payload/QSC_Battery" ] || return 0
-	type qsc_hot_finalize >/dev/null 2>&1 || return 0
-	# 失败时别每轮重试：最多 5 次，每次至少隔 60 秒
-	[ "$QSC_HOT_FIN_TRIES" -ge 5 ] 2>/dev/null && return 0
-	now="$(date +%s 2>/dev/null)" || now=0
-	case "$now" in "" | *[!0-9]*) now=0 ;; esac
-	if [ "$now" -gt 0 ] && [ "$QSC_HOT_FIN_TS" -gt 0 ] \
-		&& [ "$((now - QSC_HOT_FIN_TS))" -lt 60 ] 2>/dev/null; then
-		return 0
-	fi
-	QSC_HOT_FIN_TS="$now"
-	QSC_HOT_FIN_TRIES=$((QSC_HOT_FIN_TRIES + 1))
-	qsc_hot_finalize || true
-}
-
-qsc_hot_finalize_maybe
 
 # power_saver.sh 缺失（如手动裁剪安装）时退化为普通 sleep
 if ! type qsc_ps_wait >/dev/null 2>&1; then

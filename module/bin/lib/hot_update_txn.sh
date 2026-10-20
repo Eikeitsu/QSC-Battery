@@ -304,41 +304,58 @@ hu_txn_state() {
 	[ -f "$TXN" ] || return 1
 	sed -i "s/^state=.*/state=$_state/" "$TXN" 2>/dev/null
 }
+hu_stage_ready() {
+	if [ -f "$NEW/module.prop" ] && [ -f "$NEW/service.sh" ] &&
+		[ -f "$NEW/bin/common.sh" ] && [ -f "$NEW/hotinstall.sh" ]; then
+		return 0
+	fi
+	[ -d "$PAYLOAD" ] || return 1
+	rm -rf "$NEW" 2>/dev/null
+	mkdir -p "$NEW" 2>/dev/null || return 1
+	cp -rfp "$PAYLOAD"/. "$NEW"/ 2>/dev/null || return 1
+	[ -f "$NEW/module.prop" ] && [ -f "$NEW/service.sh" ] &&
+		[ -f "$NEW/bin/common.sh" ] && [ -f "$NEW/hotinstall.sh" ]
+}
 hu_fallback() {
+	_why="${1:-服务接管校验失败}"
 	hu_txn_state fallback
-	touch "$OLD/data/hot_update_fallback_reboot" "$OLD/update" 2>/dev/null
-	if [ ! -d "$NEW" ] && [ -d "$PAYLOAD" ]; then
-		mkdir -p "$NEW" 2>/dev/null
-		cp -rfp "$PAYLOAD"/. "$NEW"/ 2>/dev/null || true
+	rm -f "$OLD/data/hot_update_at" 2>/dev/null
+	if hu_stage_ready; then
+		touch "$OLD/data/hot_update_fallback_reboot" "$OLD/update" 2>/dev/null
+		_desc="$_why，已保留标准更新流程"
+	else
+		# 没有完整 modules_update 时留下 update，管理器开关会一直不可点
+		rm -f "$OLD/update" "$OLD/data/hot_update_fallback_reboot" 2>/dev/null
+		rm -rf "$(dirname "$TXN")" 2>/dev/null
+		_desc="$_why，更新包不完整，模块开关已恢复，请重新安装"
 	fi
 	if [ -f "$OLD/bin/common.sh" ]; then
 		MODDIR="$OLD"
 		. "$OLD/bin/common.sh" 2>/dev/null || true
 		type qsc_write_module_description >/dev/null 2>&1 &&
 			qsc_write_module_description "⚠️热更新未完成" "请重启设备完成更新" \
-				"服务接管校验失败，已保留标准更新流程"
+				"$_desc"
 	fi
-	hu_log "fallback: verifier 未确认 service 接管，保留标准重启更新"
+	hu_log "fallback: $_why"
 	rm -f "$SELF" /data/adb/qsc/hot_update/worker.sh 2>/dev/null
 }
 TARGET_VERSION="$(sed -n 's/^target_version=//p' "$TXN" 2>/dev/null | head -n1 | tr -d ' \r')"
 CURRENT_VERSION="$(sed -n 's/^versionCode=//p' "$OLD/module.prop" 2>/dev/null | head -n1 | tr -d ' \r')"
 case "$TARGET_VERSION:$CURRENT_VERSION" in
 	*[!0-9:]*|*:|:*)
-		hu_fallback
+		hu_fallback "版本号无效"
 		exit 1
 		;;
 esac
 [ "$TARGET_VERSION" = "$CURRENT_VERSION" ] || {
-	hu_fallback
+	hu_fallback "运行版本与目标不一致（当前 $CURRENT_VERSION，目标 $TARGET_VERSION）"
 	exit 1
 }
 _i=0
 _verified=0
 # 接管判定只看常驻 service：PID 存活 + 已进入主循环 + 心跳未过期。
-# 简介 worker 刷新周期 120–300s，且启动时可能仍处 starting；
-# 再要求 last_refresh≤90s 会导致几乎必失败 →「热更新未完成」。
-while [ "$_i" -lt 120 ]; do
+# 设备探测已改为后台，主循环应在数秒内开始；180s 只兜住异常慢的启动。
+while [ "$_i" -lt 180 ]; do
 	_pid="$(cat "$OLD/data/service_pid" 2>/dev/null | tr -d ' \r\n')"
 	_hb="$(cat "$OLD/data/service_heartbeat" 2>/dev/null | tr -d ' \r\n')"
 	_loops="$(cat "$OLD/data/service_loop_count" 2>/dev/null | tr -d ' \r\n')"
@@ -365,21 +382,22 @@ if [ "$_verified" -ne 1 ]; then
 	_loops="$(cat "$OLD/data/service_loop_count" 2>/dev/null | tr -d ' \r\n')"
 	_now="$(date +%s 2>/dev/null)"
 	hu_log "verify_fail: pid=${_pid:-?} alive=$(kill -0 "${_pid:-0}" 2>/dev/null && echo 1 || echo 0) loops=${_loops:-?} hb=${_hb:-?} now=${_now:-?}"
-	hu_fallback
+	hu_fallback "服务接管校验失败"
 	exit 1
 fi
 hu_txn_state commit || {
-	hu_fallback
+	hu_fallback "事务提交失败"
 	exit 1
 }
 rm -rf "$NEW" 2>/dev/null
 if [ -e "$NEW" ]; then
-	hu_fallback
+	hu_fallback "无法移除暂存目录"
 	exit 1
 fi
-rm -f "$OLD/update" "$OLD/remove" 2>/dev/null
+rm -f "$OLD/update" "$OLD/remove" \
+	"$OLD/data/hot_update_fallback_reboot" "$OLD/data/hot_update_at" 2>/dev/null
 [ ! -e "$OLD/update" ] || {
-	hu_fallback
+	hu_fallback "无法清除 update 标记"
 	exit 1
 }
 rm -rf /data/adb/qsc/hot_update/payload/"$MODID" 2>/dev/null
@@ -537,24 +555,41 @@ hu_txn_set() {
 		mv -f "$TXN_STATE.tmp.$$" "$TXN_STATE" 2>/dev/null
 }
 
-hu_fallback() {
-	hu_txn_set fallback
-	touch "$OLD/data/hot_update_fallback_reboot" 2>/dev/null
-	# 管理器可能已经删除暂存目录；用完整副本重建它，确保下次重启仍能标准更新。
-	if [ ! -d "$NEW" ] && [ -d "$PAYLOAD" ]; then
-		mkdir -p "$NEW" 2>/dev/null
-		cp -rfp "$PAYLOAD"/. "$NEW"/ 2>/dev/null || true
+hu_stage_ready() {
+	if [ -f "$NEW/module.prop" ] && [ -f "$NEW/service.sh" ] &&
+		[ -f "$NEW/bin/common.sh" ] && [ -f "$NEW/hotinstall.sh" ]; then
+		return 0
 	fi
-	touch "$OLD/update" 2>/dev/null
+	[ -d "$PAYLOAD" ] || return 1
+	rm -rf "$NEW" 2>/dev/null
+	mkdir -p "$NEW" 2>/dev/null || return 1
+	cp -rfp "$PAYLOAD"/. "$NEW"/ 2>/dev/null || return 1
+	[ -f "$NEW/module.prop" ] && [ -f "$NEW/service.sh" ] &&
+		[ -f "$NEW/bin/common.sh" ] && [ -f "$NEW/hotinstall.sh" ]
+}
+hu_fallback() {
+	_why="${1:-热更新失败}"
+	hu_txn_set fallback
+	rm -f "$OLD/data/hot_update_at" 2>/dev/null
+	# 只有完整暂存目录才允许留下 update。否则管理器开机不会替换模块，
+	# 开关却会因为 update 一直不可点。
+	if hu_stage_ready; then
+		touch "$OLD/data/hot_update_fallback_reboot" "$OLD/update" 2>/dev/null
+		_desc="$_why，已保留标准更新流程"
+	else
+		rm -f "$OLD/update" "$OLD/data/hot_update_fallback_reboot" 2>/dev/null
+		rm -rf "$TXN_DIR" 2>/dev/null
+		_desc="$_why，更新包不完整，模块开关已恢复，请重新安装"
+	fi
 	if [ -f "$OLD/bin/common.sh" ]; then
 		MODDIR="$OLD"
 		. "$OLD/bin/common.sh" 2>/dev/null || true
 		if type qsc_write_module_description >/dev/null 2>&1; then
 			qsc_write_module_description "⚠️热更新未完成" "请重启设备完成更新" \
-				"服务接管校验失败，已保留标准更新流程"
+				"$_desc"
 		fi
 	fi
-	hu_log "fallback: 服务接管校验失败，保留 update 和重启更新源"
+	hu_log "fallback: $_why"
 }
 
 # 暂存目录的轻量指纹：文件数 + 占用大小
@@ -607,21 +642,22 @@ else
 	SRC="$NEW"
 	if ! hu_wait_stable; then
 		hu_log "abort: modules_update 未在 60s 内稳定，保留标准更新标记"
-		hu_fallback
+		hu_fallback "暂存目录未稳定"
 		exit 1
 	fi
 fi
 
-[ -d "$SRC" ] || { hu_log "abort: 无更新源 $SRC，保留标准更新标记"; hu_fallback; exit 1; }
-[ -d "$OLD" ] || { hu_log "abort: 无 $OLD"; hu_fallback; exit 1; }
-[ -f "$OLD/disable" ] && { hu_log "abort: 模块已禁用"; hu_fallback; exit 1; }
-[ -f "$OLD/remove" ] && { hu_log "abort: 模块待卸载"; hu_fallback; exit 1; }
+[ -d "$SRC" ] || { hu_log "abort: 无更新源 $SRC，保留标准更新标记"; hu_fallback "无更新源"; exit 1; }
+[ -d "$OLD" ] || { hu_log "abort: 无 $OLD"; hu_fallback "模块目录不存在"; exit 1; }
+[ -f "$OLD/disable" ] && { hu_log "abort: 模块已禁用"; hu_fallback "模块已禁用"; exit 1; }
+[ -f "$OLD/remove" ] && { hu_log "abort: 模块待卸载"; hu_fallback "模块待卸载"; exit 1; }
 # 关键文件齐全才敢覆盖：暂存被中断时不能拿半个包盖掉正在用的模块
 for f in module.prop service.sh bin/common.sh hotinstall.sh; do
-	[ -f "$SRC/$f" ] || { hu_log "abort: 更新源缺少 $f，保留标准更新标记"; hu_fallback; exit 1; }
+	[ -f "$SRC/$f" ] || { hu_log "abort: 更新源缺少 $f，保留标准更新标记"; hu_fallback "更新源缺少 $f"; exit 1; }
 done
 RUN_VERSION="$(hu_version "$SRC/module.prop")"
-case "$RUN_VERSION" in "" | *[!0-9]*) hu_log "abort: 更新源版本号无效，保留标准更新标记"; hu_fallback; exit 1 ;; esac
+case "$RUN_VERSION" in "" | *[!0-9]*) hu_log "abort: 更新源版本号无效，保留标准更新标记"; hu_fallback "版本号无效"; exit 1 ;; esac
+hu_txn_set apply
 
 # 复制新文件前先停止旧 service 与简介 worker，避免旧进程在半更新文件上
 # 继续执行，造成「简介首轮成功但停充逻辑失效」的混合版本状态。
@@ -686,18 +722,18 @@ _cp_err="$(cp -rfp "$SRC"/. "$OLD"/ 2>&1)"
 _cp_rc=$?
 if [ "$_cp_rc" -ne 0 ]; then
 	hu_log "fail: 覆盖 $OLD 失败 rc=$_cp_rc err=${_cp_err:-无输出}，保留标准更新标记"
-	hu_fallback
+	hu_fallback "覆盖模块失败"
 	exit 1
 fi
 for f in module.prop service.sh bin/common.sh hotinstall.sh; do
 	[ -f "$OLD/$f" ] || {
 		hu_log "fail: 覆盖后校验缺少 $f，保留标准更新标记"
-		hu_fallback
+		hu_fallback "覆盖后缺少 $f"
 		exit 1
 	}
 	hu_verify_file "$SRC/$f" "$OLD/$f" || {
 		hu_log "fail: 覆盖后校验不一致 $f，保留标准更新标记"
-		hu_fallback
+		hu_fallback "覆盖后校验不一致 $f"
 		exit 1
 	}
 done
@@ -717,7 +753,7 @@ if [ -f "$OLD/$SCRIPT" ]; then
 	hu_log "ok: 已启动 $SCRIPT（立即生效，pid $!）"
 else
 	hu_log "fail: 缺少 $SCRIPT，无法启动新服务"
-	hu_fallback
+	hu_fallback "缺少 $SCRIPT"
 	exit 1
 fi
 
