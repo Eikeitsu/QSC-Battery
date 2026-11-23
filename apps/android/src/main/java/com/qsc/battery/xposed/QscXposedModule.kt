@@ -998,6 +998,7 @@ class QscXposedModule : XposedModule() {
             "com.rifsxd.ksunext",
             "me.weishu.kernelsu",
             "com.tiann.kernelsu",
+            "com.sukisu.nova",
             "com.sukisu.ultra",
             "org.bakasu.bakasu",
             "com.resukisu.resukisu",

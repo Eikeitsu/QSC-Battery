@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **SukiSU Nova**：管理器包名 `com.sukisu.nova`（兼容旧 `com.sukisu.ultra`）；简介「在看管理器」内置表、WebUI 打开管理器、伴侣 XP 边沿包名已同步
 - **热更新失败后开关一直灰、重启也不走标准更新**：接管失败时只有完整的 `modules_update` 才留下 `update`；服务启动时若发现失败事务，会在写简介前对上版本并清掉 `update` / 事务 /「请重启」标记。没有更新源时不再把开关锁死。电流探测和机型档案改到后台，避免主循环迟迟不开始导致接管校验超时。失败文案带具体原因，且在标记还在时不会被默认简介盖掉
 - **安装/Action 音量键**：zip 为 `volkey-*` 写入可执行位；`keys.sh` 装机时再 `chmod 0755`，避免无 +x 静默回退 `getevent` 弹出系统音量条
 - **停充开关解析**：统一 `qsc_parse_normalized_switch_entry`，去掉散落的 sed 切字段
