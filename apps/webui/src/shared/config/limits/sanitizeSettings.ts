@@ -181,7 +181,7 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   }
   next.screen_off_saver =
     next.screen_off_saver === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
-  next.night_saver = next.night_saver === BinaryFlag.On ? BinaryFlag.On : BinaryFlag.Off;
+  next.night_saver = next.night_saver === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
   next.deep_idle_enable =
     next.deep_idle_enable === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
   next.screen_probe_dumpsys =
@@ -194,7 +194,12 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   );
   if (String(deepAfter) !== String(input.deep_after_sec)) mark(true);
   next.deep_after_sec = String(deepAfter);
-  const deepIdle = clampInt(next.deep_idle_sec, 60, 900, Number(DEFAULTS.deep_idle_sec));
+  const deepIdle = clampInt(
+    next.deep_idle_sec,
+    60,
+    14400,
+    Number(DEFAULTS.deep_idle_sec),
+  );
   if (String(deepIdle) !== String(input.deep_idle_sec)) mark(true);
   next.deep_idle_sec = String(deepIdle);
   const deepGap = clampInt(
@@ -205,7 +210,7 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   );
   if (String(deepGap) !== String(input.deep_full_gap_sec)) mark(true);
   next.deep_full_gap_sec = String(deepGap);
-  const hb = clampInt(next.heartbeat_sec, 60, 900, Number(DEFAULTS.heartbeat_sec));
+  const hb = clampInt(next.heartbeat_sec, 60, 3600, Number(DEFAULTS.heartbeat_sec));
   if (String(hb) !== String(input.heartbeat_sec)) mark(true);
   next.heartbeat_sec = String(hb);
   const idleI = clampInt(
@@ -216,11 +221,11 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
   );
   if (String(idleI) !== String(input.loop_interval_idle_sec)) mark(true);
   next.loop_interval_idle_sec = String(idleI);
-  // 0 = 不放大；比「未插电间隔」小则模块侧不生效，这里不强改，避免抹掉用户输入
+  // 0 = 不放大；DeepPark v2 允许小时级 native 超时
   const idleNativeI = clampInt(
     next.loop_interval_idle_native_sec,
     0,
-    900,
+    7200,
     Number(DEFAULTS.loop_interval_idle_native_sec),
   );
   if (String(idleNativeI) !== String(input.loop_interval_idle_native_sec)) mark(true);

@@ -59,16 +59,18 @@ internal fun ConfigAdvancedSections(
                     "aggressive" -> {
                         vm.setLocals(
                             "power_profile" to it,
-                            "loop_interval_idle_native_sec" to "900",
-                            "heartbeat_sec" to "600",
+                            "loop_interval_idle_native_sec" to "3600",
+                            "deep_idle_sec" to "7200",
+                            "heartbeat_sec" to "1800",
                         )
                     }
 
                     "balanced" -> {
                         vm.setLocals(
                             "power_profile" to it,
-                            "loop_interval_idle_native_sec" to "600",
-                            "heartbeat_sec" to "180",
+                            "loop_interval_idle_native_sec" to "1800",
+                            "deep_idle_sec" to "3600",
+                            "heartbeat_sec" to "600",
                         )
                     }
 
@@ -110,8 +112,8 @@ internal fun ConfigAdvancedSections(
             Triple("维持间隔", "loop_interval_maintain_sec", "秒"),
             Triple("近窗口", "loop_interval_near_window", "%"),
             Triple("深睡等待", "deep_after_sec", "秒"),
-            Triple("深睡 idle", "deep_idle_sec", "秒"),
-            Triple("心跳", "heartbeat_sec", "秒"),
+            Triple("深睡 idle", "deep_idle_sec", "秒(可达小时)"),
+            Triple("心跳写盘节流", "heartbeat_sec", "秒"),
         ).forEach { (title, key, unit) ->
             ChargeListRow(
                 title = title,

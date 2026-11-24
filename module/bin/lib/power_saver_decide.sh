@@ -23,8 +23,9 @@ qsc_ps_can_skip_round() {
 QSC_PS_DESC_SIG=""
 QSC_PS_DESC_STATE_SIG=""
 QSC_PS_DESC_TS=0
-# 默认 5 分钟；管理器前台时临时压到约 45s；上升沿可设 QSC_PS_DESC_FORCE=1 绕过
-QSC_PS_DESC_MIN_GAP=300
+# 无人看列表：默认 15 分钟才允许因电量抖动写 prop（状态突变仍立即写）
+# 管理器前台时临时压到约 45s；上升沿可设 QSC_PS_DESC_FORCE=1 绕过
+QSC_PS_DESC_MIN_GAP=900
 QSC_PS_DESC_FORCE=0
 
 # 参数: 当前单调秒（service.sh 已经读过 /proc/uptime，不再重复读）
@@ -79,7 +80,7 @@ qsc_ps_refresh_desc() {
 		fi
 	fi
 
-	gap="${QSC_PS_DESC_MIN_GAP:-300}"
+	gap="${QSC_PS_DESC_MIN_GAP:-900}"
 	[ "$viewer" = "1" ] && [ "$gap" -gt 60 ] 2>/dev/null && gap=45
 	if [ "${QSC_PS_DESC_FORCE:-0}" != "1" ] &&
 		[ "$now" -gt 0 ] 2>/dev/null &&

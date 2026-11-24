@@ -7,6 +7,9 @@
 QSC_PS_CONF_LOADED=0
 QSC_PS_WAKE_COUNT=0
 QSC_PS_LAST_WAKE_REASON=""
+QSC_PS_PARK_WAKES=0
+QSC_PS_HB_WRITES=0
+QSC_PS_LAST_PARK_SEC=0
 QSC_PS_WAIT_FAILURES=0
 QSC_PS_WAIT_NEXT_RETRY=0
 QSC_PS_NATIVE_MODE=""
@@ -80,6 +83,12 @@ qsc_ps_log_native_wake() {
 qsc_ps_record_wake() {
 	QSC_PS_WAKE_COUNT=$((QSC_PS_WAKE_COUNT + 1))
 	QSC_PS_LAST_WAKE_REASON="$1"
+	# DeepPark 驻停期间的唤醒单独计数，便于一夜对照
+	case "${QSC_PS_MODE:-}" in
+		deep|screen_off)
+			QSC_PS_PARK_WAKES=$((${QSC_PS_PARK_WAKES:-0} + 1))
+			;;
+	esac
 }
 
 # 无 fork 读取单行文件；成功置 QSC_PS_VAL
@@ -141,7 +150,7 @@ qsc_ps_load_conf() {
 
 	QSC_PS_ENABLE=1
 	QSC_PS_IDLE=90
-	QSC_PS_IDLE_NATIVE=600
+	QSC_PS_IDLE_NATIVE=1800
 	QSC_PS_PLUGGED=15
 	QSC_PS_PLUGGED_NATIVE=90
 	QSC_PS_STOP=101
@@ -153,15 +162,16 @@ qsc_ps_load_conf() {
 	QSC_PS_NATIVE=1
 	QSC_PS_PROFILE=balanced
 	QSC_PS_SCREEN_OFF_SAVER=1
-	QSC_PS_NIGHT_SAVER=0
+	QSC_PS_NIGHT_SAVER=1
 	QSC_PS_DEEP_ENABLE=1
 	QSC_PS_DEEP_AFTER=600
-	QSC_PS_DEEP_IDLE=900
+	QSC_PS_DEEP_IDLE=3600
 	QSC_PS_DEEP_FULL_GAP=7200
-	QSC_PS_HB_SEC=180
+	QSC_PS_HB_SEC=600
 	QSC_PS_SCREEN_DUMPSYS=0
 	QSC_PS_SCREEN_OFF_ENTER=90
 	QSC_PS_IDLE_NATIVE_SET=0
+	QSC_PS_DEEP_IDLE_SET=0
 	QSC_PS_HB_SET=0
 	QSC_PS_FULL_MAX_GAP=1800
 
@@ -184,7 +194,7 @@ qsc_ps_load_conf() {
 				night_saver) QSC_PS_NIGHT_SAVER="$v" ;;
 				deep_idle_enable) QSC_PS_DEEP_ENABLE="$v" ;;
 				deep_after_sec) QSC_PS_DEEP_AFTER="$v" ;;
-				deep_idle_sec) QSC_PS_DEEP_IDLE="$v" ;;
+				deep_idle_sec) QSC_PS_DEEP_IDLE="$v"; QSC_PS_DEEP_IDLE_SET=1 ;;
 				deep_full_gap_sec) QSC_PS_DEEP_FULL_GAP="$v" ;;
 				heartbeat_sec) QSC_PS_HB_SEC="$v"; QSC_PS_HB_SET=1 ;;
 				screen_probe_dumpsys) QSC_PS_SCREEN_DUMPSYS="$v" ;;
@@ -231,7 +241,8 @@ qsc_ps_load_conf() {
 	# 省电轮询钳位；温控上下限与 WebUI LIMITS.tempSwitchMin/Max 对齐
 	QSC_PS_ENABLE="$(qsc_clamp_int "$QSC_PS_ENABLE" 0 1 1)"
 	QSC_PS_IDLE="$(qsc_clamp_int "$QSC_PS_IDLE" 3 300 90)"
-	QSC_PS_IDLE_NATIVE="$(qsc_clamp_int "$QSC_PS_IDLE_NATIVE" 0 900 600)"
+	# DeepPark v2：native idle / deep idle 允许小时级超时（插拔仍即时醒）
+	QSC_PS_IDLE_NATIVE="$(qsc_clamp_int "$QSC_PS_IDLE_NATIVE" 0 7200 1800)"
 	QSC_PS_PLUGGED="$(qsc_clamp_int "$QSC_PS_PLUGGED" 2 120 15)"
 	QSC_PS_PLUGGED_NATIVE="$(qsc_clamp_int "$QSC_PS_PLUGGED_NATIVE" 0 300 90)"
 	QSC_PS_STOP="$(qsc_clamp_int "$QSC_PS_STOP" 1 255 101)"
@@ -243,12 +254,12 @@ qsc_ps_load_conf() {
 	QSC_PS_MAINTAIN="$(qsc_clamp_int "$QSC_PS_MAINTAIN" 3 600 30)"
 	QSC_PS_NATIVE="$(qsc_clamp_int "$QSC_PS_NATIVE" 0 1 1)"
 	QSC_PS_SCREEN_OFF_SAVER="$(qsc_clamp_int "$QSC_PS_SCREEN_OFF_SAVER" 0 1 1)"
-	QSC_PS_NIGHT_SAVER="$(qsc_clamp_int "$QSC_PS_NIGHT_SAVER" 0 1 0)"
+	QSC_PS_NIGHT_SAVER="$(qsc_clamp_int "$QSC_PS_NIGHT_SAVER" 0 1 1)"
 	QSC_PS_DEEP_ENABLE="$(qsc_clamp_int "$QSC_PS_DEEP_ENABLE" 0 1 1)"
 	QSC_PS_DEEP_AFTER="$(qsc_clamp_int "$QSC_PS_DEEP_AFTER" 60 7200 600)"
-	QSC_PS_DEEP_IDLE="$(qsc_clamp_int "$QSC_PS_DEEP_IDLE" 60 900 900)"
+	QSC_PS_DEEP_IDLE="$(qsc_clamp_int "$QSC_PS_DEEP_IDLE" 60 14400 3600)"
 	QSC_PS_DEEP_FULL_GAP="$(qsc_clamp_int "$QSC_PS_DEEP_FULL_GAP" 600 14400 7200)"
-	QSC_PS_HB_SEC="$(qsc_clamp_int "$QSC_PS_HB_SEC" 60 900 180)"
+	QSC_PS_HB_SEC="$(qsc_clamp_int "$QSC_PS_HB_SEC" 60 3600 600)"
 	QSC_PS_SCREEN_DUMPSYS="$(qsc_clamp_int "$QSC_PS_SCREEN_DUMPSYS" 0 1 0)"
 	QSC_PS_SCREEN_OFF_ENTER="$(qsc_clamp_int "${QSC_PS_SCREEN_OFF_ENTER:-90}" 0 600 90)"
 	QSCV_description_enable="$(qsc_clamp_int "${QSCV_description_enable:-1}" 0 1 1)"

@@ -353,22 +353,30 @@ esac
 }
 _i=0
 _verified=0
-# 接管判定只看常驻 service：PID 存活 + 已进入主循环 + 心跳未过期。
-# 设备探测已改为后台，主循环应在数秒内开始；180s 只兜住异常慢的启动。
+# 接管判定：PID 存活 + 已进入主循环。
+# DeepPark v2 心跳只在 lean 醒时节流写盘（深睡可达数小时），故探活以 PID 为主，
+# 心跳窗口放宽到 deep_idle 上限 + 余量（15000s），避免误判未接管。
 while [ "$_i" -lt 180 ]; do
 	_pid="$(cat "$OLD/data/service_pid" 2>/dev/null | tr -d ' \r\n')"
 	_hb="$(cat "$OLD/data/service_heartbeat" 2>/dev/null | tr -d ' \r\n')"
 	_loops="$(cat "$OLD/data/service_loop_count" 2>/dev/null | tr -d ' \r\n')"
-	case "$_pid:$_hb:$_loops" in
+	case "$_pid:$_loops" in
 		""|*[!0-9:]*) ;;
 		*)
 			if kill -0 "$_pid" 2>/dev/null &&
 				[ "$_loops" -gt 0 ] 2>/dev/null; then
-				# 心跳约 180s 写一次（省电）；探活窗口与 description_worker 一致取 400s。
 				_now="$(date +%s 2>/dev/null)"
-				[ "$_now" -ge "$_hb" ] 2>/dev/null &&
-					[ "$((_now - _hb))" -le 400 ] 2>/dev/null &&
-					_verified=1
+				case "$_hb" in
+					""|*[!0-9]*)
+						# 尚无心跳文件但已进主循环：视为已接管
+						_verified=1
+						;;
+					*)
+						[ "$_now" -ge "$_hb" ] 2>/dev/null &&
+							[ "$((_now - _hb))" -le 15000 ] 2>/dev/null &&
+							_verified=1
+						;;
+				esac
 			fi
 			;;
 	esac

@@ -26,11 +26,13 @@ const profile = computed({
   set: (v: string) => {
     store.settings.power_profile = v;
     if (v === "aggressive") {
-      store.settings.loop_interval_idle_native_sec = "900";
-      store.settings.heartbeat_sec = "600";
+      store.settings.loop_interval_idle_native_sec = "3600";
+      store.settings.deep_idle_sec = "7200";
+      store.settings.heartbeat_sec = "1800";
     } else if (v === "balanced") {
-      store.settings.loop_interval_idle_native_sec = "600";
-      store.settings.heartbeat_sec = "180";
+      store.settings.loop_interval_idle_native_sec = "1800";
+      store.settings.deep_idle_sec = "3600";
+      store.settings.heartbeat_sec = "600";
     }
     void persist();
   },
@@ -60,9 +62,7 @@ const customOpen = computed(() => store.settings.power_profile === "custom");
         <van-radio name="custom">自定义</van-radio>
       </van-radio-group>
     </div>
-    <p class="hint">
-      均衡≈现网；强力拉长未插电兜底与心跳、强制静态简介；自定义展开下方秒数。
-    </p>
+    <p class="hint">均衡深睡约 1h；强力约 2h 兜底、强制静态简介；心跳仅为写盘节流。</p>
 
     <SwitchCell
       title="息屏加强"
@@ -115,7 +115,7 @@ const customOpen = computed(() => store.settings.power_profile === "custom");
         v-model="store.settings.deep_idle_sec"
         type="digit"
         label="深睡 idle(秒)"
-        placeholder="60–900"
+        placeholder="60–14400"
         input-align="right"
         @change="persist"
       />
@@ -130,8 +130,8 @@ const customOpen = computed(() => store.settings.power_profile === "custom");
       <van-field
         v-model="store.settings.heartbeat_sec"
         type="digit"
-        label="心跳间隔(秒)"
-        placeholder="60–900"
+        label="心跳写盘节流(秒)"
+        placeholder="60–3600"
         input-align="right"
         @change="persist"
       />

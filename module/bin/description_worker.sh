@@ -11,8 +11,9 @@ WORKER_PID_FILE="$DATADIR/description_worker.pid"
 WORKER_LOCK="$DATADIR/.description_worker.lock"
 REFRESH_VIEWING_PLUGGED=45
 REFRESH_VIEWING=60
-REFRESH_IDLE_CHECK=30
-DUMPSYS_NET_EVERY=30
+# 无人看管理器：拉长空闲探测（仍保留动态简介；有 XP 时本进程本就不会常驻）
+REFRESH_IDLE_CHECK=120
+DUMPSYS_NET_EVERY=60
 
 case "$PARENT_PID" in
 	""|*[!0-9]*) PARENT_PID=0 ;;
@@ -50,14 +51,19 @@ worker_service_ready() {
 	local service_pid service_state heartbeat now
 	service_pid="$(cat "$DATADIR/service_pid" 2>/dev/null | tr -d ' \r\n')"
 	[ "$service_pid" = "$PARENT_PID" ] || return 1
+	# 主服务 PID 仍活着即可；DeepPark v2 心跳可能数小时才写一次
+	kill -0 "$PARENT_PID" 2>/dev/null || return 1
 	service_state="$(sed -n 's/^state=//p' "$DATADIR/service_start.state" 2>/dev/null | head -n1 | tr -d ' \r')"
 	[ "$service_state" = "running" ] || return 1
 	heartbeat="$(cat "$DATADIR/service_heartbeat" 2>/dev/null | tr -d ' \r\n')"
 	now="$(date +%s 2>/dev/null)"
-	[ -n "$heartbeat" ] && [ -n "$now" ] || return 1
-	case "$heartbeat:$now" in *[!0-9:]*) return 1 ;; esac
+	# 无心跳文件时以 PID 为准；有则窗口覆盖深睡上限（14400）+ 余量
+	case "$heartbeat" in
+		""|*[!0-9]*) return 0 ;;
+	esac
+	case "$now" in ""|*[!0-9]*) return 0 ;; esac
 	[ "$now" -ge "$heartbeat" ] 2>/dev/null &&
-		[ "$((now - heartbeat))" -le 400 ] 2>/dev/null
+		[ "$((now - heartbeat))" -le 15000 ] 2>/dev/null
 }
 
 worker_state() {

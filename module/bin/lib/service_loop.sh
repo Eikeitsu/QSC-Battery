@@ -4,17 +4,26 @@
 # XP 路径：主服务消费边沿 + 刷简介；停掉遗留 worker。
 # 无 XP：按需启停 dumpsys 降级 worker。
 
+# DeepPark 驻停：强制静态简介、停 worker、清假「在看」标记
+qsc_service_deeppark_harden() {
+	case "${QSC_PS_MODE:-}" in
+		deep|screen_off) ;;
+		*)
+			[ "${QSC_PS_DESC_FORCE_STATIC:-0}" = "1" ] || return 0
+			;;
+	esac
+	QSC_PS_DESC_FORCE_STATIC=1
+	type qsc_desc_viewing_clear >/dev/null 2>&1 && qsc_desc_viewing_clear
+	type qsc_stop_description_worker >/dev/null 2>&1 &&
+		qsc_stop_description_worker
+	# 驻停禁止 dumpsys 亮屏探测旁路
+	QSC_PS_SCREEN_DUMPSYS=0
+	return 0
+}
+
 # lean 醒来是否需要跑简介管家（有边沿/观看/需启停或停掉遗留 worker）
 qsc_service_desc_work_needed() {
-	if type qsc_manager_viewer_xp_edge_pending >/dev/null 2>&1 &&
-		qsc_manager_viewer_xp_edge_pending; then
-		return 0
-	fi
-	if type qsc_desc_viewing_active >/dev/null 2>&1 &&
-		qsc_desc_viewing_active; then
-		return 0
-	fi
-	# 遗留 worker 仍在跑：有 XP 也必须 sync 去停掉，避免双写/偷吃 enter
+	# 遗留 worker 仍在跑：必须 sync 去停掉（含 DeepPark）
 	_desc_pid="$(cat "$DATADIR/description_worker.pid" 2>/dev/null | tr -d ' \r\n')"
 	case "$_desc_pid" in
 		""|*[!0-9]*) ;;
@@ -24,6 +33,19 @@ qsc_service_desc_work_needed() {
 			fi
 			;;
 	esac
+	# DeepPark / 强制静态：不因 viewer 边沿跑简介（除非上面有遗留 worker）
+	case "${QSC_PS_MODE:-}" in
+		deep|screen_off) return 1 ;;
+	esac
+	[ "${QSC_PS_DESC_FORCE_STATIC:-0}" = "1" ] && return 1
+	if type qsc_manager_viewer_xp_edge_pending >/dev/null 2>&1 &&
+		qsc_manager_viewer_xp_edge_pending; then
+		return 0
+	fi
+	if type qsc_desc_viewing_active >/dev/null 2>&1 &&
+		qsc_desc_viewing_active; then
+		return 0
+	fi
 	# 有 XP：仅 pending/观看/遗留 worker
 	if type qsc_fg_xp_ready >/dev/null 2>&1 && qsc_fg_xp_ready; then
 		return 1
@@ -177,11 +199,17 @@ qsc_service_unplug_housekeep() {
 	if type qsc_description_enabled >/dev/null 2>&1; then
 		qsc_service_desc_ondemand_sync
 	fi
-	# XP 观看中已在 ondemand 刷过；此处仅补无人看时的状态变化简介
+	# 无人看：仅尝试状态突变简介（refresh 内部会跳过纯电量抖动）；观看中已由 ondemand 刷过
 	if type qsc_ps_refresh_desc >/dev/null 2>&1; then
 		if ! type qsc_desc_viewing_active >/dev/null 2>&1 ||
 			! qsc_desc_viewing_active; then
-			qsc_ps_refresh_desc "$_now"
+			# DeepPark / 强制静态：不碰电量快照，避免无意义 sysfs
+			if type qsc_ps_desc_suppressed >/dev/null 2>&1 &&
+				qsc_ps_desc_suppressed; then
+				:
+			else
+				qsc_ps_refresh_desc "$_now"
+			fi
 		fi
 	fi
 	if [ "$do_flush" = "1" ] &&
@@ -212,19 +240,24 @@ qsc_service_loop_once() {
 			# 未插电强制放锁，避免残留 wake_lock 挡系统 Doze
 			type qsc_stop_wakelock_release >/dev/null 2>&1 &&
 				qsc_stop_wakelock_release
-			# 配置变了才重做简介/XP；策略+idle 每轮都要（进深睡靠 idle_secs）
-			if [ "${QSC_PS_CONF_RELOADED:-0}" = "1" ]; then
-				qsc_service_unplug_housekeep 0
-			elif type qsc_service_desc_work_needed >/dev/null 2>&1 &&
-				qsc_service_desc_work_needed; then
-				# 仅 pending/观看/无 XP worker 启停时跑简介管家
-				qsc_service_desc_ondemand_sync
-			fi
+			# 先算 idle/策略，再 harden（深睡粘滞依赖 idle_secs → policy_refresh）
 			if type qsc_ps_idle_secs >/dev/null 2>&1; then
 				qsc_ps_idle_secs
 			else
 				QSC_PS_IDLE_EFF="${QSC_PS_IDLE:-30}"
 			fi
+			type qsc_service_deeppark_harden >/dev/null 2>&1 &&
+				qsc_service_deeppark_harden
+			# 配置变了才完整管家；DeepPark 下仅清理遗留 worker，不刷简介
+			if [ "${QSC_PS_CONF_RELOADED:-0}" = "1" ]; then
+				qsc_service_unplug_housekeep 0
+				type qsc_service_deeppark_harden >/dev/null 2>&1 &&
+					qsc_service_deeppark_harden
+			elif type qsc_service_desc_work_needed >/dev/null 2>&1 &&
+				qsc_service_desc_work_needed; then
+				qsc_service_desc_ondemand_sync
+			fi
+			QSC_PS_LAST_PARK_SEC="${QSC_PS_IDLE_EFF:-30}"
 			QSC_SERVICE_SKIP_ROUNDS=$((${QSC_SERVICE_SKIP_ROUNDS:-0} + 1))
 			qsc_ps_wait "${QSC_PS_IDLE_EFF:-30}"
 			# region agent log
@@ -234,6 +267,10 @@ qsc_service_loop_once() {
 			# 等待返回：有边沿/观看才立刻 sync（XP enter 可能刚打断）
 			QSC_PS_SCREEN_CACHE_AT=0
 			type qsc_ps_now >/dev/null 2>&1 && qsc_ps_now
+			# 仍驻停则继续 harden，避免亮一下又回到 DeepPark 时误刷简介
+			type qsc_ps_idle_secs >/dev/null 2>&1 && qsc_ps_idle_secs
+			type qsc_service_deeppark_harden >/dev/null 2>&1 &&
+				qsc_service_deeppark_harden
 			if type qsc_service_desc_work_needed >/dev/null 2>&1 &&
 				qsc_service_desc_work_needed &&
 				type qsc_service_desc_ondemand_sync >/dev/null 2>&1; then

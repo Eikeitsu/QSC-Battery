@@ -132,8 +132,12 @@ qsc_ps_native_exec() {
 qsc_ps_native_wait() {
 	local secs="$1" floor="$2" rc error_file wake_args=""
 	error_file="$DATADIR/qscd_wait_error.$$"
-	# Rust：简介开着时把 viewer 边沿并进 qscd poll，省掉 shell inotify 竞速
-	if type qsc_native_has >/dev/null 2>&1 && qsc_native_has wake-file &&
+	# Rust：亮屏且非 DeepPark 时才把 viewer 边沿并进 poll；驻停勿挂 wake-file（假醒）
+	_parked=0
+	case "${QSC_PS_MODE:-}" in deep|screen_off) _parked=1 ;; esac
+	[ "${QSC_PS_DESC_FORCE_STATIC:-0}" = "1" ] && _parked=1
+	if [ "$_parked" != "1" ] &&
+		type qsc_native_has >/dev/null 2>&1 && qsc_native_has wake-file &&
 		type qsc_description_enabled >/dev/null 2>&1 &&
 		qsc_description_enabled &&
 		[ "${QSC_PS_PROFILE:-balanced}" != "aggressive" ] &&

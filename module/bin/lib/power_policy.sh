@@ -3,12 +3,12 @@
 
 QSC_PS_PROFILE=balanced
 QSC_PS_SCREEN_OFF_SAVER=1
-QSC_PS_NIGHT_SAVER=0
+QSC_PS_NIGHT_SAVER=1
 QSC_PS_DEEP_ENABLE=1
 QSC_PS_DEEP_AFTER=600
-QSC_PS_DEEP_IDLE=900
+QSC_PS_DEEP_IDLE=3600
 QSC_PS_DEEP_FULL_GAP=7200
-QSC_PS_HB_SEC=180
+QSC_PS_HB_SEC=600
 QSC_PS_SCREEN_DUMPSYS=0
 # 连续息屏满此秒数才切到 screen_off 模式（防亮灭闪动刷日志/抖策略）
 QSC_PS_SCREEN_OFF_ENTER=90
@@ -43,19 +43,20 @@ QSC_PS_PARK_LAST_SUMMARY=
 qsc_ps_apply_profile_defaults() {
 	case "${QSC_PS_PROFILE:-balanced}" in
 		aggressive)
-			[ "${QSC_PS_IDLE_NATIVE_SET:-0}" = "1" ] || QSC_PS_IDLE_NATIVE=900
-			[ "${QSC_PS_HB_SET:-0}" = "1" ] || QSC_PS_HB_SEC=600
-			QSC_PS_FULL_MAX_GAP=3600
+			[ "${QSC_PS_IDLE_NATIVE_SET:-0}" = "1" ] || QSC_PS_IDLE_NATIVE=3600
+			[ "${QSC_PS_HB_SET:-0}" = "1" ] || QSC_PS_HB_SEC=1800
+			[ "${QSC_PS_DEEP_IDLE_SET:-0}" = "1" ] || QSC_PS_DEEP_IDLE=7200
+			QSC_PS_FULL_MAX_GAP=7200
 			QSC_PS_DESC_FORCE_STATIC=1
 			;;
 		custom)
-			QSC_PS_FULL_MAX_GAP=1800
+			QSC_PS_FULL_MAX_GAP=3600
 			QSC_PS_DESC_FORCE_STATIC=0
 			;;
 		balanced|*)
-			[ "${QSC_PS_IDLE_NATIVE_SET:-0}" = "1" ] || QSC_PS_IDLE_NATIVE=600
-			[ "${QSC_PS_HB_SET:-0}" = "1" ] || QSC_PS_HB_SEC=180
-			QSC_PS_FULL_MAX_GAP=1800
+			[ "${QSC_PS_IDLE_NATIVE_SET:-0}" = "1" ] || QSC_PS_IDLE_NATIVE=1800
+			[ "${QSC_PS_HB_SET:-0}" = "1" ] || QSC_PS_HB_SEC=600
+			QSC_PS_FULL_MAX_GAP=3600
 			QSC_PS_DESC_FORCE_STATIC=0
 			;;
 	esac
@@ -441,10 +442,41 @@ qsc_ps_policy_try_deep_sticky() {
 	QSC_PS_DEEP=1
 	QSC_PS_SCREEN_OFF=1
 	QSC_PS_DESC_FORCE_STATIC=1
-	QSC_PS_IDLE_EFF="${QSC_PS_DEEP_IDLE:-900}"
+	QSC_PS_IDLE_EFF="${QSC_PS_DEEP_IDLE:-3600}"
 	QSC_PS_FULL_MAX_GAP="${QSC_PS_DEEP_FULL_GAP:-7200}"
-	QSC_PS_HB_SEC="$(qsc_clamp_int "${QSC_PS_HB_SEC:-180}" 180 900 600)"
+	QSC_PS_HB_SEC="$(qsc_clamp_int "${QSC_PS_HB_SEC:-600}" 180 3600 600)"
 	QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+	QSC_PS_LAST_PARK_SEC="$QSC_PS_IDLE_EFF"
+	return 0
+}
+
+# 亮屏未插电「日用驻停」粘滞：不反复读亮度，沿用 native idle。
+# 动态简介仍开：打开管理器靠 qscd wake-file / XP enter 叫醒，不依赖这里探测。
+qsc_ps_policy_try_day_sticky() {
+	local max="${QSC_PS_DAY_STICKY_MAX:-4}" n
+	case "${QSC_PS_MODE_WAS:-}" in
+		park) ;;
+		*) return 1 ;;
+	esac
+	[ "${QSC_PS_CONF_RELOADED:-0}" = "1" ] && return 1
+	[ "${QSC_PS_DESC_FORCE_STATIC:-0}" = "1" ] && return 1
+	case "$max" in ""|*[!0-9]*) max=4 ;; esac
+	[ "$max" -lt 1 ] 2>/dev/null && max=1
+	n=$((${QSC_PS_DAY_STICKY_N:-0} + 1))
+	QSC_PS_DAY_STICKY_N="$n"
+	if [ $((n % (max + 1))) -eq 0 ] 2>/dev/null; then
+		return 1
+	fi
+	QSC_PS_MODE=park
+	QSC_PS_DEEP=0
+	QSC_PS_SCREEN_OFF=0
+	QSC_PS_DESC_FORCE_STATIC=0
+	QSC_PS_IDLE_EFF="${QSC_PS_IDLE:-90}"
+	qsc_ps_native_ready 2>/dev/null &&
+		[ "${QSC_PS_IDLE_NATIVE:-0}" -gt "$QSC_PS_IDLE_EFF" ] 2>/dev/null &&
+		QSC_PS_IDLE_EFF="$QSC_PS_IDLE_NATIVE"
+	QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+	QSC_PS_LAST_PARK_SEC="$QSC_PS_IDLE_EFF"
 	return 0
 }
 
@@ -484,9 +516,18 @@ qsc_ps_policy_refresh() {
 		[ ! -f "$DATADIR/power_switch" ] &&
 		type qsc_ps_policy_try_deep_sticky >/dev/null 2>&1 &&
 		qsc_ps_policy_try_deep_sticky; then
+		QSC_PS_DAY_STICKY_N=0
 		return 0
 	fi
 	QSC_PS_DEEP_STICKY_N=0
+	# 亮屏日用驻停粘滞（动态简介仍可用：管理器 enter 事件叫醒）
+	if [ "$plugged" != "1" ] &&
+		[ ! -f "$DATADIR/power_switch" ] &&
+		type qsc_ps_policy_try_day_sticky >/dev/null 2>&1 &&
+		qsc_ps_policy_try_day_sticky; then
+		return 0
+	fi
+	QSC_PS_DAY_STICKY_N=0
 
 	# 先刷新场景，再分支（停充维持也要息屏信息）
 	qsc_ps_policy_scene
@@ -512,11 +553,12 @@ qsc_ps_policy_refresh() {
 	QSC_PS_MODE=park
 	if [ "${QSC_PS_DEEP:-0}" = "1" ]; then
 		QSC_PS_MODE=deep
-		QSC_PS_IDLE_EFF="${QSC_PS_DEEP_IDLE:-900}"
+		QSC_PS_IDLE_EFF="${QSC_PS_DEEP_IDLE:-3600}"
 		QSC_PS_FULL_MAX_GAP="${QSC_PS_DEEP_FULL_GAP:-7200}"
-		QSC_PS_HB_SEC="$(qsc_clamp_int "${QSC_PS_HB_SEC:-180}" 180 900 600)"
+		QSC_PS_HB_SEC="$(qsc_clamp_int "${QSC_PS_HB_SEC:-600}" 180 3600 600)"
 		QSC_PS_DESC_FORCE_STATIC=1
 		QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+		QSC_PS_LAST_PARK_SEC="$QSC_PS_IDLE_EFF"
 		QSC_PS_PARK_EXIT_SINCE=0
 		QSC_PS_DEEP_EXIT_HITS=0
 		qsc_ps_policy_edge_log
@@ -532,8 +574,9 @@ qsc_ps_policy_refresh() {
 				QSC_PS_DEEP=1
 				QSC_PS_SCREEN_OFF=1
 				QSC_PS_DESC_FORCE_STATIC=1
-				QSC_PS_IDLE_EFF="${QSC_PS_DEEP_IDLE:-900}"
+				QSC_PS_IDLE_EFF="${QSC_PS_DEEP_IDLE:-3600}"
 				QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+				QSC_PS_LAST_PARK_SEC="$QSC_PS_IDLE_EFF"
 				qsc_ps_policy_edge_log
 				return 0
 			fi
@@ -557,10 +600,12 @@ qsc_ps_policy_refresh() {
 			qsc_ps_native_ready 2>/dev/null &&
 				[ "${QSC_PS_IDLE_NATIVE:-0}" -gt "$QSC_PS_IDLE_EFF" ] 2>/dev/null &&
 				QSC_PS_IDLE_EFF="$QSC_PS_IDLE_NATIVE"
+			# 息屏加强：native idle ×1.5，上限跟 idle_native 钳位对齐（7200）
 			QSC_PS_IDLE_EFF=$((QSC_PS_IDLE_EFF + QSC_PS_IDLE_EFF / 2))
-			[ "$QSC_PS_IDLE_EFF" -gt 900 ] 2>/dev/null && QSC_PS_IDLE_EFF=900
+			[ "$QSC_PS_IDLE_EFF" -gt 7200 ] 2>/dev/null && QSC_PS_IDLE_EFF=7200
 			QSC_PS_DESC_FORCE_STATIC=1
 			QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+			QSC_PS_LAST_PARK_SEC="$QSC_PS_IDLE_EFF"
 			QSC_PS_PARK_EXIT_SINCE=0
 			qsc_ps_policy_edge_log
 			return 0
@@ -574,16 +619,17 @@ qsc_ps_policy_refresh() {
 			if qsc_ps_policy_hold_park_exit; then
 				QSC_PS_MODE="${QSC_PS_MODE_WAS}"
 				if [ "$QSC_PS_MODE" = "deep" ]; then
-					QSC_PS_IDLE_EFF="${QSC_PS_DEEP_IDLE:-900}"
+					QSC_PS_IDLE_EFF="${QSC_PS_DEEP_IDLE:-3600}"
 				else
 					QSC_PS_IDLE_EFF="$QSC_PS_IDLE"
 					qsc_ps_native_ready 2>/dev/null &&
 						[ "${QSC_PS_IDLE_NATIVE:-0}" -gt "$QSC_PS_IDLE_EFF" ] 2>/dev/null &&
 						QSC_PS_IDLE_EFF="$QSC_PS_IDLE_NATIVE"
 					QSC_PS_IDLE_EFF=$((QSC_PS_IDLE_EFF + QSC_PS_IDLE_EFF / 2))
-					[ "$QSC_PS_IDLE_EFF" -gt 900 ] 2>/dev/null && QSC_PS_IDLE_EFF=900
+					[ "$QSC_PS_IDLE_EFF" -gt 7200 ] 2>/dev/null && QSC_PS_IDLE_EFF=7200
 				fi
 				QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+				QSC_PS_LAST_PARK_SEC="$QSC_PS_IDLE_EFF"
 				QSC_PS_SCREEN_CACHE_AT=0
 				if type qsc_ps_screen_is_off >/dev/null 2>&1 && ! qsc_ps_screen_is_off; then
 					QSC_PS_DESC_FORCE_STATIC=0
@@ -626,22 +672,17 @@ qsc_ps_desc_worker_wanted() {
 	type qsc_description_enabled >/dev/null 2>&1 || return 1
 	qsc_description_enabled || return 1
 	[ "${QSC_PS_PROFILE:-balanced}" = "aggressive" ] && return 1
+	# DeepPark v2：强制静态 / 深睡 / 息屏加强绝不启 worker
+	[ "${QSC_PS_DESC_FORCE_STATIC:-0}" = "1" ] && return 1
+	case "${QSC_PS_MODE:-}" in
+		deep|screen_off) return 1 ;;
+	esac
 
 	# XP 健康：简介交给主循环，worker 一律不要
 	if type qsc_fg_xp_ready >/dev/null 2>&1 && qsc_fg_xp_ready; then
 		return 1
 	fi
 
-	case "${QSC_PS_MODE:-}" in
-		deep|screen_off)
-			if type qsc_ps_screen_is_off >/dev/null 2>&1 &&
-				! qsc_ps_screen_is_off; then
-				:
-			else
-				return 1
-			fi
-			;;
-	esac
 	[ "${QSC_PS_PARK_ACTIVE:-0}" = "1" ] &&
 		type qsc_ps_screen_is_off >/dev/null 2>&1 &&
 		qsc_ps_screen_is_off &&

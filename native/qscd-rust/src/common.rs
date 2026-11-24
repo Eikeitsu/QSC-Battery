@@ -9,7 +9,8 @@ pub(crate) const EXIT_OK: u8 = 0;
 pub(crate) const EXIT_UNUSABLE: u8 = 2;
 pub(crate) const EXIT_NO_HIT: u8 = 1;
 
-pub(crate) const WAIT_MAX_CAP: u64 = 3600;
+/// DeepPark v2：允许小时级未插电超时（与 shell deep_idle_sec 上限 14400 对齐）
+pub(crate) const WAIT_MAX_CAP: u64 = 14400;
 pub(crate) const WAIT_MAX_DEFAULT: u64 = 30;
 pub(crate) const WAIT_FLOOR_DEFAULT: u64 = 3;
 

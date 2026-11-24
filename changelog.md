@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **DeepPark v2 待机省电**：去掉常驻 heartbeat 子进程（改 lean/边沿节流写盘）；均衡深睡超时 3600s、强力 7200s；默认开夜间省电；息屏驻停强制停 worker / 清假 viewing、不挂 viewer wake-file；Rust `watch` 上限 14400s。诊断字段增加 `park_wakes_total` / `last_park_sec` / `heartbeat_writes`
+- **动态简介仍开也能更省**：无人看列表时写 prop 最小间隔 15 分钟（状态突变仍立刻）；亮屏日用 sticky 少读亮度；无 XP 时 dumpsys 空闲探测 30s→120s。打开管理器仍即时刷电量
 - **SukiSU Nova**：管理器包名 `com.sukisu.nova`（兼容旧 `com.sukisu.ultra`）；简介「在看管理器」内置表、WebUI 打开管理器、伴侣 XP 边沿包名已同步
 - **热更新失败后开关一直灰、重启也不走标准更新**：接管失败时只有完整的 `modules_update` 才留下 `update`；服务启动时若发现失败事务，会在写简介前对上版本并清掉 `update` / 事务 /「请重启」标记。没有更新源时不再把开关锁死。电流探测和机型档案改到后台，避免主循环迟迟不开始导致接管校验超时。失败文案带具体原因，且在标记还在时不会被默认简介盖掉
 - **安装/Action 音量键**：zip 为 `volkey-*` 写入可执行位；`keys.sh` 装机时再 `chmod 0755`，避免无 +x 静默回退 `getevent` 弹出系统音量条

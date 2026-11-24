@@ -313,16 +313,16 @@ mod tests {
 
     #[test]
     fn parse_secs_clamps_and_defaults() {
-        assert_eq!(parse_secs(None, 30, 3600), 30);
-        assert_eq!(parse_secs(Some("5"), 30, 3600), 5);
-        assert_eq!(parse_secs(Some(" 7 "), 30, 3600), 7);
-        assert_eq!(parse_secs(Some("99999"), 30, 3600), 3600);
-        assert_eq!(parse_secs(Some("abc"), 30, 3600), 30);
+        assert_eq!(parse_secs(None, 30, 14400), 30);
+        assert_eq!(parse_secs(Some("5"), 30, 14400), 5);
+        assert_eq!(parse_secs(Some(" 7 "), 30, 14400), 7);
+        assert_eq!(parse_secs(Some("99999"), 30, 14400), 14400);
+        assert_eq!(parse_secs(Some("abc"), 30, 14400), 30);
     }
 
     #[test]
     fn floor_never_exceeds_max() {
-        let max = parse_secs(Some("2"), 30, 3600);
+        let max = parse_secs(Some("2"), 30, 14400);
         let floor = parse_secs(Some("10"), 3, max.max(1));
         assert_eq!(max, 2);
         assert_eq!(floor, 2);
