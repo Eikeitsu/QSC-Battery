@@ -114,13 +114,12 @@ const frameRx = computed(() => (props.variant === "miuix" ? 3.5 : 4));
 }
 
 .batt-glyph__shine {
-  fill: color-mix(in srgb, #fff 55%, transparent);
-  animation: batt-shine 1.6s ease-in-out infinite;
+  fill: color-mix(in srgb, #fff 28%, transparent);
+  animation: batt-shine 2.4s ease-in-out infinite;
 }
 
 .batt-glyph__bolt {
-  opacity: 0.92;
-  filter: drop-shadow(0 0 1px color-mix(in srgb, var(--batt-fill) 40%, transparent));
+  opacity: 0.72;
 }
 
 .batt-glyph--hero {
@@ -132,7 +131,7 @@ const frameRx = computed(() => (props.variant === "miuix" ? 3.5 : 4));
 }
 
 .batt-glyph.is-charging .batt-glyph__frame {
-  animation: batt-pulse 1.8s ease-in-out infinite;
+  animation: batt-pulse 2.4s ease-in-out infinite;
 }
 
 @keyframes batt-shine {
@@ -141,8 +140,8 @@ const frameRx = computed(() => (props.variant === "miuix" ? 3.5 : 4));
     opacity: 0;
   }
 
-  35% {
-    opacity: 0.7;
+  40% {
+    opacity: 0.35;
   }
 
   100% {
@@ -158,7 +157,7 @@ const frameRx = computed(() => (props.variant === "miuix" ? 3.5 : 4));
   }
 
   50% {
-    opacity: 0.72;
+    opacity: 0.88;
   }
 }
 

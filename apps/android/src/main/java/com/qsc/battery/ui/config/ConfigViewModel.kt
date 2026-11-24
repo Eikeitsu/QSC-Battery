@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qsc.battery.data.AppContainer
 import com.qsc.battery.data.model.CurrentConfig
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -63,30 +65,39 @@ class ConfigViewModel(
     }
 
     suspend fun reload() {
-        val rootOk = container.root.isRootAvailable()
-        val st = container.statusRepository.load()
-        val moduleOk = st.modulePresent
-        if (moduleOk) {
-            val conf = container.configRepository.loadConf()
-            val current = container.configRepository.loadCurrent()
-            val daemonStatus = container.daemonRepository.status()
-            val (stop, quiet, night) = container.configRepository.loadSchedules()
-            _ui.update {
-                it.copy(
-                    rootOk = rootOk,
-                    moduleOk = true,
-                    conf = conf,
-                    current = current,
-                    daemonStatus = daemonStatus,
-                    stopSchedules = stop,
-                    quietSchedules = quiet,
-                    nightSchedules = night,
-                    ready = true,
-                )
-            }
-        } else {
-            _ui.update {
-                it.copy(rootOk = rootOk, moduleOk = false, ready = true)
+        // 并行拉 root/状态/配置，缩短策略页「等待渲染」空窗（#3）
+        coroutineScope {
+            val rootOkDef = async { container.root.isRootAvailable() }
+            val stDef = async { container.statusRepository.load() }
+            val rootOk = rootOkDef.await()
+            val st = stDef.await()
+            val moduleOk = st.modulePresent
+            if (moduleOk) {
+                val confDef = async { container.configRepository.loadConf() }
+                val currentDef = async { container.configRepository.loadCurrent() }
+                val daemonDef = async { container.daemonRepository.status() }
+                val schedulesDef = async { container.configRepository.loadSchedules() }
+                val conf = confDef.await()
+                val current = currentDef.await()
+                val daemonStatus = daemonDef.await()
+                val (stop, quiet, night) = schedulesDef.await()
+                _ui.update {
+                    it.copy(
+                        rootOk = rootOk,
+                        moduleOk = true,
+                        conf = conf,
+                        current = current,
+                        daemonStatus = daemonStatus,
+                        stopSchedules = stop,
+                        quietSchedules = quiet,
+                        nightSchedules = night,
+                        ready = true,
+                    )
+                }
+            } else {
+                _ui.update {
+                    it.copy(rootOk = rootOk, moduleOk = false, ready = true)
+                }
             }
         }
     }

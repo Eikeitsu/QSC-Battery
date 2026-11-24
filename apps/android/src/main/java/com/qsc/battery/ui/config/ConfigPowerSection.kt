@@ -95,9 +95,14 @@ internal fun ConfigPowerSection(
                 onSelect = { setLocal("charge_full_mode", it) },
             )
         }
-        ChargeToggleRow("自动拔插", v("power_reset") == "1") {
-            setLocal("power_reset", if (it) "1" else "0")
-        }
+        ChargeToggleRow(
+            title = "自动拔插",
+            checked = v("power_reset") == "1",
+            summary = "例：停充后协议卡死时模拟拔插重握手（日常建议关）",
+            onCheckedChange = {
+                setLocal("power_reset", if (it) "1" else "0")
+            },
+        )
         ChargeToggleRow("兼容模式", v("compatibility_mode") == "1") {
             setLocal("compatibility_mode", if (it) "1" else "0")
         }

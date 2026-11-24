@@ -7,6 +7,7 @@ export type StatusRefreshCtx = {
   bridgeOk: Ref<boolean>;
   deviceName: Ref<string>;
   status: StatusState;
+  lastStatusAtMs?: Ref<number>;
 };
 
 export async function refreshStatusInternal(
@@ -104,10 +105,14 @@ export async function refreshStatusInternal(
       ? (voltRaw / 1000000).toFixed(2)
       : (voltRaw / 1000).toFixed(2);
 
+  // 内核 current_now 充电多为负；界面约定充电为正、放电为负（#3）
   const currRaw = parseInt(bundle.current, 10);
-  status.currentMa = Number.isNaN(currRaw)
-    ? "--"
-    : String(Math.round(Math.abs(currRaw) > 10000 ? currRaw / 1000 : currRaw));
+  if (Number.isNaN(currRaw)) {
+    status.currentMa = "--";
+  } else {
+    const scaled = Math.abs(currRaw) > 10000 ? currRaw / 1000 : currRaw;
+    status.currentMa = String(Math.round(-scaled));
+  }
 
   status.version = bundle.version || "--";
 
@@ -129,6 +134,7 @@ export async function refreshStatusInternal(
     String(now.getMinutes()).padStart(2, "0"),
     String(now.getSeconds()).padStart(2, "0"),
   ].join(":");
+  if (ctx.lastStatusAtMs) ctx.lastStatusAtMs.value = now.getTime();
 
   return true;
 }

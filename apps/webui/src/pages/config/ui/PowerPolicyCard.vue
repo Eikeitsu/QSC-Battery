@@ -97,7 +97,7 @@ const customOpen = computed(() => store.settings.power_profile === "custom");
     />
     <SwitchCell
       title="动态简介"
-      label="关后列表固定文案并停 worker；强力/深睡也会强制静态"
+      label="开：管理器模块列表显示实时电量/状态；关：固定文案更省电。看区别→系统模块列表里本模块那一行"
       :model-value="store.settings.description_enable !== '0'"
       @update:model-value="(v) => onSwitch('description_enable', v)"
     />

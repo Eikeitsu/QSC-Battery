@@ -56,10 +56,11 @@ export const useAppStore = defineStore("app", () => {
   const hydrating = ref(false);
   const ready = ref(false);
 
-  const statusCtx = { bridgeOk, deviceName, status };
+  const lastStatusAtMs = ref(0);
+  const statusCtx = { bridgeOk, deviceName, status, lastStatusAtMs };
   const { refreshStatus } = createStatusRefresh(statusCtx);
 
-  const polling = createStatusPolling({ ready, refreshStatus });
+  const polling = createStatusPolling({ ready, refreshStatus, lastStatusAtMs });
   const { bindVisibilityListener, setInteractiveTab, startStatusPolling } = polling;
 
   const config = createConfigActions({

@@ -96,13 +96,13 @@ async function toggleKind(kind: "stop" | "resume" | "fail", on: boolean) {
     </van-cell>
     <SwitchCell
       title="自动拔插"
-      label="插电时模拟拔插以激活快充"
+      label="例：停充后协议卡死、充不进电时，模拟拔插重新握手快充（日常建议关）"
       :model-value="store.settings.power_reset === '1'"
       @update:model-value="(v) => onSwitch('power_reset', v)"
     />
     <SwitchCell
       title="拔线立刻还原节点"
-      label="开=拔线后还原并清除停充标记；关=保留停充迟滞，再插上仍停到恢复电量"
+      label="例：80%停充后拔线——开=节点立刻恢复可充；关=再插上仍停到恢复电量（如70%）"
       :model-value="store.settings.unplug_restore !== '0'"
       @update:model-value="(v) => onSwitch('unplug_restore', v)"
     />

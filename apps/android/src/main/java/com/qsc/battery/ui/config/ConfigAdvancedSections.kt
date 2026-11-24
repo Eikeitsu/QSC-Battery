@@ -100,9 +100,14 @@ internal fun ConfigAdvancedSections(
         ChargeToggleRow("深睡", v("deep_idle_enable") != "0") {
             setLocal("deep_idle_enable", if (it) "1" else "0")
         }
-        ChargeToggleRow("动态简介", v("description_enable") != "0") {
-            setLocal("description_enable", if (it) "1" else "0")
-        }
+        ChargeToggleRow(
+            title = "动态简介",
+            checked = v("description_enable") != "0",
+            summary = "开：模块列表显示实时电量；关：固定文案更省。看区别→管理器模块列表本模块那一行",
+            onCheckedChange = {
+                setLocal("description_enable", if (it) "1" else "0")
+            },
+        )
         listOf(
             Triple("未插电间隔", "loop_interval_idle_sec", "秒"),
             Triple("未插电·有守护", "loop_interval_idle_native_sec", "秒"),
@@ -150,7 +155,7 @@ internal fun ConfigAdvancedSections(
         ChargeToggleRow(
             title = "拔线立刻还原节点",
             checked = v("unplug_restore") != "0",
-            summary = "关=保留停充迟滞，再插上仍停到恢复电量",
+            summary = "例：80%停充后拔线——开=立刻可再充；关=再插上仍停到恢复电量",
             onCheckedChange = {
                 setLocal("unplug_restore", if (it) "1" else "0")
             },

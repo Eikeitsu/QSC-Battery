@@ -191,8 +191,10 @@ private fun formatTemp(raw: String): String {
 
 private fun formatUa(raw: String): String {
     val ua = raw.toLongOrNull() ?: return "--"
-    val a = kotlin.math.abs(ua) / 1_000_000.0
-    return String.format("%s%.2fA", if (ua < 0) "-" else "", a)
+    // 内核 current_now 充电多为负；界面约定：充电为正、放电为负（更直觉）
+    val displayUa = -ua
+    val a = kotlin.math.abs(displayUa) / 1_000_000.0
+    return String.format("%s%.2fA", if (displayUa < 0) "-" else "", a)
 }
 
 private fun formatUv(raw: String): String {
