@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 data class HomeUiState(
     val status: StatusBundle = StatusBundle(),
     val conf: Map<String, String> = emptyMap(),
+    val configProfiles: List<String> = emptyList(),
     val bootstrapped: Boolean = false,
     val rootSettled: Boolean = false,
 )
@@ -33,10 +34,20 @@ class HomeViewModel(
         } else {
             _ui.value.conf
         }
+        val profiles = if (full || next.modulePresent) {
+            if (next.modulePresent) {
+                container.profilesRepository.listNames()
+            } else {
+                _ui.value.configProfiles
+            }
+        } else {
+            _ui.value.configProfiles
+        }
         _ui.update {
             it.copy(
                 status = next,
                 conf = conf,
+                configProfiles = profiles,
                 rootSettled = true,
                 bootstrapped = true,
             )
@@ -48,6 +59,17 @@ class HomeViewModel(
             // Magisk soft switch only — APP never writes charge nodes
             container.statusRepository.setModuleEnabled(enabled)
             refresh(full = false)
+        }
+    }
+
+    /** 应用「我的 → 配置档」里保存的档位 */
+    fun applyConfigProfile(name: String) {
+        viewModelScope.launch {
+            val ok = container.profilesRepository.applyProfile(name, container.configRepository)
+            if (ok) {
+                container.settingsRepository.setActiveConfigProfile(name)
+                refresh(full = true)
+            }
         }
     }
 

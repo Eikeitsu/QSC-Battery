@@ -75,6 +75,9 @@ fun ProfilesScreen(
                         onClick = {
                             scope.launch {
                                 val ok = container.profilesRepository.applyProfile(name, container.configRepository)
+                                if (ok) {
+                                    container.settingsRepository.setActiveConfigProfile(name)
+                                }
                                 snackbar.showSnackbar(if (ok) "已应用 $name" else "应用失败")
                             }
                         },
@@ -89,7 +92,9 @@ fun ProfilesScreen(
                     scope.launch {
                         val conf = container.configRepository.loadConf()
                         val current = container.root.readFile(ModulePaths.CURRENT)
-                        val ok = container.profilesRepository.saveProfile(profileName.trim(), conf, current)
+                        val name = profileName.trim()
+                        val ok = container.profilesRepository.saveProfile(name, conf, current)
+                        if (ok) container.settingsRepository.setActiveConfigProfile(name)
                         profiles = container.profilesRepository.listNames()
                         snackbar.showSnackbar(if (ok) "已保存档位" else "保存失败")
                     }

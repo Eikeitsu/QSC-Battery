@@ -10,7 +10,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -30,6 +32,7 @@ import com.qsc.battery.ui.design.charge.ChargeToggleRow
 import com.qsc.battery.ui.design.charge.ChargeTopBar
 import com.qsc.battery.ui.design.charge.batteryStatusLabel
 import com.qsc.battery.ui.design.charge.isActivelyCharging
+import com.qsc.battery.ui.theme.ThemeSettings
 import com.qsc.battery.ui.util.LifecycleResumePollEffect
 
 @Composable
@@ -40,6 +43,10 @@ fun HomeScreen(
     val factory = remember(container) { AppViewModelFactory(container) }
     val vm: HomeViewModel = viewModel(factory = factory)
     val ui by vm.ui.collectAsStateWithLifecycle()
+    val theme by container.settingsRepository.settings.collectAsStateWithLifecycle(
+        initialValue = ThemeSettings(),
+    )
+    var showProfileSheet by remember { mutableStateOf(false) }
 
     LifecycleResumePollEffect(intervalMs = 8_000) { first ->
         vm.refresh(full = first)
@@ -118,6 +125,13 @@ fun HomeScreen(
                         charging = charging,
                     )
 
+                    if (theme.homeProfileSwitcher) {
+                        HomeConfigProfileCard(
+                            activeName = theme.activeConfigProfile.ifBlank { null },
+                            onClick = { showProfileSheet = true },
+                        )
+                    }
+
                     ChargeSection {
                         ChargeToggleRow(
                             title = "充电控制",
@@ -154,6 +168,18 @@ fun HomeScreen(
                 }
             }
         }
+    }
+
+    if (showProfileSheet) {
+        HomeConfigProfileSheet(
+            names = ui.configProfiles,
+            selectedName = theme.activeConfigProfile.ifBlank { null },
+            onSelect = { name ->
+                vm.applyConfigProfile(name)
+                showProfileSheet = false
+            },
+            onDismiss = { showProfileSheet = false },
+        )
     }
 }
 

@@ -144,6 +144,13 @@ fun AppearanceScreen(
                     summary = "默认关闭。按约 10% 分档；打开应用或插拔电时刷新（切入口可能闪一下）",
                     onCheckedChange = { scope.launch { container.settingsRepository.setDynamicBatteryIcon(it) } },
                 )
+                ChargeDivider()
+                ChargeToggleRow(
+                    title = "首页显示配置档",
+                    checked = settings.homeProfileSwitcher,
+                    summary = "在首页展示当前配置档，点按可快捷切换",
+                    onCheckedChange = { scope.launch { container.settingsRepository.setHomeProfileSwitcher(it) } },
+                )
             }
         }
     }

@@ -27,6 +27,8 @@ class SettingsRepository(private val context: Context) {
         val colorSpec = stringPreferencesKey("color_spec")
         val alternativeIcon = booleanPreferencesKey("alternative_icon")
         val dynamicBatteryIcon = booleanPreferencesKey("dynamic_battery_icon")
+        val homeProfileSwitcher = booleanPreferencesKey("home_profile_switcher")
+        val activeConfigProfile = stringPreferencesKey("active_config_profile")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
         val updateChannel = stringPreferencesKey("update_channel")
 
@@ -46,6 +48,8 @@ class SettingsRepository(private val context: Context) {
             alternativeIcon = prefs[Keys.alternativeIcon] ?: false,
             // 默认关：避免安装后立即切换 alias 导致部分桌面「无图标」
             dynamicBatteryIcon = prefs[Keys.dynamicBatteryIcon] ?: false,
+            homeProfileSwitcher = prefs[Keys.homeProfileSwitcher] ?: false,
+            activeConfigProfile = prefs[Keys.activeConfigProfile].orEmpty(),
         )
     }
 
@@ -123,6 +127,14 @@ class SettingsRepository(private val context: Context) {
             dynamic = enabled,
             force = true,
         )
+    }
+
+    suspend fun setHomeProfileSwitcher(enabled: Boolean) {
+        context.settingsStore.edit { it[Keys.homeProfileSwitcher] = enabled }
+    }
+
+    suspend fun setActiveConfigProfile(name: String) {
+        context.settingsStore.edit { it[Keys.activeConfigProfile] = name }
     }
 
     /** 启动时按偏好同步 alias，避免升级后图标状态丢失。 */

@@ -45,4 +45,8 @@ data class ThemeSettings(
     val colorSpec: String = "SPEC_2021",
     val alternativeIcon: Boolean = false,
     val dynamicBatteryIcon: Boolean = false,
+    /** 首页是否展示配置档快捷切换（默认关） */
+    val homeProfileSwitcher: Boolean = false,
+    /** 最近一次应用的配置档名称（仅 UI 展示） */
+    val activeConfigProfile: String = "",
 )
