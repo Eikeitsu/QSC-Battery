@@ -242,9 +242,14 @@ for (const mod of modules) {
   requireText(service, "QSC_SCAN_LOCK", `${mod.name} scan lock`);
   requireText(service, "QSC_SCAN_STATE", `${mod.name} scan state`);
   requireText(service, "failed:$rc", `${mod.name} scan failure state`);
+  // DeepPark v2：不再拉常驻 heartbeat 子进程；改为 lean/满轮节流写盘
   requireText(service, "service_heartbeat", `${mod.name} service heartbeat`);
-  requireText(service, "qsc_start_heartbeat_loop", `${mod.name} detached heartbeat`);
-  requireText(service, "service_heartbeat_pid", `${mod.name} heartbeat ownership`);
+  requireText(service, "qsc_service_heartbeat", `${mod.name} throttled heartbeat`);
+  requireText(
+    service,
+    "service_heartbeat_pid",
+    `${mod.name} legacy heartbeat pid cleanup`,
+  );
   requireText(service, "service_metrics", `${mod.name} service metrics`);
   requireText(service, "diagnostic_on", `${mod.name} optional diagnostic sampling`);
   requireText(service, "history_pending", `${mod.name} history pending metric`);
