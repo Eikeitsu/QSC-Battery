@@ -80,6 +80,7 @@ WebUI「日志」/ APP「动态」可看运行日志与充电事件。
 - 安装时探测写入 `data/device.profile`（MCA 路径、preferred 等）
 - WebUI：测开关、清缓存、自定义 `power_switch`、设备档案库、社区机型预设
 - Action / `diagnose` / `test-switch` / `qsc detect`
+- 参考机型与自测步骤见 [适配机型说明](/guide/devices)（列表仅供参考，以刷入实测为准）
 
 ## 动态简介
 

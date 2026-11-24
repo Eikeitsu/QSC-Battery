@@ -26,6 +26,7 @@ export default defineConfig({
       { text: "首页", link: "/" },
       { text: "功能", link: "/guide/features" },
       { text: "安装", link: "/guide/install" },
+      { text: "机型", link: "/guide/devices" },
       { text: "常见问题", link: "/guide/faq" },
       {
         text: "更多",
@@ -44,6 +45,7 @@ export default defineConfig({
         items: [
           { text: "功能介绍", link: "/guide/features" },
           { text: "安装与升级", link: "/guide/install" },
+          { text: "适配机型", link: "/guide/devices" },
           { text: "配置说明", link: "/guide/config" },
           { text: "常见问题", link: "/guide/faq" },
         ],

@@ -9,6 +9,7 @@ rm -f "$LIST_SWITCH"
 # suspend / disable 类：停充写 1，恢复写 0
 # 排除策略类：night_charging / cool_mode / batt_protect（非供电开关，易与系统互抢）
 # 排除 usb/qc_usb 等输入口 input_suspend（改由末位兜底）
+# 机型 ABI：charge_control_limit 是电流档位不是开关；handle_stop_charging 是内核处理节点，反复写会闪充停
 find /sys/*/* -type f \( \
 	-iname "*input_suspend" -o -iname "*battery_input_suspend" -o \
 	-iname "*disable*_charge*" -o -iname "*charge*_disable*" -o \
@@ -21,7 +22,7 @@ find /sys/*/* -type f \( \
 	-iname "*force_charger_suspend" -o -iname "*force_usb_suspend" -o \
 	-iname "*bypass_charger" \
 	\) 2>/dev/null \
-	| egrep -i -v 'limit_max|float|step|reverse|/battery_|bq2597x|/cpu/|firmware|charge_control_limit|/power_supply/usb/|/power_supply/qc_usb/|/power_supply/dc/|/power_supply/wireless/|/power_supply/pc_port/|night_charging|cool_mode|batt_protect|smart_charging|adapter_cc_mode|step_charging|restrict_chg|restricted_charging' \
+	| egrep -i -v 'limit_max|float|step|reverse|/battery_|bq2597x|/cpu/|firmware|charge_control_limit|handle_stop_charging|/power_supply/usb/|/power_supply/qc_usb/|/power_supply/dc/|/power_supply/wireless/|/power_supply/pc_port/|night_charging|cool_mode|batt_protect|smart_charging|adapter_cc_mode|step_charging|restrict_chg|restricted_charging' \
 	| sed -n 's/$/,start=0,stop=1/g;p' >"$LIST_SWITCH"
 
 # enable 类：停充写 0，恢复写 1
@@ -100,8 +101,14 @@ find /sys/devices/platform/ -maxdepth 6 -type f \( \
 	-iname "*charging_enable*" -o -iname "chg_enable" -o -iname "ChargerEnable" \
 	\) \( -path "*oplus*" -o -path "*lge*" -o -path "*battery*" \) 2>/dev/null \
 	| sed -n 's/$/,start=1,stop=0/g;p' >>"$LIST_SWITCH"
+# 机型 ABI：OPlus ColorOS 常见挂在 class 或 devices/virtual 两套路径
+find /sys/class/oplus_chg/ -maxdepth 3 -type f -iname "*charging_enable*" 2>/dev/null \
+	| sed -n 's/$/,start=1,stop=0/g;p' >>"$LIST_SWITCH"
 find /sys/devices/virtual/oplus_chg/ -maxdepth 3 -type f -iname "*charging_enable*" 2>/dev/null \
 	| sed -n 's/$/,start=1,stop=0/g;p' >>"$LIST_SWITCH"
+# 机型 ABI：内核 power_supply charge_behaviour（auto / inhibit-charge）
+find /sys/class/power_supply/*/ -maxdepth 1 -type f -iname "charge_behaviour" 2>/dev/null \
+	| sed -n 's/$/,start=auto,stop=inhibit-charge/g;p' >>"$LIST_SWITCH"
 find /sys/kernel/nubia_charge/ -maxdepth 1 -type f -iname "charger_bypass" 2>/dev/null \
 	| sed -n 's/$/,start=off,stop=on/g;p' >>"$LIST_SWITCH"
 find /sys/kernel/debug/google_charger/ -maxdepth 1 -type f \( \
@@ -187,6 +194,8 @@ cat >>"$LIST_SWITCH" << 'EOF'
 /sys/devices/platform/soc/soc:google,charger/charge_disable,start=0,stop=1
 /sys/devices/platform/charger/bypass_charger,start=0,stop=1
 /sys/devices/platform/soc/soc:qcom,pmic_glink/soc:qcom,pmic_glink:qcom,battery_charger/force_charger_suspend,start=0,stop=1
+/sys/class/power_supply/battery/charge_behaviour,start=auto,stop=inhibit-charge
+/sys/class/oplus_chg/battery/mmi_charging_enable,start=1,stop=0
 /sys/devices/virtual/oplus_chg/battery/mmi_charging_enable,start=1,stop=0
 /sys/kernel/debug/google_charger/chg_suspend,start=0,stop=1
 /sys/kernel/debug/google_charger/input_suspend,start=0,stop=1

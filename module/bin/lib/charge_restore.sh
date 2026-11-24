@@ -19,6 +19,9 @@ qsc_restore_switches_from_list() {
 qsc_restore_mca_charge() {
 	local mca
 	qsc_load_device_profile 2>/dev/null || true
+	type qsc_xm_power_vote >/dev/null 2>&1 &&
+		qsc_xm_power_vote start >/dev/null 2>&1 || true
+	rm -f "$DATADIR/xm_power_stop" 2>/dev/null
 	if [ -n "$QSC_MCA_PATH" ] && [ -f "$QSC_MCA_PATH" ]; then
 		qsc_mca_raw_echo "$QSC_MCA_PATH" "${QSC_MCA_START:-0}"
 		return 0

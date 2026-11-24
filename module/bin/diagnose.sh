@@ -4,8 +4,29 @@
 # 结果保存到 /sdcard/qsc_diagnose.txt
 
 OUT="/sdcard/qsc_diagnose.txt"
+
+# 机型 ABI：按 ls 权限位判断「文件模式可写」，不用 test -w（root 下常误报 yes）
+qsc_diag_writable() {
+  local f="$1" lsline
+  lsline="$(ls -l "$f" 2>/dev/null)"
+  case "$lsline" in
+    -*w*) echo "yes" ;;
+    *) echo "no" ;;
+  esac
+}
+
+qsc_diag_line() {
+  local f="$1" perm val w lsline
+  [ -e "$f" ] || return 1
+  perm="$(stat -c '%a' "$f" 2>/dev/null)"
+  val="$(cat "$f" 2>/dev/null | tr '\n' ' ' | head -c 120)"
+  w="$(qsc_diag_writable "$f")"
+  lsline="$(ls -l "$f" 2>/dev/null)"
+  echo "  $f = ${val:-?} | mode=${perm:-?} writable:$w | $lsline"
+}
+
 echo "========================================" > "$OUT"
-echo "QSC 充电控制节点诊断报告 v2" >> "$OUT"
+echo "QSC 充电控制节点诊断报告 v3" >> "$OUT"
 echo "时间: $(date +%F_%T)" >> "$OUT"
 echo "设备: $(getprop ro.product.model)" >> "$OUT"
 echo "芯片: $(getprop ro.product.board) / $(getprop ro.board.platform)" >> "$OUT"
@@ -13,18 +34,17 @@ echo "系统: $(getprop ro.build.version.incremental)" >> "$OUT"
 echo "内核: $(uname -r)" >> "$OUT"
 echo "HyperOS: $(getprop ro.mi.os.version)" >> "$OUT"
 echo "SOC: $(getprop ro.soc.model)" >> "$OUT"
+echo "说明: writable 按文件模式位判定（非 test -w），root 下更接近真实可写性" >> "$OUT"
 echo "========================================" >> "$OUT"
 
 # 1. 扫描所有 power_supply 目录
 echo "" >> "$OUT"
-echo "[1] /sys/class/power_supply/ 下所有可写文件:" >> "$OUT"
+echo "[1] /sys/class/power_supply/ 下节点（含 mode / writable）:" >> "$OUT"
 for ps in /sys/class/power_supply/*/; do
   if [ -d "$ps" ]; then
     echo "  --- $(basename $ps) ---" >> "$OUT"
     find "$ps" -maxdepth 1 -type f 2>/dev/null | while read f; do
-      perm=$(stat -c '%a' "$f" 2>/dev/null)
-      val=$(cat "$f" 2>/dev/null | tr '\n' ' ')
-      echo "    $(basename $f) [$perm] = $val" >> "$OUT"
+      qsc_diag_line "$f" >> "$OUT"
     done
   fi
 done
@@ -33,35 +53,55 @@ done
 echo "" >> "$OUT"
 echo "[2] 全系统 handle_state 节点:" >> "$OUT"
 find /sys/devices/platform/ -maxdepth 8 -type f -name "handle_state" 2>/dev/null | while read f; do
-  val=$(cat "$f" 2>/dev/null | tr '\n' ' ')
-  echo "  $f = $val" >> "$OUT"
+  qsc_diag_line "$f" >> "$OUT"
 done
 
 # 3. 扫描 mca 相关所有文件
 echo "" >> "$OUT"
 echo "[3] /sys/devices/platform/soc/ 下 mca 充电相关所有文件:" >> "$OUT"
 find /sys/devices/platform/soc/ -maxdepth 6 -path "*mca*charg*" -type f 2>/dev/null | while read f; do
-  val=$(cat "$f" 2>/dev/null | tr '\n' ' ')
-  echo "  $f = $val" >> "$OUT"
+  qsc_diag_line "$f" >> "$OUT"
 done
 find /sys/devices/platform/soc/ -maxdepth 6 -path "*mca*" -type f 2>/dev/null | while read f; do
-  val=$(cat "$f" 2>/dev/null | tr '\n' ' ')
-  echo "  $f = $val" >> "$OUT"
+  qsc_diag_line "$f" >> "$OUT"
 done
+
+# 3b. 机型 ABI：xm_power charge_interface
+echo "" >> "$OUT"
+echo "[3b] /sys/class/xm_power 充电接口:" >> "$OUT"
+if [ -d /sys/class/xm_power ]; then
+  for d in /sys/class/xm_power /sys/class/xm_power/charger /sys/class/xm_power/charger/charge_interface; do
+    [ -d "$d" ] || continue
+    echo "  --- $d ---" >> "$OUT"
+    ls -la "$d/" 2>/dev/null | while IFS= read -r line; do
+      echo "    $line" >> "$OUT"
+    done
+  done
+  for f in \
+    /sys/class/xm_power/charger/charge_interface/charge_enable \
+    /sys/class/xm_power/charger/charge_interface/input_suspend \
+    /sys/class/xm_power/charger/charge_interface/suspend_status
+  do
+    qsc_diag_line "$f" >> "$OUT" || true
+  done
+else
+  echo "  （无 /sys/class/xm_power）" >> "$OUT"
+fi
 
 # 4. 扫描 charger 相关可写文件
 echo "" >> "$OUT"
 echo "[4] battery/charger 目录下疑似开关节点 (含 charge/charging/enable/disable/suspend/stop):" >> "$OUT"
-find /sys/class/power_supply/ /sys/devices/platform/soc/ -maxdepth 6 -type f \( \
+find /sys/class/power_supply/ /sys/devices/platform/soc/ /sys/class/oplus_chg/ /sys/devices/virtual/oplus_chg/ /sys/class/xm_power/ -maxdepth 6 -type f \( \
   -iname "*charge_disable*" -o -iname "*charging_enabled*" -o -iname "*charge_enabled*" \
   -o -iname "*disable_charging*" -o -iname "*stop_charging*" -o -iname "*input_suspend*" \
   -o -iname "*batt_slate*" -o -iname "*store_mode*" -o -iname "*chg_suspend*" \
   -o -iname "*chg_mode*" -o -iname "*charger_limit*" -o -iname "*pin_enabled*" \
   -o -iname "*charge_control*" -o -iname "*force_charging*" -o -iname "*enable_charging*" \
-  -o -iname "*battery_charging*" \
+  -o -iname "*battery_charging*" -o -iname "*charge_behaviour*" -o -iname "*mmi_charging*" \
+  -o -iname "charge_enable" \
 \) 2>/dev/null | while read f; do
-  val=$(cat "$f" 2>/dev/null | tr '\n' ' ')
-  echo "  $f = $val" >> "$OUT"
+  case "$f" in *handle_stop_charging*) continue ;; esac
+  qsc_diag_line "$f" >> "$OUT"
 done
 
 # 5. 扫描所有 /sys/devices/platform/soc/ 下 charger/battery 目录文件
@@ -113,9 +153,9 @@ for node in \
   fi
 done
 
-# 7. 尝试写入已知节点并检测效果
+# 7. 候选开关：只读列举 + 真实 mode 可写性（不实际写入，避免干扰充电）
 echo "" >> "$OUT"
-echo "[7] 尝试向疑似节点写入停充值并读取结果:" >> "$OUT"
+echo "[7] 候选停充节点（只读；writable 按文件模式位）:" >> "$OUT"
 for node in \
   "/sys/class/power_supply/battery/charging_enabled" \
   "/sys/class/power_supply/battery/charge_disable" \
@@ -124,20 +164,24 @@ for node in \
   "/sys/class/power_supply/battery/input_suspend" \
   "/sys/class/power_supply/battery/batt_slate_mode" \
   "/sys/class/power_supply/battery/store_mode" \
+  "/sys/class/power_supply/battery/charge_behaviour" \
+  "/sys/class/power_supply/battery/charge_control_limit" \
+  "/sys/class/power_supply/battery/charge_control_limit_max" \
   "/sys/class/power_supply/bms/charging_enabled" \
   "/sys/class/power_supply/charger/charge_disable" \
   "/sys/class/qcom-battery/charging_enabled" \
   "/sys/class/qcom-battery/charge_disable" \
   "/sys/class/qcom-battery/input_suspend" \
   "/sys/class/qcom-battery/battery_charging_enabled" \
+  "/sys/class/oplus_chg/battery/mmi_charging_enable" \
+  "/sys/devices/virtual/oplus_chg/battery/mmi_charging_enable" \
+  "/sys/class/xm_power/charger/charge_interface/charge_enable" \
+  "/sys/class/xm_power/charger/charge_interface/input_suspend" \
   "/sys/kernel/debug/google_charger/chg_suspend" \
   "/sys/kernel/debug/google_charger/chg_mode" \
   "/proc/driver/charger_limit_enable" \
 ; do
-  if [ -f "$node" ]; then
-    before=$(cat "$node" 2>/dev/null | tr '\n' ' ')
-    echo "  $node: 存在, 当前值=$before" >> "$OUT"
-  fi
+  qsc_diag_line "$node" >> "$OUT" || true
 done
 
 # 8. 模块运行态摘要（首选开关 / 兼容模式 / 电流节点）

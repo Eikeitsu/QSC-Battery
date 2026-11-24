@@ -46,6 +46,8 @@ QSC_FALLBACK_SWITCHES="\
 /sys/devices/platform/soc/soc:google,charger/charge_disable,start=0,stop=1 \
 /sys/devices/platform/charger/bypass_charger,start=0,stop=1 \
 /sys/devices/platform/soc/soc:qcom,pmic_glink/soc:qcom,pmic_glink:qcom,battery_charger/force_charger_suspend,start=0,stop=1 \
+/sys/class/power_supply/battery/charge_behaviour,start=auto,stop=inhibit-charge \
+/sys/class/oplus_chg/battery/mmi_charging_enable,start=1,stop=0 \
 /sys/devices/virtual/oplus_chg/battery/mmi_charging_enable,start=1,stop=0 \
 /sys/kernel/debug/google_charger/chg_suspend,start=0,stop=1 \
 /sys/kernel/debug/google_charger/input_suspend,start=0,stop=1 \

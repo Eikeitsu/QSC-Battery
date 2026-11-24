@@ -2,6 +2,58 @@
 # charge: MCA / preferred / power stop-start-reset
 # 停充写入语义对齐 v2026.08.14：写成功即认；仅 MCA=1 走专用路径。
 # 用法：qsc_mca_write stop | qsc_mca_write start
+
+# 机型 ABI：xm_power charge_interface（部分小米 HyperOS）
+# charge_enable 用 qsc 客户端真正关充；input_suspend 用 micharge 客户端把状态推成 DISCHARGING。
+QSC_XM_POWER_EN="/sys/class/xm_power/charger/charge_interface/charge_enable"
+QSC_XM_POWER_SUS="/sys/class/xm_power/charger/charge_interface/input_suspend"
+
+qsc_xm_power_available() {
+	[ -e "$QSC_XM_POWER_EN" ] || [ -e "$QSC_XM_POWER_SUS" ]
+}
+
+# 向投票节点写「client all N」；读回已含目标则跳过。返回 0=至少一处成功或已是目标。
+qsc_xm_power_vote_one() {
+	local node="$1" needle="$2" payload="$3" cur
+	[ -e "$node" ] || return 1
+	cur="$(cat "$node" 2>/dev/null | tr -d '\r')"
+	case "$cur" in
+		*"$needle"*) return 0 ;;
+	esac
+	printf '%s\n' "$payload" >"$node" 2>/dev/null || return 1
+	return 0
+}
+
+# stop|start；有节点才写。返回 0=本机有 xm_power 且投票成功。
+qsc_xm_power_vote() {
+	local label="$1" ok=0
+	qsc_xm_power_available || return 1
+	case "$label" in
+		stop)
+			# 真停充
+			if qsc_xm_power_vote_one "$QSC_XM_POWER_EN" "qsc 0" "qsc all 0"; then
+				ok=1
+			fi
+			# 状态显示 / 图标侧
+			if qsc_xm_power_vote_one "$QSC_XM_POWER_SUS" "micharge 1" "micharge all 1"; then
+				ok=1
+			fi
+			;;
+		start)
+			if qsc_xm_power_vote_one "$QSC_XM_POWER_EN" "qsc 1" "qsc all 1"; then
+				ok=1
+			fi
+			if qsc_xm_power_vote_one "$QSC_XM_POWER_SUS" "micharge 0" "micharge all 0"; then
+				ok=1
+			fi
+			;;
+		*) return 1 ;;
+	esac
+	[ "$ok" = "1" ] || return 1
+	qsc_dbg "xm_power vote $label ok"
+	return 0
+}
+
 qsc_mca_write() {
 	local label="$1"
 	local val="" path="" cand
@@ -129,7 +181,18 @@ qsc_power_stop() {
 	qsc_dbg "power_stop 开始 batch=$_batch mca=${QSC_MCA:-?} mca_path=${QSC_MCA_PATH:-?}"
 	# MCA 最先（仅 MCA=1）；对齐 0814 写成功即返回
 	if qsc_mca_write stop; then
+		# handle_state 成功后仍补 xm_power 投票（有则写，影响状态上报）
+		qsc_xm_power_vote stop >/dev/null 2>&1 || true
 		qsc_dbg "power_stop：MCA 路径成功 [$stop_nodes]"
+		return
+	fi
+	# 机型 ABI：无 handle_state 时 xm_power 可作为主停充路径
+	if qsc_xm_power_vote stop; then
+		stop_ok=1
+		stop_nodes="${stop_nodes} xm_power"
+		touch "$DATADIR/xm_power_stop" 2>/dev/null
+		qsc_save_active_switch "${QSC_XM_POWER_EN},start=qsc_all_1,stop=qsc_all_0" 2>/dev/null || true
+		qsc_dbg "power_stop：xm_power 成功 [$stop_nodes]"
 		return
 	fi
 	if qsc_pref_write stop; then
@@ -170,7 +233,22 @@ qsc_power_start() {
 	start_ok=0
 	start_node=""
 	start_val=""
+	local _had_xm=0
+	[ -f "$DATADIR/xm_power_stop" ] && _had_xm=1
+	# 先撤 xm_power 投票，避免 handle_state 恢复后图标/状态仍挂停
+	qsc_xm_power_vote start >/dev/null 2>&1 || true
+	rm -f "$DATADIR/xm_power_stop" 2>/dev/null
 	if qsc_mca_write start; then
+		qsc_clear_active_switch
+		qsc_stop_wakelock_release
+		return
+	fi
+	# 本轮曾以 xm_power 为主停充：vote start 已执行，直接收尾
+	if [ "$_had_xm" = "1" ]; then
+		start_ok=1
+		start_node="$QSC_XM_POWER_EN"
+		start_val="qsc all 1"
+		log_log2=1
 		qsc_clear_active_switch
 		qsc_stop_wakelock_release
 		return

@@ -181,6 +181,12 @@ qsc_detect_and_write_profile() {
 		echo "MCA=1 path=$mca_path"
 		return 0
 	fi
+	# 机型 ABI：无 handle_state 时若有 xm_power，运行时走投票停充（见 charge_mca.sh）
+	if [ -e /sys/class/xm_power/charger/charge_interface/charge_enable ] ||
+		[ -e /sys/class/xm_power/charger/charge_interface/input_suspend ]; then
+		echo "MCA=0 xm_power=1 （无 handle_state，运行时用 charge_interface 投票）"
+		return 1
+	fi
 	# 便于社区反馈：有 mca 目录却无节点 vs 目录都没有
 	_mca_dirs="$(ls -d /sys/devices/platform/soc*/*mca* \
 		/sys/devices/platform/soc*/*/*mca* \

@@ -445,6 +445,10 @@ qsc_device_is_mca() {
 	[ -f /sys/devices/platform/soc/soc:mca_charger/handle_state ] && return 0
 	[ -e /sys/devices/platform/soc@0/soc:mca_charger/handle_state ] && return 0
 	[ -e /sys/devices/platform/soc@0/mca_charger/handle_state ] && return 0
+	# 机型 ABI：xm_power 投票也会被 OEM 改回，同样需要重申
+	type qsc_xm_power_available >/dev/null 2>&1 && qsc_xm_power_available && return 0
+	[ -e /sys/class/xm_power/charger/charge_interface/charge_enable ] && return 0
+	[ -e /sys/class/xm_power/charger/charge_interface/input_suspend ] && return 0
 	return 1
 }
 
@@ -531,7 +535,13 @@ qsc_maintain_stop_while_plugged() {
 	fi
 	# MCA：系统会改回 handle_state，必须每轮重申
 	if qsc_mca_write stop; then
+		qsc_xm_power_vote stop >/dev/null 2>&1 || true
 		qsc_dbg "maintain：MCA 重申成功"
+		return 0
+	fi
+	# 机型 ABI：xm_power 投票也会被改回
+	if type qsc_xm_power_vote >/dev/null 2>&1 && qsc_xm_power_vote stop; then
+		qsc_dbg "maintain：xm_power 重申成功"
 		return 0
 	fi
 	# preferred（测开关）或 active_switch：停充期间持续重申，防 OEM 改回
