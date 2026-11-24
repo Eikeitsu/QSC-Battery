@@ -63,10 +63,10 @@ qsc_battery_snapshot_read() {
 			;;
 	esac
 
-	# 插电以 qsc_ps_plugged（端口交叉）为准。
-	# 勿对 status=4 Not charging 再问 dumpsys：K90U 未插电待机也常报
-	# Not charging + dumpsys powered:true，早退会跳过下方 reconcile，
-	# 假插电 → 残留 power_switch → 整夜 maintain。
+	# 插电以 qsc_ps_plugged（端口/电流交叉）为准。
+	# K90U/MCA 充电时常 online=0、掉 VBUS；若端口扫描漏判，仅在有
+	# 「充电态 + 大电流 / present / Charging|Full」旁证时才用 dumpsys 补正，
+	# 禁止单靠 Not charging + dumpsys powered 假插电（过夜掉电根因）。
 	if type qsc_ps_plugged >/dev/null 2>&1; then
 		if qsc_ps_plugged; then
 			QSC_BATTERY_POWERED="powered: true"
@@ -75,9 +75,47 @@ qsc_battery_snapshot_read() {
 		fi
 	fi
 
-	# sysfs 完整：直接返回（powered 已按端口判定；不再 dumpsys）
+	if [ -z "$QSC_BATTERY_POWERED" ] && command -v dumpsys >/dev/null 2>&1; then
+		_snap_need_ds=0
+		case "${QSC_BATTERY_STATUS:-}" in
+			2|5) _snap_need_ds=1 ;; # Charging / Full
+			4)
+				# Not charging：必须另有电流/present 旁证
+				if type qsc_ps_charging_current_live >/dev/null 2>&1 &&
+					qsc_ps_charging_current_live; then
+					_snap_need_ds=1
+				elif qsc_read_node "$PSDIR/usb/present" 2>/dev/null &&
+					[ "$QSC_NODE_VAL" = "1" ]; then
+					_snap_need_ds=1
+				elif qsc_read_node "$PSDIR/qc_usb/present" 2>/dev/null &&
+					[ "$QSC_NODE_VAL" = "1" ]; then
+					_snap_need_ds=1
+				fi
+				;;
+		esac
+		if [ "$_snap_need_ds" = "1" ] &&
+			dumpsys battery 2>/dev/null | egrep -q 'powered: true'; then
+			QSC_BATTERY_POWERED="powered: true"
+		fi
+	fi
+
+	# 完整 sysfs：返回前再与 qsc_ps_plugged 对齐一次（防止 dumpsys 单独撒谎）
 	if [ -n "$_QSC_SNAP_CAP" ] && [ -n "$QSC_BATTERY_STATUS" ] &&
 		[ -n "$_QSC_SNAP_TEMP" ]; then
+		if [ -n "$QSC_BATTERY_POWERED" ] &&
+			type qsc_ps_plugged >/dev/null 2>&1 && ! qsc_ps_plugged; then
+			# dumpsys 说有电但端口扫描仍否：保留 powered 仅当有大电流/充电态旁证
+			_keep=0
+			type qsc_ps_charging_current_live >/dev/null 2>&1 &&
+				qsc_ps_charging_current_live && _keep=1
+			case "${QSC_BATTERY_STATUS:-}" in
+				2|5) [ "$_keep" = "1" ] || _keep=1 ;; # Charging/Full 信任 dumpsys+status
+			esac
+			# status=4 且无大电流：清掉，避免未插电假插电
+			if [ "${QSC_BATTERY_STATUS:-}" = "4" ] && [ "$_keep" != "1" ]; then
+				QSC_BATTERY_POWERED=""
+			fi
+		fi
 		QSC_BATTERY_LEVEL="$_QSC_SNAP_CAP"
 		QSC_BATTERY_TEMP="$_QSC_SNAP_TEMP"
 		QSC_BATTERY_READ_AT="$(date +%s 2>/dev/null)"

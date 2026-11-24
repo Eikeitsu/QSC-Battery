@@ -326,8 +326,8 @@ impl BatterySnapshot {
 
 /// 与 shell 侧 `qsc_ps_plugged` 对齐的最小电源状态。
 ///
-/// MCA 停充后 `usb/online` 常为 0；`present` 需 VBUS/类型旁证。
-/// 孤立 `Not charging` / 孤立 `present` 不判插电（K90U 未插电待机常见）。
+/// MCA/K90U：`online` 常为 0、充电时常掉 VBUS；`present` 需电流/充电态旁证。
+/// 孤立 `Not charging` / 孤立放电 `present` 不判插电。
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct PowerState {
     pub(crate) plugged: bool,
@@ -353,27 +353,67 @@ impl PowerState {
         false
     }
 
+    fn current_abs_ua(base: &str) -> Option<u64> {
+        for name in ["battery", "bms", "soc"] {
+            if let Some(cur) = read_int(&format!("{base}/{name}/current_now")) {
+                let mut abs = cur.unsigned_abs();
+                // |I|<10000 更像 mA
+                if abs > 0 && abs < 10_000 {
+                    abs *= 1000;
+                }
+                return Some(abs);
+            }
+        }
+        None
+    }
+
     fn looks_discharging(base: &str) -> bool {
-        // 与 shell qsc_ps_looks_discharging 对齐：仅 Discharging + |I|>10mA
         let st = read_text(&format!("{base}/battery/status")).unwrap_or_default();
         if !matches!(st.as_str(), "Discharging" | "discharging") {
             return false;
         }
-        for name in ["battery", "bms", "soc"] {
-            if let Some(cur) = read_int(&format!("{base}/{name}/current_now")) {
-                return cur.unsigned_abs() > 10_000;
-            }
-        }
-        false
+        Self::current_abs_ua(base).is_some_and(|ua| ua > 10_000)
     }
 
     fn charging_current_live(base: &str) -> bool {
-        for name in ["battery", "bms", "soc"] {
-            if let Some(cur) = read_int(&format!("{base}/{name}/current_now")) {
-                return cur.unsigned_abs() >= 150_000;
-            }
-        }
-        false
+        Self::current_abs_ua(base).is_some_and(|ua| ua >= 150_000)
+    }
+
+    fn status_charge_like(base: &str) -> bool {
+        matches!(
+            read_text(&format!("{base}/battery/status")).as_deref(),
+            Some(
+                "Charging"
+                    | "charging"
+                    | "Full"
+                    | "full"
+                    | "Not charging"
+                    | "Notcharging"
+                    | "not_charging"
+            )
+        )
+    }
+
+    /// 与 shell `qsc_device_is_mca` 粗对齐（有 handle_state / xm_power 即 MCA 族）
+    fn device_is_mca(root: &str) -> bool {
+        let candidates = [
+            "/sys/devices/platform/soc/soc:mca_business_charger/handle_state",
+            "/sys/devices/platform/soc/soc:mca_charger/handle_state",
+            "/sys/devices/platform/soc@0/soc:mca_charger/handle_state",
+            "/sys/devices/platform/soc@0/mca_charger/handle_state",
+            "/sys/class/xm_power/charger/charge_interface/charge_enable",
+            "/sys/class/xm_power/charger/charge_interface/input_suspend",
+        ];
+        candidates.iter().any(|p| {
+            let path = if root.is_empty() {
+                std::path::PathBuf::from(p)
+            } else if let Some(rest) = p.strip_prefix('/') {
+                std::path::Path::new(root).join(rest)
+            } else {
+                std::path::Path::new(root).join(p)
+            };
+            path.exists()
+        })
     }
 
     pub(crate) fn read(root: &str) -> Self {
@@ -390,17 +430,25 @@ impl PowerState {
 
         for name in ["usb", "qc_usb", "wireless", "ac"] {
             if read_int(&format!("{base}/{name}/present")) == Some(1) {
-                // VBUS/类型优先：停充后会放电，不能先因放电否决真插电
                 if Self::vbus_live(&base) || Self::type_live(&base) {
                     return Self { plugged: true };
                 }
                 if Self::looks_discharging(&base) {
                     continue;
                 }
+                if Self::charging_current_live(&base) {
+                    return Self { plugged: true };
+                }
+                // MCA：充电时常掉 VBUS；present + 充电态仍算插电
+                if Self::device_is_mca(root)
+                    && Self::status_charge_like(&base)
+                    && !Self::looks_discharging(&base)
+                {
+                    return Self { plugged: true };
+                }
             }
         }
 
-        // 类型 / VBUS 是强证据（与 shell 一致，不因放电否决）
         if Self::type_live(&base) {
             return Self { plugged: true };
         }

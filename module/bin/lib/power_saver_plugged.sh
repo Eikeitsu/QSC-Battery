@@ -21,7 +21,7 @@ qsc_ps_plugged() {
 # 注意：MCA/K90U 插电充电时常报 Not charging 且 |I| 很大——绝不能据此判放电，
 # 否则会否决 present/VBUS，整轮 charge_eval=0（多机停充失效的常见原因）。
 qsc_ps_looks_discharging() {
-	local p cur cur_int st
+	local st
 	if qsc_ps_read "$PSDIR/battery/status"; then
 		st="$QSC_PS_VAL"
 		case "$st" in
@@ -31,26 +31,9 @@ qsc_ps_looks_discharging() {
 	else
 		return 1
 	fi
-	for p in "$PSDIR/battery/current_now" \
-		"$PSDIR/bms/current_now" \
-		"$PSDIR/soc/current_now"; do
-		if qsc_ps_read "$p"; then
-			cur="$QSC_PS_VAL"
-			case "$cur" in
-				-|""|*[!0-9-]*) continue ;;
-			esac
-			cur_int="${cur#-}"
-			case "$cur_int" in
-				""|*[!0-9]*) continue ;;
-			esac
-			# 仅 status=Discharging 时，|I|>10mA 视为在耗电
-			if [ "$cur_int" -gt 10000 ] 2>/dev/null; then
-				return 0
-			fi
-			return 1
-		fi
-	done
-	return 1
+	# 仅 status=Discharging 时，|I|>10mA 视为在耗电（含 mA 口径）
+	qsc_ps_current_abs_ua || return 1
+	[ "${QSC_PS_CUR_UA:-0}" -gt 10000 ] 2>/dev/null
 }
 
 # USB VBUS 约 >3V（µV 或 mV）
@@ -83,9 +66,11 @@ qsc_ps_type_live() {
 	return 1
 }
 
-# 明显在充电：|I|≥150mA（µA）。MTK（K60U 等）常 online=0 + Not charging 但仍大电流。
-qsc_ps_charging_current_live() {
+# 把 current_now 归一成 µA 绝对值（有的机报 mA）。
+# 结果写入 QSC_PS_CUR_UA；失败返回 1。
+qsc_ps_current_abs_ua() {
 	local p cur cur_int
+	QSC_PS_CUR_UA=0
 	for p in "$PSDIR/battery/current_now" \
 		"$PSDIR/bms/current_now" \
 		"$PSDIR/soc/current_now"; do
@@ -98,22 +83,49 @@ qsc_ps_charging_current_live() {
 			case "$cur_int" in
 				""|*[!0-9]*) continue ;;
 			esac
-			if [ "$cur_int" -ge 150000 ] 2>/dev/null; then
-				return 0
+			# |I|<10000 更像 mA（1.5A→1500）；常见充电电流远大于 10A(µA 口径)
+			if [ "$cur_int" -gt 0 ] 2>/dev/null && [ "$cur_int" -lt 10000 ] 2>/dev/null; then
+				cur_int=$((cur_int * 1000))
 			fi
-			return 1
+			QSC_PS_CUR_UA="$cur_int"
+			return 0
 		fi
 	done
 	return 1
 }
 
-# present=1 旁证：优先 VBUS / 类型。
-# 停充标记存在时仅在冷却期内允许单信 present（MCA 刚停常掉 VBUS）；
-# 过期后孤立 present 视为未插电，避免 K90U 粘 present + 残留 power_switch 永远清不掉。
+# 明显在充电：|I|≥150mA。MTK/MCA 常 online=0 + Not charging 但仍大电流。
+qsc_ps_charging_current_live() {
+	qsc_ps_current_abs_ua || return 1
+	[ "${QSC_PS_CUR_UA:-0}" -ge 150000 ] 2>/dev/null
+}
+
+# 电池侧充电态（非 Discharging）
+qsc_ps_status_charge_like() {
+	local st
+	qsc_ps_read "$PSDIR/battery/status" || return 1
+	st="$QSC_PS_VAL"
+	case "$st" in
+		Charging|charging|Full|full|"Not charging"|Notcharging|not_charging) return 0 ;;
+	esac
+	return 1
+}
+
+# present=1 旁证：优先 VBUS / 类型 / 大电流；
+# MCA 充电时常掉 VBUS 且 online=0，允许「present + 充电态」；
+# 停充标记冷却期内允许单信 present；
+# 过期后孤立 present（且放电）视为未插电，避免粘 present + 残留 power_switch。
 qsc_ps_present_corroborated() {
 	local now last
 	qsc_ps_vbus_live && return 0
 	qsc_ps_type_live && return 0
+	qsc_ps_charging_current_live && return 0
+	# MCA/xm_power：线还在但 VBUS 被掐时，present + Charging/Not charging/Full 仍算插电
+	if type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca; then
+		if qsc_ps_status_charge_like && ! qsc_ps_looks_discharging; then
+			return 0
+		fi
+	fi
 	if [ -f "$DATADIR/power_switch" ]; then
 		now="$(date +%s 2>/dev/null)"
 		last="$(cat "$DATADIR/power_stop_ts" 2>/dev/null | tr -d ' \r\n')"
@@ -154,7 +166,7 @@ qsc_ps_plugged_scan() {
 				continue
 			fi
 			if ! qsc_ps_present_corroborated; then
-				qsc_ps_dbg ps_present debug "忽略孤立 ${p##*/}=1（无 VBUS/类型/冷却期旁证）"
+				qsc_ps_dbg ps_present debug "忽略孤立 ${p##*/}=1（无 VBUS/类型/电流/MCA充电态旁证）"
 				continue
 			fi
 			qsc_ps_dbg ps_present debug "判定已插电：${p##*/}=1（online 可能为 0）"
