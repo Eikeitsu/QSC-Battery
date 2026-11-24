@@ -21,12 +21,38 @@ qsc_event_log_raw() {
 	return 0
 }
 
+# 同类事件去抖（秒）：避免假停充/边沿抖动连记多条
+QSC_EVENT_DEDUP_SEC="${QSC_EVENT_DEDUP_SEC:-45}"
+
+qsc_event_should_skip_dup() {
+	local type="$1" now last gap f
+	case "$type" in
+		PLUG|UNPLUG|CHARGE_START|CHARGE_STOP|THERMAL) ;;
+		*) return 1 ;;
+	esac
+	f="$DATADIR/.event_dedup_${type}"
+	now="$(date +%s 2>/dev/null | tr -d ' \r\n')"
+	case "$now" in ""|*[!0-9]*) return 1 ;; esac
+	last="$(cat "$f" 2>/dev/null | tr -d ' \r\n')"
+	case "$last" in ""|*[!0-9]*) last=0 ;; esac
+	gap=$((now - last))
+	if [ "$last" -gt 0 ] 2>/dev/null &&
+		[ "$gap" -ge 0 ] 2>/dev/null &&
+		[ "$gap" -lt "${QSC_EVENT_DEDUP_SEC:-45}" ] 2>/dev/null; then
+		return 0
+	fi
+	printf '%s\n' "$now" >"$f" 2>/dev/null
+	return 1
+}
+
 # $1=事件类型(PLUG/UNPLUG/CHARGE_START/CHARGE_STOP/MAINTAIN/HEALTH/THERMAL/WARNING/CUSTOM)
 # $2=detail(可空)
 qsc_event_log() {
 	local type="$1" detail="$2"
 	[ -n "$type" ] || return 0
 	local ts level temp raw_temp
+	type="$(printf '%s' "$type" | tr -d '\r\n')"
+	qsc_event_should_skip_dup "$type" && return 0
 	ts="$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null)" || ts=""
 	level="$(qsc_cat_node "$PSDIR/battery/capacity" 2>/dev/null)"
 	[ -z "$level" ] && level="--"
@@ -36,8 +62,6 @@ qsc_event_log() {
 		temp="$(qsc_normalize_temperature "$raw_temp" 2>/dev/null)" || temp=""
 	fi
 	[ -z "$temp" ] && temp="--"
-	# 归一化：过滤换行、%、度符号
-	type="$(printf '%s' "$type" | tr -d '\r\n')"
 	detail="$(printf '%s' "$detail" | tr -d '\r\n')"
 	qsc_event_log_raw "${ts} [EVENT] ${type} ${level}% ${temp}°C ${detail}"
 }

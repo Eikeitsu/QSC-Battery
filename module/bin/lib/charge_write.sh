@@ -455,6 +455,7 @@ qsc_device_is_mca() {
 # 插电且处于停充态：仅 MCA/preferred 持续重申（非 MCA 停充成功后不再写节点，避免小米 OS2 闪充）
 qsc_maintain_stop_while_plugged() {
 	local online _ts _now _cur _st _age _grace _node_hold _as_entry _as_route _as_val _keep_full
+	local _stable _last_rf _rf_gap _rf_min _fake_last _is_mca
 	[ -f "$DATADIR/power_switch" ] || {
 		qsc_stop_wakelock_release
 		return 1
@@ -470,6 +471,9 @@ qsc_maintain_stop_while_plugged() {
 		return 1
 	}
 
+	_is_mca=0
+	type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca && _is_mca=1
+
 	# 假停充自愈：
 	# 标记已超过数秒且仍像在充 → 清标记，让主循环重新走完整停充分支。
 	# 停充后短时间内 OEM（尤其 input_suspend）常仍报 Charging / 中等电流，
@@ -480,12 +484,14 @@ qsc_maintain_stop_while_plugged() {
 	_now="$(date +%s 2>/dev/null | tr -d ' \r\n')"
 	case "$_ts" in ""|*[!0-9]*) _ts=0 ;; esac
 	case "$_now" in ""|*[!0-9]*) _now=0 ;; esac
+	_node_hold=0
+	_stable=0
 	if [ "$_now" -gt 0 ] && [ "$_ts" -gt 0 ] && [ $((_now - _ts)) -ge 8 ]; then
 		_cur="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n')"
 		_st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
 		_age=$((_now - _ts))
-		_grace=120
-		_node_hold=0
+		# 通用更宽：OEM 停充后短时仍报 Charging/中等电流很常见
+		_grace=180
 		_as_route=''
 		_as_val=''
 		if [ -f "$DATADIR/active_switch" ]; then
@@ -502,45 +508,74 @@ qsc_maintain_stop_while_plugged() {
 		if [ "$_node_hold" = "1" ]; then
 			# 节点还停着：即使电流偏大也只重申（放电负载常见）
 			qsc_dbg "maintain：节点仍停充 age=${_age}s cur=${_cur:-?} status=${_st:-?} node=${_as_route:-?}=${_as_val:-?}"
+			qsc_charge_looks_stopped && _stable=1
 		elif ! qsc_charge_looks_stopped; then
 			if [ "$_age" -lt "$_grace" ] 2>/dev/null || [ -f "$DATADIR/charge_full_done" ]; then
 				qsc_dbg "假停充可疑但宽限/闩锁中：仅重申 age=${_age}s cur=${_cur:-?} status=${_st:-?} node=${_as_route:-?}=${_as_val:-?}"
 			else
-				qsc_log_once fake_stop warn \
-					"假停充：已标记停充但电流仍高，先还原节点再清标记并重试停充"
-				qsc_dbg "fake_stop 触发 age=${_age}s cur=${_cur:-?} status=${_st:-?} node=${_as_route:-?}=${_as_val:-?} hold=0"
-				# 必须先还原：只清 power_switch 会留下孤儿停充，热更新/杀进程后更难自愈
-				if type qsc_power_start >/dev/null 2>&1; then
-					qsc_power_start
+				# 连续清标记冷却：避免一夜反复「还原→再停」加热
+				_fake_last="$(cat "$DATADIR/.fake_stop_at" 2>/dev/null | tr -d ' \r\n')"
+				case "$_fake_last" in ""|*[!0-9]*) _fake_last=0 ;; esac
+				if [ "$_fake_last" -gt 0 ] 2>/dev/null &&
+					[ $((_now - _fake_last)) -lt 300 ] 2>/dev/null; then
+					qsc_dbg "假停充冷却中：只重申 age=${_age}s since_clear=$((_now - _fake_last))s"
+				else
+					qsc_log_once fake_stop warn \
+						"假停充：已标记停充但电流仍高，先还原节点再清标记并重试停充"
+					qsc_dbg "fake_stop 触发 age=${_age}s cur=${_cur:-?} status=${_st:-?} node=${_as_route:-?}=${_as_val:-?} hold=0"
+					printf '%s\n' "$_now" >"$DATADIR/.fake_stop_at" 2>/dev/null
+					if type qsc_power_start >/dev/null 2>&1; then
+						qsc_power_start
+					fi
+					_keep_full=0
+					[ -f "$DATADIR/charge_full_done" ] && _keep_full=1
+					rm -f "$DATADIR/power_switch" "$DATADIR/active_switch" \
+						"$DATADIR/power_on" "$DATADIR/power_off" \
+						"$DATADIR/.orphan_checked_at" 2>/dev/null
+					[ "$_keep_full" = "1" ] && touch "$DATADIR/charge_full_done" 2>/dev/null
+					qsc_stop_wakelock_release
+					return 1
 				fi
-				# 保留充满再停闩锁，下一轮可立刻再停而不必重等
-				_keep_full=0
-				[ -f "$DATADIR/charge_full_done" ] && _keep_full=1
-				rm -f "$DATADIR/power_switch" "$DATADIR/active_switch" \
-					"$DATADIR/power_on" "$DATADIR/power_off" \
-					"$DATADIR/.orphan_checked_at" 2>/dev/null
-				[ "$_keep_full" = "1" ] && touch "$DATADIR/charge_full_done" 2>/dev/null
-				qsc_stop_wakelock_release
-				return 1
 			fi
 		else
 			qsc_dbg "maintain：停充态正常 age=${_age}s cur=${_cur:-?} status=${_st:-?} node=${_as_route:-?}=${_as_val:-?}"
+			_stable=1
 		fi
 	fi
 
 	# 按场景决定持锁或释放（auto 亮屏会释放）
 	if ! qsc_stop_wakelock_acquire; then
-		# 未持锁或已释放：确保标志与内核一致
 		:
 	fi
+
+	# 停充已稳（节点 hold 且看起来已停）：非 MCA 节流写节点，减少过夜抢写发热
+	# MCA / xm_power 仍须较勤重申，不被系统改回
+	if [ "$_stable" = "1" ] && [ "$_is_mca" != "1" ]; then
+		_last_rf="$(cat "$DATADIR/.maintain_reaffirm_at" 2>/dev/null | tr -d ' \r\n')"
+		case "$_last_rf" in ""|*[!0-9]*) _last_rf=0 ;; esac
+		_rf_min=180
+		type qsc_ps_maintain_secs >/dev/null 2>&1 && qsc_ps_maintain_secs
+		[ "${QSC_PS_MAINTAIN_EFF:-0}" -gt "$_rf_min" ] 2>/dev/null &&
+			_rf_min="$QSC_PS_MAINTAIN_EFF"
+		_rf_gap=$((_now - _last_rf))
+		if [ "$_last_rf" -gt 0 ] 2>/dev/null &&
+			[ "$_rf_gap" -ge 0 ] 2>/dev/null &&
+			[ "$_rf_gap" -lt "$_rf_min" ] 2>/dev/null; then
+			qsc_dbg "maintain：稳态跳过重申 gap=${_rf_gap}s < ${_rf_min}s"
+			return 0
+		fi
+	fi
+
 	# MCA：系统会改回 handle_state，必须每轮重申
 	if qsc_mca_write stop; then
 		qsc_xm_power_vote stop >/dev/null 2>&1 || true
+		[ "$_now" -gt 0 ] && printf '%s\n' "$_now" >"$DATADIR/.maintain_reaffirm_at" 2>/dev/null
 		qsc_dbg "maintain：MCA 重申成功"
 		return 0
 	fi
 	# 机型 ABI：xm_power 投票也会被改回
 	if type qsc_xm_power_vote >/dev/null 2>&1 && qsc_xm_power_vote stop; then
+		[ "$_now" -gt 0 ] && printf '%s\n' "$_now" >"$DATADIR/.maintain_reaffirm_at" 2>/dev/null
 		qsc_dbg "maintain：xm_power 重申成功"
 		return 0
 	fi
@@ -548,12 +583,14 @@ qsc_maintain_stop_while_plugged() {
 	qsc_load_device_profile 2>/dev/null || true
 	if [ -n "$QSC_PREF_PATH" ] && [ -f "$QSC_PREF_PATH" ]; then
 		if qsc_pref_write stop; then
+			[ "$_now" -gt 0 ] && printf '%s\n' "$_now" >"$DATADIR/.maintain_reaffirm_at" 2>/dev/null
 			qsc_dbg "maintain：preferred 重申成功 $QSC_PREF_PATH"
 			return 0
 		fi
 	fi
 	if [ -f "$DATADIR/active_switch" ]; then
 		if qsc_reaffirm_active_stop; then
+			[ "$_now" -gt 0 ] && printf '%s\n' "$_now" >"$DATADIR/.maintain_reaffirm_at" 2>/dev/null
 			qsc_dbg "maintain：active_switch 重申成功"
 			return 0
 		fi

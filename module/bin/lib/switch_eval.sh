@@ -205,6 +205,7 @@ if [ "$charge_eval" = "1" ]; then
 	if [ ! -f "$DATADIR/power_on" -a "$module_off" != "1" ]; then
 		rm -f "$DATADIR/power_off"
 		touch "$DATADIR/power_on"
+		rm -f "$DATADIR/.unplug_noted" 2>/dev/null
 		type qsc_event_plug >/dev/null 2>&1 &&
 			qsc_event_plug "检测到充电器接入"
 		if [ "$power_reset" = "1" -a "$reset_log" = "1" ]; then
@@ -246,16 +247,20 @@ else
 		qsc_dbg "拔线确认：unplug_restore=$unplug_restore"
 		if [ "$unplug_restore" = "0" ]; then
 			# 不清 power_switch / 不还原节点：再插上仍保持停充直到恢复阈值
-			qsc_log info "已拔出充电器，保留停充状态（未还原节点）"
-			type qsc_event_unplug >/dev/null 2>&1 &&
-				qsc_event_unplug "充电器拔出，保留停充状态"
+			# 保留停充时只记一次拔线，避免连续两轮确认反复打日志
+			if [ ! -f "$DATADIR/.unplug_noted" ]; then
+				touch "$DATADIR/.unplug_noted" 2>/dev/null
+				qsc_log info "已拔出充电器，保留停充状态（未还原节点）"
+				type qsc_event_unplug >/dev/null 2>&1 &&
+					qsc_event_unplug "充电器拔出，保留停充状态"
+			fi
 			qsc_log_once_clear unplug_restore
 		else
 			qsc_power_start
 			if [ "$start_ok" = "1" ]; then
 				rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" \
 					"$DATADIR/battery_switch" "$DATADIR/app_stop_flag" \
-					"$DATADIR/resume_fail_hint"
+					"$DATADIR/resume_fail_hint" "$DATADIR/.unplug_noted"
 				rm -f "$DATADIR/charge_full_done" "$DATADIR/charge_full_since" "$DATADIR/now_c"
 				qsc_clear_active_switch
 				qsc_stop_wakelock_release

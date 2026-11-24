@@ -2,18 +2,18 @@
 
 ## Unreleased
 
-- **低电防护（冷门）**：低电提醒/关机 + 过温关机（默关；关时零额外开销）；低电关机需开机≥15 分钟；建议值 15%/5%/55°C；旧 `shut_down` 迁为 `low_batt_shutdown`
-- **机型 ABI**：补 OPlus `class`/`virtual` 双路径与 `charge_behaviour`；扫描排除 `handle_stop_charging`；支持 `xm_power` 的 `qsc`/`micharge` 双投票停充与重申；诊断按文件模式位标 `writable`（不用 `test -w`），并列出 xm_power 接口
-- **DeepPark v2 待机省电**：去掉常驻 heartbeat 子进程（改 lean/边沿节流写盘）；均衡深睡超时 3600s、强力 7200s；默认开夜间省电；息屏驻停强制停 worker / 清假 viewing、不挂 viewer wake-file；Rust `watch` 上限 14400s。诊断字段增加 `park_wakes_total` / `last_park_sec` / `heartbeat_writes`
-- **动态简介仍开也能更省**：无人看列表时写 prop 最小间隔 15 分钟（状态突变仍立刻）；亮屏日用 sticky 少读亮度；无 XP 时 dumpsys 空闲探测 30s→120s。打开管理器仍即时刷电量
-- **SukiSU Nova**：管理器包名 `com.sukisu.nova`（兼容旧 `com.sukisu.ultra`）；简介「在看管理器」内置表、WebUI 打开管理器、伴侣 XP 边沿包名已同步
-- **热更新失败后开关一直灰、重启也不走标准更新**：接管失败时只有完整的 `modules_update` 才留下 `update`；服务启动时若发现失败事务，会在写简介前对上版本并清掉 `update` / 事务 /「请重启」标记。没有更新源时不再把开关锁死。电流探测和机型档案改到后台，避免主循环迟迟不开始导致接管校验超时。失败文案带具体原因，且在标记还在时不会被默认简介盖掉
-- **安装/Action 音量键**：zip 为 `volkey-*` 写入可执行位；`keys.sh` 装机时再 `chmod 0755`，避免无 +x 静默回退 `getevent` 弹出系统音量条
-- **停充开关解析**：统一 `qsc_parse_normalized_switch_entry`，去掉散落的 sed 切字段
-- **WebUI 减卡顿**：`qsc_status.sh` 不再 source 整份 `common.sh`（仅 util + snapshot）；状态轮询走 low 优先级并合并并发刷新；配置一次 cat 三个 conf；档案 API 只加载 `archive.sh`
-- **热路径**：停充 verify/wakelock/batch 只用 `QSCV_*`；wakelock mode 单处解析；maintain 插电只走 `qsc_ps_plugged`
-- **Action / 测开关**：刷新复用 snapshot；测开关解析复用 helper；音量键 getevent 精简并优先 `chooseport`
-- **配置钳位同源**：WebUI `LIMITS` 增补 `chargeFullWait*`；shell `switch_prelude` / `power_saver_core` 注明与 LIMITS 对齐
+> 增加小米17Pro适配，其它机型自测，控制节点可能相同
+
+- **插电停充过夜更稳**：停充稳态少写节点（非 MCA 节流重申）；假停充宽限更长、清标记有冷却，减轻反复「还原→再停」；充电事件同类约 45s 去抖
+- **低电防护（冷门，默关）**：未插电低电提醒 / 倒计时关机，以及过温关机；关时主路径零额外开销。建议启用 15% / 5% / 55°C；低电关机需开机满约 15 分钟。旧键 `shut_down` 迁为 `low_batt_shutdown`
+- **首页配置档快捷切换（APP）**：主题设置可开「首页显示配置档」；点卡片切换「我的 → 配置档」里已保存的档位
+- **机型适配**：OPlus 补 `class`/`virtual` 双路径与 `charge_behaviour`；扫描排除易误伤的 `handle_stop_charging`；小米 `xm_power` 支持 `qsc`/`micharge` 双投票停充与重申；诊断按权限位标 `writable`，并列出 xm_power 接口
+- **DeepPark v2 待机**：去掉常驻 heartbeat 子进程；均衡深睡 3600s、强力 7200s；默认开夜间省电；息屏驻停停 worker、清假 viewing。Rust `watch` 最长 14400s；诊断增加驻停唤醒相关字段
+- **简介更省、打开仍即时**：无人看管理器列表时电量数字最多约 15 分钟写一次（状态突变仍立刻）；亮屏少读亮度；无 XP 时 dumpsys 空闲探测放宽。打开管理器仍马上刷电量
+- **SukiSU Nova**：识别 `com.sukisu.nova`（兼容旧 `ultra`）；简介在看表、WebUI「打开管理器」、XP 边沿包名已跟上
+- **热更新卡死修复**：接管失败不再误留「请重启 / 开关灰」；无更新源不锁开关；探测与机型档案改后台，避免主循环迟迟不跑导致超时。失败原因写进简介且不被默认文案盖掉
+- **安装音量键**：打包保证 `volkey` 可执行，装机再 `chmod`，减少无 +x 回退 `getevent` 弹出系统音量条
+- **内部整理**：开关条目统一解析；停充热路径少 fork、多用已缓存配置；WebUI 状态轮询减卡顿；Action 测开关 / 刷新复用 snapshot；WebUI 与 shell 数值钳位口径对齐
 
 ## 2026.10.12
 
