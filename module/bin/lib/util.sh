@@ -89,6 +89,26 @@ qsc_boot_cleanup_logs() {
 	qsc_trim_file_bytes "$DATADIR/debug.log" 262144 131072
 	# 运行日志软上限：超过 400 行留最近 300 行（主循环里还会再裁）
 	qsc_trim_file_lines "${LOG_FILE:-$DATADIR/log.log}" 400 300
+	# 电流失败黑名单（#6）：历史无上限可胀到数十 GB，启动时按体积处理
+	if type qsc_ch_curr_session_fail_sanitize >/dev/null 2>&1; then
+		qsc_ch_curr_session_fail_sanitize
+	elif [ -f "$DATADIR/.ch_curr_session_fail" ]; then
+		_sf_sz="$(stat -c %s "$DATADIR/.ch_curr_session_fail" 2>/dev/null)"
+		case "$_sf_sz" in
+			""|*[!0-9]*)
+				_sf_sz="$(wc -c <"$DATADIR/.ch_curr_session_fail" 2>/dev/null | tr -d ' ')"
+				;;
+		esac
+		case "$_sf_sz" in ""|*[!0-9]*) _sf_sz=0 ;; esac
+		if [ "$_sf_sz" -gt 1048576 ] 2>/dev/null; then
+			rm -f "$DATADIR/.ch_curr_session_fail" \
+				"$DATADIR/.ch_curr_sf2" "$DATADIR/.ch_curr_sf_u" 2>/dev/null
+		elif [ "$_sf_sz" -gt 65536 ] 2>/dev/null; then
+			sort -u "$DATADIR/.ch_curr_session_fail" -o "$DATADIR/.ch_curr_sf_u" 2>/dev/null &&
+				mv -f "$DATADIR/.ch_curr_sf_u" "$DATADIR/.ch_curr_session_fail" 2>/dev/null ||
+				rm -f "$DATADIR/.ch_curr_session_fail" "$DATADIR/.ch_curr_sf_u" 2>/dev/null
+		fi
+	fi
 }
 
 # 单行节点快速读取：纯内建，无 fork、不写临时文件。结果放 QSC_NODE_VAL。

@@ -17,6 +17,47 @@ if [ -f "$LIBDIR/hot_update.sh" ]; then
 fi
 
 mkdir -p "$DATADIR"
+# 单实例（#6）：避免 Magisk/热更新/手工重复拉起叠跑，放大电流失败黑名单写盘
+QSC_SERVICE_LOCK="$DATADIR/service.lock"
+QSC_SERVICE_LOCK_DIR="$DATADIR/service.lock.d"
+QSC_SERVICE_HAS_FLOCK=0
+qsc_service_try_singleton() {
+	local old
+	if command -v flock >/dev/null 2>&1; then
+		# FD 200 持锁至进程退出；非阻塞失败则已有实例
+		exec 200>"$QSC_SERVICE_LOCK" 2>/dev/null || return 0
+		if flock -n 200 2>/dev/null; then
+			QSC_SERVICE_HAS_FLOCK=1
+			return 0
+		fi
+		old="$(cat "$DATADIR/service_pid" 2>/dev/null | tr -d ' \r\n')"
+		echo "qsc: service already running pid=${old:-?}，exit" >&2
+		return 1
+	fi
+	if mkdir "$QSC_SERVICE_LOCK_DIR" 2>/dev/null; then
+		printf '%s\n' "$$" >"$QSC_SERVICE_LOCK_DIR/pid" 2>/dev/null
+		return 0
+	fi
+	old="$(cat "$QSC_SERVICE_LOCK_DIR/pid" 2>/dev/null | tr -d ' \r\n')"
+	case "$old" in
+		""|*[!0-9]*)
+			rm -rf "$QSC_SERVICE_LOCK_DIR" 2>/dev/null
+			;;
+		*)
+			if kill -0 "$old" 2>/dev/null; then
+				echo "qsc: service already running pid=$old，exit" >&2
+				return 1
+			fi
+			rm -rf "$QSC_SERVICE_LOCK_DIR" 2>/dev/null
+			;;
+	esac
+	mkdir "$QSC_SERVICE_LOCK_DIR" 2>/dev/null || return 1
+	printf '%s\n' "$$" >"$QSC_SERVICE_LOCK_DIR/pid" 2>/dev/null
+	return 0
+}
+if ! qsc_service_try_singleton; then
+	exit 0
+fi
 QSC_SERVICE_BOOT_AT="$(date +%s 2>/dev/null)"
 case "$QSC_SERVICE_BOOT_AT" in ""|*[!0-9]*) QSC_SERVICE_BOOT_AT=0 ;; esac
 printf '%s\n' "$$" >"$DATADIR/service_pid" 2>/dev/null
@@ -42,6 +83,11 @@ qsc_service_exit() {
 			mv -f "$DATADIR/service_start.state.tmp" "$DATADIR/service_start.state" 2>/dev/null
 		rm -f "$DATADIR/service_pid" 2>/dev/null
 		rm -f "$DATADIR/service_heartbeat_pid" 2>/dev/null
+	fi
+	# mkdir 锁需显式释放；flock 随进程退出自动放
+	if [ "${QSC_SERVICE_HAS_FLOCK:-0}" != "1" ]; then
+		_lk="$(cat "$QSC_SERVICE_LOCK_DIR/pid" 2>/dev/null | tr -d ' \r\n')"
+		[ "$_lk" = "$$" ] && rm -rf "$QSC_SERVICE_LOCK_DIR" 2>/dev/null
 	fi
 }
 trap qsc_service_exit 0 1 2 3 15

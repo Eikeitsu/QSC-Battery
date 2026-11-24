@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **修复 [#6](https://github.com/Eikeitsu/QSC-Battery/issues/6)**：`.ch_curr_session_fail` 去重写入 + 体积上限（启动清异常膨胀）；服务加单实例锁，避免多守护叠跑放大写盘
+
 ## 2026.11.24
 
 > 增加小米17Pro适配，其它机型自测，控制节点可能相同

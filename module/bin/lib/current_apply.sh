@@ -126,6 +126,81 @@ qsc_current_write_one() {
 	return 1
 }
 
+# .ch_curr_session_fail：本会话写失败节点黑名单（每行一条路径）。
+# 旧逻辑在 force 重申失败时无去重 append，可胀到数十 GB（GitHub #6）。
+QSC_CH_SF_MAX_BYTES=65536
+
+qsc_ch_curr_session_fail_size() {
+	local f="$1" s
+	[ -f "$f" ] || {
+		echo 0
+		return 0
+	}
+	s="$(stat -c %s "$f" 2>/dev/null)"
+	case "$s" in
+		""|*[!0-9]*) s="$(wc -c <"$f" 2>/dev/null | tr -d ' ')" ;;
+	esac
+	case "$s" in
+		""|*[!0-9]*) s=0 ;;
+	esac
+	echo "$s"
+}
+
+# 过大则清空/去重，避免对膨胀文件 grep/sort
+qsc_ch_curr_session_fail_sanitize() {
+	local f="$DATADIR/.ch_curr_session_fail" sz tmp
+	[ -f "$f" ] || return 0
+	sz="$(qsc_ch_curr_session_fail_size "$f")"
+	if [ "$sz" -gt 1048576 ] 2>/dev/null; then
+		rm -f "$f" "$DATADIR/.ch_curr_sf2" "$DATADIR/.ch_curr_sf_u" 2>/dev/null
+		type qsc_log_once >/dev/null 2>&1 &&
+			qsc_log_once ch_sf_huge warn "已清空异常膨胀的 .ch_curr_session_fail（${sz}B）"
+		return 0
+	fi
+	if [ "$sz" -gt "${QSC_CH_SF_MAX_BYTES:-65536}" ] 2>/dev/null; then
+		tmp="$DATADIR/.ch_curr_sf_u"
+		if sort -u "$f" -o "$tmp" 2>/dev/null && mv -f "$tmp" "$f" 2>/dev/null; then
+			:
+		else
+			rm -f "$f" "$tmp" 2>/dev/null
+			return 0
+		fi
+		sz="$(qsc_ch_curr_session_fail_size "$f")"
+		if [ "$sz" -gt "${QSC_CH_SF_MAX_BYTES:-65536}" ] 2>/dev/null; then
+			rm -f "$f" 2>/dev/null
+		fi
+	fi
+	return 0
+}
+
+qsc_ch_curr_session_fail_has() {
+	local path="$1" f="$DATADIR/.ch_curr_session_fail"
+	[ -n "$path" ] || return 1
+	qsc_ch_curr_session_fail_sanitize
+	[ -f "$f" ] || return 1
+	grep -qxF -- "$path" "$f" 2>/dev/null
+}
+
+qsc_ch_curr_session_fail_add() {
+	local path="$1" f="$DATADIR/.ch_curr_session_fail"
+	[ -n "$path" ] || return 0
+	qsc_ch_curr_session_fail_sanitize
+	if [ -f "$f" ] && grep -qxF -- "$path" "$f" 2>/dev/null; then
+		return 0
+	fi
+	echo "$path" >>"$f" 2>/dev/null || true
+}
+
+qsc_ch_curr_session_fail_remove() {
+	local path="$1" f="$DATADIR/.ch_curr_session_fail" tmp
+	[ -n "$path" ] || return 0
+	qsc_ch_curr_session_fail_sanitize
+	[ -f "$f" ] || return 0
+	tmp="$DATADIR/.ch_curr_sf2"
+	grep -vxF -- "$path" "$f" >"$tmp" 2>/dev/null
+	mv -f "$tmp" "$f" 2>/dev/null || rm -f "$tmp" 2>/dev/null
+}
+
 # 写入电流目标（内部单位 µA）
 # 副作用：QSC_CW_HIT / QSC_CW_OK / QSC_CW_FROM / QSC_CW_TO / QSC_CW_RB / QSC_CW_NODE / QSC_CW_SCALE
 # 可选环境：QSC_CW_FORCE=1 强制重申（忽略读回相等快路径；优先只写工作节点）
@@ -175,6 +250,7 @@ qsc_current_write_target() {
 	[ -z "$(echo "$entries" | tr -d ' ')" ] && entries="$QSC_CURR_ENTRIES"
 
 	: >"$DATADIR/.ch_curr_ok_tmp" 2>/dev/null
+	qsc_ch_curr_session_fail_sanitize
 
 	for entry in $entries; do
 		path="${entry%%::*}"
@@ -182,7 +258,8 @@ qsc_current_write_target() {
 		[ -n "$path" ] && [ -f "$path" ] || continue
 		qsc_current_node_denied "$path" && continue
 
-		if [ "$force" != "1" ] && [ -f "$session_fail" ] && grep -q "^${path}$" "$session_fail" 2>/dev/null; then
+		# 非强制：已失败过的节点本会话跳过；强制重申仍试，但失败只记一次
+		if [ "$force" != "1" ] && qsc_ch_curr_session_fail_has "$path"; then
 			continue
 		fi
 
@@ -240,12 +317,9 @@ qsc_current_write_target() {
 			ok=1
 			QSC_CW_REACHED=1
 			echo "$path::$scale" >>"$DATADIR/.ch_curr_ok_tmp"
-			if [ -f "$session_fail" ]; then
-				grep -v "^${path}$" "$session_fail" >"$DATADIR/.ch_curr_sf2" 2>/dev/null
-				mv "$DATADIR/.ch_curr_sf2" "$session_fail" 2>/dev/null
-			fi
+			qsc_ch_curr_session_fail_remove "$path"
 		else
-			echo "$path" >>"$session_fail" 2>/dev/null
+			qsc_ch_curr_session_fail_add "$path"
 		fi
 	done
 
