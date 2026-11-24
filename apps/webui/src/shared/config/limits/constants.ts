@@ -7,6 +7,13 @@ export const LIMITS = {
   levelMin: 1,
   levelMax: 100,
   levelOff: 110,
+  /** 低电关机上限（与 shell low_batt_shutdown 钳位一致） */
+  lowBattShutMax: 15,
+  lowBattDelayMin: 10,
+  lowBattDelayMax: 300,
+  lowBattUptimeMin: 0,
+  lowBattUptimeMax: 7200,
+  lowBattTempShutMax: 70,
   powerStopTimeMin: 1,
   powerStopTimeMax: 120,
   tempSwitchMin: 25,

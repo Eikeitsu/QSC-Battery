@@ -225,6 +225,97 @@ internal fun ConfigAdvancedSections(
         )
     }
 
+    ChargeSection(title = "低电防护（冷门）") {
+        Text(
+            text = "默认全关。建议：提醒 15% / 关机 5% / 过温 55°C。低电仅未插电；过温插电也生效。",
+            style = ChargeTheme.typography.caption,
+            color = ChargeTheme.colors.muted,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+        ChargeListRow(
+            title = "填入建议值",
+            summary = "15 / 5 / 55°C · 倒计时 60s · 开机满 900s",
+            onClick = {
+                setLocal("low_batt_warn", "15")
+                setLocal("low_batt_shutdown", "5")
+                setLocal("low_batt_temp_shutdown", "55")
+                setLocal("low_batt_shutdown_delay_sec", "60")
+                setLocal("low_batt_shutdown_min_uptime_sec", "900")
+            },
+        )
+        ChargeListRow(
+            title = "低电提醒 %",
+            summary = v("low_batt_warn").ifBlank { "0" }.let {
+                if (it == "0") "关" else "≤$it% 提醒"
+            },
+            onClick = {
+                onEdit(
+                    ConfigEditField("低电提醒", "% · 0=关，建议 15", true, 1, { v("low_batt_warn") }) {
+                        setLocal("low_batt_warn", it)
+                    },
+                )
+            },
+        )
+        ChargeListRow(
+            title = "自动关机 %",
+            summary = v("low_batt_shutdown").ifBlank { "0" }.let {
+                if (it == "0") "关" else "≤$it% 关机"
+            },
+            onClick = {
+                onEdit(
+                    ConfigEditField("自动关机", "% · 0=关，建议 5", true, 1, {
+                        v("low_batt_shutdown")
+                    }) {
+                        setLocal("low_batt_shutdown", it)
+                    },
+                )
+            },
+        )
+        ChargeListRow(
+            title = "过温关机 °C",
+            summary = v("low_batt_temp_shutdown").ifBlank { "0" }.let {
+                if (it == "0") "关" else "≥$it°C 关机"
+            },
+            onClick = {
+                onEdit(
+                    ConfigEditField("过温关机", "°C · 0=关，建议 55", true, 1, {
+                        v("low_batt_temp_shutdown")
+                    }) {
+                        setLocal("low_batt_temp_shutdown", it)
+                    },
+                )
+            },
+        )
+        ChargeListRow(
+            title = "关机倒计时",
+            summary = "${v("low_batt_shutdown_delay_sec").ifBlank { "60" }} 秒",
+            onClick = {
+                onEdit(
+                    ConfigEditField("关机倒计时", "秒", true, 1, {
+                        v("low_batt_shutdown_delay_sec")
+                    }) {
+                        setLocal("low_batt_shutdown_delay_sec", it)
+                    },
+                )
+            },
+        )
+        ChargeListRow(
+            title = "开机满秒才关",
+            summary = v("low_batt_shutdown_min_uptime_sec").ifBlank { "900" }.let {
+                if (it == "0") "不限制" else "${it}s"
+            },
+            onClick = {
+                onEdit(
+                    ConfigEditField("开机满秒才关", "秒 · 默认 900，0=不限", true, 1, {
+                        v("low_batt_shutdown_min_uptime_sec")
+                    }) {
+                        setLocal("low_batt_shutdown_min_uptime_sec", it)
+                    },
+                )
+            },
+        )
+    }
+
     ChargeSection(title = "日程摘要") {
         ChargeListRow(
             title = "停充时段",

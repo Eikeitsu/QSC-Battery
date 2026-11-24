@@ -216,6 +216,8 @@ qsc_service_unplug_housekeep() {
 		type qsc_history_flush_pending >/dev/null 2>&1; then
 		qsc_history_flush_pending
 	fi
+	# 低电防护：两阈值均关时函数内立刻 return
+	type qsc_low_batt_guard >/dev/null 2>&1 && qsc_low_batt_guard
 }
 
 qsc_service_loop_once() {

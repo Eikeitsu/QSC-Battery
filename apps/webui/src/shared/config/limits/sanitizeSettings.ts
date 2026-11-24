@@ -86,6 +86,43 @@ export function sanitizeSettings(input: Settings): SanitizeResult<Settings> {
     )
       mark(true);
   }
+  {
+    const warn = clampInt(next.low_batt_warn, 0, LIMITS.levelMax, 0);
+    let shut = clampInt(next.low_batt_shutdown, 0, LIMITS.lowBattShutMax, 0);
+    const delay = clampInt(
+      next.low_batt_shutdown_delay_sec,
+      LIMITS.lowBattDelayMin,
+      LIMITS.lowBattDelayMax,
+      60,
+    );
+    const uptime = clampInt(
+      next.low_batt_shutdown_min_uptime_sec,
+      LIMITS.lowBattUptimeMin,
+      LIMITS.lowBattUptimeMax,
+      900,
+    );
+    const tempShut = clampInt(
+      next.low_batt_temp_shutdown,
+      0,
+      LIMITS.lowBattTempShutMax,
+      0,
+    );
+    if (warn > 0 && shut > 0 && shut >= warn) {
+      shut = Math.max(0, warn - 1);
+      mark(true);
+    }
+    if (String(warn) !== String(input.low_batt_warn ?? "0")) mark(true);
+    if (String(shut) !== String(input.low_batt_shutdown ?? "0")) mark(true);
+    if (String(delay) !== String(input.low_batt_shutdown_delay_sec ?? "60")) mark(true);
+    if (String(uptime) !== String(input.low_batt_shutdown_min_uptime_sec ?? "900"))
+      mark(true);
+    if (String(tempShut) !== String(input.low_batt_temp_shutdown ?? "0")) mark(true);
+    next.low_batt_warn = String(warn);
+    next.low_batt_shutdown = String(shut);
+    next.low_batt_shutdown_delay_sec = String(delay);
+    next.low_batt_shutdown_min_uptime_sec = String(uptime);
+    next.low_batt_temp_shutdown = String(tempShut);
+  }
   next.temperature_switch =
     next.temperature_switch === BinaryFlag.Off ? BinaryFlag.Off : BinaryFlag.On;
 

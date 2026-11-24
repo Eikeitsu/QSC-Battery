@@ -27,6 +27,11 @@ export const NOTIFY_CONF_KEYS = [
   "notify_charge_event",
   "notify_charge_kinds",
   "notify_power_status",
+  "low_batt_warn",
+  "low_batt_shutdown",
+  "low_batt_shutdown_delay_sec",
+  "low_batt_shutdown_min_uptime_sec",
+  "low_batt_temp_shutdown",
 ] as const;
 
 const POWER_SET = new Set<string>(POWER_CONF_KEYS);

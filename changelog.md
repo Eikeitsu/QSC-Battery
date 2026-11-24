@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **低电防护（冷门）**：低电提醒/关机 + 过温关机（默关；关时零额外开销）；低电关机需开机≥15 分钟；建议值 15%/5%/55°C；旧 `shut_down` 迁为 `low_batt_shutdown`
 - **机型 ABI**：补 OPlus `class`/`virtual` 双路径与 `charge_behaviour`；扫描排除 `handle_stop_charging`；支持 `xm_power` 的 `qsc`/`micharge` 双投票停充与重申；诊断按文件模式位标 `writable`（不用 `test -w`），并列出 xm_power 接口
 - **DeepPark v2 待机省电**：去掉常驻 heartbeat 子进程（改 lean/边沿节流写盘）；均衡深睡超时 3600s、强力 7200s；默认开夜间省电；息屏驻停强制停 worker / 清假 viewing、不挂 viewer wake-file；Rust `watch` 上限 14400s。诊断字段增加 `park_wakes_total` / `last_park_sec` / `heartbeat_writes`
 - **动态简介仍开也能更省**：无人看列表时写 prop 最小间隔 15 分钟（状态突变仍立刻）；亮屏日用 sticky 少读亮度；无 XP 时 dumpsys 空闲探测 30s→120s。打开管理器仍即时刷电量

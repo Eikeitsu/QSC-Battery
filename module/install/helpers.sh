@@ -157,6 +157,9 @@ qsc_merge_config() {
 	sed -i -e '/^power_switch=/d' -e '/^power_stop_schedule=/d' -e '/^notify_quiet_schedule=/d' \
 		-e '/^night_schedule=/d' -e '/^stop_hold_wakelock=/d' \
 		-e '/^notify_charge_event=/d' -e '/^notify_charge_kinds=/d' -e '/^notify_power_status=/d' \
+		-e '/^low_batt_warn=/d' -e '/^low_batt_shutdown=/d' -e '/^low_batt_shutdown_delay_sec=/d' \
+		-e '/^low_batt_shutdown_min_uptime_sec=/d' -e '/^low_batt_temp_shutdown=/d' \
+		-e '/^shut_down=/d' \
 		"$merged" 2>/dev/null
 	if grep -q '^power_switch=' "$source" 2>/dev/null; then
 		kept_ps=0
@@ -210,7 +213,9 @@ qsc_merge_side_confs() {
 		fi
 	done
 
-	for k in notify_charge_event notify_charge_kinds notify_power_status; do
+	for k in notify_charge_event notify_charge_kinds notify_power_status \
+		low_batt_warn low_batt_shutdown low_batt_shutdown_delay_sec \
+		low_batt_shutdown_min_uptime_sec low_batt_temp_shutdown; do
 		v="$(sed -n "s/^${k}=//p" "$source" 2>/dev/null | head -n1 | tr -d ' \r\n')"
 		[ -n "$v" ] || continue
 		if grep -q "^${k}=" "$notify" 2>/dev/null; then
@@ -219,6 +224,17 @@ qsc_merge_side_confs() {
 			echo "${k}=${v}" >>"$notify"
 		fi
 	done
+	# 旧 shut_down → low_batt_shutdown
+	_sd="$(sed -n 's/^shut_down=//p' "$source" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+	if [ -n "$_sd" ] && [ "$_sd" != "0" ]; then
+		if grep -q '^low_batt_shutdown=' "$notify" 2>/dev/null; then
+			_cur="$(sed -n 's/^low_batt_shutdown=//p' "$notify" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+			[ "$_cur" = "0" ] || [ -z "$_cur" ] &&
+				sed -i "s|^low_batt_shutdown=.*|low_batt_shutdown=${_sd}|" "$notify"
+		else
+			echo "low_batt_shutdown=${_sd}" >>"$notify"
+		fi
+	fi
 	if grep -q '^notify_quiet_schedule=' "$source" 2>/dev/null; then
 		sed -i '/^notify_quiet_schedule=/d' "$notify" 2>/dev/null
 		grep '^notify_quiet_schedule=' "$source" >>"$notify" 2>/dev/null

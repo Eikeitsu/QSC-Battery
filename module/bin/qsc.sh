@@ -16,7 +16,7 @@ else
 fi
 
 # 允许 CLI 改写的单行配置键（与 apps/webui/APP 常用项对齐）
-QSC_CLI_CONF_KEYS="power_stop power_start power_stop_time charge_full charge_full_mode charge_full_wait_sec power_reset unplug_restore compatibility_mode shut_down loop_interval_sec loop_interval_maintain_sec switch_verify_sec switch_batch_blind switch_hard_verify wireless_policy app_stop app_stop_list history_enable history_interval_sec description_enable temperature_switch temperature_switch_stop temperature_switch_start notify_power_status notify_charge_event native_daemon native_impl"
+QSC_CLI_CONF_KEYS="power_stop power_start power_stop_time charge_full charge_full_mode charge_full_wait_sec power_reset unplug_restore compatibility_mode shut_down low_batt_warn low_batt_shutdown low_batt_shutdown_delay_sec low_batt_shutdown_min_uptime_sec low_batt_temp_shutdown loop_interval_sec loop_interval_maintain_sec switch_verify_sec switch_batch_blind switch_hard_verify wireless_policy app_stop app_stop_list history_enable history_interval_sec description_enable temperature_switch temperature_switch_stop temperature_switch_start notify_power_status notify_charge_event native_daemon native_impl"
 
 qsc_cli_usage() {
 	cat <<EOF
@@ -210,17 +210,47 @@ qsc_cli_conf_is_allowed() {
 	return 1
 }
 
+# 通知/低电键落 notify.conf；省电部分键落 power.conf；其余主 conf
+qsc_cli_conf_file_for() {
+	local key="$1"
+	case "$key" in
+		notify_charge_event|notify_power_status|low_batt_warn|low_batt_shutdown|low_batt_shutdown_delay_sec|low_batt_shutdown_min_uptime_sec|low_batt_temp_shutdown)
+			echo "${NOTIFY_CONF:-$CONFDIR/notify.conf}"
+			;;
+		native_daemon|native_impl|description_enable|stop_hold_wakelock)
+			echo "${POWER_CONF:-$CONFDIR/power.conf}"
+			;;
+		shut_down)
+			# 旧键写入时落到 notify 的 low_batt_shutdown 语义文件
+			echo "${NOTIFY_CONF:-$CONFDIR/notify.conf}"
+			;;
+		*)
+			echo "$CONF"
+			;;
+	esac
+}
+
 qsc_cli_conf_get() {
-	local key="$1" line
+	local key="$1" line file
 	[ -n "$key" ] || {
 		echo "用法: config get <键>" >&2
 		return 2
 	}
-	[ -f "$CONF" ] || {
-		echo "错误：无配置文件 $CONF" >&2
+	file="$(qsc_cli_conf_file_for "$key")"
+	[ -f "$file" ] || file="$CONF"
+	[ -f "$file" ] || {
+		echo "错误：无配置文件" >&2
 		return 1
 	}
-	line="$(grep "^${key}=" "$CONF" 2>/dev/null | head -n1)"
+	# shut_down 别名读 low_batt_shutdown
+	if [ "$key" = "shut_down" ]; then
+		line="$(grep '^low_batt_shutdown=' "$file" 2>/dev/null | head -n1)"
+		[ -z "$line" ] && line="$(grep '^shut_down=' "$CONF" 2>/dev/null | head -n1)"
+	else
+		line="$(grep "^${key}=" "$file" 2>/dev/null | head -n1)"
+		[ -z "$line" ] && [ "$file" != "$CONF" ] &&
+			line="$(grep "^${key}=" "$CONF" 2>/dev/null | head -n1)"
+	fi
 	if [ -z "$line" ]; then
 		echo "(未设置)"
 		return 1
@@ -229,7 +259,7 @@ qsc_cli_conf_get() {
 }
 
 qsc_cli_conf_set() {
-	local key="$1" val="$2" tmp
+	local key="$1" val="$2" tmp file write_key
 	[ -n "$key" ] || {
 		echo "用法: config set <键> <值>" >&2
 		return 2
@@ -249,13 +279,13 @@ qsc_cli_conf_set() {
 		echo "错误：不允许写入键 '$key'（见 config list）" >&2
 		return 2
 	}
-	[ -f "$CONF" ] || {
-		echo "错误：无配置文件 $CONF" >&2
-		return 1
-	}
+	write_key="$key"
+	[ "$key" = "shut_down" ] && write_key="low_batt_shutdown"
+	file="$(qsc_cli_conf_file_for "$key")"
+	mkdir -p "$(dirname "$file")" "$DATADIR" 2>/dev/null
+	[ -f "$file" ] || printf '# QSC conf\n' >"$file" 2>/dev/null
 	tmp="$DATADIR/.qsc_cli_conf.$$"
-	mkdir -p "$DATADIR"
-	awk -v k="$key" -v v="$val" '
+	awk -v k="$write_key" -v v="$val" '
 		BEGIN { done=0 }
 		{
 			if (!done && $0 ~ ("^" k "=")) {
@@ -264,26 +294,28 @@ qsc_cli_conf_set() {
 			} else print
 		}
 		END { if (!done) print k "=" v }
-	' "$CONF" >"$tmp" || {
+	' "$file" >"$tmp" || {
 		rm -f "$tmp"
 		return 1
 	}
-	mv -f "$tmp" "$CONF" || {
+	mv -f "$tmp" "$file" || {
 		rm -f "$tmp"
 		echo "错误：写入失败" >&2
 		return 1
 	}
-	echo "已设置 $key=$val"
+	touch "$DATADIR/conf_reload_req" 2>/dev/null
+	echo "已设置 $write_key=$val"
 }
 
 qsc_cli_conf_list() {
-	local k cur
-	[ -f "$CONF" ] || {
-		echo "错误：无配置文件 $CONF" >&2
-		return 1
-	}
+	local k cur file
 	for k in $QSC_CLI_CONF_KEYS; do
-		cur="$(grep "^${k}=" "$CONF" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '\r')"
+		file="$(qsc_cli_conf_file_for "$k")"
+		if [ "$k" = "shut_down" ]; then
+			cur="$(grep '^low_batt_shutdown=' "$file" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '\r')"
+		else
+			cur="$(grep "^${k}=" "$file" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '\r')"
+		fi
 		[ -n "$cur" ] || cur="(未设置)"
 		printf '%s=%s\n' "$k" "$cur"
 	done

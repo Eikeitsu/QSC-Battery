@@ -133,6 +133,8 @@ qsc_conf_scan_file() {
 			|app_stop|app_stop_list|history_enable|history_interval_sec \
 			|temperature_switch|temperature_switch_stop|temperature_switch_start \
 			|description_enable|chart_show|notify_power_status|notify_charge_event \
+			|low_batt_warn|low_batt_shutdown|low_batt_shutdown_delay_sec \
+			|low_batt_shutdown_min_uptime_sec|low_batt_temp_shutdown \
 			|native_daemon|native_impl|power_saver|power_profile|stop_hold_wakelock \
 			|screen_off_saver|night_saver|deep_idle_enable|heartbeat_sec|desc_viewer_pkgs|screen_off_enter_sec)
 				eval "QSCV_$k=\$v"

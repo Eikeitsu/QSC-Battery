@@ -120,12 +120,19 @@
 
 ## `notify.conf`（通知）
 
-| 键                      | 默认             | 含义                         |
-| ----------------------- | ---------------- | ---------------------------- |
-| `notify_charge_event`   | 0                | 停充/恢复/失败通知           |
-| `notify_charge_kinds`   | stop,resume,fail | 种类                         |
-| `notify_quiet_schedule` | （注释）         | 勿扰时段（失败仍通知）       |
-| `notify_power_status`   | 0                | 常显功耗通知（费电，默认关） |
+| 键                                 | 默认             | 含义                                           |
+| ---------------------------------- | ---------------- | ---------------------------------------------- |
+| `notify_charge_event`              | 0                | 停充/恢复/失败通知                             |
+| `notify_charge_kinds`              | stop,resume,fail | 种类                                           |
+| `notify_quiet_schedule`            | （注释）         | 勿扰时段（失败仍通知）                         |
+| `notify_power_status`              | 0                | 常显功耗通知（费电，默认关）                   |
+| `low_batt_warn`                    | 0                | 低电提醒：`0`=关；建议启用 `15`                |
+| `low_batt_shutdown`                | 0                | 自动关机：`0`=关；建议启用 `5`（须低于提醒）   |
+| `low_batt_shutdown_delay_sec`      | 60               | 关机倒计时秒数                                 |
+| `low_batt_shutdown_min_uptime_sec` | 900              | 低电关机前最少开机秒数（约 15 分钟；`0`=不限） |
+| `low_batt_temp_shutdown`           | 0                | 过温关机：`0`=关；建议启用 `55`（插电也生效）  |
+
+默认阈值均为关（`0`）；关闭时立刻返回、无额外开销。旧 `shut_down` 迁成 `low_batt_shutdown`。
 
 ---
 

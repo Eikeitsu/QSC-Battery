@@ -6,4 +6,5 @@
 . "$LIBDIR/charge_mca.sh"
 . "$LIBDIR/charge_unplug.sh"
 . "$LIBDIR/charge_restore.sh"
+[ -f "$LIBDIR/low_batt_guard.sh" ] && . "$LIBDIR/low_batt_guard.sh"
 [ -f "$LIBDIR/hot_update_charge.sh" ] && . "$LIBDIR/hot_update_charge.sh"

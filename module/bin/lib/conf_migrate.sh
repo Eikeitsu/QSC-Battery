@@ -9,7 +9,7 @@ QSC_POWER_STRIP_ONLY="power_saver power_profile screen_off_saver night_saver dee
 # 与 qsc_merge_side_confs 一致：用户偏好可保留
 QSC_POWER_KEEP="native_daemon native_impl description_enable stop_hold_wakelock"
 
-QSC_NOTIFY_KEYS="notify_charge_event notify_charge_kinds notify_power_status"
+QSC_NOTIFY_KEYS="notify_charge_event notify_charge_kinds notify_power_status low_batt_warn low_batt_shutdown low_batt_shutdown_delay_sec low_batt_shutdown_min_uptime_sec low_batt_temp_shutdown"
 
 qsc_conf_file_ensure() {
 	local f="$1" header="$2"
@@ -62,6 +62,15 @@ qsc_conf_migrate_split() {
 			qsc_conf_move_key "$conf" "$notify" "$k" && migrated=1
 		fi
 	done
+	# 旧 shut_down → low_batt_shutdown（仅当新键尚未存在）
+	if grep -E '^shut_down=' "$conf" >/dev/null 2>&1; then
+		_sd="$(sed -n 's/^shut_down=//p' "$conf" 2>/dev/null | head -n1 | tr -d ' \r\n')"
+		if [ -n "$_sd" ] && [ "$_sd" != "0" ] &&
+			! grep -E '^low_batt_shutdown=' "$notify" >/dev/null 2>&1; then
+			printf 'low_batt_shutdown=%s\n' "$_sd" >>"$notify" 2>/dev/null && migrated=1
+		fi
+		sed -i '/^shut_down=/d' "$conf" 2>/dev/null
+	fi
 	if grep -E '^notify_quiet_schedule=' "$conf" >/dev/null 2>&1; then
 		sed -i '/^notify_quiet_schedule=/d' "$notify" 2>/dev/null
 		grep -E '^notify_quiet_schedule=' "$conf" >>"$notify" 2>/dev/null && migrated=1
@@ -71,7 +80,7 @@ qsc_conf_migrate_split() {
 	# shellcheck disable=SC2086
 	qsc_conf_strip_keys_from "$conf" $QSC_POWER_STRIP_ONLY $QSC_POWER_KEEP night_schedule
 	# shellcheck disable=SC2086
-	qsc_conf_strip_keys_from "$conf" $QSC_NOTIFY_KEYS notify_quiet_schedule
+	qsc_conf_strip_keys_from "$conf" $QSC_NOTIFY_KEYS notify_quiet_schedule shut_down
 
 	[ "$migrated" = "1" ] && type qsc_log >/dev/null 2>&1 &&
 		qsc_log info "已整理省电/通知配置（间隔用新版默认，偏好/通知已迁出）"

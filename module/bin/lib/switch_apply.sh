@@ -142,6 +142,7 @@ fi
 
 qsc_refresh_module_description
 type qsc_notify_power_status >/dev/null 2>&1 && qsc_notify_power_status
+type qsc_low_batt_guard >/dev/null 2>&1 && qsc_low_batt_guard
 
 qsc_debug_step 9
 #version=20260805

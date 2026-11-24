@@ -103,7 +103,7 @@ qsc_ps_read() {
 # 配置内容指纹（cksum）：避免 Magisk 刷新 module.prop / 挂载抖动导致 mtime 变新却内容未变，
 # 从而每轮误报「已重载配置」。
 qsc_ps_conf_fingerprint() {
-	local power="$1" conf="$2" fp=""
+	local power="$1" conf="$2" notify="${3:-${NOTIFY_CONF:-}}" fp=""
 	if [ -f "$power" ]; then
 		fp="p:$(cksum "$power" 2>/dev/null | awk '{print $1"-"$2}')"
 	else
@@ -113,6 +113,11 @@ qsc_ps_conf_fingerprint() {
 		fp="${fp}|c:$(cksum "$conf" 2>/dev/null | awk '{print $1"-"$2}')"
 	else
 		fp="${fp}|c:-"
+	fi
+	if [ -n "$notify" ] && [ -f "$notify" ]; then
+		fp="${fp}|n:$(cksum "$notify" 2>/dev/null | awk '{print $1"-"$2}')"
+	else
+		fp="${fp}|n:-"
 	fi
 	printf '%s\n' "$fp"
 }
@@ -125,13 +130,14 @@ qsc_ps_load_conf() {
 	local bump="$DATADIR/conf_reload_req"
 	local power="${POWER_CONF:-$CONFDIR/power.conf}"
 	local conf="${CONF:-}"
+	local notify="${NOTIFY_CONF:-$CONFDIR/notify.conf}"
 	local line k v
 	local need=0
 	local was_loaded="${QSC_PS_CONF_LOADED:-0}"
 	local fp_now fp_old conf_sig
 
 	QSC_PS_CONF_RELOADED=0
-	fp_now="$(qsc_ps_conf_fingerprint "$power" "$conf")"
+	fp_now="$(qsc_ps_conf_fingerprint "$power" "$conf" "$notify")"
 
 	if [ -f "$bump" ]; then
 		need=1
@@ -215,7 +221,8 @@ qsc_ps_load_conf() {
 		done <"$power"
 	fi
 
-	# 2) config.conf：仅阈值（watch 需要）
+	# 2) config.conf：仅阈值（watch 需要）+ 旧 shut_down 别名
+	QSCV_shut_down="${QSCV_shut_down:-0}"
 	if [ -f "$conf" ]; then
 		while IFS= read -r line || [ -n "$line" ]; do
 			case "$line" in
@@ -229,8 +236,37 @@ qsc_ps_load_conf() {
 				power_stop) QSC_PS_STOP="$v" ;;
 				temperature_switch) QSC_PS_TEMP_ON="$v" ;;
 				temperature_switch_stop) QSC_PS_TEMP_STOP="$v" ;;
+				shut_down) QSCV_shut_down="$v" ;;
 			esac
 		done <"$conf"
+	fi
+
+	# 3) notify.conf：低电/过温防护（默 0；关则 lean 路径几乎零开销）
+	QSCV_low_batt_warn=0
+	QSCV_low_batt_shutdown=0
+	QSCV_low_batt_shutdown_delay_sec=60
+	QSCV_low_batt_shutdown_min_uptime_sec=900
+	QSCV_low_batt_temp_shutdown=0
+	if [ -f "$notify" ]; then
+		while IFS= read -r line || [ -n "$line" ]; do
+			case "$line" in
+				\#*|"") continue ;;
+				*=*) ;;
+				*) continue ;;
+			esac
+			k="${line%%=*}"
+			v="${line#*=}"
+			case "$k" in
+				low_batt_warn) QSCV_low_batt_warn="$v" ;;
+				low_batt_shutdown) QSCV_low_batt_shutdown="$v" ;;
+				low_batt_shutdown_delay_sec) QSCV_low_batt_shutdown_delay_sec="$v" ;;
+				low_batt_shutdown_min_uptime_sec) QSCV_low_batt_shutdown_min_uptime_sec="$v" ;;
+				low_batt_temp_shutdown) QSCV_low_batt_temp_shutdown="$v" ;;
+				shut_down)
+					[ "${QSCV_low_batt_shutdown:-0}" = "0" ] && QSCV_low_batt_shutdown="$v"
+					;;
+			esac
+		done <"$notify"
 	fi
 
 	case "$QSC_PS_PROFILE" in
@@ -269,7 +305,7 @@ qsc_ps_load_conf() {
 		qsc_ps_apply_profile_defaults
 
 	# 重新算指纹（读盘后文件偶发被外部改写时仍对齐当前内容）
-	fp_now="$(qsc_ps_conf_fingerprint "$power" "$conf")"
+	fp_now="$(qsc_ps_conf_fingerprint "$power" "$conf" "$notify")"
 	printf '%s\n' "$fp_now" >"$fp_file" 2>/dev/null || true
 	# 清理旧 mtime 哨兵（升级兼容）
 	rm -f "$DATADIR/.power_conf_seen" "$DATADIR/.conf_seen" 2>/dev/null || true

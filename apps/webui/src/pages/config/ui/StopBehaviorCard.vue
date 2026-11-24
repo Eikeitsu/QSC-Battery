@@ -9,6 +9,29 @@ import ConfigBlock from "./ConfigBlock.vue";
 
 const { store, onSwitch, saveNotifyQuietSchedule } = useConfigFormContext();
 const notifyDetailOpen = ref<string[]>([]);
+const lowBattOpen = ref<string[]>([]);
+
+async function setLowBatt(
+  key:
+    | "low_batt_warn"
+    | "low_batt_shutdown"
+    | "low_batt_shutdown_delay_sec"
+    | "low_batt_shutdown_min_uptime_sec"
+    | "low_batt_temp_shutdown",
+  raw: string,
+) {
+  store.settings[key] = raw;
+  await store.saveSettings();
+}
+
+function applyLowBattSuggested() {
+  store.settings.low_batt_warn = "15";
+  store.settings.low_batt_shutdown = "5";
+  store.settings.low_batt_temp_shutdown = "55";
+  store.settings.low_batt_shutdown_delay_sec = "60";
+  store.settings.low_batt_shutdown_min_uptime_sec = "900";
+  void store.saveSettings();
+}
 
 const holdOptions = [
   { name: "关", value: "0" },
@@ -128,6 +151,83 @@ async function toggleKind(kind: "stop" | "resume" | "fail", on: boolean) {
             @change="saveNotifyQuietSchedule"
           />
         </ConfigBlock>
+      </van-collapse-item>
+    </van-collapse>
+    <van-collapse v-model="lowBattOpen" accordion>
+      <van-collapse-item name="lowbatt" title="低电防护（冷门）">
+        <p class="field-hint">
+          默认全关（0），关闭无额外开销。建议启用值：提醒 15% / 关机 5% / 过温
+          55°C。低电仅未插电；过温插电也生效。
+        </p>
+        <van-cell title="一键填入建议值" is-link @click="applyLowBattSuggested" />
+        <van-field
+          :model-value="store.settings.low_batt_warn"
+          type="digit"
+          label="低电提醒 %"
+          placeholder="0=关，建议 15"
+          input-align="right"
+          @update:model-value="(v) => (store.settings.low_batt_warn = String(v ?? '0'))"
+          @change="setLowBatt('low_batt_warn', store.settings.low_batt_warn)"
+        />
+        <van-field
+          :model-value="store.settings.low_batt_shutdown"
+          type="digit"
+          label="自动关机 %"
+          placeholder="0=关，建议 5"
+          input-align="right"
+          @update:model-value="
+            (v) => (store.settings.low_batt_shutdown = String(v ?? '0'))
+          "
+          @change="setLowBatt('low_batt_shutdown', store.settings.low_batt_shutdown)"
+        />
+        <van-field
+          :model-value="store.settings.low_batt_temp_shutdown"
+          type="digit"
+          label="过温关机 °C"
+          placeholder="0=关，建议 55"
+          input-align="right"
+          @update:model-value="
+            (v) => (store.settings.low_batt_temp_shutdown = String(v ?? '0'))
+          "
+          @change="
+            setLowBatt('low_batt_temp_shutdown', store.settings.low_batt_temp_shutdown)
+          "
+        />
+        <van-field
+          :model-value="store.settings.low_batt_shutdown_delay_sec"
+          type="digit"
+          label="关机倒计时秒"
+          placeholder="10–300，默认 60"
+          input-align="right"
+          @update:model-value="
+            (v) => (store.settings.low_batt_shutdown_delay_sec = String(v ?? '60'))
+          "
+          @change="
+            setLowBatt(
+              'low_batt_shutdown_delay_sec',
+              store.settings.low_batt_shutdown_delay_sec,
+            )
+          "
+        />
+        <van-field
+          :model-value="store.settings.low_batt_shutdown_min_uptime_sec"
+          type="digit"
+          label="开机满秒才关"
+          placeholder="默认 900（15 分钟），0=不限"
+          input-align="right"
+          @update:model-value="
+            (v) => (store.settings.low_batt_shutdown_min_uptime_sec = String(v ?? '900'))
+          "
+          @change="
+            setLowBatt(
+              'low_batt_shutdown_min_uptime_sec',
+              store.settings.low_batt_shutdown_min_uptime_sec,
+            )
+          "
+        />
+        <p class="field-hint">
+          低电关机：插电可取消；过温：降温可取消。关机阈值须低于提醒。
+        </p>
       </van-collapse-item>
     </van-collapse>
   </ThemedCard>
