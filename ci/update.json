@@ -1,7 +1,7 @@
 {
-  "version": "2026.11.24.ci.406",
-  "versionCode": 2026112404,
+  "version": "2026.11.24.ci.408",
+  "versionCode": 2026112405,
   "zipUrl": "https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@ci-dist/module/QSC-Battery-full.zip",
-  "changelog": "https://github.com/Eikeitsu/QSC-Battery/commit/4d494c5867e4bc233262c3c89fa692c87a02cd38",
+  "changelog": "https://github.com/Eikeitsu/QSC-Battery/commit/4d3b15600a38cb2c104a427fa34f7e3a9dc05bc9",
   "channel": "ci"
 }
