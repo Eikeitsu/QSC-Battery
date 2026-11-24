@@ -26,8 +26,9 @@
 //!       检查 netlink、事件过滤和电源节点读取能力，只读不写。
 //!
 //! 设计约束：本程序不写任何充电节点，也不做停充/恢复决策，只负责「等」与
-//! 「该不该叫醒 shell」。阈值判定的唯一真理仍在 shell 里——sh 版主包没有本
-//! 二进制也必须行为一致。因此它异常退出时最坏结果是退化成定时轮询。
+//! 「该不该叫醒 shell」。`--maintain` 仅向 datadir 写 `.qscd_maintain_stable`
+//! 标记供 shell lean 跳轮。阈值判定的唯一真理仍在 shell 里——无本二进制
+//! （或 C 版无 maintain-stable）时退回定时/满轮。异常退出最坏是退化轮询。
 
 mod common;
 mod diagnose;
@@ -49,7 +50,7 @@ use plugged::plugged;
 use watch::{parse_watch_args, watch};
 
 /// 支持的扩展子命令；features 子命令原样打印
-const FEATURES: &str = "watch pkgs selftest plugged diagnose wake-file";
+const FEATURES: &str = "watch pkgs selftest plugged diagnose wake-file maintain-stable";
 
 /// 判断包名列表里有没有包在跑主进程。
 /// 匹配规则是「cmdline 首字段与包名完全相等」：Android 应用主进程的 cmdline
@@ -253,6 +254,7 @@ fn main() -> ExitCode {
             eprintln!(
                 "usage: qscd wait-event <max_secs> [floor_secs]\n       \
                  qscd watch --max N [--floor N] [--stop N] [--near N] [--temp-stop N]\n       \
+                 qscd watch --maintain --marker F --active-switch F --datadir D ...\n       \
                  qscd pkgs <list_file> [--proc-root DIR]\n       \
                  qscd plugged | qscd diagnose | qscd probe | qscd features\n       \
                  qscd selftest [--sysfs-root DIR]"
@@ -432,6 +434,30 @@ mod tests {
         assert_eq!((max, floor), (2, 2));
     }
 
+    #[test]
+    fn parse_watch_args_bare_maintain_does_not_eat_next_flag() {
+        let args: Vec<String> = [
+            "--maintain",
+            "--marker",
+            "/data/adb/qsc/power_switch",
+            "--active-switch",
+            "/data/adb/qsc/active_switch",
+            "--datadir",
+            "/data/adb/qsc",
+            "--temp-stop",
+            "999",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let (_, _, th) = parse_watch_args(&args);
+        assert!(th.maintain);
+        assert_eq!(th.marker, "/data/adb/qsc/power_switch");
+        assert_eq!(th.active_switch, "/data/adb/qsc/active_switch");
+        assert_eq!(th.datadir, "/data/adb/qsc");
+        assert_eq!(th.temp_stop, Some(999));
+    }
+
     /// 造一棵假 sysfs：返回临时根目录，由调用方负责清理。
     /// 目录名带自增序号，测试并行跑也不会互相踩
     fn fake_sysfs(files: &[(&str, &str)]) -> std::path::PathBuf {
@@ -455,8 +481,71 @@ mod tests {
             near: 3,
             temp_stop,
             root: root.to_string_lossy().to_string(),
-            wake_files: Vec::new(),
+            ..Default::default()
         }
+    }
+
+    #[test]
+    fn maintain_swallows_noise_when_stable() {
+        let root = fake_sysfs(&[
+            ("battery/capacity", "100"),
+            ("battery/temp", "300"),
+            ("battery/status", "Not charging"),
+            ("battery/current_now", "5000"),
+            ("usb/online", "1"),
+            ("battery/mmi_charging_enable", "0"),
+        ]);
+        let marker = root.join("power_switch");
+        let active = root.join("active_switch");
+        std::fs::write(&marker, "1\n").unwrap();
+        // 用真实机上的绝对路径形态，由 --sysfs-root 重映射
+        std::fs::write(
+            &active,
+            "/sys/class/power_supply/battery/mmi_charging_enable,start=1,stop=0\n",
+        )
+        .unwrap();
+        let th = Thresholds {
+            maintain: true,
+            marker: marker.to_string_lossy().to_string(),
+            active_switch: active.to_string_lossy().to_string(),
+            root: root.to_string_lossy().to_string(),
+            near: 3,
+            ..Default::default()
+        };
+        assert!(th.is_maintain_stable());
+        assert!(th.wake_reason(true).is_none());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn maintain_wakes_when_node_lost() {
+        let root = fake_sysfs(&[
+            ("battery/capacity", "100"),
+            ("battery/temp", "300"),
+            ("battery/status", "Charging"),
+            ("battery/current_now", "500000"),
+            ("usb/online", "1"),
+            ("battery/mmi_charging_enable", "1"),
+        ]);
+        let marker = root.join("power_switch");
+        let active = root.join("active_switch");
+        std::fs::write(&marker, "1\n").unwrap();
+        std::fs::write(
+            &active,
+            "/sys/class/power_supply/battery/mmi_charging_enable,start=1,stop=0\n",
+        )
+        .unwrap();
+        let th = Thresholds {
+            maintain: true,
+            marker: marker.to_string_lossy().to_string(),
+            active_switch: active.to_string_lossy().to_string(),
+            root: root.to_string_lossy().to_string(),
+            near: 3,
+            ..Default::default()
+        };
+        assert!(!th.is_maintain_stable());
+        assert_eq!(th.wake_reason(true), Some("unstable"));
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]

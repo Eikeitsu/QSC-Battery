@@ -190,7 +190,9 @@ qsc_write_loop_sleep() {
 	local normal="$1" maintain="$2"
 	normal="$(qsc_clamp_int "${normal:-3}" 2 30 3)"
 	maintain="$(qsc_clamp_int "${maintain:-30}" 3 600 30)"
-	if [ -f "$DATADIR/power_switch" ] && [ ! -f "$MODULE_OFF_FLAG" ]; then
+	# 仅插电停充用 maintain 间隔；未插电（含拔线迟滞残留标记）用 normal/idle
+	if [ -f "$DATADIR/power_switch" ] && [ ! -f "$MODULE_OFF_FLAG" ] &&
+		type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged; then
 		if type qsc_ps_maintain_secs >/dev/null 2>&1; then
 			# 确保有单调时钟供息屏计时
 			type qsc_ps_now >/dev/null 2>&1 && qsc_ps_now
@@ -198,7 +200,11 @@ qsc_write_loop_sleep() {
 			maintain="${QSC_PS_MAINTAIN_EFF:-$maintain}"
 			maintain="$(qsc_clamp_int "$maintain" 3 600 30)"
 		elif [ -f "$DATADIR/wakelock_held" ]; then
-			if ! type qsc_device_is_mca >/dev/null 2>&1 || ! qsc_device_is_mca; then
+			if type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca; then
+				maintain=90
+				[ "${2:-0}" -gt 45 ] 2>/dev/null && maintain="$2"
+				maintain="$(qsc_clamp_int "$maintain" 45 180 90)"
+			else
 				maintain=300
 				[ "${2:-0}" -gt 60 ] 2>/dev/null && maintain="$2"
 				maintain="$(qsc_clamp_int "$maintain" 60 600 300)"

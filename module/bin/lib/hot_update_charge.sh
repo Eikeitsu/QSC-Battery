@@ -25,7 +25,7 @@ qsc_hot_restore_charge_nodes() {
 		if [ "${start_ok:-0}" = "1" ]; then
 			rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" \
 				"$DATADIR/battery_switch" "$DATADIR/app_stop_flag" \
-				"$DATADIR/resume_fail_hint" 2>/dev/null
+				"$DATADIR/resume_fail_hint" "$DATADIR/.qscd_maintain_stable" 2>/dev/null
 			type qsc_clear_active_switch >/dev/null 2>&1 && qsc_clear_active_switch
 			type qsc_stop_wakelock_release >/dev/null 2>&1 && qsc_stop_wakelock_release
 			type qsc_log >/dev/null 2>&1 &&
@@ -80,7 +80,7 @@ qsc_hot_boot_charge_heal() {
 		if [ "${start_ok:-0}" = "1" ]; then
 			rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" \
 				"$DATADIR/battery_switch" "$DATADIR/app_stop_flag" \
-				"$DATADIR/resume_fail_hint" 2>/dev/null
+				"$DATADIR/resume_fail_hint" "$DATADIR/.qscd_maintain_stable" 2>/dev/null
 			type qsc_clear_active_switch >/dev/null 2>&1 && qsc_clear_active_switch
 			type qsc_stop_wakelock_release >/dev/null 2>&1 && qsc_stop_wakelock_release
 			type qsc_log >/dev/null 2>&1 &&

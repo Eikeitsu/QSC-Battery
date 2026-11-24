@@ -531,7 +531,8 @@ qsc_maintain_stop_while_plugged() {
 					[ -f "$DATADIR/charge_full_done" ] && _keep_full=1
 					rm -f "$DATADIR/power_switch" "$DATADIR/active_switch" \
 						"$DATADIR/power_on" "$DATADIR/power_off" \
-						"$DATADIR/.orphan_checked_at" 2>/dev/null
+						"$DATADIR/.orphan_checked_at" \
+						"$DATADIR/.qscd_maintain_stable" 2>/dev/null
 					[ "$_keep_full" = "1" ] && touch "$DATADIR/charge_full_done" 2>/dev/null
 					qsc_stop_wakelock_release
 					return 1
@@ -548,25 +549,33 @@ qsc_maintain_stop_while_plugged() {
 		:
 	fi
 
-	# 停充已稳（节点 hold 且看起来已停）：非 MCA 节流写节点，减少过夜抢写发热
-	# MCA / xm_power 仍须较勤重申，不被系统改回
-	if [ "$_stable" = "1" ] && [ "$_is_mca" != "1" ]; then
+	# 停充已稳：节流写节点。非 MCA 约 180s+；MCA 跟 maintain 间隔（夜间约 90s），
+	# 不再每 30s 抢写 handle_state（K90U 等过夜发热/掉电主因之一）
+	if [ "$_stable" = "1" ]; then
 		_last_rf="$(cat "$DATADIR/.maintain_reaffirm_at" 2>/dev/null | tr -d ' \r\n')"
 		case "$_last_rf" in ""|*[!0-9]*) _last_rf=0 ;; esac
-		_rf_min=180
-		type qsc_ps_maintain_secs >/dev/null 2>&1 && qsc_ps_maintain_secs
-		[ "${QSC_PS_MAINTAIN_EFF:-0}" -gt "$_rf_min" ] 2>/dev/null &&
-			_rf_min="$QSC_PS_MAINTAIN_EFF"
+		if [ "$_is_mca" = "1" ]; then
+			_rf_min=60
+			type qsc_ps_maintain_secs >/dev/null 2>&1 && qsc_ps_maintain_secs
+			[ "${QSC_PS_MAINTAIN_EFF:-0}" -gt "$_rf_min" ] 2>/dev/null &&
+				_rf_min="$QSC_PS_MAINTAIN_EFF"
+			_rf_min="$(qsc_clamp_int "$_rf_min" 45 180 60)"
+		else
+			_rf_min=180
+			type qsc_ps_maintain_secs >/dev/null 2>&1 && qsc_ps_maintain_secs
+			[ "${QSC_PS_MAINTAIN_EFF:-0}" -gt "$_rf_min" ] 2>/dev/null &&
+				_rf_min="$QSC_PS_MAINTAIN_EFF"
+		fi
 		_rf_gap=$((_now - _last_rf))
 		if [ "$_last_rf" -gt 0 ] 2>/dev/null &&
 			[ "$_rf_gap" -ge 0 ] 2>/dev/null &&
 			[ "$_rf_gap" -lt "$_rf_min" ] 2>/dev/null; then
-			qsc_dbg "maintain：稳态跳过重申 gap=${_rf_gap}s < ${_rf_min}s"
+			qsc_dbg "maintain：稳态跳过重申 gap=${_rf_gap}s < ${_rf_min}s mca=$_is_mca"
 			return 0
 		fi
 	fi
 
-	# MCA：系统会改回 handle_state，必须每轮重申
+	# MCA：系统会改回 handle_state，稳态外/到期仍须重申
 	if qsc_mca_write stop; then
 		qsc_xm_power_vote stop >/dev/null 2>&1 || true
 		[ "$_now" -gt 0 ] && printf '%s\n' "$_now" >"$DATADIR/.maintain_reaffirm_at" 2>/dev/null

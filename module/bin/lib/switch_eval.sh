@@ -153,6 +153,8 @@ if [ "$charge_eval" = "1" ]; then
 		fi
 		if [ "$stop_ok" = "1" ]; then
 			touch "$DATADIR/power_switch"
+			# 首次停充后强制下一轮满评估，再由 qscd 写稳态标记
+			rm -f "$DATADIR/.qscd_maintain_stable" 2>/dev/null
 			qsc_stop_wakelock_acquire
 			rm -f "$DATADIR/no_node_logged" "$DATADIR/stop_fail_hint"
 			# 又能成功停充说明节点是通的，之前那次还原失败的提示不该再挂着
@@ -260,7 +262,8 @@ else
 			if [ "$start_ok" = "1" ]; then
 				rm -f "$DATADIR/power_switch" "$DATADIR/temp_switch" \
 					"$DATADIR/battery_switch" "$DATADIR/app_stop_flag" \
-					"$DATADIR/resume_fail_hint" "$DATADIR/.unplug_noted"
+					"$DATADIR/resume_fail_hint" "$DATADIR/.unplug_noted" \
+					"$DATADIR/.qscd_maintain_stable"
 				rm -f "$DATADIR/charge_full_done" "$DATADIR/charge_full_since" "$DATADIR/now_c"
 				qsc_clear_active_switch
 				qsc_stop_wakelock_release

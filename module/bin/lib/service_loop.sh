@@ -227,8 +227,8 @@ qsc_service_loop_once() {
 	# 不 fork qsc_switch.sh（那会重新解析约 90KB 脚本并触发多次写盘）。
 	if type qsc_ps_load_conf >/dev/null 2>&1; then
 		# —— 未插电 lean 再入：几乎只 wait；配置未变则跳过简介/XP 管家 ——
+		# 未插电 lean：允许残留 power_switch（拔线迟滞），勿因此卡出 DeepPark
 		if [ "${QSC_SERVICE_LEAN_IDLE:-0}" = "1" ] &&
-			[ ! -f "$DATADIR/power_switch" ] &&
 			[ ! -f "$MODULE_OFF_FLAG" ] &&
 			type qsc_ps_plugged >/dev/null 2>&1 &&
 			! qsc_ps_plugged; then
@@ -287,6 +287,39 @@ qsc_service_loop_once() {
 		# region agent log
 		qsc_runtime_trace "H1" "loop_enter" "$QSC_SERVICE_LOOP_COUNT:$_now"
 		# endregion
+		# —— 插电停充 lean 维持（Rust maintain-stable；含 MCA，醒时轻量重申）——
+		_lean_maintain=0
+		if [ -f "$DATADIR/power_switch" ] &&
+			[ ! -f "$MODULE_OFF_FLAG" ] &&
+			type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged &&
+			type qsc_native_has >/dev/null 2>&1 && qsc_native_has maintain-stable &&
+			[ "$(cat "$DATADIR/.qscd_maintain_stable" 2>/dev/null | tr -d ' \r\n')" = "1" ]; then
+			_lean_maintain=1
+		fi
+		if [ "$_lean_maintain" = "1" ]; then
+			qsc_service_heartbeat
+			type qsc_stop_wakelock_acquire >/dev/null 2>&1 &&
+				qsc_stop_wakelock_acquire || true
+			type qsc_low_batt_guard >/dev/null 2>&1 && qsc_low_batt_guard
+			# MCA：跳过满轮 qsc_switch，但仍按节流窗口轻量重申 handle_state
+			if type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca; then
+				type qsc_maintain_stop_while_plugged >/dev/null 2>&1 &&
+					qsc_maintain_stop_while_plugged || true
+			fi
+			if type qsc_ps_maintain_secs >/dev/null 2>&1; then
+				qsc_ps_maintain_secs
+				_m="${QSC_PS_MAINTAIN_EFF:-${QSC_PS_MAINTAIN:-30}}"
+			else
+				_m="${QSC_PS_MAINTAIN:-30}"
+			fi
+			QSC_SERVICE_SKIP_ROUNDS=$((${QSC_SERVICE_SKIP_ROUNDS:-0} + 1))
+			QSC_PS_LAST_PARK_SEC="$_m"
+			qsc_runtime_trace "H1" "loop_lean_maintain" "$QSC_SERVICE_LOOP_COUNT:$_m"
+			qsc_ps_wait "$_m"
+			_wait_rc="$?"
+			qsc_runtime_trace "H1" "wait_exit" "$_wait_rc"
+			return 0
+		fi
 		qsc_service_unplug_housekeep 0
 		# region agent log
 		qsc_runtime_trace "H1" "after_description" "$QSC_SERVICE_LOOP_COUNT"
@@ -347,6 +380,8 @@ qsc_service_loop_once() {
 	# region agent log
 	qsc_runtime_trace "H6" "switch_enter" "$QSC_SERVICE_FULL_ROUNDS"
 	# endregion
+	# 满轮前清稳态标记：本轮 switch 后再由 qscd wait 重新判定
+	rm -f "$DATADIR/.qscd_maintain_stable" 2>/dev/null
 	if type qsc_ps_native_exec >/dev/null 2>&1; then
 		qsc_ps_native_exec 45 "$BINDIR/qsc_switch.sh" > /dev/null 2>&1
 	else

@@ -196,31 +196,39 @@ qsc_ps_policy_scene() {
 	return 0
 }
 
-# 停充维持有效间隔：MCA 不拉长；非 MCA 息屏/夜间/深睡可拉长以便 Doze
+# 停充维持有效间隔：息屏/夜间/深睡可拉长；MCA 也拉但更短（仍要防 OEM 改回）
 # 结果写入 QSC_PS_MAINTAIN_EFF
 qsc_ps_maintain_secs() {
-	local base="${QSC_PS_MAINTAIN:-30}"
+	local base="${QSC_PS_MAINTAIN:-30}" _mca=0
 	base="$(qsc_clamp_int "$base" 3 600 30)"
 	QSC_PS_MAINTAIN_EFF="$base"
 
 	type qsc_ps_policy_scene >/dev/null 2>&1 && qsc_ps_policy_scene
-
-	# MCA：必须按时重申，不受场景拉长
-	if type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca; then
-		return 0
-	fi
+	type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca && _mca=1
 
 	if [ "${QSC_PS_DEEP:-0}" = "1" ] || [ "${QSC_PS_NIGHT:-0}" = "1" ]; then
-		QSC_PS_MAINTAIN_EFF=300
-		[ "$base" -gt 300 ] 2>/dev/null && QSC_PS_MAINTAIN_EFF="$base"
-		# 若仍持内核锁，可再保守一点到 300（已是）；用户手调更大则尊重
-		QSC_PS_MAINTAIN_EFF="$(qsc_clamp_int "$QSC_PS_MAINTAIN_EFF" 60 600 300)"
+		if [ "$_mca" = "1" ]; then
+			# MCA：夜间也要重申，但 30s 一轮整夜会拖垮待机；折中 90s
+			QSC_PS_MAINTAIN_EFF=90
+			[ "$base" -gt 90 ] 2>/dev/null && QSC_PS_MAINTAIN_EFF="$base"
+			QSC_PS_MAINTAIN_EFF="$(qsc_clamp_int "$QSC_PS_MAINTAIN_EFF" 45 180 90)"
+		else
+			QSC_PS_MAINTAIN_EFF=300
+			[ "$base" -gt 300 ] 2>/dev/null && QSC_PS_MAINTAIN_EFF="$base"
+			QSC_PS_MAINTAIN_EFF="$(qsc_clamp_int "$QSC_PS_MAINTAIN_EFF" 60 600 300)"
+		fi
 		return 0
 	fi
 	if [ "${QSC_PS_SCREEN_OFF:-0}" = "1" ]; then
-		QSC_PS_MAINTAIN_EFF=180
-		[ "$base" -gt 180 ] 2>/dev/null && QSC_PS_MAINTAIN_EFF="$base"
-		QSC_PS_MAINTAIN_EFF="$(qsc_clamp_int "$QSC_PS_MAINTAIN_EFF" 60 600 180)"
+		if [ "$_mca" = "1" ]; then
+			QSC_PS_MAINTAIN_EFF=60
+			[ "$base" -gt 60 ] 2>/dev/null && QSC_PS_MAINTAIN_EFF="$base"
+			QSC_PS_MAINTAIN_EFF="$(qsc_clamp_int "$QSC_PS_MAINTAIN_EFF" 30 120 60)"
+		else
+			QSC_PS_MAINTAIN_EFF=180
+			[ "$base" -gt 180 ] 2>/dev/null && QSC_PS_MAINTAIN_EFF="$base"
+			QSC_PS_MAINTAIN_EFF="$(qsc_clamp_int "$QSC_PS_MAINTAIN_EFF" 60 600 180)"
+		fi
 		return 0
 	fi
 	# 亮屏日用：用配置 maintain（偏勤，便于看简介/状态）
@@ -512,8 +520,8 @@ qsc_ps_policy_refresh() {
 	fi
 
 	# 未插电深睡粘滞：不读亮度，直接再睡
+	# 允许残留 power_switch（拔线保留迟滞）：未插电不应卡在 maintain
 	if [ "$plugged" != "1" ] &&
-		[ ! -f "$DATADIR/power_switch" ] &&
 		type qsc_ps_policy_try_deep_sticky >/dev/null 2>&1 &&
 		qsc_ps_policy_try_deep_sticky; then
 		QSC_PS_DAY_STICKY_N=0
@@ -522,7 +530,6 @@ qsc_ps_policy_refresh() {
 	QSC_PS_DEEP_STICKY_N=0
 	# 亮屏日用驻停粘滞（动态简介仍可用：管理器 enter 事件叫醒）
 	if [ "$plugged" != "1" ] &&
-		[ ! -f "$DATADIR/power_switch" ] &&
 		type qsc_ps_policy_try_day_sticky >/dev/null 2>&1 &&
 		qsc_ps_policy_try_day_sticky; then
 		return 0
@@ -532,7 +539,9 @@ qsc_ps_policy_refresh() {
 	# 先刷新场景，再分支（停充维持也要息屏信息）
 	qsc_ps_policy_scene
 
-	if [ -f "$DATADIR/power_switch" ] && [ ! -f "$MODULE_OFF_FLAG" ]; then
+	# 仅「仍插电 + 停充标记」才走 maintain；未插电有标记视为迟滞，走下方 park/deep
+	if [ "$plugged" = "1" ] &&
+		[ -f "$DATADIR/power_switch" ] && [ ! -f "$MODULE_OFF_FLAG" ]; then
 		QSC_PS_MODE=maintain
 		qsc_ps_maintain_secs
 		if [ "${QSC_PS_SCREEN_OFF:-0}" = "1" ] || [ "${QSC_PS_DEEP:-0}" = "1" ]; then

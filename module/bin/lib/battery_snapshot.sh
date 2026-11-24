@@ -63,25 +63,19 @@ qsc_battery_snapshot_read() {
 			;;
 	esac
 
-	# status=Not charging 在 MCA/K90U 上仍可能代表插线；统一交给供电
-	# 信号判定，qsc_ps_plugged 内置时再复用它的完整兼容逻辑。
-	if [ -z "$QSC_BATTERY_POWERED" ] &&
-		type qsc_ps_plugged >/dev/null 2>&1 && qsc_ps_plugged; then
-		QSC_BATTERY_POWERED="powered: true"
+	# 插电以 qsc_ps_plugged（端口交叉）为准。
+	# 勿对 status=4 Not charging 再问 dumpsys：K90U 未插电待机也常报
+	# Not charging + dumpsys powered:true，早退会跳过下方 reconcile，
+	# 假插电 → 残留 power_switch → 整夜 maintain。
+	if type qsc_ps_plugged >/dev/null 2>&1; then
+		if qsc_ps_plugged; then
+			QSC_BATTERY_POWERED="powered: true"
+		else
+			QSC_BATTERY_POWERED=""
+		fi
 	fi
 
-	# sysfs 判未插电时，对可能仍在供电的 status 再问 dumpsys 作正证据
-	if [ -z "$QSC_BATTERY_POWERED" ]; then
-		case "${QSC_BATTERY_STATUS:-}" in
-			2|4|5)
-				if command -v dumpsys >/dev/null 2>&1 &&
-					dumpsys battery 2>/dev/null | egrep -q 'powered: true'; then
-					QSC_BATTERY_POWERED="powered: true"
-				fi
-				;;
-		esac
-	fi
-
+	# sysfs 完整：直接返回（powered 已按端口判定；不再 dumpsys）
 	if [ -n "$_QSC_SNAP_CAP" ] && [ -n "$QSC_BATTERY_STATUS" ] &&
 		[ -n "$_QSC_SNAP_TEMP" ]; then
 		QSC_BATTERY_LEVEL="$_QSC_SNAP_CAP"

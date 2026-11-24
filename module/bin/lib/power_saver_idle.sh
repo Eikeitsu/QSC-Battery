@@ -160,6 +160,19 @@ qsc_ps_native_wait() {
 				--stop "${QSC_PS_STOP:-101}" --near "${QSC_PS_NEAR:-3}" \
 				--temp-stop "${QSC_PS_TEMP_STOP:-999}" $wake_args > /dev/null 2>"$error_file"
 			rc="$?"
+		elif [ -f "$DATADIR/power_switch" ] && qsc_ps_plugged &&
+			type qsc_native_has >/dev/null 2>&1 && qsc_native_has maintain-stable; then
+			# Rust：插电停充维持 — 稳态噪声不叫醒；超时写 .qscd_maintain_stable
+			# 未插电即使有 power_switch（拔线迟滞）也不走 maintain
+			# C 版无此 feature，走下方仅 temp-stop 999 / wait-event
+			# shellcheck disable=SC2086
+			qsc_ps_native_exec "$secs" "$BINDIR/qscd" watch --max "$secs" --floor "$floor" \
+				--temp-stop 999 --maintain \
+				--marker "$DATADIR/power_switch" \
+				--active-switch "$DATADIR/active_switch" \
+				--datadir "$DATADIR" \
+				$wake_args > /dev/null 2>"$error_file"
+			rc="$?"
 		else
 			# shellcheck disable=SC2086
 			qsc_ps_native_exec "$secs" "$BINDIR/qscd" watch --max "$secs" --floor "$floor" \
@@ -168,8 +181,8 @@ qsc_ps_native_wait() {
 		fi
 	else
 		# C 版只有 wait-event（无法过滤）。未插电若照用，效果同上：电池噪声
-		# 整夜唤醒。改为直接走外层 sleep，插电仍用 wait-event 保响应。
-		if ! qsc_ps_plugged && [ ! -f "$DATADIR/power_switch" ]; then
+		# 整夜唤醒。改为直接走外层 sleep（含拔线迟滞残留 power_switch）。
+		if ! qsc_ps_plugged; then
 			QSC_PS_NATIVE_MODE=sleep-idle
 			QSC_PS_NATIVE_ERROR=idle_no_watch
 			# region agent log
@@ -525,7 +538,13 @@ qsc_ps_next_sleep() {
 		echo "${QSC_PS_LOOP:-3}"
 		return 0
 	fi
-	# 维持停充：按场景拉长（MCA 除外）；持锁与否由 wakelock 策略单独决定
+	# 未插电优先 idle/DeepPark（即使残留 power_switch / 拔线迟滞）
+	if [ "$plugged" != "1" ]; then
+		qsc_ps_idle_secs
+		echo "$QSC_PS_IDLE_EFF"
+		return 0
+	fi
+	# 插电维持停充：按场景拉长（MCA 夜间也拉到约 90s）；持锁由 wakelock 策略单独决定
 	if [ -f "$DATADIR/power_switch" ] && [ ! -f "$MODULE_OFF_FLAG" ]; then
 		if type qsc_ps_maintain_secs >/dev/null 2>&1; then
 			type qsc_ps_now >/dev/null 2>&1 && qsc_ps_now
@@ -535,7 +554,8 @@ qsc_ps_next_sleep() {
 			_m="${QSC_PS_MAINTAIN:-30}"
 			if [ -f "$DATADIR/wakelock_held" ]; then
 				if type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca; then
-					:
+					_m=90
+					[ "${QSC_PS_MAINTAIN:-0}" -gt 45 ] 2>/dev/null && _m="$QSC_PS_MAINTAIN"
 				else
 					_m=300
 					[ "${QSC_PS_MAINTAIN:-0}" -gt 60 ] 2>/dev/null && _m="$QSC_PS_MAINTAIN"
@@ -544,11 +564,6 @@ qsc_ps_next_sleep() {
 		fi
 		QSC_PS_WAIT_FALLBACK="$_m"
 		echo "$_m"
-		return 0
-	fi
-	if [ "$plugged" != "1" ]; then
-		qsc_ps_idle_secs
-		echo "$QSC_PS_IDLE_EFF"
 		return 0
 	fi
 

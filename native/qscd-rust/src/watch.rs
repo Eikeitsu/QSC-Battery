@@ -1,8 +1,9 @@
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use crate::common::{
-    parse_secs, BatterySnapshot, UeventSocket, EXIT_OK, EXIT_UNUSABLE, RECV_BUF, RECV_MIN_TIMEOUT,
-    WAIT_FLOOR_DEFAULT, WAIT_MAX_CAP, WAIT_MAX_DEFAULT,
+    parse_secs, read_int, read_text, BatterySnapshot, UeventSocket, EXIT_OK, EXIT_UNUSABLE,
+    RECV_BUF, RECV_MIN_TIMEOUT, WAIT_FLOOR_DEFAULT, WAIT_MAX_CAP, WAIT_MAX_DEFAULT,
 };
 use crate::wake::{poll_uevent_or_wake, WakeSource, WakeWatch};
 
@@ -19,16 +20,117 @@ pub(crate) struct Thresholds {
     pub(crate) root: String,
     /// 旁路唤醒文件（如 qsc_xp_viewer）；内容变化即叫醒
     pub(crate) wake_files: Vec<String>,
+    /// 插电停充维持：稳态噪声不叫醒；超时若仍稳则写 .qscd_maintain_stable=1
+    pub(crate) maintain: bool,
+    /// power_switch 标记路径（maintain 用）
+    pub(crate) marker: String,
+    /// active_switch 文件路径（path,start=X,stop=Y）
+    pub(crate) active_switch: String,
+    /// 写 .qscd_maintain_stable 的目录
+    pub(crate) datadir: String,
 }
 
 impl Thresholds {
     /// 没有任何阈值时退化成 wait-event：任何 power_supply 事件都叫醒 shell
     pub(crate) fn is_empty(&self) -> bool {
-        self.stop.is_none() && self.temp_stop.is_none()
+        !self.maintain && self.stop.is_none() && self.temp_stop.is_none()
+    }
+
+    fn sys_path(&self, abs: &str) -> PathBuf {
+        if self.root.is_empty() {
+            PathBuf::from(abs)
+        } else if let Some(rest) = abs.strip_prefix('/') {
+            Path::new(&self.root).join(rest)
+        } else {
+            Path::new(&self.root).join(abs)
+        }
+    }
+
+    /// 与 shell `qsc_charge_looks_stopped` 对齐的粗判
+    pub(crate) fn charge_looks_stopped(root: &str, status: Option<&str>) -> bool {
+        let base = format!("{root}/sys/class/power_supply");
+        let abs = ["battery", "bms", "soc"]
+            .into_iter()
+            .find_map(|n| read_int(&format!("{base}/{n}/current_now")))
+            .map(|c| c.unsigned_abs())
+            .unwrap_or(0);
+        match status.unwrap_or("") {
+            "Discharging" | "discharging" => true,
+            "Not charging" | "Notcharging" | "not_charging" | "Full" | "full" => true,
+            "Charging" | "charging" => abs < 80_000,
+            _ => abs < 80_000,
+        }
+    }
+
+    /// active_switch 节点是否仍停在 stop 值
+    pub(crate) fn active_stop_node_holds(&self) -> bool {
+        if self.active_switch.is_empty() {
+            return false;
+        }
+        let Some(entry) = read_text(&self.active_switch) else {
+            return false;
+        };
+        // path,start=X,stop=Y
+        let Some((route, rest)) = entry.split_once(",start=") else {
+            return false;
+        };
+        let Some((_start, stop)) = rest.split_once(",stop=") else {
+            return false;
+        };
+        let stop = stop.replace('_', " ");
+        if route.is_empty() || stop.is_empty() {
+            return false;
+        }
+        let path = self.sys_path(route);
+        let Some(cur) = read_text(&path.to_string_lossy()) else {
+            return false;
+        };
+        cur == stop
+    }
+
+    /// 维持态是否仍稳：有标记、仍插电、节点 hold、看起来已停充
+    pub(crate) fn is_maintain_stable(&self) -> bool {
+        if !self.maintain || self.marker.is_empty() {
+            return false;
+        }
+        if !Path::new(&self.marker).is_file() {
+            return false;
+        }
+        let snap = BatterySnapshot::read(&self.root);
+        if !snap.plugged {
+            return false;
+        }
+        if !self.active_stop_node_holds() {
+            return false;
+        }
+        Self::charge_looks_stopped(&self.root, snap.status.as_deref())
+    }
+
+    pub(crate) fn write_maintain_stable(&self, stable: bool) {
+        if self.datadir.is_empty() {
+            return;
+        }
+        let path = Path::new(&self.datadir).join(".qscd_maintain_stable");
+        let _ = std::fs::create_dir_all(&self.datadir);
+        let _ = std::fs::write(path, if stable { "1\n" } else { "0\n" });
     }
 
     /// 命中 power_supply 事件且应叫醒 shell 时的原因；否则 None 表示继续等
     pub(crate) fn wake_reason(&self, plugged_at_start: bool) -> Option<&'static str> {
+        if self.maintain {
+            if self.marker.is_empty() || !Path::new(&self.marker).is_file() {
+                return Some("no_marker");
+            }
+            let snapshot = BatterySnapshot::read(&self.root);
+            if snapshot.plugged != plugged_at_start {
+                return Some("plug_changed");
+            }
+            if !self.is_maintain_stable() {
+                return Some("unstable");
+            }
+            // 稳态：吞掉电流/温度噪声事件
+            return None;
+        }
         if self.is_empty() {
             return Some("event");
         }
@@ -77,6 +179,20 @@ pub(crate) fn parse_watch_args(args: &[String]) -> (u64, u64, Thresholds) {
                     }
                 }
             }
+            "--maintain" => {
+                th.maintain = true;
+                // 允许裸 flag 或 --maintain 1
+                if val.is_some_and(|v| matches!(v.trim(), "0" | "1" | "true" | "false")) {
+                    th.maintain = !matches!(val.unwrap().trim(), "0" | "false");
+                    i += 2;
+                    continue;
+                }
+                i += 1;
+                continue;
+            }
+            "--marker" => th.marker = val.unwrap_or("").trim().to_string(),
+            "--active-switch" => th.active_switch = val.unwrap_or("").trim().to_string(),
+            "--datadir" => th.datadir = val.unwrap_or("").trim().to_string(),
             _ => {
                 i += 1;
                 continue;
@@ -98,6 +214,18 @@ pub(crate) fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
     }
     let remaining = max_secs.saturating_sub(floor_secs);
     if remaining == 0 {
+        if th.maintain {
+            let stable = th.is_maintain_stable();
+            th.write_maintain_stable(stable);
+            eprintln!(
+                "qscd: wake={}",
+                if stable {
+                    "maintain_stable"
+                } else {
+                    "maintain_need"
+                }
+            );
+        }
         return EXIT_OK;
     }
     let Some(sock) = UeventSocket::open() else {
@@ -111,21 +239,41 @@ pub(crate) fn watch(max_secs: u64, floor_secs: u64, th: &Thresholds) -> u8 {
     loop {
         let left = deadline.saturating_duration_since(Instant::now());
         if left < RECV_MIN_TIMEOUT {
+            if th.maintain {
+                let stable = th.is_maintain_stable();
+                th.write_maintain_stable(stable);
+                eprintln!(
+                    "qscd: wake={}",
+                    if stable {
+                        "maintain_stable"
+                    } else {
+                        "maintain_need"
+                    }
+                );
+            }
             return EXIT_OK;
         }
         match poll_uevent_or_wake(&sock, wake.as_ref(), &mut buf, left) {
             Ok(WakeSource::File) => {
+                if th.maintain {
+                    th.write_maintain_stable(false);
+                }
                 eprintln!("qscd: wake=file");
                 return EXIT_OK;
             }
             Ok(WakeSource::Power) => {
-                if th.wake_reason(plugged_at_start).is_some() {
+                if let Some(reason) = th.wake_reason(plugged_at_start) {
                     if sock.drain_event_burst(&mut buf).is_err() {
                         eprintln!("qscd: reason=event_drain");
                         return EXIT_UNUSABLE;
                     }
+                    if th.maintain {
+                        th.write_maintain_stable(false);
+                    }
+                    eprintln!("qscd: wake={reason}");
                     return EXIT_OK;
                 }
+                // maintain 稳态：吞事件继续睡
             }
             Ok(WakeSource::Timeout) => {}
             Err(_) => {

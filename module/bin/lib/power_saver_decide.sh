@@ -3,10 +3,11 @@
 qsc_ps_can_skip_round() {
 	local now last gap
 	[ "${QSC_PS_ENABLE:-1}" = "1" ] || return 1
-	# 模块关闭时也别空转，但仍要走满轮以刷新简介
-	[ -f "$DATADIR/power_switch" ] && return 1
-	qsc_ps_plugged && return 1
-
+	# 真正插电才必须满轮；仅残留 power_switch（拔线保留迟滞 / 粘标记）时未插电可 lean，
+	# 否则 MCA 会整夜按 maintain 间隔满轮，DeepPark 进不去。
+	if qsc_ps_plugged; then
+		return 1
+	fi
 	# 未插电：不再用 FULL_MAX_GAP 强行满轮（简介已由 worker/XP；停充逻辑无事可做）
 	# 仅当显式要求（QSC_PS_FORCE_FULL=1）才走满轮。
 	[ "${QSC_PS_FORCE_FULL:-0}" = "1" ] && return 1
