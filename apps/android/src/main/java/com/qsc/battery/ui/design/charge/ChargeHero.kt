@@ -80,7 +80,7 @@ fun ChargeHero(
     statusLine: String,
     subtitle: String,
     charging: Boolean = false,
-    /** 内核 current_now（µA）；仅充电时驱动液面浪高/快慢。 */
+    /** 内核 current_now（µA）；仅充电时驱动三套 Hero 动效强弱/快慢。 */
     currentUa: String = "",
     style: ChargeHeroStyle = ChargeHeroStyle.Battery,
 ) {
@@ -112,6 +112,7 @@ fun ChargeHero(
                 subtitle,
                 charging,
                 animated,
+                currentEnergy,
             )
         }
 
@@ -122,6 +123,7 @@ fun ChargeHero(
                 subtitle,
                 charging,
                 animated,
+                currentEnergy,
             )
         }
     }
@@ -147,6 +149,7 @@ private fun ChargeHeroPulse(
     subtitle: String,
     charging: Boolean,
     animated: Float,
+    currentEnergy: Float,
 ) {
     val track = ChargeTheme.colors.stroke
     val progress = ChargeTheme.colors.accent
@@ -154,7 +157,8 @@ private fun ChargeHeroPulse(
     val heroStroke = ChargeTheme.dimens.heroStroke
     val ink = ChargeTheme.colors.ink
     val muted = ChargeTheme.colors.muted
-    val motion = if (charging) rememberPulseMotion() else null
+    val energy = if (charging) currentEnergy.coerceIn(0f, 1f) else 0f
+    val motion = if (charging) rememberPulseMotion(energy) else null
     // 足够外扩余量，避免脉冲环顶部被裁成「缺边」
     val canvasPad = 48.dp
 
@@ -172,28 +176,31 @@ private fun ChargeHeroPulse(
                 val c = Offset(size.width / 2f, size.height / 2f)
                 val ringR = (heroSize.toPx() - heroStroke.toPx()) / 2f
                 val glowA = motion?.glowAlpha ?: 0.08f
+                val expand = 0.28f + 0.42f * energy
+                val ringAlpha = 0.12f + 0.14f * energy
 
-                // 中心柔光：无硬边
+                // 中心柔光：无硬边；电流越大半径/亮度越高
+                val glowR = ringR * (1.35f + 0.45f * energy)
                 drawCircle(
                     brush = Brush.radialGradient(
                         0f to progress.copy(alpha = glowA),
                         0.55f to progress.copy(alpha = glowA * 0.35f),
                         1f to Color.Transparent,
                         center = c,
-                        radius = ringR * 1.55f,
+                        radius = glowR,
                     ),
-                    radius = ringR * 1.55f,
+                    radius = glowR,
                     center = c,
                 )
 
                 if (motion != null) {
+                    val layers = 2 + (energy * 2.5f).toInt().coerceIn(0, 2)
                     // 软边脉冲：多层半透明填充环模拟虚化，不用硬 Stroke
-                    for (i in 0..2) {
-                        val phase = (motion.pulse + i / 3f) % 1f
+                    for (i in 0..layers) {
+                        val phase = (motion.pulse + i / (layers + 1f)) % 1f
                         val ease = FastOutSlowInEasing.transform(phase)
-                        val r = ringR * (1.04f + ease * 0.42f)
-                        val a = (1f - ease) * 0.16f
-                        // 外晕
+                        val r = ringR * (1.04f + ease * expand)
+                        val a = (1f - ease) * ringAlpha
                         drawCircle(
                             brush = Brush.radialGradient(
                                 0.72f to Color.Transparent,
@@ -241,17 +248,19 @@ private fun ChargeHeroPulse(
                         topLeft = topLeft,
                     )
                     if (motion != null && animated > 0.02f) {
-                        rotate(degrees = -90f + 360f * animated - 6f + motion.shimmer * 10f) {
+                        val shimmerSpan = 16f + 18f * energy
+                        val shimmerA = 0.22f + 0.28f * energy
+                        rotate(degrees = -90f + 360f * animated - 6f + motion.shimmer * (8f + 16f * energy)) {
                             drawArc(
                                 brush = Brush.sweepGradient(
                                     0f to Color.Transparent,
-                                    0.4f to Color.White.copy(alpha = 0.35f),
+                                    0.4f to Color.White.copy(alpha = shimmerA),
                                     1f to Color.Transparent,
                                 ),
                                 startAngle = 0f,
-                                sweepAngle = 22f,
+                                sweepAngle = shimmerSpan,
                                 useCenter = false,
-                                style = Stroke(width = stroke * 0.75f, cap = StrokeCap.Round),
+                                style = Stroke(width = stroke * (0.7f + 0.2f * energy), cap = StrokeCap.Round),
                                 size = arcSize,
                                 topLeft = topLeft,
                             )
@@ -271,6 +280,7 @@ private fun ChargeHeroPulse(
             Spacer(modifier = Modifier.height(6.dp))
             SoftBubbleField(
                 accent = progress,
+                currentEnergy = energy,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
@@ -297,6 +307,7 @@ private fun ChargeHeroOrbit(
     subtitle: String,
     charging: Boolean,
     animated: Float,
+    currentEnergy: Float,
 ) {
     val track = ChargeTheme.colors.stroke
     val progress = ChargeTheme.colors.accent
@@ -304,7 +315,8 @@ private fun ChargeHeroOrbit(
     val heroStroke = ChargeTheme.dimens.heroStroke
     val ink = ChargeTheme.colors.ink
     val muted = ChargeTheme.colors.muted
-    val motion = if (charging) rememberOrbitMotion() else null
+    val energy = if (charging) currentEnergy.coerceIn(0f, 1f) else 0f
+    val motion = if (charging) rememberOrbitMotion(energy) else null
     val canvasPad = 28.dp
 
     Column(
@@ -321,24 +333,25 @@ private fun ChargeHeroOrbit(
                 val c = Offset(size.width / 2f, size.height / 2f)
                 val ringR = (heroSize.toPx() - heroStroke.toPx()) / 2f
                 val glowA = motion?.breath ?: 0.10f
+                val glowR = ringR * (1.25f + 0.35f * energy)
                 drawCircle(
                     brush = Brush.radialGradient(
                         0f to progress.copy(alpha = glowA),
                         0.6f to progress.copy(alpha = glowA * 0.4f),
                         1f to Color.Transparent,
                         center = c,
-                        radius = ringR * 1.4f,
+                        radius = glowR,
                     ),
-                    radius = ringR * 1.4f,
+                    radius = glowR,
                     center = c,
                 )
-                // 外圈软呼吸环
+                // 外圈软呼吸环：电流越大张得越开
                 if (motion != null) {
-                    val pulseR = ringR * (1.08f + motion.breath * 0.12f)
+                    val pulseR = ringR * (1.06f + motion.breath * (0.10f + 0.16f * energy))
                     drawCircle(
                         brush = Brush.radialGradient(
                             0.85f to Color.Transparent,
-                            0.93f to progress.copy(alpha = 0.12f),
+                            0.93f to progress.copy(alpha = 0.10f + 0.12f * energy),
                             1f to Color.Transparent,
                             center = c,
                             radius = pulseR,
@@ -373,23 +386,26 @@ private fun ChargeHeroOrbit(
                         topLeft = topLeft,
                     )
                     if (motion != null) {
-                        // 拖尾弧：多层渐隐，比旧版单段高光更柔和
+                        // 拖尾弧：电流大 → 更长更亮更多层
+                        val trails = 3 + (energy * 2.2f).toInt().coerceIn(0, 2)
+                        val gap = 12f + 6f * energy
+                        val headSweep = 32f + 22f * energy
                         rotate(degrees = motion.spin) {
-                            for (i in 0..3) {
-                                val start = -90f - i * 14f
-                                val sweep = 38f - i * 6f
-                                val a = (0.85f - i * 0.18f).coerceAtLeast(0.12f)
+                            for (i in 0..trails) {
+                                val start = -90f - i * gap
+                                val sweep = (headSweep - i * (5f + 2f * energy)).coerceAtLeast(10f)
+                                val a = (0.88f - i * (0.14f - 0.03f * energy)).coerceAtLeast(0.10f)
                                 drawArc(
                                     color = if (i == 0) {
                                         Color.White.copy(alpha = a * motion.bolt)
                                     } else {
-                                        progress.copy(alpha = a * 0.55f)
+                                        progress.copy(alpha = a * (0.45f + 0.25f * energy))
                                     },
                                     startAngle = start,
                                     sweepAngle = sweep,
                                     useCenter = false,
                                     style = Stroke(
-                                        width = stroke * (1.15f - i * 0.12f),
+                                        width = stroke * (1.1f + 0.2f * energy - i * 0.1f),
                                         cap = StrokeCap.Round,
                                     ),
                                     size = arcSize,
@@ -1030,44 +1046,49 @@ private fun ChargingChip(accent: Color, boltAlpha: Float = 1f) {
     }
 }
 
-/** 软边上升粒子：径向渐变圆 + 左右/上下边缘淡出，避免与白底硬切。 */
+/** 软边上升粒子：径向渐变圆 + 左右/上下边缘淡出；密度/速度随电流。 */
 @Composable
 private fun SoftBubbleField(
     accent: Color,
+    currentEnergy: Float,
     modifier: Modifier = Modifier,
 ) {
+    val energy = currentEnergy.coerceIn(0f, 1f)
     val infinite = rememberInfiniteTransition(label = "softBubbles")
-    val t by infinite.animateFloat(
+    val clock by infinite.animateFloat(
         initialValue = 0f,
-        targetValue = 1f,
+        targetValue = 3600f,
         animationSpec = infiniteRepeatable(
-            animation = tween(4800, easing = LinearEasing),
+            animation = tween(3_600_000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
-        label = "bubbleT",
+        label = "bubbleClock",
     )
     val seeds = remember {
-        List(10) { i ->
+        List(16) { i ->
             BubbleSeed(
-                xFrac = 0.12f + (i * 0.085f) % 0.76f,
-                size = 3.2f + (i % 4) * 1.1f,
-                speed = 0.5f + (i % 4) * 0.11f,
-                phase = (i * 0.19f) % 1f,
-                sway = 8f + (i % 3) * 5f,
+                xFrac = 0.10f + (i * 0.055f) % 0.80f,
+                size = 3.0f + (i % 5) * 1.35f,
+                speed = 0.45f + (i % 5) * 0.13f,
+                phase = (i * 0.17f) % 1f,
+                sway = 7f + (i % 4) * 5f,
             )
         }
     }
+    val activeCount = (8 + (energy * 8f).toInt()).coerceIn(8, 16)
+    val speedBoost = 0.55f + 1.35f * energy
+    val sizeBoost = 0.85f + 0.75f * energy
+    val fogA = 0.06f + 0.10f * energy
 
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
 
-        // 底雾：四周彻底淡出
         drawRect(
             brush = Brush.verticalGradient(
                 0f to Color.Transparent,
-                0.55f to accent.copy(alpha = 0.04f),
-                1f to accent.copy(alpha = 0.10f),
+                0.55f to accent.copy(alpha = fogA * 0.4f),
+                1f to accent.copy(alpha = fogA),
             ),
         )
         drawRect(
@@ -1079,8 +1100,8 @@ private fun SoftBubbleField(
             ),
         )
 
-        seeds.forEach { b ->
-            val life = (t * b.speed + b.phase) % 1f
+        seeds.take(activeCount).forEach { b ->
+            val life = ((clock * b.speed * speedBoost * 0.22f) + b.phase) % 1f
             val y = h * (1.08f - life * 1.2f)
             val x = w * b.xFrac + sin(life * PI.toFloat() * 2f + b.phase * 5f) * b.sway
             val edgeX = when {
@@ -1098,9 +1119,8 @@ private fun SoftBubbleField(
                 life > 0.7f -> ((1f - life) / 0.3f).coerceIn(0f, 1f)
                 else -> 1f
             }
-            val alpha = lifeA * edgeX * edgeY * 0.42f
-            val r = b.size * (0.75f + life * 0.55f)
-            // 软圆：径向渐变，边缘透明
+            val alpha = lifeA * edgeX * edgeY * (0.34f + 0.22f * energy)
+            val r = b.size * sizeBoost * (0.75f + life * 0.55f)
             drawCircle(
                 brush = Brush.radialGradient(
                     0f to accent.copy(alpha = alpha),
@@ -1120,71 +1140,53 @@ private fun SoftBubbleField(
 
 private data class PulseMotion(val pulse: Float, val glowAlpha: Float, val shimmer: Float)
 
+/** 脉冲相位/光晕/扫光速度与亮度随电流（energy 0..1）。 */
 @Composable
-private fun rememberPulseMotion(): PulseMotion {
+private fun rememberPulseMotion(energy: Float): PulseMotion {
+    val e = energy.coerceIn(0f, 1f)
     val infinite = rememberInfiniteTransition(label = "pulseMotion")
-    val pulse by infinite.animateFloat(
+    val clock by infinite.animateFloat(
         initialValue = 0f,
-        targetValue = 1f,
+        targetValue = 3600f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2600, easing = LinearEasing),
+            animation = tween(3_600_000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
-        label = "pulse",
+        label = "pulseClock",
     )
-    val glow by infinite.animateFloat(
-        initialValue = 0.08f,
-        targetValue = 0.18f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "glow",
-    )
-    val shimmer by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "shimmer",
-    )
-    return PulseMotion(pulse, glow, shimmer)
+    val pulseHz = 0.28f + 0.95f * e
+    val shimmerHz = 0.22f + 0.85f * e
+    val pulse = (clock * pulseHz) % 1f
+    val shimmer = (clock * shimmerHz) % 1f
+    val glowBase = 0.08f + 0.14f * e
+    val glowAlpha = glowBase + 0.05f * (0.5f + 0.5f * sin(clock * PI.toFloat() * 2f * (0.4f + e)))
+    return PulseMotion(pulse, glowAlpha, shimmer)
 }
 
 private data class OrbitMotion(val spin: Float, val breath: Float, val bolt: Float)
 
+/** 弧光转速/呼吸/闪电闪烁随电流（energy 0..1）。 */
 @Composable
-private fun rememberOrbitMotion(): OrbitMotion {
+private fun rememberOrbitMotion(energy: Float): OrbitMotion {
+    val e = energy.coerceIn(0f, 1f)
     val infinite = rememberInfiniteTransition(label = "orbitMotion")
-    val spin by infinite.animateFloat(
+    val clock by infinite.animateFloat(
         initialValue = 0f,
-        targetValue = 360f,
+        targetValue = 3600f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2400, easing = LinearEasing),
+            animation = tween(3_600_000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
-        label = "spin",
+        label = "orbitClock",
     )
-    val breath by infinite.animateFloat(
-        initialValue = 0.14f,
-        targetValue = 0.32f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "breath",
-    )
-    val bolt by infinite.animateFloat(
-        initialValue = 0.55f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "bolt",
-    )
+    // deg/s：约 90→360
+    val spin = (clock * (90f + 270f * e)) % 360f
+    val breathHz = 0.35f + 0.9f * e
+    val breathMid = 0.14f + 0.16f * e
+    val breathAmp = 0.06f + 0.12f * e
+    val breath = breathMid + breathAmp * sin(clock * PI.toFloat() * 2f * breathHz)
+    val boltHz = 0.5f + 1.4f * e
+    val bolt = 0.55f + 0.45f * (0.5f + 0.5f * sin(clock * PI.toFloat() * 2f * boltHz))
     return OrbitMotion(spin, breath, bolt)
 }
 
