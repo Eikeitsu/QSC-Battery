@@ -33,12 +33,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,8 +72,8 @@ internal fun ChargeHeroBatteryBlocks(
         subtitle = subtitle,
         charging = charging,
         currentEnergy = currentEnergy,
-        glyphWidth = if (horizontal) 120.dp else 86.dp,
-        glyphHeight = if (horizontal) 56.dp else 132.dp,
+        glyphWidth = if (horizontal) 148.dp else 86.dp,
+        glyphHeight = if (horizontal) 82.dp else 132.dp,
     ) { accent, ink, track ->
         BatteryBlocksCanvas(
             level = level,
@@ -100,8 +104,8 @@ internal fun ChargeHeroBatterySolid(
         subtitle = subtitle,
         charging = charging,
         currentEnergy = currentEnergy,
-        glyphWidth = if (horizontal) 120.dp else 86.dp,
-        glyphHeight = if (horizontal) 56.dp else 132.dp,
+        glyphWidth = if (horizontal) 148.dp else 86.dp,
+        glyphHeight = if (horizontal) 82.dp else 132.dp,
     ) { accent, ink, track ->
         BatterySolidCanvas(
             level = level,
@@ -213,64 +217,60 @@ private fun BatteryBlocksCanvas(
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
-        val stroke = (min(w, h) * 0.055f).coerceIn(3.5f, 6f)
         if (horizontal) {
-            val bodyH = h * 0.72f
-            val bodyTop = (h - bodyH) / 2f
-            val capW = w * 0.07f
-            val bodyW = w - capW - stroke
-            drawRoundRect(
-                color = ink.copy(alpha = 0.55f),
-                topLeft = Offset(stroke / 2f, bodyTop),
-                size = Size(bodyW, bodyH),
-                cornerRadius = CornerRadius(bodyH * 0.22f),
-                style = Stroke(width = stroke),
-            )
-            drawRoundRect(
-                color = track.copy(alpha = 0.9f),
-                topLeft = Offset(bodyW + stroke * 0.2f, bodyTop + bodyH * 0.28f),
-                size = Size(capW, bodyH * 0.44f),
-                cornerRadius = CornerRadius(capW * 0.35f),
-            )
-            val pad = stroke * 1.4f
-            val innerL = stroke / 2f + pad
-            val innerT = bodyTop + pad
-            val innerW = bodyW - pad * 2f
-            val innerH = bodyH - pad * 2f
-            val segments = 5
-            val gap = 4f
-            val segW = (innerW - gap * (segments - 1)) / segments
-            val lit = (level.coerceIn(0f, 1f) * segments).toInt().coerceIn(0, segments)
-            val partial = (level.coerceIn(0f, 1f) * segments) - lit
-            for (i in 0 until segments) {
-                val x = innerL + i * (segW + gap)
-                val fill = when {
-                    i < lit -> 1f
-                    i == lit -> partial
-                    else -> 0f
-                }
-                if (fill <= 0.02f) continue
-                val t = (i + 0.5f) / segments
-                val col = blockColor(t, accent).copy(
-                    alpha = if (charging && i == lit.coerceAtMost(segments - 1)) {
-                        0.75f + 0.25f * pulse
-                    } else {
-                        0.95f
-                    },
-                )
-                drawRoundRect(
-                    color = col,
-                    topLeft = Offset(x, innerT),
-                    size = Size(segW * fill.coerceAtLeast(0.08f), innerH),
-                    cornerRadius = CornerRadius(4f),
+            val g = horizontalBatteryGeom()
+            drawHorizontalBatteryShell(g, ink, track, frameAlpha = if (charging) 0.72f + 0.28f * pulse else 0.88f)
+            val clip = Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        left = g.innerL,
+                        top = g.innerT,
+                        right = g.innerL + g.innerW,
+                        bottom = g.innerT + g.innerH,
+                        cornerRadius = CornerRadius(g.innerRx),
+                    ),
                 )
             }
+            clipPath(clip) {
+                val segments = 5
+                val gap = g.innerH * 0.08f
+                val segW = (g.innerW - gap * (segments - 1)) / segments
+                val lit = (level.coerceIn(0f, 1f) * segments).toInt().coerceIn(0, segments)
+                val partial = (level.coerceIn(0f, 1f) * segments) - lit
+                val segRx = (g.innerH * 0.18f).coerceAtMost(g.innerRx)
+                for (i in 0 until segments) {
+                    val x = g.innerL + i * (segW + gap)
+                    val fill = when {
+                        i < lit -> 1f
+                        i == lit -> partial
+                        else -> 0f
+                    }
+                    if (fill <= 0.02f) continue
+                    val t = (i + 0.5f) / segments
+                    val col = blockColor(t, accent).copy(
+                        alpha = if (charging && i == lit.coerceAtMost(segments - 1)) {
+                            0.78f + 0.22f * pulse
+                        } else {
+                            0.96f
+                        },
+                    )
+                    drawRoundRect(
+                        color = col,
+                        topLeft = Offset(x, g.innerT),
+                        size = Size(segW * fill.coerceAtLeast(0.12f), g.innerH),
+                        cornerRadius = CornerRadius(segRx),
+                    )
+                }
+            }
+            if (charging) drawBatteryBolt(g, ink)
         } else {
+            val stroke = (min(w, h) * 0.055f).coerceIn(3.5f, 6f)
             val bodyW = w * 0.88f
             val bodyLeft = (w - bodyW) / 2f
             val capH = h * 0.08f
             val bodyTop = capH * 0.7f
             val bodyH = h - bodyTop - h * 0.02f
+            val bodyRx = bodyW * 0.18f
             drawRoundRect(
                 color = ink.copy(alpha = 0.5f),
                 topLeft = Offset((w - bodyW * 0.4f) / 2f, 0f),
@@ -281,46 +281,159 @@ private fun BatteryBlocksCanvas(
                 color = ink.copy(alpha = 0.55f),
                 topLeft = Offset(bodyLeft, bodyTop),
                 size = Size(bodyW, bodyH),
-                cornerRadius = CornerRadius(bodyW * 0.18f),
+                cornerRadius = CornerRadius(bodyRx),
                 style = Stroke(width = stroke),
             )
-            val pad = stroke * 1.35f
+            val pad = stroke * 1.2f
             val innerL = bodyLeft + pad
             val innerT = bodyTop + pad
             val innerW = bodyW - pad * 2f
             val innerH = bodyH - pad * 2f
-            val segments = 5
-            val gap = 5f
-            val segH = (innerH - gap * (segments - 1)) / segments
-            val lit = (level.coerceIn(0f, 1f) * segments).toInt().coerceIn(0, segments)
-            val partial = (level.coerceIn(0f, 1f) * segments) - lit
-            for (i in 0 until segments) {
-                val fromBottom = i
-                val y = innerT + innerH - (fromBottom + 1) * segH - fromBottom * gap
-                val fill = when {
-                    fromBottom < lit -> 1f
-                    fromBottom == lit -> partial
-                    else -> 0f
+            val innerRx = (bodyRx - pad).coerceAtLeast(4f)
+            val clip = Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        left = innerL,
+                        top = innerT,
+                        right = innerL + innerW,
+                        bottom = innerT + innerH,
+                        cornerRadius = CornerRadius(innerRx),
+                    ),
+                )
+            }
+            clipPath(clip) {
+                val segments = 5
+                val gap = 5f
+                val segH = (innerH - gap * (segments - 1)) / segments
+                val lit = (level.coerceIn(0f, 1f) * segments).toInt().coerceIn(0, segments)
+                val partial = (level.coerceIn(0f, 1f) * segments) - lit
+                val segRx = (innerW * 0.08f).coerceAtMost(innerRx)
+                for (i in 0 until segments) {
+                    val fromBottom = i
+                    val y = innerT + innerH - (fromBottom + 1) * segH - fromBottom * gap
+                    val fill = when {
+                        fromBottom < lit -> 1f
+                        fromBottom == lit -> partial
+                        else -> 0f
+                    }
+                    if (fill <= 0.02f) continue
+                    val t = (fromBottom + 0.5f) / segments
+                    val col = blockColor(t, accent).copy(
+                        alpha = if (charging && fromBottom == lit.coerceAtMost(segments - 1)) {
+                            0.75f + 0.25f * pulse
+                        } else {
+                            0.95f
+                        },
+                    )
+                    val hSeg = segH * fill.coerceAtLeast(0.1f)
+                    drawRoundRect(
+                        color = col,
+                        topLeft = Offset(innerL, y + (segH - hSeg)),
+                        size = Size(innerW, hSeg),
+                        cornerRadius = CornerRadius(segRx),
+                    )
                 }
-                if (fill <= 0.02f) continue
-                val t = (fromBottom + 0.5f) / segments
-                val col = blockColor(t, accent).copy(
-                    alpha = if (charging && fromBottom == lit.coerceAtMost(segments - 1)) {
-                        0.75f + 0.25f * pulse
-                    } else {
-                        0.95f
-                    },
-                )
-                val hSeg = segH * fill.coerceAtLeast(0.1f)
-                drawRoundRect(
-                    color = col,
-                    topLeft = Offset(innerL, y + (segH - hSeg)),
-                    size = Size(innerW, hSeg),
-                    cornerRadius = CornerRadius(5f),
-                )
             }
         }
     }
+}
+
+/** 对齐 WebUI BatteryGlyph：viewBox 48×26、frame 40×19 rx≈4、内填充 inset≈2.5。 */
+private data class HBattGeom(
+    val stroke: Float,
+    val bodyL: Float,
+    val bodyT: Float,
+    val bodyW: Float,
+    val bodyH: Float,
+    val bodyRx: Float,
+    val capL: Float,
+    val capT: Float,
+    val capW: Float,
+    val capH: Float,
+    val innerL: Float,
+    val innerT: Float,
+    val innerW: Float,
+    val innerH: Float,
+    val innerRx: Float,
+    val tipRx: Float,
+)
+
+private fun DrawScope.horizontalBatteryGeom(): HBattGeom {
+    val w = size.width
+    val h = size.height
+    // 壳体加高：约占画布 84%，圆角比 WebUI 4/19
+    val stroke = (h * 0.085f).coerceIn(3.4f, 5.8f)
+    val bodyH = h * 0.84f
+    val bodyT = (h - bodyH) / 2f
+    val capW = w * 0.055f
+    val bodyL = stroke * 0.55f
+    val bodyW = w - bodyL - capW - stroke * 0.35f
+    val bodyRx = bodyH * (4f / 19f)
+    val capH = bodyH * 0.42f
+    val capT = bodyT + (bodyH - capH) / 2f
+    val capL = bodyL + bodyW + stroke * 0.05f
+    val inset = stroke * 1.15f
+    val innerL = bodyL + inset
+    val innerT = bodyT + inset
+    val innerW = bodyW - inset * 2f
+    val innerH = bodyH - inset * 2f
+    val innerRx = (bodyRx - inset * 0.65f).coerceAtLeast(bodyH * 0.08f)
+    val tipRx = (innerH * (1.5f / 14f)).coerceIn(2.2f, 5f)
+    return HBattGeom(
+        stroke = stroke,
+        bodyL = bodyL,
+        bodyT = bodyT,
+        bodyW = bodyW,
+        bodyH = bodyH,
+        bodyRx = bodyRx,
+        capL = capL,
+        capT = capT,
+        capW = capW,
+        capH = capH,
+        innerL = innerL,
+        innerT = innerT,
+        innerW = innerW,
+        innerH = innerH,
+        innerRx = innerRx,
+        tipRx = tipRx,
+    )
+}
+
+private fun DrawScope.drawHorizontalBatteryShell(
+    g: HBattGeom,
+    ink: Color,
+    track: Color,
+    frameAlpha: Float,
+) {
+    drawRoundRect(
+        color = ink.copy(alpha = frameAlpha),
+        topLeft = Offset(g.bodyL, g.bodyT),
+        size = Size(g.bodyW, g.bodyH),
+        cornerRadius = CornerRadius(g.bodyRx),
+        style = Stroke(width = g.stroke),
+    )
+    drawRoundRect(
+        color = track.copy(alpha = 0.85f),
+        topLeft = Offset(g.capL, g.capT),
+        size = Size(g.capW, g.capH),
+        cornerRadius = CornerRadius(g.capW * 0.45f),
+    )
+}
+
+private fun DrawScope.drawBatteryBolt(g: HBattGeom, ink: Color) {
+    val cx = g.innerL + g.innerW * 0.52f
+    val cy = g.innerT + g.innerH * 0.5f
+    val s = g.innerH * 0.42f
+    val bolt = Path().apply {
+        moveTo(cx + s * 0.08f, cy - s * 0.55f)
+        lineTo(cx - s * 0.28f, cy + s * 0.05f)
+        lineTo(cx + s * 0.02f, cy + s * 0.05f)
+        lineTo(cx - s * 0.1f, cy + s * 0.55f)
+        lineTo(cx + s * 0.32f, cy - s * 0.08f)
+        lineTo(cx + s * 0.02f, cy - s * 0.08f)
+        close()
+    }
+    drawPath(bolt, color = ink.copy(alpha = 0.72f))
 }
 
 private fun blockColor(t: Float, accent: Color): Color {
@@ -361,110 +474,150 @@ private fun BatterySolidCanvas(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween((2200 - 900 * energy).toInt().coerceIn(900, 2200), easing = LinearEasing),
+            animation = tween((2400 - 900 * energy).toInt().coerceIn(1100, 2400), easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "solidShimmer",
     )
+    val pulse by infinite.animateFloat(
+        initialValue = 0.88f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "solidPulse",
+    )
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
-        val stroke = (min(w, h) * 0.055f).coerceIn(3.5f, 6f)
         val lvl = level.coerceIn(0f, 1f)
         if (horizontal) {
-            val bodyH = h * 0.72f
-            val bodyTop = (h - bodyH) / 2f
-            val capW = w * 0.07f
-            val bodyW = w - capW - stroke
-            drawRoundRect(
-                color = ink.copy(alpha = 0.55f),
-                topLeft = Offset(stroke / 2f, bodyTop),
-                size = Size(bodyW, bodyH),
-                cornerRadius = CornerRadius(bodyH * 0.22f),
-                style = Stroke(width = stroke),
+            val g = horizontalBatteryGeom()
+            drawHorizontalBatteryShell(
+                g,
+                ink,
+                track,
+                frameAlpha = if (charging) 0.72f + 0.28f * pulse else 0.9f,
             )
-            drawRoundRect(
-                color = track.copy(alpha = 0.9f),
-                topLeft = Offset(bodyW + stroke * 0.2f, bodyTop + bodyH * 0.28f),
-                size = Size(capW, bodyH * 0.44f),
-                cornerRadius = CornerRadius(capW * 0.35f),
-            )
-            val pad = stroke * 1.35f
-            val innerL = stroke / 2f + pad
-            val innerT = bodyTop + pad
-            val innerW = (bodyW - pad * 2f) * lvl
-            val innerH = bodyH - pad * 2f
-            if (innerW > 1f) {
-                drawRoundRect(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(accent.copy(alpha = 0.75f), accent),
+            val clip = Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        left = g.innerL,
+                        top = g.innerT,
+                        right = g.innerL + g.innerW,
+                        bottom = g.innerT + g.innerH,
+                        cornerRadius = CornerRadius(g.innerRx),
                     ),
-                    topLeft = Offset(innerL, innerT),
-                    size = Size(innerW, innerH),
-                    cornerRadius = CornerRadius(6f),
                 )
-                if (charging) {
-                    val sx = innerL + innerW * shimmer
-                    drawRect(
+            }
+            clipPath(clip) {
+                val fillW = g.innerW * lvl
+                if (fillW > 1.5f) {
+                    // 低电量偏暖，对齐 WebUI ≤30% 警示色
+                    val fillColor = when {
+                        lvl <= 0.15f -> Color(0xFFEF4444)
+                        lvl <= 0.30f -> Color(0xFFF59E0B)
+                        else -> accent
+                    }
+                    drawRoundRect(
                         brush = Brush.horizontalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.White.copy(alpha = 0.28f),
-                                Color.Transparent,
-                            ),
+                            colors = listOf(fillColor.copy(alpha = 0.82f), fillColor),
                         ),
-                        topLeft = Offset(sx - 12f, innerT),
-                        size = Size(24f, innerH),
+                        topLeft = Offset(g.innerL, g.innerT),
+                        size = Size(fillW, g.innerH),
+                        cornerRadius = CornerRadius(g.tipRx),
                     )
+                    if (charging) {
+                        val band = g.innerH * 0.9f
+                        val sx = g.innerL - band + (g.innerW + band * 2f) * shimmer
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.White.copy(alpha = 0.08f),
+                                    Color.White.copy(alpha = 0.32f),
+                                    Color.White.copy(alpha = 0.08f),
+                                    Color.Transparent,
+                                ),
+                            ),
+                            topLeft = Offset(sx, g.innerT),
+                            size = Size(band, g.innerH),
+                        )
+                    }
                 }
             }
+            if (charging) drawBatteryBolt(g, ink)
         } else {
+            val stroke = (min(w, h) * 0.055f).coerceIn(3.5f, 6f)
             val bodyW = w * 0.88f
             val bodyLeft = (w - bodyW) / 2f
             val capH = h * 0.08f
             val bodyTop = capH * 0.7f
             val bodyH = h - bodyTop - h * 0.02f
+            val bodyRx = bodyW * 0.18f
             drawRoundRect(
-                color = ink.copy(alpha = 0.5f),
+                color = ink.copy(alpha = if (charging) 0.5f + 0.2f * pulse else 0.55f),
                 topLeft = Offset((w - bodyW * 0.4f) / 2f, 0f),
                 size = Size(bodyW * 0.4f, capH),
                 cornerRadius = CornerRadius(capH * 0.4f),
             )
             drawRoundRect(
-                color = ink.copy(alpha = 0.55f),
+                color = ink.copy(alpha = if (charging) 0.5f + 0.25f * pulse else 0.55f),
                 topLeft = Offset(bodyLeft, bodyTop),
                 size = Size(bodyW, bodyH),
-                cornerRadius = CornerRadius(bodyW * 0.18f),
+                cornerRadius = CornerRadius(bodyRx),
                 style = Stroke(width = stroke),
             )
-            val pad = stroke * 1.35f
+            val pad = stroke * 1.2f
             val innerL = bodyLeft + pad
             val innerW = bodyW - pad * 2f
             val innerHMax = bodyH - pad * 2f
-            val fillH = innerHMax * lvl
-            val innerT = bodyTop + pad + (innerHMax - fillH)
-            if (fillH > 1f) {
-                drawRoundRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(accent.copy(alpha = 0.7f), accent),
+            val innerRx = (bodyRx - pad).coerceAtLeast(4f)
+            val tipRx = (innerW * 0.08f).coerceIn(3f, 8f)
+            val clip = Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        left = innerL,
+                        top = bodyTop + pad,
+                        right = innerL + innerW,
+                        bottom = bodyTop + pad + innerHMax,
+                        cornerRadius = CornerRadius(innerRx),
                     ),
-                    topLeft = Offset(innerL, innerT),
-                    size = Size(innerW, fillH),
-                    cornerRadius = CornerRadius(6f),
                 )
-                if (charging) {
-                    val sy = innerT + fillH * (1f - shimmer)
-                    drawRect(
+            }
+            clipPath(clip) {
+                val fillH = innerHMax * lvl
+                val innerT = bodyTop + pad + (innerHMax - fillH)
+                if (fillH > 1.5f) {
+                    val fillColor = when {
+                        lvl <= 0.15f -> Color(0xFFEF4444)
+                        lvl <= 0.30f -> Color(0xFFF59E0B)
+                        else -> accent
+                    }
+                    drawRoundRect(
                         brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.White.copy(alpha = 0.28f),
-                                Color.Transparent,
-                            ),
+                            colors = listOf(fillColor.copy(alpha = 0.78f), fillColor),
                         ),
-                        topLeft = Offset(innerL, sy - 10f),
-                        size = Size(innerW, 20f),
+                        topLeft = Offset(innerL, innerT),
+                        size = Size(innerW, fillH),
+                        cornerRadius = CornerRadius(tipRx),
                     )
+                    if (charging) {
+                        val band = innerW * 0.35f
+                        val sy = innerT + fillH - (fillH + band) * shimmer
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.White.copy(alpha = 0.3f),
+                                    Color.Transparent,
+                                ),
+                            ),
+                            topLeft = Offset(innerL, sy),
+                            size = Size(innerW, band),
+                        )
+                    }
                 }
             }
         }
@@ -570,68 +723,121 @@ internal fun ChargeHeroRingLiquidRise(
             label = "liqClock",
         )
         val seeds = remember {
-            List(8) { i ->
+            List(10) { i ->
                 floatArrayOf(
-                    0.15f + (i * 0.1f) % 0.7f,
-                    4f + (i % 4) * 2.2f,
-                    0.4f + (i % 5) * 0.12f,
-                    (i * 0.17f) % 1f,
+                    0.12f + (i * 0.085f) % 0.76f,
+                    3.2f + (i % 5) * 1.6f,
+                    0.45f + (i % 4) * 0.14f,
+                    (i * 0.19f) % 1f,
                 )
             }
         }
         val heroSize = ChargeTheme.dimens.heroSize
         val heroStroke = ChargeTheme.dimens.heroStroke
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(heroSize + 40.dp)) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val c = Offset(size.width / 2f, size.height / 2f - 8f)
-                    val ringR = (heroSize.toPx() - heroStroke.toPx()) / 2f
-                    val stroke = heroStroke.toPx()
-                    // 环内液面
-                    val fillY = c.y + ringR - 2f * ringR * level
-                    drawCircle(
-                        color = accent.copy(alpha = 0.12f),
-                        radius = ringR,
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(heroSize + 36.dp)) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val c = Offset(size.width / 2f, size.height / 2f)
+                val stroke = heroStroke.toPx()
+                val ringR = (heroSize.toPx() - stroke) / 2f
+                val lvl = level.coerceIn(0f, 1f)
+                val surfaceY = c.y + ringR - 2f * ringR * lvl
+                val waveAmp = (4.5f + 5.5f * energy) * if (charging) 1f else 0.45f
+                val phase = clock * (1.15f + 1.4f * energy)
+
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        0f to accent.copy(alpha = 0.1f + 0.08f * energy),
+                        1f to Color.Transparent,
                         center = c,
-                    )
-                    if (level > 0.02f) {
-                        val liquid = Path().apply {
-                            val steps = 36
+                        radius = ringR * 1.05f,
+                    ),
+                    radius = ringR * 1.05f,
+                    center = c,
+                )
+
+                val disc = Path().apply {
+                    addOval(Rect(c.x - ringR, c.y - ringR, c.x + ringR, c.y + ringR))
+                }
+                clipPath(disc) {
+                    if (lvl > 0.015f) {
+                        fun surfaceAt(x: Float, ph: Float, amp: Float): Float {
+                            val t = ((x - (c.x - ringR)) / (ringR * 2f)).coerceIn(0f, 1f)
+                            return surfaceY +
+                                sin(t * PI.toFloat() * 2.2f + ph) * amp +
+                                sin(t * PI.toFloat() * 4.1f - ph * 1.35f) * amp * 0.38f
+                        }
+                        val back = Path().apply {
+                            val steps = 56
+                            val left = c.x - ringR
+                            val right = c.x + ringR
+                            moveTo(left, c.y + ringR + 4f)
                             for (i in 0..steps) {
-                                val ang = PI.toFloat() * (i / steps.toFloat())
-                                val x = c.x - ringR * cos(ang)
-                                val yBase = c.y + ringR * sin(ang)
-                                val wave = sin(ang * 3f + clock * (1.2f + energy)) * (3f + 4f * energy)
-                                val y = yBase.coerceAtLeast(fillY + wave)
-                                if (i == 0) moveTo(x, y) else lineTo(x, y)
+                                val x = left + (right - left) * (i / steps.toFloat())
+                                lineTo(x, surfaceAt(x, phase * 0.85f + 0.7f, waveAmp * 0.7f))
                             }
-                            lineTo(c.x + ringR, c.y + ringR)
-                            lineTo(c.x - ringR, c.y + ringR)
+                            lineTo(right, c.y + ringR + 4f)
                             close()
                         }
-                        drawPath(liquid, color = accent.copy(alpha = 0.55f))
+                        drawPath(back, color = accent.copy(alpha = 0.28f))
+                        val front = Path().apply {
+                            val steps = 56
+                            val left = c.x - ringR
+                            val right = c.x + ringR
+                            moveTo(left, c.y + ringR + 4f)
+                            for (i in 0..steps) {
+                                val x = left + (right - left) * (i / steps.toFloat())
+                                lineTo(x, surfaceAt(x, phase, waveAmp))
+                            }
+                            lineTo(right, c.y + ringR + 4f)
+                            close()
+                        }
+                        drawPath(
+                            front,
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    accent.copy(alpha = 0.42f),
+                                    accent.copy(alpha = 0.82f),
+                                ),
+                                startY = surfaceY - waveAmp,
+                                endY = c.y + ringR,
+                            ),
+                        )
+                        // 液面高光
+                        val gloss = Path().apply {
+                            val steps = 40
+                            val left = c.x - ringR * 0.92f
+                            val right = c.x + ringR * 0.92f
+                            moveTo(left, surfaceAt(left, phase, waveAmp))
+                            for (i in 1..steps) {
+                                val x = left + (right - left) * (i / steps.toFloat())
+                                lineTo(x, surfaceAt(x, phase, waveAmp))
+                            }
+                        }
+                        drawPath(
+                            gloss,
+                            color = Color.White.copy(alpha = 0.28f + 0.12f * energy),
+                            style = Stroke(width = 2.2f, cap = StrokeCap.Round),
+                        )
                     }
-                    drawCircle(
-                        color = accent.copy(alpha = 0.9f),
-                        radius = ringR,
-                        center = c,
-                        style = Stroke(width = stroke, cap = StrokeCap.Round),
-                    )
                     if (charging) {
-                        val speed = 0.35f + 0.9f * energy
+                        val speed = 0.4f + 1.1f * energy
                         seeds.forEach { s ->
                             val life = ((clock * s[2] * speed) + s[3]) % 1f
-                            val y = size.height * (0.92f - life * 0.55f)
-                            val x = size.width * s[0] + sin(life * 6f + s[3]) * 10f
-                            val r = s[1] * (0.7f + life * 0.6f) * (0.7f + 0.4f * energy)
+                            val rise = life * ringR * (1.15f + 0.35f * lvl)
+                            val y = c.y + ringR * 0.92f - rise
+                            if (y > surfaceY + 4f) return@forEach
+                            val x = c.x - ringR * 0.75f + ringR * 1.5f * s[0] +
+                                sin(life * 7f + s[3]) * (6f + 6f * energy)
+                            val r = s[1] * (0.75f + life * 0.55f) * (0.75f + 0.45f * energy)
                             val a = when {
-                                life < 0.1f -> life / 0.1f
-                                life > 0.75f -> ((1f - life) / 0.25f).coerceIn(0f, 1f)
+                                life < 0.12f -> life / 0.12f
+                                life > 0.7f -> ((1f - life) / 0.3f).coerceIn(0f, 1f)
                                 else -> 1f
-                            } * 0.45f
+                            } * 0.55f
                             drawCircle(
                                 brush = Brush.radialGradient(
-                                    0f to accent.copy(alpha = a),
+                                    0f to Color.White.copy(alpha = a * 0.85f),
+                                    0.45f to accent.copy(alpha = a),
                                     1f to Color.Transparent,
                                     center = Offset(x, y),
                                     radius = r,
@@ -642,10 +848,27 @@ internal fun ChargeHeroRingLiquidRise(
                         }
                     }
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = levelText, style = ChargeTheme.typography.display, color = ink)
-                    Text(text = statusLine, style = ChargeTheme.typography.body, color = muted)
-                }
+
+                drawCircle(
+                    color = accent.copy(alpha = 0.92f),
+                    radius = ringR,
+                    center = c,
+                    style = Stroke(width = stroke, cap = StrokeCap.Round),
+                )
+                // 进度弧暗示液位
+                drawArc(
+                    color = accent.copy(alpha = 0.35f),
+                    startAngle = -90f,
+                    sweepAngle = 360f * lvl,
+                    useCenter = false,
+                    style = Stroke(width = stroke * 0.45f, cap = StrokeCap.Round),
+                    topLeft = Offset(c.x - ringR, c.y - ringR),
+                    size = Size(ringR * 2f, ringR * 2f),
+                )
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(text = levelText, style = ChargeTheme.typography.display, color = ink)
+                Text(text = statusLine, style = ChargeTheme.typography.body, color = muted)
             }
         }
     }
@@ -745,20 +968,38 @@ internal fun ChargeHeroRingPlasma(
             label = "plasmaClock",
         )
         val heroSize = ChargeTheme.dimens.heroSize
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(heroSize + 36.dp)) {
+        val heroStroke = ChargeTheme.dimens.heroStroke
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(heroSize + 40.dp)) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val c = Offset(size.width / 2f, size.height / 2f)
-                val r = heroSize.toPx() / 2f * 0.92f
-                val amp = (2.5f + 5f * energy) * if (charging) 1f else 0.35f
-                val phase = clock * (1.2f + 2.2f * energy)
-                fun waveRing(pathPhase: Float, alpha: Float, width: Float) {
+                val baseR = heroSize.toPx() / 2f * 0.9f
+                val stroke = heroStroke.toPx()
+                val lvl = level.coerceIn(0f, 1f)
+                val amp = (5f + 7f * energy) * if (charging) 1f else 0.55f
+                val phase = clock * (1.6f + 2.4f * energy)
+
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        0f to accent.copy(alpha = 0.14f + 0.18f * energy * if (charging) 1f else 0.4f),
+                        0.55f to accent.copy(alpha = 0.05f),
+                        1f to Color.Transparent,
+                        center = c,
+                        radius = baseR * 1.15f,
+                    ),
+                    radius = baseR * 1.15f,
+                    center = c,
+                )
+
+                fun waveRing(pathPhase: Float, radius: Float, alpha: Float, width: Float) {
                     val path = Path()
-                    val steps = 72
+                    val steps = 96
                     for (i in 0..steps) {
                         val t = i / steps.toFloat()
                         val ang = t * PI.toFloat() * 2f - PI.toFloat() / 2f
-                        val rr = r + sin(ang * 3f + pathPhase) * amp +
-                            sin(ang * 5f - pathPhase * 1.3f) * amp * 0.4f
+                        val rr = radius +
+                            sin(ang * 3f + pathPhase) * amp +
+                            sin(ang * 5f - pathPhase * 1.25f) * amp * 0.45f +
+                            sin(ang * 7f + pathPhase * 0.6f) * amp * 0.18f
                         val x = c.x + cos(ang) * rr
                         val y = c.y + sin(ang) * rr
                         if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
@@ -770,31 +1011,62 @@ internal fun ChargeHeroRingPlasma(
                         style = Stroke(width = width, cap = StrokeCap.Round),
                     )
                 }
-                waveRing(phase, 0.35f, 5f)
-                waveRing(phase * 1.15f + 0.8f, 0.55f, 3.2f)
-                waveRing(phase * 0.9f + 1.6f, 0.75f, 2f)
+
+                // 外层柔波 → 中层 → 内层实波
+                waveRing(phase * 0.75f, baseR * 1.06f, 0.22f, 6.5f)
+                waveRing(phase, baseR, 0.42f, 4.2f)
+                waveRing(phase * 1.2f + 0.9f, baseR * 0.94f, 0.7f, 2.6f)
+
+                // 进度：沿波纹环扫过，加宽更明显
                 val progress = Path()
-                val sweepSteps = (72 * level).toInt().coerceAtLeast(1)
+                val sweepSteps = (96 * lvl).toInt().coerceAtLeast(2)
                 for (i in 0..sweepSteps) {
-                    val t = i / 72f
+                    val t = i / 96f
                     val ang = t * PI.toFloat() * 2f - PI.toFloat() / 2f
-                    val rr = r + sin(ang * 3f + phase) * amp * 0.6f
+                    val rr = baseR +
+                        sin(ang * 3f + phase) * amp * 0.55f +
+                        sin(ang * 5f - phase * 1.25f) * amp * 0.25f
                     val x = c.x + cos(ang) * rr
                     val y = c.y + sin(ang) * rr
                     if (i == 0) progress.moveTo(x, y) else progress.lineTo(x, y)
                 }
                 drawPath(
                     progress,
-                    color = accent,
-                    style = Stroke(width = 4f, cap = StrokeCap.Round),
+                    color = accent.copy(alpha = 0.35f),
+                    style = Stroke(width = stroke * 1.8f, cap = StrokeCap.Round),
                 )
+                drawPath(
+                    progress,
+                    color = accent,
+                    style = Stroke(width = stroke * 0.95f, cap = StrokeCap.Round),
+                )
+
+                // 轨道底环，避免空窗看不清
+                drawCircle(
+                    color = accent.copy(alpha = 0.18f),
+                    radius = baseR,
+                    center = c,
+                    style = Stroke(width = stroke * 0.55f),
+                )
+
                 if (charging) {
-                    for (i in 0..4) {
-                        val life = ((clock * (0.6f + energy) + i * 0.19f) % 1f)
-                        val y = c.y + r + 8f + life * 28f
-                        val x = c.x + sin(life * 8f + i) * (10f + 8f * energy)
-                        val a = (1f - abs(life - 0.5f) * 2f).coerceIn(0f, 1f) * 0.5f
-                        drawCircle(color = accent.copy(alpha = a), radius = 2.5f + energy, center = Offset(x, y))
+                    for (i in 0..7) {
+                        val life = ((clock * (0.85f + energy) + i * 0.13f) % 1f)
+                        val ang = life * PI.toFloat() * 2f + i * 0.7f
+                        val rr = baseR * (0.55f + 0.4f * ((sin(life * PI.toFloat() * 2f) + 1f) * 0.5f))
+                        val x = c.x + cos(ang) * rr
+                        val y = c.y + sin(ang) * rr
+                        val a = (1f - abs(life - 0.5f) * 2f).coerceIn(0f, 1f) * (0.35f + 0.35f * energy)
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                0f to Color.White.copy(alpha = a),
+                                1f to Color.Transparent,
+                                center = Offset(x, y),
+                                radius = 5f + 4f * energy,
+                            ),
+                            radius = 5f + 4f * energy,
+                            center = Offset(x, y),
+                        )
                     }
                 }
             }

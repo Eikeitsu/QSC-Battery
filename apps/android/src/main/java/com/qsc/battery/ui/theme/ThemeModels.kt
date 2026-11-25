@@ -116,6 +116,7 @@ data class ChargeAnimConfig(
             }
             "电池 · $orient · $fill"
         }
+
         ChargeAnimShape.Ring -> {
             val fx = when (ringEffect) {
                 RingEffect.SoftPulse -> "柔光脉冲"

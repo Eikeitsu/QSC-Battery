@@ -106,6 +106,7 @@ fun ChargeHero(
                 animated,
                 currentEnergy,
             )
+
             BatteryFillStyle.Blocks -> ChargeHeroBatteryBlocks(
                 levelText = levelText,
                 statusLine = statusLine,
@@ -115,6 +116,7 @@ fun ChargeHero(
                 currentEnergy = currentEnergy,
                 horizontal = cfg.batteryOrientation == BatteryOrientation.Horizontal,
             )
+
             BatteryFillStyle.Solid -> ChargeHeroBatterySolid(
                 levelText = levelText,
                 statusLine = statusLine,
@@ -125,6 +127,7 @@ fun ChargeHero(
                 horizontal = cfg.batteryOrientation == BatteryOrientation.Horizontal,
             )
         }
+
         ChargeAnimShape.Ring -> when (cfg.ringEffect) {
             RingEffect.SoftPulse -> ChargeHeroPulse(
                 levelText,
@@ -134,6 +137,7 @@ fun ChargeHero(
                 animated,
                 currentEnergy,
             )
+
             RingEffect.ArcOrbit -> ChargeHeroOrbit(
                 levelText,
                 statusLine,
@@ -142,6 +146,7 @@ fun ChargeHero(
                 animated,
                 currentEnergy,
             )
+
             RingEffect.NeonMinimal -> ChargeHeroRingNeon(
                 levelText,
                 statusLine,
@@ -150,6 +155,7 @@ fun ChargeHero(
                 animated,
                 currentEnergy,
             )
+
             RingEffect.LiquidRise -> ChargeHeroRingLiquidRise(
                 levelText,
                 statusLine,
@@ -158,6 +164,7 @@ fun ChargeHero(
                 animated,
                 currentEnergy,
             )
+
             RingEffect.Concentric -> ChargeHeroRingConcentric(
                 levelText,
                 statusLine,
@@ -166,6 +173,7 @@ fun ChargeHero(
                 animated,
                 currentEnergy,
             )
+
             RingEffect.PlasmaWave -> ChargeHeroRingPlasma(
                 levelText,
                 statusLine,
@@ -502,6 +510,7 @@ private fun ChargeHeroBattery(
     val surfaceStrong = ChargeTheme.colors.surfaceStrong
     val motion = rememberBatteryMotion()
     val gravity = rememberGravityDown()
+    val waves = rememberOrganicWaves()
     val idleBubbles = remember { randomBubbleActors(charging = false) }
     val chargeBubbles = remember { randomBubbleActors(charging = true) }
     val feedBubbles = remember { randomChargeFeedActors() }
@@ -533,6 +542,7 @@ private fun ChargeHeroBattery(
             currentEnergy = currentEnergy,
             boltAlpha = if (charging) motion.bolt else 0f,
             gravity = gravity,
+            waves = waves,
             bubbles = if (charging) chargeBubbles else idleBubbles,
             feedBubbles = if (charging) feedBubbles else emptyList(),
             modifier = Modifier
@@ -585,6 +595,7 @@ private fun VerticalBatteryGlyph(
     currentEnergy: Float,
     boltAlpha: Float,
     gravity: GravityDown,
+    waves: OrganicWaveField,
     bubbles: List<BubbleActor>,
     feedBubbles: List<BubbleActor> = emptyList(),
     modifier: Modifier = Modifier,
@@ -734,35 +745,29 @@ private fun VerticalBatteryGlyph(
                 ),
             )
         }
-        // 双层波浪液面（参考：前景亮浪 + 背景暗浪），相位用 clock 连续滚动
+        // 双层波浪液面：前景亮浪 + 背景暗浪；分量频率/振幅缓慢随机漂移
         val energy = if (charging) currentEnergy.coerceIn(0f, 1f) else 0f
         val waveAmp = if (charging) {
             (fillW * (0.045f + 0.10f * energy)).coerceIn(4f, 14f)
         } else {
             (fillW * 0.038f).coerceIn(2.8f, 6.5f)
         }
-        val swayHz = if (charging) 0.38f + 1.2f * energy else 0.28f
-        val phase = clock * (PI.toFloat() * 2f) * swayHz
-        val phaseBack = phase * 0.82f + 1.35f
+        waves.advance(clock, energy, charging)
         val nx = gravity.nx
         val ny = gravity.ny.coerceAtLeast(0.22f)
         val slope = (nx / ny).coerceIn(-2.4f, 2.4f)
         // 前后浪垂直错开，做出层次，而不是椭圆顶面
         val layerGap = (fillW * 0.055f).coerceIn(4f, 10f)
 
-        fun waveDelta(x: Float, ph: Float, ampScale: Float): Float {
+        fun frontWaveY(x: Float, intercept: Float): Float {
             val t = ((x - fillLeft) / fillW).coerceIn(0f, 1f)
-            val primary = sin(t * PI.toFloat() * 2f + ph) * waveAmp * ampScale
-            val secondary = sin(t * PI.toFloat() * 3.35f + ph * 1.28f) * waveAmp * 0.38f * ampScale
-            val tertiary = sin(t * PI.toFloat() * 5.1f - ph * 0.7f) * waveAmp * 0.14f * ampScale
-            return primary + secondary + tertiary
+            return intercept + slope * (x - fillCx) + waves.sampleFront(t) * waveAmp
         }
 
-        fun frontWaveY(x: Float, intercept: Float): Float =
-            intercept + slope * (x - fillCx) + waveDelta(x, phase, 1f)
-
-        fun backWaveY(x: Float, intercept: Float): Float =
-            intercept + slope * (x - fillCx) + waveDelta(x, phaseBack, 0.9f) - layerGap
+        fun backWaveY(x: Float, intercept: Float): Float {
+            val t = ((x - fillLeft) / fillW).coerceIn(0f, 1f)
+            return intercept + slope * (x - fillCx) + waves.sampleBack(t) * waveAmp * 0.9f - layerGap
+        }
 
         fun meanDepth(intercept: Float): Float {
             val n = 24
@@ -1459,6 +1464,108 @@ private data class BatteryMotion(
     /** 单调秒表（秒），供液面相位与气泡生命周期使用。 */
     val clock: Float,
 )
+
+/** 单个正弦分量：空间频率 / 角速度 / 振幅向随机目标缓慢插值。 */
+private class WaveHarmonic(
+    var k: Float,
+    var omega: Float,
+    var amp: Float,
+    var phase: Float,
+    var targetK: Float,
+    var targetOmega: Float,
+    var targetAmp: Float,
+    var retargetIn: Float,
+) {
+    fun tick(dt: Float, rng: Random, kRange: ClosedFloatingPointRange<Float>, omegaRange: ClosedFloatingPointRange<Float>, ampRange: ClosedFloatingPointRange<Float>) {
+        phase += omega * dt
+        val ease = (1f - expSmooth(dt, 1.8f))
+        k += (targetK - k) * ease
+        omega += (targetOmega - omega) * ease
+        amp += (targetAmp - amp) * ease
+        retargetIn -= dt
+        if (retargetIn <= 0f) {
+            targetK = rng.nextFloat() * (kRange.endInclusive - kRange.start) + kRange.start
+            targetOmega = rng.nextFloat() * (omegaRange.endInclusive - omegaRange.start) + omegaRange.start
+            targetAmp = rng.nextFloat() * (ampRange.endInclusive - ampRange.start) + ampRange.start
+            retargetIn = 1.6f + rng.nextFloat() * 3.8f
+        }
+    }
+
+    fun sample(t: Float): Float = sin(t * PI.toFloat() * 2f * k + phase) * amp
+
+    private fun expSmooth(dt: Float, rate: Float): Float = kotlin.math.exp(-rate * dt)
+}
+
+/**
+ * 有机双浪场：前/后浪各若干谐波独立随机漂移，避免固定周期循环感。
+ */
+private class OrganicWaveField(seed: Int = 42) {
+    private val rng = Random(seed)
+    private var lastClock = Float.NaN
+    private val front = List(4) { i -> freshHarmonic(i, front = true) }
+    private val back = List(4) { i -> freshHarmonic(i, front = false) }
+
+    private fun freshHarmonic(i: Int, front: Boolean): WaveHarmonic {
+        val k0 = (if (front) 1.1f else 0.95f) + i * (0.55f + rng.nextFloat() * 0.35f)
+        val w0 = (if (front) 0.7f else 0.55f) * (0.6f + rng.nextFloat()) * (if (i == 0) 1f else 0.7f + rng.nextFloat() * 0.5f)
+        val a0 = when (i) {
+            0 -> 0.55f + rng.nextFloat() * 0.2f
+            1 -> 0.22f + rng.nextFloat() * 0.14f
+            2 -> 0.10f + rng.nextFloat() * 0.08f
+            else -> 0.04f + rng.nextFloat() * 0.05f
+        }
+        return WaveHarmonic(
+            k = k0,
+            omega = w0,
+            amp = a0,
+            phase = rng.nextFloat() * PI.toFloat() * 2f,
+            targetK = k0,
+            targetOmega = w0,
+            targetAmp = a0,
+            retargetIn = 0.8f + rng.nextFloat() * 2.5f,
+        )
+    }
+
+    fun advance(clock: Float, energy: Float, charging: Boolean) {
+        val dt = if (lastClock.isNaN()) {
+            0f
+        } else {
+            (clock - lastClock).coerceIn(0f, 0.08f)
+        }
+        lastClock = clock
+        if (dt <= 0f) return
+        val speedBoost = if (charging) 0.85f + 1.4f * energy else 0.7f
+        val ampBoost = if (charging) 0.9f + 0.55f * energy else 0.85f
+        val kRange = 0.85f..4.6f
+        val omegaRange = (0.35f * speedBoost)..(2.4f * speedBoost)
+        val ampRange = (0.04f * ampBoost)..(0.72f * ampBoost)
+        front.forEach { it.tick(dt, rng, kRange, omegaRange, ampRange) }
+        back.forEach { it.tick(dt, rng, kRange, omegaRange, ampRange) }
+        // 归一：避免多谐波叠加炸幅
+        normalize(front, 1f)
+        normalize(back, 0.95f)
+    }
+
+    private fun normalize(list: List<WaveHarmonic>, cap: Float) {
+        val sum = list.sumOf { abs(it.amp).toDouble() }.toFloat().coerceAtLeast(0.001f)
+        if (sum > cap) {
+            val s = cap / sum
+            list.forEach { it.amp *= s }
+        }
+    }
+
+    fun sampleFront(t: Float): Float = sumSample(front, t)
+    fun sampleBack(t: Float): Float = sumSample(back, t)
+
+    private fun sumSample(list: List<WaveHarmonic>, t: Float): Float {
+        var s = 0f
+        for (h in list) s += h.sample(t)
+        return s
+    }
+}
+
+@Composable
+private fun rememberOrganicWaves(): OrganicWaveField = remember { OrganicWaveField(seed = 20261125) }
 
 /**
  * 独立气泡演员：各自 rise/gap/start，避免同一波次齐生齐灭。
