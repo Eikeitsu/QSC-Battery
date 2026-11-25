@@ -969,9 +969,12 @@ private fun VerticalBatteryGlyph(
                             size = Size(fillW, fillHMax),
                         )
 
-                        // 漩涡：只画在真实液柱内；过浅改为底心小涡，避免「空壳龙卷风」
-                        val vortexTop = surfMid + 1.5f
+                        // 漩涡：底宽顶尖；顶端汇聚在闪电底端下方，不顶到水面
+                        val boltTipY = boltCy + 28f
+                        val feedApexY = boltTipY + 10f
                         val vortexBot = fillBottom - 2.5f
+                        val vortexTop = maxOf(surfMid + 3f, feedApexY)
+                            .coerceAtMost(vortexBot - 12f)
                         val vortexH = vortexBot - vortexTop
                         if (vortexH >= 14f) {
                             val spin = clock * (PI.toFloat() * 2f) *
@@ -981,9 +984,11 @@ private fun VerticalBatteryGlyph(
                                 depthNorm < 0.35f -> if (energy > 0.45f) 2 else 1
                                 else -> 2 + (energy * 2f).toInt().coerceIn(0, 2)
                             }
-                            val baseR = fillW * (0.10f + 0.10f * energy) *
-                                (0.35f + 0.65f * shallow) *
+                            // 底部略加宽，顶端收成细尖朝闪电送能
+                            val baseR = fillW * (0.14f + 0.12f * energy) *
+                                (0.40f + 0.60f * shallow) *
                                 (0.55f + 0.45f * depthNorm)
+                            val tipR = baseR * 0.06f
                             val segs = if (depthNorm < 0.25f) 12 else 22
                             val armAlpha = (0.08f + 0.12f * energy) * (0.4f + 0.6f * shallow)
                             for (arm in 0 until arms) {
@@ -991,8 +996,8 @@ private fun VerticalBatteryGlyph(
                                 for (s in 0..segs) {
                                     val t = s / segs.toFloat()
                                     val y = vortexBot - t * vortexH
-                                    val taper = (1f - t) * (1f - t * 0.35f)
-                                    val r = baseR * taper
+                                    val taper = (1f - t)
+                                    val r = tipR + (baseR - tipR) * taper * taper
                                     val ang = spin + arm * (PI.toFloat() * 2f / arms.coerceAtLeast(1)) +
                                         t * (3.2f + 2f * shallow)
                                     val x = fillCx + cos(ang) * r
@@ -1012,12 +1017,13 @@ private fun VerticalBatteryGlyph(
                                     style = Stroke(width = 0.8f, cap = StrokeCap.Round),
                                 )
                             }
-                            val coreY = vortexBot - vortexH * (0.18f + 0.12f * shallow)
-                            val coreR = baseR * (0.4f + 0.15f * shallow)
+                            // 核心光靠近顶端汇聚点，暗示送能给闪电
+                            val coreY = vortexTop + vortexH * 0.12f
+                            val coreR = (baseR * 0.22f + tipR * 2f).coerceAtLeast(4f)
                             drawCircle(
                                 brush = Brush.radialGradient(
-                                    0f to Color.White.copy(alpha = 0.12f + 0.16f * energy * shallow),
-                                    0.45f to accent.copy(alpha = 0.10f * shallow),
+                                    0f to Color.White.copy(alpha = 0.14f + 0.18f * energy * shallow),
+                                    0.45f to accent.copy(alpha = 0.12f * shallow),
                                     1f to Color.Transparent,
                                     center = Offset(fillCx, coreY),
                                     radius = coreR,
@@ -1027,15 +1033,15 @@ private fun VerticalBatteryGlyph(
                             )
                         } else if (vortexH >= 6f && charging) {
                             // 极浅：只保留底心微涡，不拉长龙卷
-                            val microR = fillW * 0.08f * (0.5f + 0.5f * energy)
+                            val microR = fillW * 0.10f * (0.5f + 0.5f * energy)
                             val spin = clock * (PI.toFloat() * 2f) * (1.4f + 2f * energy)
                             val micro = Path()
                             for (s in 0..10) {
                                 val t = s / 10f
                                 val ang = spin + t * 4f
-                                val r = microR * (1f - t * 0.7f)
+                                val r = microR * (1f - t * 0.75f)
                                 val x = fillCx + cos(ang) * r
-                                val y = fillBottom - 3f - t * vortexH
+                                val y = vortexBot - t * vortexH
                                 if (s == 0) micro.moveTo(x, y) else micro.lineTo(x, y)
                             }
                             drawPath(
