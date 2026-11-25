@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -429,7 +430,7 @@ private fun ChargeHeroBattery(
             shine = motion?.shine ?: 0f,
             glow = motion?.glow ?: 0.1f,
             modifier = Modifier
-                .width(72.dp)
+                .width(86.dp)
                 .height(132.dp),
         )
 
@@ -481,35 +482,39 @@ private fun VerticalBatteryGlyph(
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
-        val bodyW = w * 0.72f
+        val strokeW = (min(w, h) * 0.052f).coerceIn(3.8f, 6.5f)
+        // 圆柱体更粗：占满画布宽度
+        val bodyW = w * 0.92f
         val bodyLeft = (w - bodyW) / 2f
-        val capH = h * 0.055f
-        val bodyTop = capH + h * 0.02f
-        val bodyH = h - bodyTop - h * 0.02f
-        val rx = bodyW * 0.18f
+        // 帽与壳体重叠一段，形成一体衔接
+        val capH = h * 0.078f
+        val neckH = strokeW * 0.85f
+        val bodyTop = capH - neckH
+        val bodyH = h - bodyTop - h * 0.015f
+        val rx = bodyW * 0.20f
         val c = Offset(w / 2f, bodyTop + bodyH / 2f)
+        val shell = ink.copy(alpha = 0.55f)
+        val shellSoft = track.copy(alpha = 0.95f)
 
-        // 外晕（仅充电）
         if (charging) {
             drawCircle(
                 brush = Brush.radialGradient(
-                    0f to accent.copy(alpha = glow * 0.55f),
+                    0f to accent.copy(alpha = glow * 0.62f),
                     1f to Color.Transparent,
                     center = c,
-                    radius = min(w, h) * 0.72f,
+                    radius = min(w, h) * 0.78f,
                 ),
-                radius = min(w, h) * 0.72f,
+                radius = min(w, h) * 0.78f,
                 center = c,
             )
         }
 
-        // 正极帽
-        val capW = bodyW * 0.38f
+        // 壳体底影，增加体积感
         drawRoundRect(
-            color = ink.copy(alpha = 0.35f),
-            topLeft = Offset((w - capW) / 2f, 0f),
-            size = Size(capW, capH + 2f),
-            cornerRadius = CornerRadius(capH, capH),
+            color = ink.copy(alpha = 0.08f),
+            topLeft = Offset(bodyLeft + 2.5f, bodyTop + 3.5f),
+            size = Size(bodyW, bodyH),
+            cornerRadius = CornerRadius(rx, rx),
         )
 
         val bodyPath = Path().apply {
@@ -524,63 +529,150 @@ private fun VerticalBatteryGlyph(
             )
         }
 
-        // 壳体描边（柔和）
-        drawPath(
-            path = bodyPath,
-            color = track.copy(alpha = 0.7f),
-            style = Stroke(width = 2.5f),
-        )
-        // 壳内浅底
+        // 壳内底：轻微纵向渐变
         drawPath(
             path = bodyPath,
             brush = Brush.verticalGradient(
                 colors = listOf(
-                    Color.White.copy(alpha = 0.04f),
+                    Color.White.copy(alpha = 0.10f),
                     Color.Transparent,
+                    ink.copy(alpha = 0.04f),
                 ),
                 startY = bodyTop,
                 endY = bodyTop + bodyH,
             ),
         )
 
-        val inset = 5f
+        // 粗描边
+        drawPath(
+            path = bodyPath,
+            color = shellSoft,
+            style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round),
+        )
+        // 内沿高光一圈，增加厚度
+        val innerInset = strokeW * 0.95f
+        drawRoundRect(
+            color = Color.White.copy(alpha = 0.22f),
+            topLeft = Offset(bodyLeft + innerInset, bodyTop + innerInset),
+            size = Size(bodyW - innerInset * 2f, bodyH - innerInset * 2f),
+            cornerRadius = CornerRadius(rx * 0.72f, rx * 0.72f),
+            style = Stroke(width = strokeW * 0.38f),
+        )
+
+        // 正极：宽底座 + 圆顶，与壳体顶边重叠，视觉连成一体
+        val capW = bodyW * 0.42f
+        val capLeft = (w - capW) / 2f
+        val collarW = bodyW * 0.56f
+        val collarLeft = (w - collarW) / 2f
+        // 衔接肩台（略宽于帽、压进壳体）
+        drawRoundRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(shell, shellSoft),
+            ),
+            topLeft = Offset(collarLeft, bodyTop - neckH * 0.15f),
+            size = Size(collarW, neckH * 1.35f),
+            cornerRadius = CornerRadius(neckH, neckH),
+        )
+        // 阳极帽本体
+        drawRoundRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    ink.copy(alpha = 0.42f),
+                    shell,
+                    shellSoft,
+                ),
+            ),
+            topLeft = Offset(capLeft, 0f),
+            size = Size(capW, capH),
+            cornerRadius = CornerRadius(capH * 0.55f, capH * 0.55f),
+        )
+        // 帽顶高光
+        drawRoundRect(
+            color = Color.White.copy(alpha = 0.28f),
+            topLeft = Offset(capLeft + capW * 0.18f, capH * 0.12f),
+            size = Size(capW * 0.64f, capH * 0.28f),
+            cornerRadius = CornerRadius(capH * 0.2f, capH * 0.2f),
+        )
+
+        val inset = strokeW * 1.15f
         val fillMaxH = bodyH - inset * 2f
-        val fillH = fillMaxH * level.coerceIn(0f, 1f)
+        val lvl = level.coerceIn(0f, 1f)
+        val fillH = fillMaxH * lvl
         val fillTop = bodyTop + bodyH - inset - fillH
+        val fillLeft = bodyLeft + inset
+        val fillW = bodyW - inset * 2f
         clipPath(bodyPath) {
+            // 左侧玻璃高光条（常驻点缀）
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.16f),
+                        Color.Transparent,
+                    ),
+                    startX = fillLeft,
+                    endX = fillLeft + fillW * 0.42f,
+                ),
+                topLeft = Offset(fillLeft, bodyTop + inset),
+                size = Size(fillW * 0.42f, fillMaxH),
+            )
+
+            // 电量刻度（25 / 50 / 75）
+            for (i in 1..3) {
+                val y = bodyTop + bodyH - inset - fillMaxH * (i / 4f)
+                drawLine(
+                    color = ink.copy(alpha = 0.12f),
+                    start = Offset(fillLeft + fillW * 0.12f, y),
+                    end = Offset(fillLeft + fillW * 0.88f, y),
+                    strokeWidth = 1.6f,
+                )
+            }
+
             if (fillH > 0.5f) {
+                val fillRx = CornerRadius(rx * 0.5f, rx * 0.5f)
                 drawRoundRect(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            accent.copy(alpha = 0.85f),
+                            accent.copy(alpha = 0.72f),
                             accent,
+                            accent.copy(alpha = 0.92f),
                         ),
                         startY = fillTop,
                         endY = bodyTop + bodyH - inset,
                     ),
-                    topLeft = Offset(bodyLeft + inset, fillTop),
-                    size = Size(bodyW - inset * 2f, fillH),
-                    cornerRadius = CornerRadius(rx * 0.55f, rx * 0.55f),
+                    topLeft = Offset(fillLeft, fillTop),
+                    size = Size(fillW, fillH),
+                    cornerRadius = fillRx,
+                )
+                // 液面弯月高光
+                drawRoundRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.35f),
+                            Color.Transparent,
+                        ),
+                    ),
+                    topLeft = Offset(fillLeft + 2f, fillTop),
+                    size = Size(fillW - 4f, min(fillH, 14f)),
+                    cornerRadius = CornerRadius(rx * 0.4f, rx * 0.4f),
                 )
                 if (charging) {
-                    val shineX = bodyLeft + inset + (bodyW - inset * 2f) * shine
+                    val shineX = fillLeft + fillW * shine
                     drawRect(
                         brush = Brush.horizontalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                Color.White.copy(alpha = 0.28f),
+                                Color.White.copy(alpha = 0.34f),
                                 Color.Transparent,
                             ),
-                            startX = shineX - 14f,
-                            endX = shineX + 14f,
+                            startX = shineX - 16f,
+                            endX = shineX + 16f,
                         ),
-                        topLeft = Offset(bodyLeft + inset, fillTop),
-                        size = Size(bodyW - inset * 2f, fillH),
+                        topLeft = Offset(fillLeft, fillTop),
+                        size = Size(fillW, fillH),
                     )
                 }
             }
             if (charging) {
-                // 闪电
                 val cx = w / 2f
                 val cy = bodyTop + bodyH * 0.48f
                 val bolt = Path().apply {
@@ -592,7 +684,12 @@ private fun VerticalBatteryGlyph(
                     lineTo(cx + 1f, cy - 2f)
                     close()
                 }
-                drawPath(bolt, color = Color.White.copy(alpha = 0.82f))
+                drawPath(bolt, color = Color.White.copy(alpha = 0.88f))
+                drawPath(
+                    bolt,
+                    color = Color.White.copy(alpha = 0.35f),
+                    style = Stroke(width = 2.2f, join = StrokeJoin.Round),
+                )
             }
         }
     }
