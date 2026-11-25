@@ -1,5 +1,7 @@
 package com.qsc.battery.ui.more
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,8 +10,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,9 +24,13 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.qsc.battery.ui.design.charge.ChargeHero
@@ -41,18 +50,30 @@ fun ChargeAnimConfigSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val cfg = config.normalized()
+    // 最高约 86% 屏高，圆角顶边始终留在状态栏下方（不是故意顶满）
+    val maxSheetH = (LocalConfiguration.current.screenHeightDp * 0.86f).dp
+    // 内容淡入稍慢，减轻「一下弹出」的生硬感（框架 sheet 弹簧本身不好改时长）
+    val contentAlpha = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        contentAlpha.animateTo(1f, animationSpec = tween(durationMillis = 380))
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = ChargeTheme.colors.surface,
         shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+        // 只吃导航栏 inset，避免系统把 sheet 往状态栏里顶
+        contentWindowInsets = { WindowInsets.navigationBars },
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(max = maxSheetH)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 28.dp),
+                .padding(bottom = 28.dp)
+                .alpha(contentAlpha.value),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
@@ -67,12 +88,15 @@ fun ChargeAnimConfigSheet(
                 color = ChargeTheme.colors.muted,
             )
 
+            // 固定预览高度：液体/圆环切换时不再改变 sheet 测量高度，杜绝顶边上爬
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .height(208.dp)
                     .clip(RoundedCornerShape(ChargeTheme.dimens.radiusLg))
                     .background(ChargeTheme.colors.surfaceStrong.copy(alpha = 0.45f))
                     .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center,
             ) {
                 ChargeHero(
                     levelText = "66%",
@@ -235,13 +259,12 @@ private fun ShapeCard(
 ) {
     Column(
         modifier = modifier
-            .height(88.dp)
             .clip(RoundedCornerShape(ChargeTheme.dimens.radiusMd))
             .background(
                 if (selected) {
                     ChargeTheme.colors.accent.copy(alpha = 0.12f)
                 } else {
-                    ChargeTheme.colors.surfaceStrong.copy(alpha = 0.55f)
+                    ChargeTheme.colors.surfaceStrong.copy(alpha = 0.45f)
                 },
             )
             .border(
@@ -250,8 +273,8 @@ private fun ShapeCard(
                 shape = RoundedCornerShape(ChargeTheme.dimens.radiusMd),
             )
             .clickable(onClick = onClick)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.Center,
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
             text = title,
@@ -259,7 +282,6 @@ private fun ShapeCard(
             color = ChargeTheme.colors.ink,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
         )
-        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = summary,
             style = ChargeTheme.typography.caption,
@@ -277,27 +299,27 @@ private fun SegmentChip(
 ) {
     Box(
         modifier = modifier
-            .height(40.dp)
-            .clip(RoundedCornerShape(999.dp))
+            .clip(RoundedCornerShape(ChargeTheme.dimens.radiusMd))
             .background(
                 if (selected) {
                     ChargeTheme.colors.accent.copy(alpha = 0.14f)
                 } else {
-                    ChargeTheme.colors.surfaceStrong.copy(alpha = 0.5f)
+                    ChargeTheme.colors.surfaceStrong.copy(alpha = 0.4f)
                 },
             )
             .border(
                 width = if (selected) 2.dp else 1.dp,
                 color = if (selected) ChargeTheme.colors.accent else ChargeTheme.colors.stroke,
-                shape = RoundedCornerShape(999.dp),
+                shape = RoundedCornerShape(ChargeTheme.dimens.radiusMd),
             )
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
             style = ChargeTheme.typography.label,
-            color = if (selected) ChargeTheme.colors.accent else ChargeTheme.colors.ink,
+            color = ChargeTheme.colors.ink,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
         )
     }
@@ -334,7 +356,6 @@ private fun FillRow(
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -343,7 +364,6 @@ private fun FillRow(
                 color = if (enabled) ChargeTheme.colors.ink else ChargeTheme.colors.muted,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             )
-            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = summary,
                 style = ChargeTheme.typography.caption,
@@ -371,13 +391,12 @@ private fun EffectCard(
 ) {
     Column(
         modifier = modifier
-            .height(96.dp)
             .clip(RoundedCornerShape(ChargeTheme.dimens.radiusMd))
             .background(
                 if (selected) {
                     ChargeTheme.colors.accent.copy(alpha = 0.12f)
                 } else {
-                    ChargeTheme.colors.surfaceStrong.copy(alpha = 0.5f)
+                    ChargeTheme.colors.surfaceStrong.copy(alpha = 0.45f)
                 },
             )
             .border(
@@ -386,7 +405,8 @@ private fun EffectCard(
                 shape = RoundedCornerShape(ChargeTheme.dimens.radiusMd),
             )
             .clickable(onClick = onClick)
-            .padding(12.dp),
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
             text = title,
@@ -394,7 +414,6 @@ private fun EffectCard(
             color = ChargeTheme.colors.ink,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
         )
-        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = summary,
             style = ChargeTheme.typography.caption,
