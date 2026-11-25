@@ -488,7 +488,7 @@ internal fun ChargeHeroRingNeon(
             initialValue = 0.55f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(
-                animation = tween((1200 - 500 * energy).toInt().coerceIn(500, 1200), FastOutSlowInEasing),
+                animation = tween((1200 - 500 * energy).toInt().coerceIn(500, 1200), easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Reverse,
             ),
             label = "neonBreath",
