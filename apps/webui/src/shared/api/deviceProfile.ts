@@ -51,8 +51,10 @@ export async function applyDeviceProfileExport(
   ];
   for (const k of keys) {
     const v = String(profile[k] ?? "").replace(/'/g, "");
+    // awk 原子写：模块 data 目录上 sed -i 同样可能打出 NUL
     cmds.push(
-      `if grep -q '^${k}=' '${PATHS.DEVICE_PROFILE}' 2>/dev/null; then sed -i 's|^${k}=.*|${k}=${v}|' '${PATHS.DEVICE_PROFILE}'; else echo '${k}=${v}' >> '${PATHS.DEVICE_PROFILE}'; fi`,
+      `f='${PATHS.DEVICE_PROFILE}'; tmp="$f.set.$$"; ` +
+        `awk -v k='${k}' -v v='${v}' 'BEGIN{done=0} { if(!done && index($0,k"=")==1){ print k"="v; done=1 } else print } END{ if(!done) print k"="v }' "$f" > "$tmp" && mv -f "$tmp" "$f"`,
     );
   }
   const result = await exec(cmds.join("; "));

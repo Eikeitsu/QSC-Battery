@@ -125,6 +125,36 @@ qsc_is_mca_switch_node() {
 	return 1
 }
 
+# ColorOS / 一加 / OPPO：mmi_charging_enable 族
+qsc_device_is_oplus() {
+	[ -e /sys/class/oplus_chg/battery/mmi_charging_enable ] && return 0
+	[ -e /sys/devices/virtual/oplus_chg/battery/mmi_charging_enable ] && return 0
+	[ -d /sys/class/oplus_chg ] && return 0
+	[ -d /sys/devices/virtual/oplus_chg ] && return 0
+	return 1
+}
+
+qsc_is_oplus_mmi_node() {
+	case "$1" in
+		*oplus_chg*mmi_charging_enable*|*mmi_charging_enable*) return 0 ;;
+	esac
+	return 1
+}
+
+# 节点去重键：优先 inode，避免 class/virtual 双路径写同一文件两遍（一加 15T 日志）
+qsc_switch_route_id() {
+	local p="$1" id
+	[ -e "$p" ] || {
+		echo "$p"
+		return 0
+	}
+	id="$(ls -i "$p" 2>/dev/null | awk '{print $1; exit}')"
+	case "$id" in
+		""|*[!0-9]*) echo "$p" ;;
+		*) echo "i:$id" ;;
+	esac
+}
+
 # 按列表写停充/恢复。
 # stop + first/verify：逐个尝试；verify 时写入后检查是否真停充
 # MCA 节点：raw echo、不做硬回滚（专用路径）
@@ -133,7 +163,7 @@ qsc_write_switch_list() {
 	local list="$2"
 	local first_only="${3:-}"
 	local allow_policy="${4:-}"
-	local i route val start_val _wrote _is_mca
+	local i route val start_val _wrote _is_mca _rid _seen=" " _oplus_mmi_done=0
 	for i in $list; do
 		qsc_parse_normalized_switch_entry "$i" || continue
 		route="$QSC_SW_ROUTE"
@@ -149,6 +179,15 @@ qsc_write_switch_list() {
 		if [ "$allow_policy" != "1" ] && qsc_is_policy_switch_node "$route"; then
 			continue
 		fi
+		# class/virtual 同 inode：只写一次
+		_rid="$(qsc_switch_route_id "$route")"
+		case "$_seen" in
+			*" $_rid "*) continue ;;
+		esac
+		# OPlus：mmi 写成功后跳过其余 mmi 路径（双路径重复）
+		if [ "$_oplus_mmi_done" = "1" ] && qsc_is_oplus_mmi_node "$route"; then
+			continue
+		fi
 		if [ "$mode" = "stop" ]; then
 			val="$QSC_SW_STOP"
 			_wrote=0
@@ -158,6 +197,7 @@ qsc_write_switch_list() {
 				qsc_write_node "$route" "$val" && _wrote=1
 			fi
 			if [ "$_wrote" = "1" ]; then
+				_seen="${_seen}${_rid} "
 				# 默认写成功即认（0814）。switch_hard_verify=1 时对 MCA 名节点做电流硬复核；
 				# first_only=verify 时对非 MCA 节点做电流硬回滚（末位兜底 / 关盲写）。
 				if [ "$_is_mca" = "1" ] && qsc_switch_hard_verify_on; then
@@ -186,8 +226,16 @@ qsc_write_switch_list() {
 				stop_ok=1
 				qsc_dbg "停充写入成功 route=$route val=$val mca=$_is_mca mode=$first_only"
 				qsc_save_active_switch "$i"
+				if qsc_is_oplus_mmi_node "$route"; then
+					_oplus_mmi_done=1
+				fi
 				if [ "$_is_mca" = "1" ] && type qsc_write_device_profile >/dev/null 2>&1; then
 					qsc_write_device_profile "$route" >/dev/null 2>&1 || true
+				fi
+				# OPlus：mmi 一旦成功即收工，避免盲写其它节点与系统互抢发热
+				if [ "$_oplus_mmi_done" = "1" ] && type qsc_device_is_oplus >/dev/null 2>&1 &&
+					qsc_device_is_oplus; then
+					return 0
 				fi
 				if [ "$first_only" = "first" ] || [ "$first_only" = "verify" ]; then
 					return 0
@@ -205,10 +253,15 @@ qsc_write_switch_list() {
 				qsc_write_node "$route" "$val" && _wrote=1
 			fi
 			if [ "$_wrote" = "1" ]; then
+				_seen="${_seen}${_rid} "
 				start_node="$route"
 				start_val="$val"
 				log_log2=1
 				start_ok=1
+				if qsc_is_oplus_mmi_node "$route"; then
+					_oplus_mmi_done=1
+					type qsc_device_is_oplus >/dev/null 2>&1 && qsc_device_is_oplus && return 0
+				fi
 			fi
 		fi
 	done
@@ -606,6 +659,7 @@ qsc_maintain_stop_while_plugged() {
 
 	# 停充已稳：节流写节点。非 MCA 约 180s+；MCA 跟 maintain 间隔（夜间约 90s），
 	# 不再每 30s 抢写 handle_state（K90U 等过夜发热/掉电主因之一）
+	# OPlus mmi：系统也会改回，但过勤重申会拖热；稳态至少 120s
 	if [ "$_stable" = "1" ]; then
 		_last_rf="$(cat "$DATADIR/.maintain_reaffirm_at" 2>/dev/null | tr -d ' \r\n')"
 		case "$_last_rf" in ""|*[!0-9]*) _last_rf=0 ;; esac
@@ -615,6 +669,12 @@ qsc_maintain_stop_while_plugged() {
 			[ "${QSC_PS_MAINTAIN_EFF:-0}" -gt "$_rf_min" ] 2>/dev/null &&
 				_rf_min="$QSC_PS_MAINTAIN_EFF"
 			_rf_min="$(qsc_clamp_int "$_rf_min" 45 180 60)"
+		elif type qsc_device_is_oplus >/dev/null 2>&1 && qsc_device_is_oplus; then
+			_rf_min=120
+			type qsc_ps_maintain_secs >/dev/null 2>&1 && qsc_ps_maintain_secs
+			[ "${QSC_PS_MAINTAIN_EFF:-0}" -gt "$_rf_min" ] 2>/dev/null &&
+				_rf_min="$QSC_PS_MAINTAIN_EFF"
+			_rf_min="$(qsc_clamp_int "$_rf_min" 90 300 120)"
 		else
 			_rf_min=180
 			type qsc_ps_maintain_secs >/dev/null 2>&1 && qsc_ps_maintain_secs

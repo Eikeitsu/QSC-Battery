@@ -76,13 +76,25 @@ fun ChargeHero(
     )
     when (style) {
         ChargeHeroStyle.Pulse -> ChargeHeroPulse(
-            levelText, statusLine, subtitle, charging, animated,
+            levelText,
+            statusLine,
+            subtitle,
+            charging,
+            animated,
         )
         ChargeHeroStyle.Orbit -> ChargeHeroOrbit(
-            levelText, statusLine, subtitle, charging, animated,
+            levelText,
+            statusLine,
+            subtitle,
+            charging,
+            animated,
         )
         ChargeHeroStyle.Battery -> ChargeHeroBattery(
-            levelText, statusLine, subtitle, charging, animated,
+            levelText,
+            statusLine,
+            subtitle,
+            charging,
+            animated,
         )
     }
 }

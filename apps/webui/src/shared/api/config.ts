@@ -49,12 +49,44 @@ export async function notifyConfReload(): Promise<void> {
   );
 }
 
+/** 原子删除 key= 行后追加新行（避免 Magisk 目录 sed -i 写 NUL） */
+async function replaceMultilineKey(
+  path: string,
+  key: string,
+  lines: string[],
+): Promise<boolean> {
+  const safeKey = String(key).replace(/[^a-zA-Z0-9_]/g, "");
+  if (!safeKey) return false;
+  const del = await exec(
+    `mkdir -p '${PATHS.MODDIR}/config' 2>/dev/null; ` +
+      `f='${path}'; [ -f "$f" ] || printf '# QSC conf\\n' > "$f"; ` +
+      `tmp="$f.rm.$$"; ` +
+      `awk -v k='${safeKey}' 'index($0,k"=")!=1{print}' "$f" > "$tmp" && ` +
+      `mv -f "$tmp" "$f"`,
+  );
+  if (del.errno !== 0) return false;
+  for (const line of lines) {
+    const b64 = btoa(unescape(encodeURIComponent(line)));
+    const r = await exec(
+      `echo '${b64}' | base64 -d >> '${path}' 2>/dev/null || echo '${b64}' | base64 --decode >> '${path}'`,
+    );
+    if (r.errno !== 0) return false;
+  }
+  return true;
+}
+
 export async function setConf(key: string, value: string | number): Promise<void> {
   const safeKey = String(key).replace(/[^a-zA-Z0-9_]/g, "");
   const safeVal = String(value).replace(/[^0-9A-Za-z._:,-]/g, "");
   const path = confPathForKey(safeKey);
+  // 原子改写：Magisk 模块目录上 sed -i 偶发写出 NUL/稀疏文件
   await exec(
-    `mkdir -p '${PATHS.MODDIR}/config' 2>/dev/null; touch '${path}'; sed -i '/^${safeKey}=/d' '${path}' 2>/dev/null; echo '${safeKey}=${safeVal}' >> '${path}'`,
+    `mkdir -p '${PATHS.MODDIR}/config' 2>/dev/null; ` +
+      `f='${path}'; [ -f "$f" ] || printf '# QSC conf\\n' > "$f"; ` +
+      `tmp="$f.set.$$"; ` +
+      `awk -v k='${safeKey}' -v v='${safeVal}' '` +
+      `BEGIN{done=0} { if(!done && index($0,k"=")==1){ print k"="v; done=1 } else print } ` +
+      `END{ if(!done) print k"="v }' "$f" > "$tmp" && mv -f "$tmp" "$f"`,
   );
   await notifyConfReload();
 }
@@ -118,17 +150,9 @@ export async function savePowerSwitches(entries: string[]): Promise<boolean> {
     const stopOut = stop.includes(" ") ? stop.replace(/ /g, "::") : stop;
     normalized.push(`power_switch=[${path} start=${startOut} stop=${stopOut}]`);
   }
-  const payload = normalized.join("\n");
-  const b64 = btoa(unescape(encodeURIComponent(payload)));
-  const script = [
-    `sed -i '/^power_switch=/d' '${PATHS.CONF}' 2>/dev/null`,
-    payload
-      ? `echo '${b64}' | base64 -d >> '${PATHS.CONF}' 2>/dev/null || echo '${b64}' | base64 --decode >> '${PATHS.CONF}'`
-      : `true`,
-  ].join("; ");
-  const result = await exec(script);
-  if (result.errno === 0) await notifyConfReload();
-  return result.errno === 0;
+  const ok = await replaceMultilineKey(PATHS.CONF, "power_switch", normalized);
+  if (ok) await notifyConfReload();
+  return ok;
 }
 
 export async function loadPowerStopSchedule(): Promise<string[]> {
@@ -149,17 +173,9 @@ export async function loadPowerStopSchedule(): Promise<string[]> {
 export async function savePowerStopSchedule(ranges: string[]): Promise<boolean> {
   const list = sanitizePowerStopSchedule(ranges);
   const lines = list.map((r) => `power_stop_schedule=${r}`);
-  const payload = lines.join("\n");
-  const b64 = btoa(unescape(encodeURIComponent(payload)));
-  const script = [
-    `sed -i '/^power_stop_schedule=/d' '${PATHS.CONF}' 2>/dev/null`,
-    payload
-      ? `echo '${b64}' | base64 -d >> '${PATHS.CONF}' 2>/dev/null || echo '${b64}' | base64 --decode >> '${PATHS.CONF}'`
-      : `true`,
-  ].join("; ");
-  const result = await exec(script);
-  if (result.errno === 0) await notifyConfReload();
-  return result.errno === 0;
+  const ok = await replaceMultilineKey(PATHS.CONF, "power_stop_schedule", lines);
+  if (ok) await notifyConfReload();
+  return ok;
 }
 
 export async function loadNotifyQuietSchedule(): Promise<string[]> {
@@ -182,18 +198,9 @@ export async function loadNotifyQuietSchedule(): Promise<string[]> {
 export async function saveNotifyQuietSchedule(ranges: string[]): Promise<boolean> {
   const list = sanitizePowerStopSchedule(ranges);
   const lines = list.map((r) => `notify_quiet_schedule=${r}`);
-  const payload = lines.join("\n");
-  const b64 = btoa(unescape(encodeURIComponent(payload)));
-  const script = [
-    `mkdir -p '${PATHS.MODDIR}/config'; touch '${PATHS.NOTIFY_CONF}'`,
-    `sed -i '/^notify_quiet_schedule=/d' '${PATHS.NOTIFY_CONF}' 2>/dev/null`,
-    payload
-      ? `echo '${b64}' | base64 -d >> '${PATHS.NOTIFY_CONF}' 2>/dev/null || echo '${b64}' | base64 --decode >> '${PATHS.NOTIFY_CONF}'`
-      : `true`,
-  ].join("; ");
-  const result = await exec(script);
-  if (result.errno === 0) await notifyConfReload();
-  return result.errno === 0;
+  const ok = await replaceMultilineKey(PATHS.NOTIFY_CONF, "notify_quiet_schedule", lines);
+  if (ok) await notifyConfReload();
+  return ok;
 }
 
 export async function loadNightSchedule(): Promise<string[]> {
@@ -214,18 +221,9 @@ export async function loadNightSchedule(): Promise<string[]> {
 export async function saveNightSchedule(ranges: string[]): Promise<boolean> {
   const list = sanitizePowerStopSchedule(ranges);
   const lines = list.map((r) => `night_schedule=${r}`);
-  const payload = lines.join("\n");
-  const b64 = btoa(unescape(encodeURIComponent(payload)));
-  const script = [
-    `mkdir -p '${PATHS.MODDIR}/config'; touch '${PATHS.POWER_CONF}'`,
-    `sed -i '/^night_schedule=/d' '${PATHS.POWER_CONF}' 2>/dev/null`,
-    payload
-      ? `echo '${b64}' | base64 -d >> '${PATHS.POWER_CONF}' 2>/dev/null || echo '${b64}' | base64 --decode >> '${PATHS.POWER_CONF}'`
-      : `true`,
-  ].join("; ");
-  const result = await exec(script);
-  if (result.errno === 0) await notifyConfReload();
-  return result.errno === 0;
+  const ok = await replaceMultilineKey(PATHS.POWER_CONF, "night_schedule", lines);
+  if (ok) await notifyConfReload();
+  return ok;
 }
 
 export function parseJsonc(text: string): Record<string, unknown> {

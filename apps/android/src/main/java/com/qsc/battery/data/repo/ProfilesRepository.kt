@@ -87,7 +87,13 @@ class ProfilesRepository(private val root: RootBridge) {
         // touch conf so service notices; rewrite via set no-op if needed
         configRepo.setConfValue("_bundle_imported", System.currentTimeMillis().toString())
         configRepo.setConfValue("_bundle_imported", "")
-        root.exec("sed -i '/^_bundle_imported=/d' '${ModulePaths.CONF}'")
+        // 原子删键，避免 Magisk 目录 sed -i 写 NUL
+        root.exec(
+            "f='${ModulePaths.CONF}'; [ -f \"\$f\" ] || exit 0; " +
+                "tmp=\"\$f.rm.\$\$\"; " +
+                "awk -v k='_bundle_imported' 'index(\$0,k\"=\")!=1{print}' \"\$f\" > \"\$tmp\" && " +
+                "mv -f \"\$tmp\" \"\$f\"",
+        )
         return true
     }
 }

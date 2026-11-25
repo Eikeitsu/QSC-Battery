@@ -16,6 +16,41 @@ qsc_strip_install_ephemeral() {
 	rm -rf "$_root/apk" "$_root/install" "$_root/META-INF" 2>/dev/null || true
 	rm -f "$_root/customize.sh" "$_root/QSC-Battery.apk" 2>/dev/null || true
 }
+# 安装期也走 awk→tmp→mv：Magisk 模块目录上 sed -i 偶发 NUL
+qsc_install_conf_set() {
+	local file="$1" key="$2" val="$3" tmp
+	[ -n "$file" ] && [ -n "$key" ] || return 1
+	[ -f "$file" ] || printf '# QSC conf\n' >"$file" 2>/dev/null
+	tmp="${file}.set.$$"
+	awk -v k="$key" -v v="$val" '
+		BEGIN { done=0 }
+		{ if (!done && index($0, k "=") == 1) { print k "=" v; done=1 } else print }
+		END { if (!done) print k "=" v }
+	' "$file" >"$tmp" || { rm -f "$tmp"; return 1; }
+	mv -f "$tmp" "$file"
+}
+
+qsc_install_conf_delete_keys() {
+	local file="$1" tmp
+	[ -f "$file" ] || return 0
+	shift
+	[ "$#" -gt 0 ] || return 0
+	tmp="${file}.rm.$$"
+	awk -v keys="$*" '
+		BEGIN {
+			n = split(keys, a, " ")
+			for (i = 1; i <= n; i++) if (a[i] != "") del[a[i]] = 1
+		}
+		{
+			eq = index($0, "=")
+			if (eq <= 1) { print; next }
+			k = substr($0, 1, eq - 1)
+			if (!(k in del)) print
+		}
+	' "$file" >"$tmp" || { rm -f "$tmp"; return 1; }
+	mv -f "$tmp" "$file"
+}
+
 qsc_conf_value() {
 	local file="$1"
 	local key="$2"
@@ -96,20 +131,15 @@ qsc_merge_config() {
 	fi
 
 	cp -f "$target" "$merged" 2>/dev/null || return 1
-	sed -i \
-		-e "s/^power_stop=.*/power_stop=$power_stop/" \
-		-e "s/^power_start=.*/power_start=$power_start/" \
-		-e "s/^power_stop_time=.*/power_stop_time=$power_stop_time/" \
-		-e "s/^charge_full=.*/charge_full=$charge_full/" \
-		-e "s/^power_reset=.*/power_reset=$power_reset/" \
-		-e "s/^compatibility_mode=.*/compatibility_mode=$compatibility_mode/" \
-		-e "s/^temperature_switch=.*/temperature_switch=$temperature_switch/" \
-		-e "s/^temperature_switch_stop=.*/temperature_switch_stop=$temperature_stop/" \
-		-e "s/^temperature_switch_start=.*/temperature_switch_start=$temperature_start/" \
-		"$merged" || {
-		rm -f "$merged"
-		return 1
-	}
+	qsc_install_conf_set "$merged" power_stop "$power_stop" || { rm -f "$merged"; return 1; }
+	qsc_install_conf_set "$merged" power_start "$power_start" || { rm -f "$merged"; return 1; }
+	qsc_install_conf_set "$merged" power_stop_time "$power_stop_time" || { rm -f "$merged"; return 1; }
+	qsc_install_conf_set "$merged" charge_full "$charge_full" || { rm -f "$merged"; return 1; }
+	qsc_install_conf_set "$merged" power_reset "$power_reset" || { rm -f "$merged"; return 1; }
+	qsc_install_conf_set "$merged" compatibility_mode "$compatibility_mode" || { rm -f "$merged"; return 1; }
+	qsc_install_conf_set "$merged" temperature_switch "$temperature_switch" || { rm -f "$merged"; return 1; }
+	qsc_install_conf_set "$merged" temperature_switch_stop "$temperature_stop" || { rm -f "$merged"; return 1; }
+	qsc_install_conf_set "$merged" temperature_switch_start "$temperature_start" || { rm -f "$merged"; return 1; }
 
 	# —— 保留更新策略 ——
 	# 核心策略：从旧配置迁入（停充相关）；省电/通知键由 qsc_merge_side_confs 处理
@@ -142,11 +172,7 @@ qsc_merge_config() {
 				case "$_nv" in *[!A-Za-z0-9._,]* ) continue ;; esac
 				;;
 		esac
-		if grep -q "^${_nk}=" "$merged" 2>/dev/null; then
-			sed -i "s|^${_nk}=.*|${_nk}=${_nv}|" "$merged"
-		else
-			echo "${_nk}=${_nv}" >>"$merged"
-		fi
+		qsc_install_conf_set "$merged" "$_nk" "$_nv"
 		_core_migrated=$((_core_migrated + 1))
 	done
 
@@ -154,13 +180,11 @@ qsc_merge_config() {
 	[ "$_core_migrated" -gt 0 ] && ui_print "- 另迁移 ${_core_migrated} 项运行偏好"
 
 	# 迁移用户自定义供电开关与停充时段（多行）；跳过策略类节点以免闪充
-	sed -i -e '/^power_switch=/d' -e '/^power_stop_schedule=/d' -e '/^notify_quiet_schedule=/d' \
-		-e '/^night_schedule=/d' -e '/^stop_hold_wakelock=/d' \
-		-e '/^notify_charge_event=/d' -e '/^notify_charge_kinds=/d' -e '/^notify_power_status=/d' \
-		-e '/^low_batt_warn=/d' -e '/^low_batt_shutdown=/d' -e '/^low_batt_shutdown_delay_sec=/d' \
-		-e '/^low_batt_shutdown_min_uptime_sec=/d' -e '/^low_batt_temp_shutdown=/d' \
-		-e '/^shut_down=/d' \
-		"$merged" 2>/dev/null
+	qsc_install_conf_delete_keys "$merged" \
+		power_switch power_stop_schedule notify_quiet_schedule night_schedule \
+		stop_hold_wakelock notify_charge_event notify_charge_kinds notify_power_status \
+		low_batt_warn low_batt_shutdown low_batt_shutdown_delay_sec \
+		low_batt_shutdown_min_uptime_sec low_batt_temp_shutdown shut_down
 	if grep -q '^power_switch=' "$source" 2>/dev/null; then
 		kept_ps=0
 		skip_ps=0
@@ -206,11 +230,7 @@ qsc_merge_side_confs() {
 	for k in stop_hold_wakelock description_enable native_daemon native_impl; do
 		v="$(sed -n "s/^${k}=//p" "$source" 2>/dev/null | head -n1 | tr -d ' \r\n')"
 		[ -n "$v" ] || continue
-		if grep -q "^${k}=" "$power" 2>/dev/null; then
-			sed -i "s|^${k}=.*|${k}=${v}|" "$power"
-		else
-			echo "${k}=${v}" >>"$power"
-		fi
+		qsc_install_conf_set "$power" "$k" "$v"
 	done
 
 	for k in notify_charge_event notify_charge_kinds notify_power_status \
@@ -218,11 +238,7 @@ qsc_merge_side_confs() {
 		low_batt_shutdown_min_uptime_sec low_batt_temp_shutdown; do
 		v="$(sed -n "s/^${k}=//p" "$source" 2>/dev/null | head -n1 | tr -d ' \r\n')"
 		[ -n "$v" ] || continue
-		if grep -q "^${k}=" "$notify" 2>/dev/null; then
-			sed -i "s|^${k}=.*|${k}=${v}|" "$notify"
-		else
-			echo "${k}=${v}" >>"$notify"
-		fi
+		qsc_install_conf_set "$notify" "$k" "$v"
 	done
 	# 旧 shut_down → low_batt_shutdown
 	_sd="$(sed -n 's/^shut_down=//p' "$source" 2>/dev/null | head -n1 | tr -d ' \r\n')"
@@ -230,13 +246,13 @@ qsc_merge_side_confs() {
 		if grep -q '^low_batt_shutdown=' "$notify" 2>/dev/null; then
 			_cur="$(sed -n 's/^low_batt_shutdown=//p' "$notify" 2>/dev/null | head -n1 | tr -d ' \r\n')"
 			[ "$_cur" = "0" ] || [ -z "$_cur" ] &&
-				sed -i "s|^low_batt_shutdown=.*|low_batt_shutdown=${_sd}|" "$notify"
+				qsc_install_conf_set "$notify" low_batt_shutdown "$_sd"
 		else
 			echo "low_batt_shutdown=${_sd}" >>"$notify"
 		fi
 	fi
 	if grep -q '^notify_quiet_schedule=' "$source" 2>/dev/null; then
-		sed -i '/^notify_quiet_schedule=/d' "$notify" 2>/dev/null
+		qsc_install_conf_delete_keys "$notify" notify_quiet_schedule
 		grep '^notify_quiet_schedule=' "$source" >>"$notify" 2>/dev/null
 		ui_print "- 已迁移通知勿扰时段到 notify.conf"
 	fi

@@ -69,4 +69,5 @@ fi
 [ -f "$LIBDIR/current.sh" ] && . "$LIBDIR/current.sh"
 
 # 升级兼容：旧键从 config.conf 迁到 power.conf / notify.conf（幂等）
+# migrate 内会先 heal 含 NUL 的 conf（Magisk+sed -i 偶发）
 type qsc_conf_migrate_split >/dev/null 2>&1 && qsc_conf_migrate_split

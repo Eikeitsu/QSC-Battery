@@ -145,11 +145,17 @@ qscd_conf_set() {
 	_k="$1"
 	_v="$2"
 	[ -f "$CONF" ] || return 0
-	if grep -q "^${_k}=" "$CONF" 2>/dev/null; then
-		sed -i "s|^${_k}=.*|${_k}=${_v}|" "$CONF" 2>/dev/null
-	else
-		echo "${_k}=${_v}" >>"$CONF" 2>/dev/null
+	if type qsc_conf_set_key_atomic >/dev/null 2>&1; then
+		qsc_conf_set_key_atomic "$CONF" "$_k" "$_v"
+		return $?
 	fi
+	# 无 common 时兜底：awk 原子写，避免 sed -i
+	_tmp="${CONF}.set.$$"
+	awk -v k="$_k" -v v="$_v" '
+		BEGIN { done=0 }
+		{ if (!done && index($0, k "=") == 1) { print k "=" v; done=1 } else print }
+		END { if (!done) print k "=" v }
+	' "$CONF" >"$_tmp" && mv -f "$_tmp" "$CONF" || rm -f "$_tmp"
 }
 
 qscd_module_version() {

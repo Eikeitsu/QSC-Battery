@@ -48,16 +48,26 @@ class ConfigRepository(private val root: RootBridge) {
         return map.toMap()
     }
 
+    /**
+     * 原子改写 conf，避免 Magisk 模块目录上 `sed -i` 写出稀疏/NUL 文件。
+     * 与 shell CLI `cfg set` 同策略：awk → tmp → mv。
+     */
+    private fun atomicSetKeyScript(path: String, key: String, escapedVal: String): String {
+        // 单行 shell：awk 用索引匹配键前缀，避免复杂引号嵌套
+        return "mkdir -p '${ModulePaths.MODDIR}/config'; " +
+            "f='$path'; " +
+            "[ -f \"\$f\" ] || printf '# QSC conf\\n' > \"\$f\"; " +
+            "tmp=\"\$f.set.\$\$\"; " +
+            "awk -v k='$key' -v v='$escapedVal' '" +
+            "BEGIN{done=0} " +
+            "{ if(!done && index(\$0,k\"=\")==1){ print k\"=\"v; done=1 } else print } " +
+            "END{ if(!done) print k\"=\"v }' \"\$f\" > \"\$tmp\" && mv -f \"\$tmp\" \"\$f\""
+    }
+
     suspend fun setConfValue(key: String, value: String): Boolean {
         val escaped = value.replace("'", "'\\''")
         val path = confPathForKey(key)
-        val r = root.exec(
-            "mkdir -p '${ModulePaths.MODDIR}/config'; " +
-                "f='$path'; " +
-                "touch \"\$f\"; " +
-                "sed -i '/^$key=/d' \"\$f\"; " +
-                "printf '%s=%s\\n' '$key' '$escaped' >> \"\$f\"",
-        )
+        val r = root.exec(atomicSetKeyScript(path, key, escaped))
         if (r.ok) notifyConfReload()
         return r.ok
     }
@@ -67,13 +77,7 @@ class ConfigRepository(private val root: RootBridge) {
         values.forEach { (k, v) ->
             val escaped = v.replace("'", "'\\''")
             val path = confPathForKey(k)
-            val r = root.exec(
-                "mkdir -p '${ModulePaths.MODDIR}/config'; " +
-                    "f='$path'; " +
-                    "touch \"\$f\"; " +
-                    "sed -i '/^$k=/d' \"\$f\"; " +
-                    "printf '%s=%s\\n' '$k' '$escaped' >> \"\$f\"",
-            )
+            val r = root.exec(atomicSetKeyScript(path, k, escaped))
             if (!r.ok) ok = false
         }
         if (ok) notifyConfReload()
@@ -121,10 +125,16 @@ class ConfigRepository(private val root: RootBridge) {
             "night_schedule" -> ModulePaths.POWER_CONF
             else -> ModulePaths.CONF
         }
-        val r = root.exec(
-            "mkdir -p '${ModulePaths.MODDIR}/config'; touch '$path'; sed -i '/^$key=/d' '$path'",
+        // 先删旧多行键（awk 重写），再追加新行，避免 sed -i
+        val del = root.exec(
+            "mkdir -p '${ModulePaths.MODDIR}/config'; " +
+                "f='$path'; " +
+                "[ -f \"\$f\" ] || printf '# QSC conf\\n' > \"\$f\"; " +
+                "tmp=\"\$f.rm.\$\$\"; " +
+                "awk -v k='$key' 'index(\$0,k\"=\")!=1{print}' \"\$f\" > \"\$tmp\" && " +
+                "mv -f \"\$tmp\" \"\$f\"",
         )
-        if (!r.ok) return false
+        if (!del.ok) return false
         for (line in lines) {
             val escaped = line.replace("'", "'\\''")
             if (!root.exec("printf '%s=%s\\n' '$key' '$escaped' >> '$path'").ok) return false

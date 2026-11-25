@@ -19,23 +19,122 @@ qsc_conf_file_ensure() {
 	printf '%s\n' "$header" >"$f" 2>/dev/null
 }
 
+# Magisk overlay + sed -i 偶发把 conf 写成「大段 NUL + 尾部文本」。
+# 启动时剥掉 NUL、去掉空行，原子写回，避免读配置失败/行为异常。
+qsc_conf_heal_nul_file() {
+	local f="$1" tmp sz1 sz2
+	[ -n "$f" ] && [ -f "$f" ] || return 0
+	sz1="$(wc -c <"$f" 2>/dev/null | tr -d ' ')"
+	sz2="$(tr -d '\000' <"$f" 2>/dev/null | wc -c | tr -d ' ')"
+	case "$sz1" in ""|*[!0-9]*) return 0 ;; esac
+	case "$sz2" in ""|*[!0-9]*) return 0 ;; esac
+	[ "$sz1" -eq "$sz2" ] 2>/dev/null && return 0
+	tmp="${f}.heal.$$"
+	# 仍须像 conf：至少有一行 key=
+	if ! tr -d '\000' <"$f" 2>/dev/null | grep -E '^[A-Za-z0-9_]+=.' >/dev/null 2>&1; then
+		rm -f "$tmp" 2>/dev/null
+		type qsc_log >/dev/null 2>&1 &&
+			qsc_log warn "配置文件含 NUL 且修复后无有效键，已跳过：$f"
+		return 1
+	fi
+	tr -d '\000' <"$f" 2>/dev/null | sed '/^$/d' >"$tmp" 2>/dev/null || {
+		rm -f "$tmp" 2>/dev/null
+		return 1
+	}
+	mv -f "$tmp" "$f" 2>/dev/null || {
+		rm -f "$tmp" 2>/dev/null
+		return 1
+	}
+	type qsc_log >/dev/null 2>&1 &&
+		qsc_log warn "已修复含 NUL 的配置文件：$f（多为 sed -i 在模块目录写坏）"
+	return 0
+}
+
+qsc_conf_heal_all() {
+	local f
+	# key=value 文本 conf；JSON（current.json）不走此路径
+	for f in "${CONF:-}" "${POWER_CONF:-}" "${NOTIFY_CONF:-}" "${DEVICE_PROFILE:-}"; do
+		[ -n "$f" ] && [ -f "$f" ] || continue
+		qsc_conf_heal_nul_file "$f"
+	done
+}
+
+# 原子改写 conf 单键（避免 Magisk 目录上 sed -i 打出稀疏/NUL 文件）
+qsc_conf_set_key_atomic() {
+	local file="$1" key="$2" val="$3" tmp
+	[ -n "$file" ] && [ -n "$key" ] || return 1
+	mkdir -p "$(dirname "$file")" 2>/dev/null
+	[ -f "$file" ] || printf '# QSC conf\n' >"$file" 2>/dev/null
+	tmp="${file}.set.$$"
+	awk -v k="$key" -v v="$val" '
+		BEGIN { done=0 }
+		{
+			if (!done && index($0, k "=") == 1) {
+				print k "=" v
+				done=1
+			} else print
+		}
+		END { if (!done) print k "=" v }
+	' "$file" >"$tmp" || {
+		rm -f "$tmp"
+		return 1
+	}
+	mv -f "$tmp" "$file"
+}
+
+# 原子删除单个 key= 行（含多行同键）
+qsc_conf_delete_key_atomic() {
+	local file="$1" key="$2" tmp
+	[ -n "$file" ] && [ -n "$key" ] && [ -f "$file" ] || return 0
+	tmp="${file}.rm.$$"
+	awk -v k="$key" 'index($0, k "=") != 1 { print }' "$file" >"$tmp" || {
+		rm -f "$tmp"
+		return 1
+	}
+	mv -f "$tmp" "$file"
+}
+
+# 一次 awk 删多个键，避免循环 sed -i
+qsc_conf_delete_keys_atomic() {
+	local file="$1" tmp
+	[ -f "$file" ] || return 0
+	shift
+	[ "$#" -gt 0 ] || return 0
+	tmp="${file}.rm.$$"
+	awk -v keys="$*" '
+		BEGIN {
+			n = split(keys, a, " ")
+			for (i = 1; i <= n; i++) if (a[i] != "") del[a[i]] = 1
+		}
+		{
+			eq = index($0, "=")
+			if (eq <= 1) { print; next }
+			k = substr($0, 1, eq - 1)
+			if (!(k in del)) print
+		}
+	' "$file" >"$tmp" || {
+		rm -f "$tmp"
+		return 1
+	}
+	mv -f "$tmp" "$file"
+}
+
 qsc_conf_move_key() {
 	local src="$1" dst="$2" key="$3" line
 	[ -f "$src" ] && [ -f "$dst" ] || return 1
 	line="$(grep -E "^${key}=" "$src" 2>/dev/null | head -n1)"
 	[ -n "$line" ] || return 1
-	sed -i "/^${key}=/d" "$dst" 2>/dev/null
+	qsc_conf_delete_key_atomic "$dst" "$key"
 	printf '%s\n' "$line" >>"$dst" 2>/dev/null
 	return 0
 }
 
 qsc_conf_strip_keys_from() {
-	local file="$1" key
+	local file="$1"
 	[ -f "$file" ] || return 0
 	shift
-	for key in "$@"; do
-		sed -i "/^${key}=/d" "$file" 2>/dev/null
-	done
+	[ "$#" -gt 0 ] || return 0
+	qsc_conf_delete_keys_atomic "$file" "$@"
 }
 
 qsc_conf_migrate_split() {
@@ -45,6 +144,9 @@ qsc_conf_migrate_split() {
 	local k migrated=0
 	[ -n "$conf" ] && [ -f "$conf" ] || return 0
 	[ -n "$power" ] && [ -n "$notify" ] || return 0
+
+	# 先治愈 NUL 损坏，再迁移键
+	qsc_conf_heal_all
 
 	qsc_conf_file_ensure "$power" "# QSC power.conf (migrated)"
 	qsc_conf_file_ensure "$notify" "# QSC notify.conf (migrated)"
@@ -69,10 +171,10 @@ qsc_conf_migrate_split() {
 			! grep -E '^low_batt_shutdown=' "$notify" >/dev/null 2>&1; then
 			printf 'low_batt_shutdown=%s\n' "$_sd" >>"$notify" 2>/dev/null && migrated=1
 		fi
-		sed -i '/^shut_down=/d' "$conf" 2>/dev/null
+		qsc_conf_delete_key_atomic "$conf" "shut_down"
 	fi
 	if grep -E '^notify_quiet_schedule=' "$conf" >/dev/null 2>&1; then
-		sed -i '/^notify_quiet_schedule=/d' "$notify" 2>/dev/null
+		qsc_conf_delete_key_atomic "$notify" "notify_quiet_schedule"
 		grep -E '^notify_quiet_schedule=' "$conf" >>"$notify" 2>/dev/null && migrated=1
 	fi
 

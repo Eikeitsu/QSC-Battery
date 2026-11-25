@@ -317,7 +317,11 @@ qsc_power_reset() {
 }
 
 # 停充成功后多久之内不下「拔线」结论（秒）
+# 一加/ColorOS：停充后 online/VBUS 抖动更久，过短会假拔线→还原→再停，整夜发热
 QSC_UNPLUG_COOLDOWN=90
+if type qsc_device_is_oplus >/dev/null 2>&1 && qsc_device_is_oplus; then
+	QSC_UNPLUG_COOLDOWN=180
+fi
 
 # 充电器是不是真被拔了。
 #
