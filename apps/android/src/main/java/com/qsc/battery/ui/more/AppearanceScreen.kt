@@ -138,7 +138,7 @@ fun AppearanceScreen(
             )
 
             val heroStyles = listOf(
-                ChargeHeroStyle.Battery to ("竖电量卡" to "默认 · 立体液体、倾斜液面与上浮气泡"),
+                ChargeHeroStyle.Battery to ("竖电量卡" to "默认 · 立体水面、随重力流动与气泡"),
                 ChargeHeroStyle.Pulse to ("柔光脉冲" to "外扩柔光环与软边粒子"),
                 ChargeHeroStyle.Orbit to ("弧光流转" to "进度环弧光拖尾旋转"),
             )
