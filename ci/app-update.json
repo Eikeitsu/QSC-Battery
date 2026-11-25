@@ -1,7 +1,7 @@
 {
-  "version": "2026.11.25.ci.120",
-  "versionCode": 2026112439,
+  "version": "2026.11.25.ci.121",
+  "versionCode": 2026112441,
   "apkUrl": "https://cdn.jsdelivr.net/gh/Eikeitsu/QSC-Battery@ci-dist/app/QSC-Battery.apk",
-  "changelog": "https://github.com/Eikeitsu/QSC-Battery/commit/a32e13ae342d63882db0c3f9c577842f0e354569",
+  "changelog": "https://github.com/Eikeitsu/QSC-Battery/commit/59889046dd7f1aab9cb2b67b81c570dc99396772",
   "channel": "ci"
 }
