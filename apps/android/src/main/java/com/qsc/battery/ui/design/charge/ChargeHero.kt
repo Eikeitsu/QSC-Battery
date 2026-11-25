@@ -589,11 +589,29 @@ private fun VerticalBatteryGlyph(
         )
 
         val lvl = level.coerceIn(0f, 1f)
-        // 液体贴壳绘制，由 clipPath 裁出与外描边一致的圆角
-        val baseY = bodyTop + bodyH
-        val surfaceY = bodyTop + bodyH * (1f - lvl)
-        val waveAmp = (bodyW * 0.045f).coerceIn(3.5f, 7.5f) * if (charging) 1.25f else 1f
+        // 壳与液体留空隙；内腔圆角与外描边同心（rx − inset）
+        val gap = (strokeW * 1.15f + 3f).coerceIn(6f, 11f)
+        val fillLeft = bodyLeft + gap
+        val fillTopBound = bodyTop + gap
+        val fillBottom = bodyTop + bodyH - gap
+        val fillW = bodyW - gap * 2f
+        val fillHMax = fillBottom - fillTopBound
+        val fillRx = (rx - gap).coerceAtLeast(rx * 0.35f)
+        val fillPath = Path().apply {
+            addRoundRect(
+                RoundRect(
+                    left = fillLeft,
+                    top = fillTopBound,
+                    right = fillLeft + fillW,
+                    bottom = fillBottom,
+                    cornerRadius = CornerRadius(fillRx, fillRx),
+                ),
+            )
+        }
+        val surfaceY = fillBottom - fillHMax * lvl
+        val waveAmp = (fillW * 0.05f).coerceIn(3.2f, 7f) * if (charging) 1.25f else 1f
         val phase = wave * (PI.toFloat() * 2f)
+
         clipPath(bodyPath) {
             drawRect(
                 brush = Brush.horizontalGradient(
@@ -607,25 +625,27 @@ private fun VerticalBatteryGlyph(
                 topLeft = Offset(bodyLeft, bodyTop),
                 size = Size(bodyW * 0.4f, bodyH),
             )
-
             for (i in 1..3) {
-                val y = bodyTop + bodyH * (1f - i / 4f)
+                val y = fillBottom - fillHMax * (i / 4f)
                 drawLine(
                     color = ink.copy(alpha = 0.10f),
-                    start = Offset(bodyLeft + bodyW * 0.18f, y),
-                    end = Offset(bodyLeft + bodyW * 0.82f, y),
+                    start = Offset(fillLeft + fillW * 0.08f, y),
+                    end = Offset(fillLeft + fillW * 0.92f, y),
                     strokeWidth = 1.5f,
                 )
             }
+        }
 
+        // 液体只在内腔里画，底部/侧边圆角与外壳同心且不贴边
+        clipPath(fillPath) {
             if (lvl > 0.01f) {
                 val liquid = Path().apply {
-                    moveTo(bodyLeft - 2f, baseY + 2f)
-                    lineTo(bodyLeft + bodyW + 2f, baseY + 2f)
+                    moveTo(fillLeft - 2f, fillBottom + 2f)
+                    lineTo(fillLeft + fillW + 2f, fillBottom + 2f)
                     val steps = 28
                     for (i in steps downTo 0) {
                         val t = i / steps.toFloat()
-                        val x = bodyLeft + bodyW * t
+                        val x = fillLeft + fillW * t
                         val y = surfaceY +
                             sin(t * PI.toFloat() * 2f + phase) * waveAmp +
                             sin(t * PI.toFloat() * 3.2f + phase * 1.35f) * waveAmp * 0.38f
@@ -642,15 +662,14 @@ private fun VerticalBatteryGlyph(
                             accent.copy(alpha = 0.94f),
                         ),
                         startY = surfaceY - waveAmp,
-                        endY = baseY,
+                        endY = fillBottom,
                     ),
                 )
-                // 液面高光描边
                 val crest = Path().apply {
                     val steps = 28
                     for (i in 0..steps) {
                         val t = i / steps.toFloat()
-                        val x = bodyLeft + bodyW * t
+                        val x = fillLeft + fillW * t
                         val y = surfaceY +
                             sin(t * PI.toFloat() * 2f + phase) * waveAmp +
                             sin(t * PI.toFloat() * 3.2f + phase * 1.35f) * waveAmp * 0.38f
@@ -663,7 +682,7 @@ private fun VerticalBatteryGlyph(
                     style = Stroke(width = 2.2f, cap = StrokeCap.Round),
                 )
                 if (charging) {
-                    val shineX = bodyLeft + bodyW * shine
+                    val shineX = fillLeft + fillW * shine
                     drawRect(
                         brush = Brush.horizontalGradient(
                             colors = listOf(
@@ -674,12 +693,15 @@ private fun VerticalBatteryGlyph(
                             startX = shineX - 16f,
                             endX = shineX + 16f,
                         ),
-                        topLeft = Offset(bodyLeft, surfaceY - waveAmp),
-                        size = Size(bodyW, baseY - surfaceY + waveAmp * 2f),
+                        topLeft = Offset(fillLeft, surfaceY - waveAmp),
+                        size = Size(fillW, fillBottom - surfaceY + waveAmp * 2f),
                     )
                 }
             }
-            if (charging) {
+        }
+
+        if (charging) {
+            clipPath(bodyPath) {
                 val cx = w / 2f
                 val cy = bodyTop + bodyH * 0.48f
                 val bolt = Path().apply {
