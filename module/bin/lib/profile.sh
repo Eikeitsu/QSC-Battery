@@ -17,7 +17,11 @@ QSC_MCA_CANDIDATES="\
 /sys/class/power_supply/mca-charger/handle_state \
 /sys/class/power_supply/mca_charger/handle_state \
 /sys/class/power_supply/mca-battery/handle_state \
-/sys/class/power_supply/mca_battery/handle_state"
+/sys/class/power_supply/mca_battery/handle_state \
+/sys/class/xm_power/charger/mca_business_charger/handle_state \
+/sys/class/xm_power/charger/mca_charger/handle_state \
+/sys/class/xm_power/mca_business_charger/handle_state \
+/sys/class/xm_power/mca_charger/handle_state"
 
 # 部分机型另有 stop_handle_charge（极性同 handle_state：停=1 开=0）
 QSC_MCA_STOP_HANDLE_CANDIDATES="\
@@ -30,7 +34,9 @@ QSC_MCA_STOP_HANDLE_CANDIDATES="\
 /sys/devices/platform/soc@0/soc:mca_business_charger/stop_handle_charge \
 /sys/devices/platform/soc@0/soc:mca_charger/stop_handle_charge \
 /sys/devices/platform/soc@0/mca_business_charger/stop_handle_charge \
-/sys/devices/platform/soc@0/mca_charger/stop_handle_charge"
+/sys/devices/platform/soc@0/mca_charger/stop_handle_charge \
+/sys/class/xm_power/charger/mca_business_charger/stop_handle_charge \
+/sys/class/xm_power/charger/mca_charger/stop_handle_charge"
 
 # sysfs 属性在部分内核上 find -type f / test -f 会漏；用 -e/-r
 qsc_mca_node_ok() {
@@ -63,9 +69,11 @@ qsc_mca_glob_under() {
 
 qsc_find_mca_named() {
 	# $1=handle_state|stop_handle_charge；优先 mca_business，再任意 mca
+	# 含 /sys/class/xm_power（K90U 等 HyperOS 可能挂在此）
 	local name="$1"
 	local path root
 	path="$(find /sys/devices/platform/ /sys/class/power_supply/ /sys/devices/virtual/ \
+		/sys/class/xm_power/ \
 		-maxdepth 12 \( -name "$name" \) 2>/dev/null \
 		| grep -F 'mca_business' | head -n 1)"
 	if qsc_mca_node_ok "$path"; then
@@ -73,6 +81,7 @@ qsc_find_mca_named() {
 		return 0
 	fi
 	path="$(find /sys/devices/platform/ /sys/class/power_supply/ /sys/devices/virtual/ \
+		/sys/class/xm_power/ \
 		-maxdepth 12 \( -name "$name" \) 2>/dev/null \
 		| grep -F 'mca' | head -n 1)"
 	if qsc_mca_node_ok "$path"; then

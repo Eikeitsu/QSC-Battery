@@ -491,7 +491,8 @@ mod tests {
             ("battery/capacity", "100"),
             ("battery/temp", "300"),
             ("battery/status", "Not charging"),
-            ("battery/current_now", "5000"),
+            // 50mA 放电（µA）；避免 <10000 被当成 mA 放大
+            ("battery/current_now", "50000"),
             ("usb/online", "1"),
             ("battery/mmi_charging_enable", "0"),
         ]);
@@ -543,6 +544,42 @@ mod tests {
             near: 3,
             ..Default::default()
         };
+        assert!(!th.is_maintain_stable());
+        assert_eq!(th.wake_reason(true), Some("unstable"));
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn maintain_unstable_when_not_charging_but_neg_current() {
+        // K90U：status=Not charging 但负向大电流 = 仍在充，不得判稳态
+        let root = fake_sysfs(&[
+            ("battery/capacity", "90"),
+            ("battery/temp", "300"),
+            ("battery/status", "Not charging"),
+            ("battery/current_now", "-1500000"),
+            ("usb/online", "1"),
+            ("battery/mmi_charging_enable", "0"),
+        ]);
+        let marker = root.join("power_switch");
+        let active = root.join("active_switch");
+        std::fs::write(&marker, "1\n").unwrap();
+        std::fs::write(
+            &active,
+            "/sys/class/power_supply/battery/mmi_charging_enable,start=1,stop=0\n",
+        )
+        .unwrap();
+        let th = Thresholds {
+            maintain: true,
+            marker: marker.to_string_lossy().to_string(),
+            active_switch: active.to_string_lossy().to_string(),
+            root: root.to_string_lossy().to_string(),
+            near: 3,
+            ..Default::default()
+        };
+        assert!(!Thresholds::charge_looks_stopped(
+            root.to_str().unwrap(),
+            Some("Not charging")
+        ));
         assert!(!th.is_maintain_stable());
         assert_eq!(th.wake_reason(true), Some("unstable"));
         std::fs::remove_dir_all(&root).ok();

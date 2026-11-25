@@ -46,19 +46,46 @@ impl Thresholds {
         }
     }
 
-    /// 与 shell `qsc_charge_looks_stopped` 对齐的粗判
+    /// 与 shell `qsc_charge_looks_stopped` 对齐的粗判。
+    /// `current_now` 可能是 mA（|I|<10000）或 µA；小米充电多为负。
+    /// MCA/K90U 充电中也常报 Not charging，负向大电流视为未停住。
     pub(crate) fn charge_looks_stopped(root: &str, status: Option<&str>) -> bool {
         let base = format!("{root}/sys/class/power_supply");
-        let abs = ["battery", "bms", "soc"]
+        let raw = ["battery", "bms", "soc"]
             .into_iter()
-            .find_map(|n| read_int(&format!("{base}/{n}/current_now")))
-            .map(|c| c.unsigned_abs())
-            .unwrap_or(0);
+            .find_map(|n| read_int(&format!("{base}/{n}/current_now")));
+        let (signed_ua, abs_ua) = match raw {
+            Some(c) => {
+                let abs = c.unsigned_abs();
+                let abs_ua = if abs > 0 && abs < 10_000 {
+                    abs.saturating_mul(1000)
+                } else {
+                    abs
+                };
+                let signed = if c < 0 {
+                    -(abs_ua as i64)
+                } else {
+                    abs_ua as i64
+                };
+                (signed, abs_ua)
+            }
+            None => (0_i64, 0_u64),
+        };
         match status.unwrap_or("") {
             "Discharging" | "discharging" => true,
-            "Not charging" | "Notcharging" | "not_charging" | "Full" | "full" => true,
-            "Charging" | "charging" => abs < 80_000,
-            _ => abs < 80_000,
+            "Not charging" | "Notcharging" | "not_charging" | "Full" | "full" => {
+                if abs_ua < 80_000 {
+                    true
+                } else if signed_ua <= -150_000 {
+                    // 负向大电流：仍在从适配器取电
+                    false
+                } else {
+                    // 正向大电流：多为停充后负载放电
+                    true
+                }
+            }
+            "Charging" | "charging" => abs_ua < 80_000,
+            _ => abs_ua < 80_000,
         }
     }
 

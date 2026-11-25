@@ -14,10 +14,11 @@ qsc_write_node() {
 }
 
 # MCA handle_state：直接 echo，避免 chmod 破坏权限（小米17/K90 实测要点）
+# 部分内核 sysfs 属性 test -f 会漏，与 qsc_mca_node_ok 一样用 -e
 qsc_mca_raw_echo() {
 	local node="$1"
 	local val="$2"
-	[ -f "$node" ] || return 1
+	[ -e "$node" ] || return 1
 	echo "$val" > "$node" 2>/dev/null || return 1
 	return 0
 }
@@ -229,40 +230,57 @@ qsc_clear_active_switch() {
 # 粗判是否已停充（供 verify / 调试 / 假停充自愈）。
 # 注意：不能对 current_now 取绝对值后当「仍在充」——停充后手机负载放电常 >150mA，
 # 小米等还会把符号反着报（本机日志：充电为负、放电为正）。Discharging = 未从适配器取电。
+# K90U/MCA：充电中也常报 Not charging；若再把该 status 一律当已停，假停充自愈永远不触发。
+# 口径：current_now 可能是 mA（|I|<10000）或 µA；小米负向大电流 = 仍在从适配器取电。
 qsc_charge_looks_stopped() {
-	local st abs
+	local st raw abs ua_abs
 	st="$(cat "$PSDIR/battery/status" 2>/dev/null | tr -d '\r\n')"
-	abs="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n-')"
+	raw="$(cat "$PSDIR/battery/current_now" 2>/dev/null | tr -d ' \r\n')"
+	case "$raw" in
+		""|*[!0-9-]*)
+			abs=0
+			ua_abs=0
+			;;
+		*)
+			abs="${raw#-}"
+			case "$abs" in
+				""|*[!0-9]*) abs=0 ;;
+			esac
+			ua_abs="$abs"
+			# |I|<10000 更像 mA（1.5A→1500）
+			if [ "$ua_abs" -gt 0 ] 2>/dev/null && [ "$ua_abs" -lt 10000 ] 2>/dev/null; then
+				ua_abs=$((ua_abs * 1000))
+			fi
+			;;
+	esac
 	case "$st" in
-		Discharging)
+		Discharging|discharging)
 			# 放电态：大电流是负载耗电，不是假停充
 			return 0
 			;;
-		"Not charging"|Full)
-			# 多数 OEM 停充后落此态；仅当仍报很大电流且状态又变回 Charging 才另论
-			return 0
-			;;
-		Charging)
-			case "$abs" in
-				""|*[!0-9]*) return 1 ;;
-				*)
-					# 浮充/涓流：接近 0 视为已停住
-					[ "$abs" -lt 80000 ] 2>/dev/null && return 0
-					# 仍有明显电流且 status=Charging → 未停住
-					[ "$abs" -ge 150000 ] 2>/dev/null && return 1
-					return 1
+		"Not charging"|Notcharging|not_charging|Full|full)
+			# 近零/涓流
+			[ "$ua_abs" -lt 80000 ] 2>/dev/null && return 0
+			# 负向大电流：MCA 充电中也报 Not charging，视为未停住
+			case "$raw" in
+				-*)
+					[ "$ua_abs" -ge 150000 ] 2>/dev/null && return 1
 					;;
 			esac
+			# 正向大电流：多为停充后负载放电
+			return 0
+			;;
+		Charging|charging)
+			# 浮充/涓流：接近 0 视为已停住
+			[ "$ua_abs" -lt 80000 ] 2>/dev/null && return 0
+			# 仍有明显电流 → 未停住（已做 mA→µA）
+			[ "$ua_abs" -ge 150000 ] 2>/dev/null && return 1
+			return 1
 			;;
 	esac
 	# 未知 status：退回电流幅度（保守：大电流当未停）
-	case "$abs" in
-		""|*[!0-9]*) return 1 ;;
-		*)
-			[ "$abs" -lt 80000 ] 2>/dev/null && return 0
-			[ "$abs" -ge 150000 ] 2>/dev/null && return 1
-			;;
-	esac
+	[ "$ua_abs" -lt 80000 ] 2>/dev/null && return 0
+	[ "$ua_abs" -ge 150000 ] 2>/dev/null && return 1
 	return 1
 }
 
@@ -390,6 +408,8 @@ qsc_stop_wakelock_wanted() {
 				|| [ -f /sys/devices/platform/soc/soc:mca_charger/handle_state ] \
 				|| [ -e /sys/devices/platform/soc@0/soc:mca_charger/handle_state ] \
 				|| [ -e /sys/devices/platform/soc@0/mca_charger/handle_state ] \
+				|| [ -e /sys/class/xm_power/charger/mca_business_charger/handle_state ] \
+				|| [ -e /sys/class/xm_power/charger/mca_charger/handle_state ] \
 				|| [ "$(qsc_profile_get mca 2>/dev/null)" = "1" ]; then
 				return 0
 			fi
@@ -445,6 +465,8 @@ qsc_device_is_mca() {
 	[ -f /sys/devices/platform/soc/soc:mca_charger/handle_state ] && return 0
 	[ -e /sys/devices/platform/soc@0/soc:mca_charger/handle_state ] && return 0
 	[ -e /sys/devices/platform/soc@0/mca_charger/handle_state ] && return 0
+	[ -e /sys/class/xm_power/charger/mca_business_charger/handle_state ] && return 0
+	[ -e /sys/class/xm_power/charger/mca_charger/handle_state ] && return 0
 	# 机型 ABI：xm_power 投票也会被 OEM 改回，同样需要重申
 	type qsc_xm_power_available >/dev/null 2>&1 && qsc_xm_power_available && return 0
 	[ -e /sys/class/xm_power/charger/charge_interface/charge_enable ] && return 0
@@ -506,9 +528,42 @@ qsc_maintain_stop_while_plugged() {
 			_node_hold=1
 		fi
 		if [ "$_node_hold" = "1" ]; then
-			# 节点还停着：即使电流偏大也只重申（放电负载常见）
+			# 节点还停着：负载放电常见，多数只重申。
+			# 例外：K90U 等写成功但无效时 status 仍 Not charging、电流仍为充电方向，
+			# 宽限后拉黑该 MCA 节点并清标记，让主循环改走 xm_power/其它节点。
 			qsc_dbg "maintain：节点仍停充 age=${_age}s cur=${_cur:-?} status=${_st:-?} node=${_as_route:-?}=${_as_val:-?}"
-			qsc_charge_looks_stopped && _stable=1
+			if qsc_charge_looks_stopped; then
+				_stable=1
+			elif [ "$_age" -lt 45 ] 2>/dev/null || [ -f "$DATADIR/charge_full_done" ]; then
+				# hold 但仍像在充：比普通假停充更短宽限，尽快换 xm_power
+				qsc_dbg "节点 hold 但电流仍像在充，宽限中：age=${_age}s"
+			else
+				_fake_last="$(cat "$DATADIR/.fake_stop_at" 2>/dev/null | tr -d ' \r\n')"
+				case "$_fake_last" in ""|*[!0-9]*) _fake_last=0 ;; esac
+				if [ "$_fake_last" -gt 0 ] 2>/dev/null &&
+					[ $((_now - _fake_last)) -lt 300 ] 2>/dev/null; then
+					qsc_dbg "无效节点冷却中：只重申 age=${_age}s"
+				else
+					type qsc_mca_mark_ineffective >/dev/null 2>&1 &&
+						qsc_mca_mark_ineffective "${_as_route:-node} hold但电流仍像在充"
+					qsc_log_once fake_stop warn \
+						"假停充：节点停充值仍在但电流像在充，拉黑后清标记并改试其它路径"
+					qsc_dbg "fake_stop 触发（hold+仍充）age=${_age}s cur=${_cur:-?} status=${_st:-?} node=${_as_route:-?}=${_as_val:-?}"
+					printf '%s\n' "$_now" >"$DATADIR/.fake_stop_at" 2>/dev/null
+					if type qsc_power_start >/dev/null 2>&1; then
+						qsc_power_start
+					fi
+					_keep_full=0
+					[ -f "$DATADIR/charge_full_done" ] && _keep_full=1
+					rm -f "$DATADIR/power_switch" "$DATADIR/active_switch" \
+						"$DATADIR/power_on" "$DATADIR/power_off" \
+						"$DATADIR/.orphan_checked_at" \
+						"$DATADIR/.qscd_maintain_stable" 2>/dev/null
+					[ "$_keep_full" = "1" ] && touch "$DATADIR/charge_full_done" 2>/dev/null
+					qsc_stop_wakelock_release
+					return 1
+				fi
+			fi
 		elif ! qsc_charge_looks_stopped; then
 			if [ "$_age" -lt "$_grace" ] 2>/dev/null || [ -f "$DATADIR/charge_full_done" ]; then
 				qsc_dbg "假停充可疑但宽限/闩锁中：仅重申 age=${_age}s cur=${_cur:-?} status=${_st:-?} node=${_as_route:-?}=${_as_val:-?}"

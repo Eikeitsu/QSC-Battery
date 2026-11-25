@@ -401,6 +401,8 @@ impl PowerState {
             "/sys/devices/platform/soc/soc:mca_charger/handle_state",
             "/sys/devices/platform/soc@0/soc:mca_charger/handle_state",
             "/sys/devices/platform/soc@0/mca_charger/handle_state",
+            "/sys/class/xm_power/charger/mca_business_charger/handle_state",
+            "/sys/class/xm_power/charger/mca_charger/handle_state",
             "/sys/class/xm_power/charger/charge_interface/charge_enable",
             "/sys/class/xm_power/charger/charge_interface/input_suspend",
         ];

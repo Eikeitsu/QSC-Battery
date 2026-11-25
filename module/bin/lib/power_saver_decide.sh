@@ -8,6 +8,13 @@ qsc_ps_can_skip_round() {
 	if qsc_ps_plugged; then
 		return 1
 	fi
+	# 安全网：端口扫描漏判「未插电」但 |I|≥150mA 仍像在充时，禁止 DeepPark/lean 跳过。
+	# K90U 日志：假未插电 → 满轮0 → 80% 一路充到 100%；有大电流就必须跑停充评估。
+	if type qsc_ps_charging_current_live >/dev/null 2>&1 &&
+		qsc_ps_charging_current_live; then
+		qsc_ps_dbg ps_skip debug "禁止 lean：未判插电但 |I|≥150mA，强制满轮"
+		return 1
+	fi
 	# 未插电：不再用 FULL_MAX_GAP 强行满轮（简介已由 worker/XP；停充逻辑无事可做）
 	# 仅当显式要求（QSC_PS_FORCE_FULL=1）才走满轮。
 	[ "${QSC_PS_FORCE_FULL:-0}" = "1" ] && return 1

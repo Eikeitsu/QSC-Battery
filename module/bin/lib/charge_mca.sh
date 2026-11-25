@@ -68,8 +68,8 @@ qsc_mca_write() {
 	# 对齐 0814：未标 MCA=1 不走专用路径（不盲扫 handle_state）
 	[ "${QSC_MCA:-0}" = "1" ] || return 1
 
-	# 硬复核曾判定无效：仅 switch_hard_verify=1 时跳过
-	if [ "$label" = "stop" ] && qsc_switch_hard_verify_on && qsc_mca_skip_stop; then
+	# 曾判定无效（硬复核失败 / maintain 发现 hold 但仍在充）：本启动周期跳过 MCA，改试 xm_power/列表
+	if [ "$label" = "stop" ] && qsc_mca_skip_stop; then
 		qsc_dbg "跳过 MCA（mca_ineffective）"
 		return 1
 	fi

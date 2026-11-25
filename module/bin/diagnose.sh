@@ -52,7 +52,7 @@ done
 # 2. 扫描所有 handle_state 节点
 echo "" >> "$OUT"
 echo "[2] 全系统 handle_state 节点:" >> "$OUT"
-find /sys/devices/platform/ -maxdepth 8 -type f -name "handle_state" 2>/dev/null | while read f; do
+find /sys/devices/platform/ /sys/class/xm_power/ /sys/class/power_supply/ -maxdepth 8 \( -type f -o -type l \) -name "handle_state" 2>/dev/null | while read f; do
   qsc_diag_line "$f" >> "$OUT"
 done
 

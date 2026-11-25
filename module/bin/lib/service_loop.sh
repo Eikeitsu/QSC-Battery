@@ -228,10 +228,13 @@ qsc_service_loop_once() {
 	if type qsc_ps_load_conf >/dev/null 2>&1; then
 		# —— 未插电 lean 再入：几乎只 wait；配置未变则跳过简介/XP 管家 ——
 		# 未插电 lean：允许残留 power_switch（拔线迟滞），勿因此卡出 DeepPark
+		# 例外：漏判未插电但大电流仍在充 → 退出 lean，避免 DeepPark 整夜满轮0漏停充
 		if [ "${QSC_SERVICE_LEAN_IDLE:-0}" = "1" ] &&
 			[ ! -f "$MODULE_OFF_FLAG" ] &&
 			type qsc_ps_plugged >/dev/null 2>&1 &&
-			! qsc_ps_plugged; then
+			! qsc_ps_plugged &&
+			{ ! type qsc_ps_charging_current_live >/dev/null 2>&1 ||
+				! qsc_ps_charging_current_live; }; then
 			qsc_ps_load_conf
 			qsc_ps_now
 			_now="$QSC_PS_NOW"
