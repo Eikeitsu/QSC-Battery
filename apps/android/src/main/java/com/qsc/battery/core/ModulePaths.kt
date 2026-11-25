@@ -28,7 +28,6 @@ object ModulePaths {
     /** Magisk 侧镜像 / 边沿事件（模块 data，Root 必可读） */
     const val XP_LOG_MODULE = "$DATADIR/xp.log"
     val XP_LOG_CANDIDATES: List<String> = listOf(XP_LOG, XP_LOG_TMP, XP_LOG_CACHE, XP_LOG_MODULE)
-    const val HEALTH_HISTORY = "$DATADIR/health_history.csv"
     const val POWER_SWITCH_FLAG = "$DATADIR/power_switch"
     const val MODULE_PROP = "$MODDIR/module.prop"
     const val COMMON_SH = "$MODDIR/bin/common.sh"
@@ -36,7 +35,6 @@ object ModulePaths {
     const val BATTERY_INFO = "$MODDIR/bin/lib/battery_info.sh"
     const val QSCD_FETCH = "$MODDIR/bin/qscd_fetch.sh"
     const val QSCD = "$MODDIR/bin/qscd"
-    const val PROFILES_DIR = "$DATADIR/profiles"
     const val HOT_UPDATE_LOCK = "/data/adb/qsc/hot_update/lock"
 
     /** APP CLI 刷模块前 touch；customize.sh 读到则跳过音量键 */
@@ -47,9 +45,6 @@ object ModulePaths {
      * 本地 versionCode 低于此值时刷入会强制清空 conf/data。
      */
     const val CLEAN_CUTOVER_CODE = 2026091701L
-
-    @Deprecated("Use CLEAN_CUTOVER_CODE")
-    const val LAYOUT_CUTOVER_CODE = CLEAN_CUTOVER_CODE
 
     const val STATUS_HELPER = "$MODDIR/bin/qsc_status.sh"
 }

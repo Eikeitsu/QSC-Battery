@@ -69,19 +69,6 @@ export function toChannelAssetUrl(url: StringLike): string {
   return u;
 }
 
-/** @deprecated 名称保留；请用 toChannelAssetUrl */
-export function preferGithubCdn(url: StringLike): string {
-  return toChannelAssetUrl(url);
-}
-
-export function rewriteRawToCdn(url: StringLike): string {
-  return toChannelAssetUrl(url);
-}
-
-export function rewritePagesToCdn(url: StringLike): string {
-  return toChannelAssetUrl(url);
-}
-
 /** manifest baseUrl → QSCD_PAGES_BASE（去掉末尾 /qscd） */
 export function pagesRootForDaemon(baseOrRoot: StringLike): string {
   const rewritten = toChannelAssetUrl(

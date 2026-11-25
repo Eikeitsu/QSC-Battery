@@ -32,9 +32,6 @@ export const STORAGE_KEYS = {
   preferCdn: "qsc_prefer_cdn",
 } as const;
 
-/** @deprecated 使用 STORAGE_KEYS.fontScale */
-export const FONT_KEY = STORAGE_KEYS.fontScale;
-
 export function readStorage(key: string): string | null {
   try {
     return localStorage.getItem(key);

@@ -58,10 +58,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.qsc.battery.ui.theme.ChargeHeroStyle
+import com.qsc.battery.ui.theme.BatteryFillStyle
+import com.qsc.battery.ui.theme.BatteryOrientation
+import com.qsc.battery.ui.theme.ChargeAnimConfig
+import com.qsc.battery.ui.theme.ChargeAnimShape
+import com.qsc.battery.ui.theme.RingEffect
 import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.min
@@ -70,10 +73,7 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 
 /**
- * 首页电量 Hero。三套样式可在「主题外观」切换：
- * - Battery（默认）：竖电池 + 右侧信息（液体电量）
- * - Pulse：柔光外扩 + 软边粒子
- * - Orbit：弧光流转
+ * 首页电量 Hero。由 [ChargeAnimConfig] 配置电池/圆环及填充效果。
  */
 @Composable
 fun ChargeHero(
@@ -82,10 +82,11 @@ fun ChargeHero(
     statusLine: String,
     subtitle: String,
     charging: Boolean = false,
-    /** 内核 current_now（µA）；仅充电时驱动三套 Hero 动效强弱/快慢。 */
+    /** 内核 current_now（µA）；仅充电时驱动动效强弱/快慢。 */
     currentUa: String = "",
-    style: ChargeHeroStyle = ChargeHeroStyle.Battery,
+    anim: ChargeAnimConfig = ChargeAnimConfig.Default,
 ) {
+    val cfg = anim.normalized()
     val p = (percent ?: 0f).coerceIn(0f, 1f)
     val animated by animateFloatAsState(
         targetValue = p,
@@ -95,9 +96,9 @@ fun ChargeHero(
     val currentEnergy = remember(currentUa, charging) {
         chargeCurrentEnergy(currentUa, charging)
     }
-    when (style) {
-        ChargeHeroStyle.Battery -> {
-            ChargeHeroBattery(
+    when (cfg.shape) {
+        ChargeAnimShape.Battery -> when (cfg.batteryFill) {
+            BatteryFillStyle.Liquid -> ChargeHeroBattery(
                 levelText,
                 statusLine,
                 subtitle,
@@ -105,10 +106,27 @@ fun ChargeHero(
                 animated,
                 currentEnergy,
             )
+            BatteryFillStyle.Blocks -> ChargeHeroBatteryBlocks(
+                levelText = levelText,
+                statusLine = statusLine,
+                subtitle = subtitle,
+                charging = charging,
+                level = animated,
+                currentEnergy = currentEnergy,
+                horizontal = cfg.batteryOrientation == BatteryOrientation.Horizontal,
+            )
+            BatteryFillStyle.Solid -> ChargeHeroBatterySolid(
+                levelText = levelText,
+                statusLine = statusLine,
+                subtitle = subtitle,
+                charging = charging,
+                level = animated,
+                currentEnergy = currentEnergy,
+                horizontal = cfg.batteryOrientation == BatteryOrientation.Horizontal,
+            )
         }
-
-        ChargeHeroStyle.Pulse -> {
-            ChargeHeroPulse(
+        ChargeAnimShape.Ring -> when (cfg.ringEffect) {
+            RingEffect.SoftPulse -> ChargeHeroPulse(
                 levelText,
                 statusLine,
                 subtitle,
@@ -116,10 +134,39 @@ fun ChargeHero(
                 animated,
                 currentEnergy,
             )
-        }
-
-        ChargeHeroStyle.Orbit -> {
-            ChargeHeroOrbit(
+            RingEffect.ArcOrbit -> ChargeHeroOrbit(
+                levelText,
+                statusLine,
+                subtitle,
+                charging,
+                animated,
+                currentEnergy,
+            )
+            RingEffect.NeonMinimal -> ChargeHeroRingNeon(
+                levelText,
+                statusLine,
+                subtitle,
+                charging,
+                animated,
+                currentEnergy,
+            )
+            RingEffect.LiquidRise -> ChargeHeroRingLiquidRise(
+                levelText,
+                statusLine,
+                subtitle,
+                charging,
+                animated,
+                currentEnergy,
+            )
+            RingEffect.Concentric -> ChargeHeroRingConcentric(
+                levelText,
+                statusLine,
+                subtitle,
+                charging,
+                animated,
+                currentEnergy,
+            )
+            RingEffect.PlasmaWave -> ChargeHeroRingPlasma(
                 levelText,
                 statusLine,
                 subtitle,
@@ -687,74 +734,42 @@ private fun VerticalBatteryGlyph(
                 ),
             )
         }
-        // 充电：浪高/扭断幅度随电流；相位一律用 clock，避免 Restart 跳变
+        // 双层波浪液面（参考：前景亮浪 + 背景暗浪），相位用 clock 连续滚动
         val energy = if (charging) currentEnergy.coerceIn(0f, 1f) else 0f
         val waveAmp = if (charging) {
-            (fillW * (0.034f + 0.15f * energy)).coerceIn(3.4f, 19f)
+            (fillW * (0.045f + 0.10f * energy)).coerceIn(4f, 14f)
         } else {
-            (fillW * 0.028f).coerceIn(1.8f, 4.2f)
+            (fillW * 0.038f).coerceIn(2.8f, 6.5f)
         }
-        val splash = if (charging) 0.22f + 0.58f * energy else 0.16f
-        val swayHz = if (charging) 0.42f + 1.55f * energy else 0.32f
-        // 连续相位（无限摇晃），不用 0→1 Restart
+        val swayHz = if (charging) 0.38f + 1.2f * energy else 0.28f
         val phase = clock * (PI.toFloat() * 2f) * swayHz
-        val phaseB = clock * (PI.toFloat() * 2f) * (swayHz * 0.63f) + 1.17f
-        // 扭断强度：在「单椭圆」与「双瓣错位」之间连续摇摆
-        val twist = sin(phase)
-        val twist2 = sin(phaseB)
-        val twistAmt = (0.35f + 0.65f * splash) * (0.55f + 0.45f * abs(twist))
+        val phaseBack = phase * 0.82f + 1.35f
         val nx = gravity.nx
         val ny = gravity.ny.coerceAtLeast(0.22f)
         val slope = (nx / ny).coerceIn(-2.4f, 2.4f)
-        val sectionRy = (fillW * 0.22f).coerceIn(13f, 28f)
-        // 前后缘横向错位：扭矩大时看起来像两个错开的椭圆瓣
-        val shearMax = sectionRy * (0.55f + 0.75f * splash)
+        // 前后浪垂直错开，做出层次，而不是椭圆顶面
+        val layerGap = (fillW * 0.055f).coerceIn(4f, 10f)
 
-        fun chordFactor(x: Float): Float {
-            val u = ((x - fillCx) / (fillW * 0.5f)).coerceIn(-1f, 1f)
-            return sqrt((1f - u * u).coerceAtLeast(0f))
+        fun waveDelta(x: Float, ph: Float, ampScale: Float): Float {
+            val t = ((x - fillLeft) / fillW).coerceIn(0f, 1f)
+            val primary = sin(t * PI.toFloat() * 2f + ph) * waveAmp * ampScale
+            val secondary = sin(t * PI.toFloat() * 3.35f + ph * 1.28f) * waveAmp * 0.38f * ampScale
+            val tertiary = sin(t * PI.toFloat() * 5.1f - ph * 0.7f) * waveAmp * 0.14f * ampScale
+            return primary + secondary + tertiary
         }
 
-        /**
-         * 扭断断面高度场：螺旋/S 形断裂，前后反向抬压，
-         * 随 twist 在单瓣椭圆与双瓣错位之间过渡。
-         */
-        fun heightField(x: Float, zNorm: Float): Float {
-            val u = ((x - fillCx) / (fillW * 0.5f)).coerceIn(-1f, 1f)
-            val z = zNorm.coerceIn(-1f, 1f)
-            val chord = chordFactor(x)
-            val ang = atan2(z * chord, u)
-            // 螺旋扭断主瓣：角向 S 形
-            val helix = sin(ang + twist * PI.toFloat()) * waveAmp * (0.75f + 0.45f * splash)
-            val helix2 = sin(ang * 2f - twist2 * PI.toFloat()) * waveAmp * 0.38f
-            // 前后反向抬升 → 双椭圆错位感
-            val counter = z * twist * waveAmp * (0.9f + 0.5f * splash)
-            // 对角剪切脊
-            val ridge = u * z * twist2 * waveAmp * 0.7f
-            val ripple = sin(u * PI.toFloat() * 2.4f + phase * 0.85f) * waveAmp * 0.28f +
-                sin((u + z) * PI.toFloat() * 3.6f - phaseB) * waveAmp * 0.18f * splash
-            return (helix + helix2 + counter + ridge + ripple) * (0.7f + 0.3f * twistAmt)
-        }
+        fun frontWaveY(x: Float, intercept: Float): Float =
+            intercept + slope * (x - fillCx) + waveDelta(x, phase, 1f)
 
-        /** 前后缘 X 向错位（扭断剪切）。 */
-        fun rimX(x: Float, zNorm: Float): Float {
-            val z = zNorm.coerceIn(-1f, 1f)
-            val shear = shearMax * twist * z * (0.55f + 0.45f * chordFactor(x))
-            return x + shear
-        }
-
-        fun projectY(x: Float, zNorm: Float, intercept: Float): Float {
-            val z = zNorm.coerceIn(-1f, 1f)
-            val base = intercept + slope * (x - fillCx) + heightField(x, z)
-            return base + sectionRy * z * chordFactor(x) * (0.85f + 0.25f * abs(twist))
-        }
+        fun backWaveY(x: Float, intercept: Float): Float =
+            intercept + slope * (x - fillCx) + waveDelta(x, phaseBack, 0.9f) - layerGap
 
         fun meanDepth(intercept: Float): Float {
             val n = 24
             var sum = 0f
             for (i in 0 until n) {
                 val x = fillLeft + fillW * ((i + 0.5f) / n)
-                val sy = projectY(x, 0f, intercept)
+                val sy = frontWaveY(x, intercept)
                 sum += when {
                     sy <= fillTopBound -> fillHMax
                     sy >= fillBottom -> 0f
@@ -773,11 +788,11 @@ private fun VerticalBatteryGlyph(
         }
         val intercept = (lo + hi) * 0.5f
 
-        fun surfaceAt(x: Float): Float = projectY(x, 0f, intercept)
-        fun backY(x: Float): Float = projectY(x, -1f, intercept)
+        fun surfaceAt(x: Float): Float = frontWaveY(x, intercept)
+        fun backY(x: Float): Float = backWaveY(x, intercept)
             .coerceIn(fillTopBound, fillBottom - 1f)
-        fun frontY(x: Float): Float = projectY(x, 1f, intercept)
-            .coerceAtMost(fillBottom)
+        fun frontY(x: Float): Float = frontWaveY(x, intercept)
+            .coerceIn(fillTopBound, fillBottom)
 
         fun smoothstep(edge0: Float, edge1: Float, x: Float): Float {
             val t = ((x - edge0) / (edge1 - edge0)).coerceIn(0f, 1f)
@@ -810,168 +825,111 @@ private fun VerticalBatteryGlyph(
 
         clipPath(fillPath) {
             if (lvl > 0.01f) {
-                val steps = 52
-                // x, midY, backY, frontY, backX, frontX, wet
+                val steps = 48
+                // x, frontY, backY, wet
                 val samples = Array(steps + 1) { i ->
                     val x = fillLeft + fillW * (i / steps.toFloat())
-                    val mid = surfaceAt(x)
-                    val back = backY(x)
                     val front = frontY(x)
-                    val bx = rimX(x, -1f)
-                    val fx = rimX(x, 1f)
-                    val wet = mid < fillBottom - 0.75f
-                    floatArrayOf(x, mid, back, front, bx, fx, if (wet) 1f else 0f)
+                    val back = backY(x)
+                    val wet = front < fillBottom - 0.75f
+                    floatArrayOf(x, front, back, if (wet) 1f else 0f)
                 }
-                val firstWet = samples.indexOfFirst { it[6] > 0.5f }
-                val lastWet = samples.indexOfLast { it[6] > 0.5f }
+                val firstWet = samples.indexOfFirst { it[3] > 0.5f }
+                val lastWet = samples.indexOfLast { it[3] > 0.5f }
                 if (firstWet >= 0 && lastWet >= firstWet) {
                     val wetL = samples[firstWet][0]
                     val wetR = samples[lastWet][0]
 
-                    // 液柱接到前缘（含横向错位）
-                    val liquid = Path().apply {
+                    // 背景浪：更暗、半透明，相位错开，增加纵深
+                    val backLiquid = Path().apply {
                         moveTo(wetL, fillBottom)
                         lineTo(wetR, fillBottom)
                         for (i in lastWet downTo firstWet) {
-                            lineTo(samples[i][5], samples[i][3])
+                            lineTo(samples[i][0], samples[i][2])
                         }
                         close()
                     }
                     drawPath(
-                        path = liquid,
+                        path = backLiquid,
                         brush = Brush.verticalGradient(
                             colors = listOf(
-                                accent.copy(alpha = 0.74f),
-                                accent.copy(alpha = 0.88f),
-                                accent.copy(alpha = 0.98f),
+                                Color(
+                                    red = accent.red * 0.55f,
+                                    green = accent.green * 0.65f,
+                                    blue = accent.blue * 0.55f,
+                                    alpha = 0.42f,
+                                ),
+                                accent.copy(alpha = 0.55f),
+                            ),
+                            startY = fillTopBound,
+                            endY = fillBottom,
+                        ),
+                    )
+
+                    // 前景浪：更实、更亮，主体液柱
+                    val frontLiquid = Path().apply {
+                        moveTo(wetL, fillBottom)
+                        lineTo(wetR, fillBottom)
+                        for (i in lastWet downTo firstWet) {
+                            lineTo(samples[i][0], samples[i][1])
+                        }
+                        close()
+                    }
+                    drawPath(
+                        path = frontLiquid,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color(
+                                    red = (accent.red * 0.72f + 0.28f).coerceAtMost(1f),
+                                    green = (accent.green * 0.72f + 0.28f).coerceAtMost(1f),
+                                    blue = (accent.blue * 0.72f + 0.28f).coerceAtMost(1f),
+                                    alpha = 0.88f,
+                                ),
+                                accent.copy(alpha = 0.95f),
+                                accent,
                             ),
                             startY = fillTopBound,
                             endY = fillBottom,
                         ),
                     )
                     drawPath(
-                        path = liquid,
+                        path = frontLiquid,
                         brush = Brush.horizontalGradient(
                             colors = listOf(
-                                Color.Black.copy(alpha = 0.18f),
-                                Color.White.copy(alpha = 0.08f),
+                                Color.White.copy(alpha = 0.10f),
                                 Color.Transparent,
-                                Color.Black.copy(alpha = 0.20f),
+                                Color.Black.copy(alpha = 0.10f),
                             ),
                             startX = wetL,
                             endX = wetR,
                         ),
                     )
 
-                    val crestLite = Color(
-                        red = (accent.red * 0.55f + 0.45f).coerceAtMost(1f),
-                        green = (accent.green * 0.55f + 0.45f).coerceAtMost(1f),
-                        blue = (accent.blue * 0.55f + 0.45f).coerceAtMost(1f),
-                    )
-                    val troughDeep = Color(
-                        red = accent.red * 0.38f,
-                        green = accent.green * 0.52f,
-                        blue = accent.blue * 0.38f,
-                    )
-                    val ridgeDark = Color(
-                        red = accent.red * 0.28f,
-                        green = accent.green * 0.40f,
-                        blue = accent.blue * 0.28f,
-                    )
-                    val ampSafe = waveAmp.coerceAtLeast(1f)
-                    fun lerpTone(from: Color, to: Color, t: Float, a: Float = 0.94f): Color {
-                        val u = t.coerceIn(0f, 1f)
-                        return Color(
-                            red = from.red + (to.red - from.red) * u,
-                            green = from.green + (to.green - from.green) * u,
-                            blue = from.blue + (to.blue - from.blue) * u,
-                            alpha = a,
-                        )
-                    }
-                    // 扭断断面条带：顶点用错位后的前后缘，形成双瓣/S 形
-                    for (i in firstWet until lastWet) {
-                        val x0 = samples[i][0]
-                        val x1 = samples[i + 1][0]
-                        val b0 = samples[i][2]
-                        val f0 = samples[i][3]
-                        val b1 = samples[i + 1][2]
-                        val f1 = samples[i + 1][3]
-                        val bx0 = samples[i][4]
-                        val fx0 = samples[i][5]
-                        val bx1 = samples[i + 1][4]
-                        val fx1 = samples[i + 1][5]
-                        val h0 = heightField(x0, 0f)
-                        val h1 = heightField(x1, 0f)
-                        val crest = (((h0 + h1) * 0.5f) / ampSafe * 0.5f + 0.5f).coerceIn(0f, 1f)
-                        val skew = (abs(fx0 - bx0) + abs(fx1 - bx1)) * 0.5f / shearMax.coerceAtLeast(1f)
-                        val tone = (crest * 0.55f + skew.coerceIn(0f, 1f) * 0.35f).coerceIn(0f, 1f)
-                        val strip = Path().apply {
-                            moveTo(bx0, b0)
-                            lineTo(bx1, b1)
-                            lineTo(fx1, f1)
-                            lineTo(fx0, f0)
-                            close()
-                        }
-                        val yTop = min(b0, b1)
-                        val yBot = maxOf(f0, f1)
-                        drawPath(
-                            path = strip,
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    lerpTone(ridgeDark, troughDeep, 0.35f + tone * 0.3f),
-                                    lerpTone(troughDeep, crestLite, tone),
-                                    lerpTone(troughDeep, crestLite, (tone * 0.75f + 0.25f).coerceAtMost(1f)),
-                                ),
-                                startY = yTop,
-                                endY = yBot,
-                            ),
-                        )
-                    }
-
-                    // 断裂中脊（双瓣交界）
-                    if (abs(twist) > 0.2f) {
-                        val ridge = Path().apply {
-                            for (i in firstWet..lastWet) {
-                                val x = samples[i][0]
-                                val mx = (samples[i][4] + samples[i][5]) * 0.5f
-                                val my = samples[i][1]
-                                if (i == firstWet) moveTo(mx, my) else lineTo(mx, my)
-                            }
-                        }
-                        drawPath(
-                            path = ridge,
-                            color = Color.Black.copy(alpha = 0.16f + 0.18f * abs(twist)),
-                            style = Stroke(width = 1.2f + abs(twist), cap = StrokeCap.Round),
-                        )
-                    }
-
-                    val backLip = Path().apply {
-                        for (i in firstWet..lastWet) {
-                            if (i == firstWet) {
-                                moveTo(samples[i][4], samples[i][2])
-                            } else {
-                                lineTo(samples[i][4], samples[i][2])
-                            }
-                        }
-                    }
-                    drawPath(
-                        path = backLip,
-                        color = Color.Black.copy(alpha = 0.30f),
-                        style = Stroke(width = 1.5f, cap = StrokeCap.Round),
-                    )
+                    // 前景浪峰高光线（起伏水线，不是椭圆边）
                     val frontLip = Path().apply {
                         for (i in firstWet..lastWet) {
-                            if (i == firstWet) {
-                                moveTo(samples[i][5], samples[i][3])
-                            } else {
-                                lineTo(samples[i][5], samples[i][3])
-                            }
+                            val x = samples[i][0]
+                            val y = samples[i][1]
+                            if (i == firstWet) moveTo(x, y) else lineTo(x, y)
                         }
                     }
                     drawPath(
                         path = frontLip,
-                        color = Color.White.copy(alpha = 0.30f),
-                        style = Stroke(width = 1.25f, cap = StrokeCap.Round),
+                        color = Color.White.copy(alpha = 0.55f),
+                        style = Stroke(width = 2.2f, cap = StrokeCap.Round),
+                    )
+                    // 背景浪峰淡描，强化双层错位
+                    val backLip = Path().apply {
+                        for (i in firstWet..lastWet) {
+                            val x = samples[i][0]
+                            val y = samples[i][2]
+                            if (i == firstWet) moveTo(x, y) else lineTo(x, y)
+                        }
+                    }
+                    drawPath(
+                        path = backLip,
+                        color = Color.White.copy(alpha = 0.18f),
+                        style = Stroke(width = 1.4f, cap = StrokeCap.Round),
                     )
 
                     // 浅液因子：液柱实际高度 / 满液，低电量时涡与气泡整体收敛
@@ -1089,7 +1047,6 @@ private fun VerticalBatteryGlyph(
                         if (bx < wetL - 2f || bx > wetR + 2f) return@forEachIndexed
                         val clampedX = bx.coerceIn(wetL, wetR)
                         val sy = frontY(clampedX)
-                        val sxf = rimX(clampedX, 1f)
                         if (sy >= fillBottom - 1f) return@forEachIndexed
                         val travel = (fillBottom - 6f - (sy + 1.5f)).coerceAtLeast(4f)
                         if (travel < 10f && depthNorm < 0.15f) return@forEachIndexed
@@ -1106,12 +1063,12 @@ private fun VerticalBatteryGlyph(
                         val bodyAlpha = 0.52f * visibility * (1f - merge * 0.4f)
                         drawOval(
                             color = Color.White.copy(alpha = bodyAlpha * 0.42f),
-                            topLeft = Offset(sxf - rw, cyBubble - rh),
+                            topLeft = Offset(clampedX - rw, cyBubble - rh),
                             size = Size(rw * 2f, rh * 2f),
                         )
                         drawOval(
                             color = Color.White.copy(alpha = bodyAlpha),
-                            topLeft = Offset(sxf - rw * 0.55f, cyBubble - rh * 0.75f),
+                            topLeft = Offset(clampedX - rw * 0.55f, cyBubble - rh * 0.75f),
                             size = Size(rw * 0.7f, rh * 0.55f),
                         )
                         if (merge > 0.02f) {
@@ -1122,8 +1079,7 @@ private fun VerticalBatteryGlyph(
                                     val px = (clampedX - spread + spread * 2f * k / n)
                                         .coerceIn(wetL, wetR)
                                     val py = frontY(px)
-                                    val qx = rimX(px, 1f)
-                                    if (k == 0) moveTo(qx, py) else lineTo(qx, py)
+                                    if (k == 0) moveTo(px, py) else lineTo(px, py)
                                 }
                             }
                             val dx = 3f
@@ -1328,7 +1284,7 @@ private fun VerticalBatteryGlyph(
 }
 
 @Composable
-private fun ChargingChip(accent: Color, boltAlpha: Float = 1f) {
+internal fun ChargingChip(accent: Color, boltAlpha: Float = 1f) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),

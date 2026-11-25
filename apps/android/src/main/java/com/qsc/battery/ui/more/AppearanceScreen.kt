@@ -18,7 +18,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,7 +35,6 @@ import com.qsc.battery.ui.design.charge.ChargeSection
 import com.qsc.battery.ui.design.charge.ChargeTheme
 import com.qsc.battery.ui.design.charge.ChargeToggleRow
 import com.qsc.battery.ui.design.charge.ChargeTopBar
-import com.qsc.battery.ui.theme.ChargeHeroStyle
 import com.qsc.battery.ui.theme.ColorMode
 import com.qsc.battery.ui.theme.ThemeSettings
 import kotlinx.coroutines.launch
@@ -47,6 +49,7 @@ fun AppearanceScreen(
         initialValue = ThemeSettings(),
     )
     val scope = rememberCoroutineScope()
+    var showAnimSheet by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         ChargeTopBar(title = "主题设置", onBack = onBack)
@@ -104,7 +107,11 @@ fun AppearanceScreen(
                                 )
                                 .border(
                                     width = if (selected) 2.dp else 1.dp,
-                                    color = if (selected) ChargeTheme.colors.accent else ChargeTheme.colors.stroke,
+                                    color = if (selected) {
+                                        ChargeTheme.colors.accent
+                                    } else {
+                                        ChargeTheme.colors.stroke
+                                    },
                                     shape = RoundedCornerShape(ChargeTheme.dimens.radiusMd),
                                 )
                                 .clickable {
@@ -132,65 +139,17 @@ fun AppearanceScreen(
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "仅影响首页电量 Hero；插电充电时可见动效差异。",
+                text = "电池或圆环、方向与填充效果；插电时可见动效差异。",
                 style = ChargeTheme.typography.caption,
                 color = ChargeTheme.colors.muted,
             )
 
-            val heroStyles = listOf(
-                ChargeHeroStyle.Battery to ("竖电量卡" to "默认 · 立体水面、随重力流动与气泡"),
-                ChargeHeroStyle.Pulse to ("柔光脉冲" to "外扩柔光环与软边粒子"),
-                ChargeHeroStyle.Orbit to ("弧光流转" to "进度环弧光拖尾旋转"),
-            )
-            heroStyles.forEach { (style, labels) ->
-                val (title, summary) = labels
-                val selected = settings.chargeHeroStyle == style
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(ChargeTheme.dimens.radiusMd))
-                        .background(
-                            if (selected) {
-                                ChargeTheme.colors.accent.copy(alpha = 0.12f)
-                            } else {
-                                ChargeTheme.colors.surface
-                            },
-                        )
-                        .border(
-                            width = if (selected) 2.dp else 1.dp,
-                            color = if (selected) ChargeTheme.colors.accent else ChargeTheme.colors.stroke,
-                            shape = RoundedCornerShape(ChargeTheme.dimens.radiusMd),
-                        )
-                        .clickable {
-                            scope.launch { container.settingsRepository.setChargeHeroStyle(style) }
-                        }
-                        .padding(horizontal = 14.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = title,
-                            style = ChargeTheme.typography.label,
-                            color = ChargeTheme.colors.ink,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = summary,
-                            style = ChargeTheme.typography.caption,
-                            color = ChargeTheme.colors.muted,
-                        )
-                    }
-                    if (selected) {
-                        Text(
-                            text = "使用中",
-                            style = ChargeTheme.typography.caption,
-                            color = ChargeTheme.colors.accent,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
+            ChargeSection {
+                ChargeListRow(
+                    title = "充电动画样式",
+                    summary = settings.chargeAnim.summaryLabel(),
+                    onClick = { showAnimSheet = true },
+                )
             }
 
             ChargeSection(title = "更多") {
@@ -204,23 +163,39 @@ fun AppearanceScreen(
                     title = "备用桌面图标",
                     checked = settings.alternativeIcon,
                     summary = "环形充电风格（可与动态电量同时使用）",
-                    onCheckedChange = { scope.launch { container.settingsRepository.setAlternativeIcon(it) } },
+                    onCheckedChange = {
+                        scope.launch { container.settingsRepository.setAlternativeIcon(it) }
+                    },
                 )
                 ChargeDivider()
                 ChargeToggleRow(
                     title = "动态电量图标",
                     checked = settings.dynamicBatteryIcon,
                     summary = "默认关闭。按约 10% 分档；打开应用或插拔电时刷新（切入口可能闪一下）",
-                    onCheckedChange = { scope.launch { container.settingsRepository.setDynamicBatteryIcon(it) } },
+                    onCheckedChange = {
+                        scope.launch { container.settingsRepository.setDynamicBatteryIcon(it) }
+                    },
                 )
                 ChargeDivider()
                 ChargeToggleRow(
                     title = "首页显示配置档",
                     checked = settings.homeProfileSwitcher,
                     summary = "在首页展示当前配置档，点按可快捷切换",
-                    onCheckedChange = { scope.launch { container.settingsRepository.setHomeProfileSwitcher(it) } },
+                    onCheckedChange = {
+                        scope.launch { container.settingsRepository.setHomeProfileSwitcher(it) }
+                    },
                 )
             }
         }
+    }
+
+    if (showAnimSheet) {
+        ChargeAnimConfigSheet(
+            config = settings.chargeAnim,
+            onChange = { next ->
+                scope.launch { container.settingsRepository.setChargeAnim(next) }
+            },
+            onDismiss = { showAnimSheet = false },
+        )
     }
 }

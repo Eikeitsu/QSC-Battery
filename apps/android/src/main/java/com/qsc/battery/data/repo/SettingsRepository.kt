@@ -10,9 +10,13 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.qsc.battery.data.model.UpdateChannel
 import com.qsc.battery.icon.LauncherIconController
-import com.qsc.battery.ui.theme.ChargeHeroStyle
+import com.qsc.battery.ui.theme.BatteryFillStyle
+import com.qsc.battery.ui.theme.BatteryOrientation
+import com.qsc.battery.ui.theme.ChargeAnimConfig
+import com.qsc.battery.ui.theme.ChargeAnimShape
 import com.qsc.battery.ui.theme.ColorMode
 import com.qsc.battery.ui.theme.PaletteStyleName
+import com.qsc.battery.ui.theme.RingEffect
 import com.qsc.battery.ui.theme.ThemeSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -30,7 +34,10 @@ class SettingsRepository(private val context: Context) {
         val dynamicBatteryIcon = booleanPreferencesKey("dynamic_battery_icon")
         val homeProfileSwitcher = booleanPreferencesKey("home_profile_switcher")
         val activeConfigProfile = stringPreferencesKey("active_config_profile")
-        val chargeHeroStyle = stringPreferencesKey("charge_hero_style")
+        val chargeAnimShape = stringPreferencesKey("charge_anim_shape")
+        val batteryOrient = stringPreferencesKey("battery_orient")
+        val batteryFill = stringPreferencesKey("battery_fill")
+        val ringEffect = stringPreferencesKey("ring_effect")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
         val updateChannel = stringPreferencesKey("update_channel")
 
@@ -52,9 +59,16 @@ class SettingsRepository(private val context: Context) {
             dynamicBatteryIcon = prefs[Keys.dynamicBatteryIcon] ?: false,
             homeProfileSwitcher = prefs[Keys.homeProfileSwitcher] ?: false,
             activeConfigProfile = prefs[Keys.activeConfigProfile].orEmpty(),
-            chargeHeroStyle = ChargeHeroStyle.fromWire(prefs[Keys.chargeHeroStyle]),
+            chargeAnim = readChargeAnim(prefs),
         )
     }
+
+    private fun readChargeAnim(prefs: Preferences): ChargeAnimConfig = ChargeAnimConfig(
+        shape = ChargeAnimShape.fromWire(prefs[Keys.chargeAnimShape]),
+        batteryOrientation = BatteryOrientation.fromWire(prefs[Keys.batteryOrient]),
+        batteryFill = BatteryFillStyle.fromWire(prefs[Keys.batteryFill]),
+        ringEffect = RingEffect.fromWire(prefs[Keys.ringEffect]),
+    ).normalized()
 
     val onboardingDone: Flow<Boolean> = context.settingsStore.data.map {
         it[Keys.onboardingDone] ?: false
@@ -140,8 +154,14 @@ class SettingsRepository(private val context: Context) {
         context.settingsStore.edit { it[Keys.activeConfigProfile] = name }
     }
 
-    suspend fun setChargeHeroStyle(style: ChargeHeroStyle) {
-        context.settingsStore.edit { it[Keys.chargeHeroStyle] = style.wire }
+    suspend fun setChargeAnim(config: ChargeAnimConfig) {
+        val c = config.normalized()
+        context.settingsStore.edit {
+            it[Keys.chargeAnimShape] = c.shape.wire
+            it[Keys.batteryOrient] = c.batteryOrientation.wire
+            it[Keys.batteryFill] = c.batteryFill.wire
+            it[Keys.ringEffect] = c.ringEffect.wire
+        }
     }
 
     /** 启动时按偏好同步 alias，避免升级后图标状态丢失。 */

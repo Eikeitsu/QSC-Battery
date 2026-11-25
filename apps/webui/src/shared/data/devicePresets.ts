@@ -135,9 +135,6 @@ export function loadLocalDevicePresets(): DevicePreset[] {
   }
 }
 
-/** @deprecated 使用 loadLocalDevicePresets */
-export const loadUserDevicePresets = loadLocalDevicePresets;
-
 export function saveLocalDevicePresets(list: DevicePreset[]): void {
   const payload: DevicePresetCatalog = {
     version: 1,
@@ -149,9 +146,6 @@ export function saveLocalDevicePresets(list: DevicePreset[]): void {
   };
   writeStorage(USER_KEY, JSON.stringify(payload));
 }
-
-/** @deprecated 使用 saveLocalDevicePresets */
-export const saveUserDevicePresets = saveLocalDevicePresets;
 
 export interface RepoPresetCacheMeta {
   updated_at?: string;

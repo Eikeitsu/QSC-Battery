@@ -15,8 +15,6 @@ const INSTALL_AUTO = "/data/adb/qsc/install_auto";
 
 /** 与 module/install/migrate.sh QSC_CLEAN_CUTOVER_CODE 对齐 */
 export const CLEAN_CUTOVER_CODE = 2026091701;
-/** @deprecated 使用 CLEAN_CUTOVER_CODE */
-export const LAYOUT_CUTOVER_CODE = CLEAN_CUTOVER_CODE;
 
 /** 常见模块管理器包名（CLI 失败时兜底；与 module manager_viewers.sh 对齐）。 */
 const MANAGER_PACKAGES = [
@@ -285,11 +283,6 @@ export async function downloadAndOpenModuleInstaller(zipUrl: string): Promise<{
     await clearUnattended();
     throw e;
   }
-}
-
-/** @deprecated 使用 downloadAndOpenModuleInstaller */
-export async function downloadAndInstallModule(zipUrl: string) {
-  return downloadAndOpenModuleInstaller(zipUrl);
 }
 
 export function moduleInstallErrorText(code: string): string {

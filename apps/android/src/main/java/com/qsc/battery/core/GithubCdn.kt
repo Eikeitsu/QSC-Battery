@@ -40,11 +40,6 @@ object GithubCdn {
         return u
     }
 
-    /** @deprecated 语义同 [toChannelAssetUrl] preferCdn=true */
-    fun preferReachable(url: String): String = toChannelAssetUrl(url, true)
-
-    fun forCiMeta(url: String, preferCdn: Boolean): String = toChannelAssetUrl(url, preferCdn)
-
     fun pagesRootForDaemon(baseOrRoot: String?, preferCdn: Boolean = false): String? {
         if (baseOrRoot.isNullOrBlank()) return null
         val rewritten = toChannelAssetUrl(baseOrRoot.trim().trimEnd('/'), preferCdn)

@@ -36,37 +36,6 @@ export function channelUpdateUrls(channel: UpdateChannel = "stable") {
   };
 }
 
-/** @deprecated 动态 URL 请用 channelUpdateUrls()；保留静态字段避免旧引用炸掉 */
-export const UPDATE_URLS = {
-  get stableModule() {
-    return channelUpdateUrls("stable").module;
-  },
-  get stableApp() {
-    return channelUpdateUrls("stable").app;
-  },
-  get stableDaemon() {
-    return channelUpdateUrls("stable").daemon;
-  },
-  get preModule() {
-    return channelUpdateUrls("prerelease").module;
-  },
-  get preApp() {
-    return channelUpdateUrls("prerelease").app;
-  },
-  get preDaemon() {
-    return channelUpdateUrls("prerelease").daemon;
-  },
-  get ciModule() {
-    return channelUpdateUrls("ci").module;
-  },
-  get ciApp() {
-    return channelUpdateUrls("ci").app;
-  },
-  get ciDaemon() {
-    return channelUpdateUrls("ci").daemon;
-  },
-} as const;
-
 export interface RemoteUpdateInfo {
   version: string;
   versionCode: number;
