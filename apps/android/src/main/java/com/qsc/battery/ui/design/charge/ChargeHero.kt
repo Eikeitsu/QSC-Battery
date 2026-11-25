@@ -56,9 +56,9 @@ import kotlin.math.sin
 
 /**
  * 首页电量 Hero。三套样式可在「主题外观」切换：
- * - Pulse（默认）：柔光外扩 + 软边粒子
- * - Orbit：弧光流转（旧转圈升级）
- * - Battery：竖电池 + 右侧信息
+ * - Battery（默认）：竖电池 + 右侧信息（液体电量）
+ * - Pulse：柔光外扩 + 软边粒子
+ * - Orbit：弧光流转
  */
 @Composable
 fun ChargeHero(
@@ -67,7 +67,7 @@ fun ChargeHero(
     statusLine: String,
     subtitle: String,
     charging: Boolean = false,
-    style: ChargeHeroStyle = ChargeHeroStyle.Pulse,
+    style: ChargeHeroStyle = ChargeHeroStyle.Battery,
 ) {
     val p = (percent ?: 0f).coerceIn(0f, 1f)
     val animated by animateFloatAsState(
@@ -76,6 +76,16 @@ fun ChargeHero(
         label = "hero",
     )
     when (style) {
+        ChargeHeroStyle.Battery -> {
+            ChargeHeroBattery(
+                levelText,
+                statusLine,
+                subtitle,
+                charging,
+                animated,
+            )
+        }
+
         ChargeHeroStyle.Pulse -> {
             ChargeHeroPulse(
                 levelText,
@@ -95,20 +105,10 @@ fun ChargeHero(
                 animated,
             )
         }
-
-        ChargeHeroStyle.Battery -> {
-            ChargeHeroBattery(
-                levelText,
-                statusLine,
-                subtitle,
-                charging,
-                animated,
-            )
-        }
     }
 }
 
-// ─── 1. 柔光脉冲（默认） ───────────────────────────────────────────
+// ─── 1. 柔光脉冲 ───────────────────────────────────────────────────
 
 @Composable
 private fun ChargeHeroPulse(
@@ -404,7 +404,7 @@ private fun ChargeHeroBattery(
     val muted = ChargeTheme.colors.muted
     val surface = ChargeTheme.colors.surface
     val surfaceStrong = ChargeTheme.colors.surfaceStrong
-    val motion = if (charging) rememberBatteryMotion() else null
+    val motion = rememberBatteryMotion()
 
     Row(
         modifier = Modifier
@@ -427,8 +427,9 @@ private fun ChargeHeroBattery(
             level = animated,
             charging = charging,
             accent = progress,
-            shine = motion?.shine ?: 0f,
-            glow = motion?.glow ?: 0.1f,
+            shine = if (charging) motion.shine else 0f,
+            glow = if (charging) motion.glow else 0.08f,
+            wave = motion.wave,
             modifier = Modifier
                 .width(86.dp)
                 .height(132.dp),
@@ -454,7 +455,7 @@ private fun ChargeHeroBattery(
             )
             if (charging) {
                 Spacer(modifier = Modifier.height(4.dp))
-                ChargingChip(progress, boltAlpha = motion?.bolt ?: 1f)
+                ChargingChip(progress, boltAlpha = motion.bolt)
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -475,6 +476,7 @@ private fun VerticalBatteryGlyph(
     accent: Color,
     shine: Float,
     glow: Float,
+    wave: Float,
     modifier: Modifier = Modifier,
 ) {
     val track = ChargeTheme.colors.stroke
@@ -483,10 +485,8 @@ private fun VerticalBatteryGlyph(
         val w = size.width
         val h = size.height
         val strokeW = (min(w, h) * 0.052f).coerceIn(3.8f, 6.5f)
-        // 圆柱体更粗：占满画布宽度
         val bodyW = w * 0.92f
         val bodyLeft = (w - bodyW) / 2f
-        // 帽与壳体重叠一段，形成一体衔接
         val capH = h * 0.078f
         val neckH = strokeW * 0.85f
         val bodyTop = capH - neckH
@@ -509,7 +509,6 @@ private fun VerticalBatteryGlyph(
             )
         }
 
-        // 壳体底影，增加体积感
         drawRoundRect(
             color = ink.copy(alpha = 0.08f),
             topLeft = Offset(bodyLeft + 2.5f, bodyTop + 3.5f),
@@ -529,7 +528,6 @@ private fun VerticalBatteryGlyph(
             )
         }
 
-        // 壳内底：轻微纵向渐变
         drawPath(
             path = bodyPath,
             brush = Brush.verticalGradient(
@@ -543,28 +541,26 @@ private fun VerticalBatteryGlyph(
             ),
         )
 
-        // 粗描边
         drawPath(
             path = bodyPath,
             color = shellSoft,
             style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round),
         )
-        // 内沿高光一圈，增加厚度
         val innerInset = strokeW * 0.95f
+        // 内沿圆角 = 外圆角 − 内缩，与描边曲率一致
+        val innerRx = (rx - innerInset).coerceAtLeast(rx * 0.35f)
         drawRoundRect(
             color = Color.White.copy(alpha = 0.22f),
             topLeft = Offset(bodyLeft + innerInset, bodyTop + innerInset),
             size = Size(bodyW - innerInset * 2f, bodyH - innerInset * 2f),
-            cornerRadius = CornerRadius(rx * 0.72f, rx * 0.72f),
+            cornerRadius = CornerRadius(innerRx, innerRx),
             style = Stroke(width = strokeW * 0.38f),
         )
 
-        // 正极：宽底座 + 圆顶，与壳体顶边重叠，视觉连成一体
         val capW = bodyW * 0.42f
         val capLeft = (w - capW) / 2f
         val collarW = bodyW * 0.56f
         val collarLeft = (w - collarW) / 2f
-        // 衔接肩台（略宽于帽、压进壳体）
         drawRoundRect(
             brush = Brush.verticalGradient(
                 colors = listOf(shell, shellSoft),
@@ -573,7 +569,6 @@ private fun VerticalBatteryGlyph(
             size = Size(collarW, neckH * 1.35f),
             cornerRadius = CornerRadius(neckH, neckH),
         )
-        // 阳极帽本体
         drawRoundRect(
             brush = Brush.verticalGradient(
                 colors = listOf(
@@ -586,7 +581,6 @@ private fun VerticalBatteryGlyph(
             size = Size(capW, capH),
             cornerRadius = CornerRadius(capH * 0.55f, capH * 0.55f),
         )
-        // 帽顶高光
         drawRoundRect(
             color = Color.White.copy(alpha = 0.28f),
             topLeft = Offset(capLeft + capW * 0.18f, capH * 0.12f),
@@ -594,81 +588,94 @@ private fun VerticalBatteryGlyph(
             cornerRadius = CornerRadius(capH * 0.2f, capH * 0.2f),
         )
 
-        val inset = strokeW * 1.15f
-        val fillMaxH = bodyH - inset * 2f
         val lvl = level.coerceIn(0f, 1f)
-        val fillH = fillMaxH * lvl
-        val fillTop = bodyTop + bodyH - inset - fillH
-        val fillLeft = bodyLeft + inset
-        val fillW = bodyW - inset * 2f
+        // 液体贴壳绘制，由 clipPath 裁出与外描边一致的圆角
+        val baseY = bodyTop + bodyH
+        val surfaceY = bodyTop + bodyH * (1f - lvl)
+        val waveAmp = (bodyW * 0.045f).coerceIn(3.5f, 7.5f) * if (charging) 1.25f else 1f
+        val phase = wave * (PI.toFloat() * 2f)
         clipPath(bodyPath) {
-            // 左侧玻璃高光条（常驻点缀）
             drawRect(
                 brush = Brush.horizontalGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.16f),
+                        Color.White.copy(alpha = 0.14f),
                         Color.Transparent,
                     ),
-                    startX = fillLeft,
-                    endX = fillLeft + fillW * 0.42f,
+                    startX = bodyLeft,
+                    endX = bodyLeft + bodyW * 0.4f,
                 ),
-                topLeft = Offset(fillLeft, bodyTop + inset),
-                size = Size(fillW * 0.42f, fillMaxH),
+                topLeft = Offset(bodyLeft, bodyTop),
+                size = Size(bodyW * 0.4f, bodyH),
             )
 
-            // 电量刻度（25 / 50 / 75）
             for (i in 1..3) {
-                val y = bodyTop + bodyH - inset - fillMaxH * (i / 4f)
+                val y = bodyTop + bodyH * (1f - i / 4f)
                 drawLine(
-                    color = ink.copy(alpha = 0.12f),
-                    start = Offset(fillLeft + fillW * 0.12f, y),
-                    end = Offset(fillLeft + fillW * 0.88f, y),
-                    strokeWidth = 1.6f,
+                    color = ink.copy(alpha = 0.10f),
+                    start = Offset(bodyLeft + bodyW * 0.18f, y),
+                    end = Offset(bodyLeft + bodyW * 0.82f, y),
+                    strokeWidth = 1.5f,
                 )
             }
 
-            if (fillH > 0.5f) {
-                val fillRx = CornerRadius(rx * 0.5f, rx * 0.5f)
-                drawRoundRect(
+            if (lvl > 0.01f) {
+                val liquid = Path().apply {
+                    moveTo(bodyLeft - 2f, baseY + 2f)
+                    lineTo(bodyLeft + bodyW + 2f, baseY + 2f)
+                    val steps = 28
+                    for (i in steps downTo 0) {
+                        val t = i / steps.toFloat()
+                        val x = bodyLeft + bodyW * t
+                        val y = surfaceY +
+                            sin(t * PI.toFloat() * 2f + phase) * waveAmp +
+                            sin(t * PI.toFloat() * 3.2f + phase * 1.35f) * waveAmp * 0.38f
+                        lineTo(x, y)
+                    }
+                    close()
+                }
+                drawPath(
+                    path = liquid,
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            accent.copy(alpha = 0.72f),
+                            accent.copy(alpha = 0.78f),
                             accent,
-                            accent.copy(alpha = 0.92f),
+                            accent.copy(alpha = 0.94f),
                         ),
-                        startY = fillTop,
-                        endY = bodyTop + bodyH - inset,
+                        startY = surfaceY - waveAmp,
+                        endY = baseY,
                     ),
-                    topLeft = Offset(fillLeft, fillTop),
-                    size = Size(fillW, fillH),
-                    cornerRadius = fillRx,
                 )
-                // 液面弯月高光
-                drawRoundRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.35f),
-                            Color.Transparent,
-                        ),
-                    ),
-                    topLeft = Offset(fillLeft + 2f, fillTop),
-                    size = Size(fillW - 4f, min(fillH, 14f)),
-                    cornerRadius = CornerRadius(rx * 0.4f, rx * 0.4f),
+                // 液面高光描边
+                val crest = Path().apply {
+                    val steps = 28
+                    for (i in 0..steps) {
+                        val t = i / steps.toFloat()
+                        val x = bodyLeft + bodyW * t
+                        val y = surfaceY +
+                            sin(t * PI.toFloat() * 2f + phase) * waveAmp +
+                            sin(t * PI.toFloat() * 3.2f + phase * 1.35f) * waveAmp * 0.38f
+                        if (i == 0) moveTo(x, y) else lineTo(x, y)
+                    }
+                }
+                drawPath(
+                    path = crest,
+                    color = Color.White.copy(alpha = 0.45f),
+                    style = Stroke(width = 2.2f, cap = StrokeCap.Round),
                 )
                 if (charging) {
-                    val shineX = fillLeft + fillW * shine
+                    val shineX = bodyLeft + bodyW * shine
                     drawRect(
                         brush = Brush.horizontalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                Color.White.copy(alpha = 0.34f),
+                                Color.White.copy(alpha = 0.30f),
                                 Color.Transparent,
                             ),
                             startX = shineX - 16f,
                             endX = shineX + 16f,
                         ),
-                        topLeft = Offset(fillLeft, fillTop),
-                        size = Size(fillW, fillH),
+                        topLeft = Offset(bodyLeft, surfaceY - waveAmp),
+                        size = Size(bodyW, baseY - surfaceY + waveAmp * 2f),
                     )
                 }
             }
@@ -878,7 +885,12 @@ private fun rememberOrbitMotion(): OrbitMotion {
     return OrbitMotion(spin, breath, bolt)
 }
 
-private data class BatteryMotion(val shine: Float, val glow: Float, val bolt: Float)
+private data class BatteryMotion(
+    val shine: Float,
+    val glow: Float,
+    val bolt: Float,
+    val wave: Float,
+)
 
 @Composable
 private fun rememberBatteryMotion(): BatteryMotion {
@@ -910,7 +922,16 @@ private fun rememberBatteryMotion(): BatteryMotion {
         ),
         label = "bolt",
     )
-    return BatteryMotion(shine, glow, bolt)
+    val wave by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2800, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "wave",
+    )
+    return BatteryMotion(shine, glow, bolt, wave)
 }
 
 private data class BubbleSeed(

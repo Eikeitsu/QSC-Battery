@@ -138,9 +138,9 @@ fun AppearanceScreen(
             )
 
             val heroStyles = listOf(
-                ChargeHeroStyle.Pulse to ("柔光脉冲" to "默认 · 外扩柔光环与软边粒子"),
+                ChargeHeroStyle.Battery to ("竖电量卡" to "默认 · 左侧竖电池，液体电量"),
+                ChargeHeroStyle.Pulse to ("柔光脉冲" to "外扩柔光环与软边粒子"),
                 ChargeHeroStyle.Orbit to ("弧光流转" to "进度环弧光拖尾旋转"),
-                ChargeHeroStyle.Battery to ("竖电量卡" to "左侧竖电池，右侧状态信息"),
             )
             heroStyles.forEach { (style, labels) ->
                 val (title, summary) = labels
