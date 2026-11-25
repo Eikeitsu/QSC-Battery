@@ -2,7 +2,14 @@ import { computed, nextTick, onMounted, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useThemePackClass } from "@/composables";
 import { useAppStore } from "@/stores";
-import { isTabName, parentTabOfRoute, TabName, type SubRouteName } from "@/shared";
+import {
+  isSubRouteName,
+  isTabName,
+  parentTabOfRoute,
+  SUB_ROUTE_META,
+  TabName,
+  type SubRouteName,
+} from "@/shared";
 import { preloadTab } from "@/router/loaders";
 
 export function useAppShell() {
@@ -94,11 +101,9 @@ export function useAppShell() {
   function goBack() {
     const parent = route.meta.parentTab;
     const hub = typeof parent === "string" && isTabName(parent) ? parent : TabName.Home;
+    // replace 回 Hub（避免 history.back 在 WebView 里退出模块页）；滚动由下方 watch 统一恢复
     saveScrollPosition();
-    void router.replace({ name: hub }).then(() => {
-      restoreScrollPosition(hub);
-      requestAnimationFrame(() => theme.syncStatusBar());
-    });
+    void router.replace({ name: hub });
   }
 
   provide("setTab", setTab);
@@ -114,12 +119,26 @@ export function useAppShell() {
 
   function restoreScrollPosition(target: string) {
     const top = scrollPositions.get(target) ?? 0;
+    // 双 rAF：等 RouterView 换页后再滚，避免系统返回时仍停在 0
     requestAnimationFrame(() => {
-      if (String(router.currentRoute.value.name) === target) {
-        document.querySelector<HTMLElement>(".app-main")?.scrollTo(0, top);
-      }
+      requestAnimationFrame(() => {
+        if (String(router.currentRoute.value.name) === target) {
+          document.querySelector<HTMLElement>(".app-main")?.scrollTo(0, top);
+        }
+      });
     });
   }
+
+  // 二级页 → 父 Hub（顶栏返回 / 系统手势 / 虚拟键）都恢复进入前滚动
+  watch(
+    () => String(route.name || ""),
+    (to, from) => {
+      if (!from || !isSubRouteName(from) || !isTabName(to)) return;
+      if (SUB_ROUTE_META[from].parentTab !== to) return;
+      restoreScrollPosition(to);
+      requestAnimationFrame(() => theme.syncStatusBar());
+    },
+  );
 
   async function onRefreshHome() {
     refreshing.value = true;

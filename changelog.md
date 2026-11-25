@@ -10,6 +10,7 @@
 - **防 DeepPark 漏停充**：端口漏判「未插电」但 `|I|≥150mA` 仍在充时，禁止 lean/深睡跳过满轮（K90U 曾因此 80% 一路充到 100%）
 - **ColorOS**：文档补节点 ABI 与机型表；`mmi_charging_enable` class/virtual 同 inode 只写一次；停充成功即收工；拔线冷却 180s；稳态重申 ≥120s（缓解过夜假拔线/反复停充发热）
 - **修复 conf 变「二进制」**：Magisk 目录上 `sed -i` 偶发写出大段 NUL；`config/power/notify` 启动自愈；shell/安装合并/APP/WebUI/qscd 改 awk→tmp→mv 公共原子写，清掉 conf 上的 `sed -i`
+- **WebUI 二级页返回保留滚动**：系统返回键/手势与顶栏返回一样，回到设置等 Hub 时恢复进入前滚动位置
 
 ## 2026.11.24
 
