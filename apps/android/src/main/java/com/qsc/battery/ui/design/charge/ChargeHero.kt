@@ -84,6 +84,7 @@ fun ChargeHero(
                 animated,
             )
         }
+
         ChargeHeroStyle.Orbit -> {
             ChargeHeroOrbit(
                 levelText,
@@ -93,6 +94,7 @@ fun ChargeHero(
                 animated,
             )
         }
+
         ChargeHeroStyle.Battery -> {
             ChargeHeroBattery(
                 levelText,
