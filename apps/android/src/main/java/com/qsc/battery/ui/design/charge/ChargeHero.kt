@@ -1,5 +1,10 @@
 package com.qsc.battery.ui.design.charge
 
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -28,8 +33,11 @@ import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +53,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -405,6 +414,18 @@ private fun ChargeHeroBattery(
     val surface = ChargeTheme.colors.surface
     val surfaceStrong = ChargeTheme.colors.surfaceStrong
     val motion = rememberBatteryMotion()
+    val tilt = rememberGravityTilt()
+    val bubbles = remember {
+        List(7) { i ->
+            LiquidBubble(
+                xFrac = 0.18f + (i * 0.11f) % 0.64f,
+                size = 2.2f + (i % 3) * 1.1f,
+                speed = 0.55f + (i % 4) * 0.12f,
+                phase = i * 0.137f,
+                sway = 3.5f + (i % 3) * 1.8f,
+            )
+        }
+    }
 
     Row(
         modifier = Modifier
@@ -427,9 +448,12 @@ private fun ChargeHeroBattery(
             level = animated,
             charging = charging,
             accent = progress,
-            shine = if (charging) motion.shine else 0f,
+            rise = if (charging) motion.rise else 0f,
             glow = if (charging) motion.glow else 0.08f,
             wave = motion.wave,
+            boltAlpha = if (charging) motion.bolt else 0f,
+            tilt = tilt,
+            bubbles = if (charging) bubbles else emptyList(),
             modifier = Modifier
                 .width(86.dp)
                 .height(132.dp),
@@ -474,9 +498,12 @@ private fun VerticalBatteryGlyph(
     level: Float,
     charging: Boolean,
     accent: Color,
-    shine: Float,
+    rise: Float,
     glow: Float,
     wave: Float,
+    boltAlpha: Float,
+    tilt: Float,
+    bubbles: List<LiquidBubble>,
     modifier: Modifier = Modifier,
 ) {
     val track = ChargeTheme.colors.stroke
@@ -499,7 +526,7 @@ private fun VerticalBatteryGlyph(
         if (charging) {
             drawCircle(
                 brush = Brush.radialGradient(
-                    0f to accent.copy(alpha = glow * 0.62f),
+                    0f to accent.copy(alpha = glow * 0.55f),
                     1f to Color.Transparent,
                     center = c,
                     radius = min(w, h) * 0.78f,
@@ -509,9 +536,10 @@ private fun VerticalBatteryGlyph(
             )
         }
 
+        // 壳底影
         drawRoundRect(
-            color = ink.copy(alpha = 0.08f),
-            topLeft = Offset(bodyLeft + 2.5f, bodyTop + 3.5f),
+            color = ink.copy(alpha = 0.10f),
+            topLeft = Offset(bodyLeft + 3f, bodyTop + 4f),
             size = Size(bodyW, bodyH),
             cornerRadius = CornerRadius(rx, rx),
         )
@@ -528,13 +556,26 @@ private fun VerticalBatteryGlyph(
             )
         }
 
+        // 壳体轻微 3D：左亮右暗 + 顶缘受光
+        drawPath(
+            path = bodyPath,
+            brush = Brush.horizontalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.16f),
+                    Color.Transparent,
+                    ink.copy(alpha = 0.10f),
+                ),
+                startX = bodyLeft,
+                endX = bodyLeft + bodyW,
+            ),
+        )
         drawPath(
             path = bodyPath,
             brush = Brush.verticalGradient(
                 colors = listOf(
-                    Color.White.copy(alpha = 0.10f),
+                    Color.White.copy(alpha = 0.08f),
                     Color.Transparent,
-                    ink.copy(alpha = 0.04f),
+                    ink.copy(alpha = 0.06f),
                 ),
                 startY = bodyTop,
                 endY = bodyTop + bodyH,
@@ -547,14 +588,19 @@ private fun VerticalBatteryGlyph(
             style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round),
         )
         val innerInset = strokeW * 0.95f
-        // 内沿圆角 = 外圆角 − 内缩，与描边曲率一致
         val innerRx = (rx - innerInset).coerceAtLeast(rx * 0.35f)
         drawRoundRect(
-            color = Color.White.copy(alpha = 0.22f),
+            brush = Brush.horizontalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.34f),
+                    Color.White.copy(alpha = 0.08f),
+                    Color.Transparent,
+                ),
+            ),
             topLeft = Offset(bodyLeft + innerInset, bodyTop + innerInset),
             size = Size(bodyW - innerInset * 2f, bodyH - innerInset * 2f),
             cornerRadius = CornerRadius(innerRx, innerRx),
-            style = Stroke(width = strokeW * 0.38f),
+            style = Stroke(width = strokeW * 0.42f),
         )
 
         val capW = bodyW * 0.42f
@@ -562,34 +608,27 @@ private fun VerticalBatteryGlyph(
         val collarW = bodyW * 0.56f
         val collarLeft = (w - collarW) / 2f
         drawRoundRect(
-            brush = Brush.verticalGradient(
-                colors = listOf(shell, shellSoft),
-            ),
+            brush = Brush.verticalGradient(colors = listOf(shell, shellSoft)),
             topLeft = Offset(collarLeft, bodyTop - neckH * 0.15f),
             size = Size(collarW, neckH * 1.35f),
             cornerRadius = CornerRadius(neckH, neckH),
         )
         drawRoundRect(
             brush = Brush.verticalGradient(
-                colors = listOf(
-                    ink.copy(alpha = 0.42f),
-                    shell,
-                    shellSoft,
-                ),
+                colors = listOf(ink.copy(alpha = 0.42f), shell, shellSoft),
             ),
             topLeft = Offset(capLeft, 0f),
             size = Size(capW, capH),
             cornerRadius = CornerRadius(capH * 0.55f, capH * 0.55f),
         )
         drawRoundRect(
-            color = Color.White.copy(alpha = 0.28f),
+            color = Color.White.copy(alpha = 0.32f),
             topLeft = Offset(capLeft + capW * 0.18f, capH * 0.12f),
             size = Size(capW * 0.64f, capH * 0.28f),
             cornerRadius = CornerRadius(capH * 0.2f, capH * 0.2f),
         )
 
         val lvl = level.coerceIn(0f, 1f)
-        // 壳与液体留空隙；内腔圆角与外描边同心（rx − inset）
         val gap = (strokeW * 1.15f + 3f).coerceIn(6f, 11f)
         val fillLeft = bodyLeft + gap
         val fillTopBound = bodyTop + gap
@@ -608,27 +647,35 @@ private fun VerticalBatteryGlyph(
                 ),
             )
         }
-        val surfaceY = fillBottom - fillHMax * lvl
-        val waveAmp = (fillW * 0.05f).coerceIn(3.2f, 7f) * if (charging) 1.25f else 1f
+        val surfaceBase = fillBottom - fillHMax * lvl
+        val waveAmp = (fillW * 0.048f).coerceIn(3f, 6.5f) * if (charging) 1.2f else 1f
         val phase = wave * (PI.toFloat() * 2f)
+        val slope = tilt.coerceIn(-0.7f, 0.7f) * fillW * 0.14f
+        fun surfaceAt(x: Float): Float {
+            val t = ((x - fillLeft) / fillW).coerceIn(0f, 1f)
+            return surfaceBase +
+                (t - 0.5f) * 2f * slope +
+                sin(t * PI.toFloat() * 2f + phase) * waveAmp +
+                sin(t * PI.toFloat() * 3.1f + phase * 1.35f) * waveAmp * 0.4f
+        }
 
         clipPath(bodyPath) {
             drawRect(
                 brush = Brush.horizontalGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.14f),
+                        Color.White.copy(alpha = 0.12f),
                         Color.Transparent,
                     ),
                     startX = bodyLeft,
-                    endX = bodyLeft + bodyW * 0.4f,
+                    endX = bodyLeft + bodyW * 0.38f,
                 ),
                 topLeft = Offset(bodyLeft, bodyTop),
-                size = Size(bodyW * 0.4f, bodyH),
+                size = Size(bodyW * 0.38f, bodyH),
             )
             for (i in 1..3) {
                 val y = fillBottom - fillHMax * (i / 4f)
                 drawLine(
-                    color = ink.copy(alpha = 0.10f),
+                    color = ink.copy(alpha = 0.09f),
                     start = Offset(fillLeft + fillW * 0.08f, y),
                     end = Offset(fillLeft + fillW * 0.92f, y),
                     strokeWidth = 1.5f,
@@ -636,88 +683,147 @@ private fun VerticalBatteryGlyph(
             }
         }
 
-        // 液体只在内腔里画，底部/侧边圆角与外壳同心且不贴边
         clipPath(fillPath) {
             if (lvl > 0.01f) {
+                val steps = 30
                 val liquid = Path().apply {
                     moveTo(fillLeft - 2f, fillBottom + 2f)
                     lineTo(fillLeft + fillW + 2f, fillBottom + 2f)
-                    val steps = 28
                     for (i in steps downTo 0) {
                         val t = i / steps.toFloat()
-                        val x = fillLeft + fillW * t
-                        val y = surfaceY +
-                            sin(t * PI.toFloat() * 2f + phase) * waveAmp +
-                            sin(t * PI.toFloat() * 3.2f + phase * 1.35f) * waveAmp * 0.38f
-                        lineTo(x, y)
+                        lineTo(fillLeft + fillW * t, surfaceAt(fillLeft + fillW * t))
                     }
                     close()
                 }
+                // 液柱体积感：底深、表浅 + 左右明暗
                 drawPath(
                     path = liquid,
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            accent.copy(alpha = 0.78f),
-                            accent,
-                            accent.copy(alpha = 0.94f),
+                            accent.copy(alpha = 0.62f),
+                            accent.copy(alpha = 0.88f),
+                            accent.copy(alpha = 0.98f),
                         ),
-                        startY = surfaceY - waveAmp,
+                        startY = surfaceBase - waveAmp * 2f,
                         endY = fillBottom,
                     ),
                 )
-                val crest = Path().apply {
-                    val steps = 28
+                drawPath(
+                    path = liquid,
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.18f),
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.14f),
+                        ),
+                        startX = fillLeft,
+                        endX = fillLeft + fillW,
+                    ),
+                )
+                // 波峰高光 / 波谷阴影 → 液面立体
+                val trough = Path().apply {
                     for (i in 0..steps) {
                         val t = i / steps.toFloat()
                         val x = fillLeft + fillW * t
-                        val y = surfaceY +
-                            sin(t * PI.toFloat() * 2f + phase) * waveAmp +
-                            sin(t * PI.toFloat() * 3.2f + phase * 1.35f) * waveAmp * 0.38f
+                        val y = surfaceAt(x) + 3.2f
+                        if (i == 0) moveTo(x, y) else lineTo(x, y)
+                    }
+                }
+                drawPath(
+                    path = trough,
+                    color = Color.Black.copy(alpha = 0.18f),
+                    style = Stroke(width = 3.5f, cap = StrokeCap.Round),
+                )
+                val crest = Path().apply {
+                    for (i in 0..steps) {
+                        val t = i / steps.toFloat()
+                        val x = fillLeft + fillW * t
+                        val y = surfaceAt(x)
                         if (i == 0) moveTo(x, y) else lineTo(x, y)
                     }
                 }
                 drawPath(
                     path = crest,
-                    color = Color.White.copy(alpha = 0.45f),
-                    style = Stroke(width = 2.2f, cap = StrokeCap.Round),
+                    color = Color.White.copy(alpha = 0.55f),
+                    style = Stroke(width = 2.4f, cap = StrokeCap.Round),
                 )
+
                 if (charging) {
-                    val shineX = fillLeft + fillW * shine
+                    // 自下而上充能光带（竖电池语义）
+                    val bandCenter = fillBottom - (fillBottom - surfaceBase) * rise
                     drawRect(
-                        brush = Brush.horizontalGradient(
+                        brush = Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                Color.White.copy(alpha = 0.30f),
+                                Color.White.copy(alpha = 0.28f),
                                 Color.Transparent,
                             ),
-                            startX = shineX - 16f,
-                            endX = shineX + 16f,
+                            startY = bandCenter - 18f,
+                            endY = bandCenter + 18f,
                         ),
-                        topLeft = Offset(fillLeft, surfaceY - waveAmp),
-                        size = Size(fillW, fillBottom - surfaceY + waveAmp * 2f),
+                        topLeft = Offset(fillLeft, surfaceBase - waveAmp * 2f),
+                        size = Size(fillW, fillBottom - surfaceBase + waveAmp * 3f),
+                    )
+                    // 液面能量柔光
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            0f to accent.copy(alpha = 0.22f * glow / 0.22f),
+                            1f to Color.Transparent,
+                            center = Offset(fillLeft + fillW / 2f, surfaceBase),
+                            radius = fillW * 0.55f,
+                        ),
+                        radius = fillW * 0.55f,
+                        center = Offset(fillLeft + fillW / 2f, surfaceBase),
+                    )
+                }
+
+                bubbles.forEach { b ->
+                    val life = ((wave * b.speed + b.phase) % 1f + 1f) % 1f
+                    val bx = fillLeft + fillW * b.xFrac +
+                        sin(life * PI.toFloat() * 2f + b.phase * 6f) * b.sway
+                    val by = fillBottom - 6f - life * (fillBottom - surfaceBase - 10f).coerceAtLeast(8f)
+                    if (by < surfaceAt(bx) - 2f) return@forEach
+                    val r = b.size * (0.75f + 0.35f * (1f - life))
+                    drawCircle(color = Color.White.copy(alpha = 0.22f * (1f - life * 0.5f)), radius = r, center = Offset(bx, by))
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.55f * (1f - life)),
+                        radius = r * 0.35f,
+                        center = Offset(bx - r * 0.25f, by - r * 0.28f),
                     )
                 }
             }
         }
 
+        // 充电：壳内黄色大闪电（呼吸透明度）
         if (charging) {
             clipPath(bodyPath) {
                 val cx = w / 2f
                 val cy = bodyTop + bodyH * 0.48f
+                val a = boltAlpha.coerceIn(0.55f, 1f)
+                val boltYellow = Color(0xFFFFC107)
                 val bolt = Path().apply {
-                    moveTo(cx + 4f, cy - 22f)
-                    lineTo(cx - 10f, cy + 2f)
-                    lineTo(cx - 1f, cy + 2f)
-                    lineTo(cx - 6f, cy + 24f)
-                    lineTo(cx + 10f, cy - 2f)
-                    lineTo(cx + 1f, cy - 2f)
+                    moveTo(cx + 5f, cy - 26f)
+                    lineTo(cx - 12f, cy + 2f)
+                    lineTo(cx - 1.5f, cy + 2f)
+                    lineTo(cx - 7f, cy + 28f)
+                    lineTo(cx + 12f, cy - 2f)
+                    lineTo(cx + 1.5f, cy - 2f)
                     close()
                 }
-                drawPath(bolt, color = Color.White.copy(alpha = 0.88f))
                 drawPath(
                     bolt,
-                    color = Color.White.copy(alpha = 0.35f),
-                    style = Stroke(width = 2.2f, join = StrokeJoin.Round),
+                    brush = Brush.radialGradient(
+                        0f to boltYellow.copy(alpha = 0.55f * a),
+                        1f to Color.Transparent,
+                        center = Offset(cx, cy),
+                        radius = fillW.coerceAtLeast(24f) * 0.9f,
+                    ),
+                )
+                drawPath(bolt, color = boltYellow.copy(alpha = 0.92f * a))
+                drawPath(
+                    bolt,
+                    color = Color(0xFFFFF59D).copy(alpha = 0.75f * a),
+                    style = Stroke(width = 2.4f, join = StrokeJoin.Round),
                 )
             }
         }
@@ -908,23 +1014,59 @@ private fun rememberOrbitMotion(): OrbitMotion {
 }
 
 private data class BatteryMotion(
-    val shine: Float,
+    val rise: Float,
     val glow: Float,
     val bolt: Float,
     val wave: Float,
 )
 
+private data class LiquidBubble(
+    val xFrac: Float,
+    val size: Float,
+    val speed: Float,
+    val phase: Float,
+    val sway: Float,
+)
+
+/** 重力倾斜 → 液面左右落差（平滑、限幅）。无传感器时为 0。 */
+@Composable
+private fun rememberGravityTilt(): Float {
+    val context = LocalContext.current
+    var tilt by remember { mutableFloatStateOf(0f) }
+    DisposableEffect(context) {
+        val sm = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        val sensor = sm?.getDefaultSensor(Sensor.TYPE_GRAVITY)
+            ?: sm?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        if (sm == null || sensor == null) {
+            return@DisposableEffect onDispose { }
+        }
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                val gx = event.values.getOrNull(0) ?: return
+                // 右倾时右侧液面升高
+                val target = (-gx / 9.81f).coerceIn(-0.7f, 0.7f)
+                tilt = tilt * 0.82f + target * 0.18f
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+        }
+        sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME)
+        onDispose { sm.unregisterListener(listener) }
+    }
+    return tilt
+}
+
 @Composable
 private fun rememberBatteryMotion(): BatteryMotion {
     val infinite = rememberInfiniteTransition(label = "batteryMotion")
-    val shine by infinite.animateFloat(
+    val rise by infinite.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2400, easing = LinearEasing),
+            animation = tween(2200, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
-        label = "shine",
+        label = "rise",
     )
     val glow by infinite.animateFloat(
         initialValue = 0.10f,
@@ -953,7 +1095,7 @@ private fun rememberBatteryMotion(): BatteryMotion {
         ),
         label = "wave",
     )
-    return BatteryMotion(shine, glow, bolt, wave)
+    return BatteryMotion(rise, glow, bolt, wave)
 }
 
 private data class BubbleSeed(
