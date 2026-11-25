@@ -123,6 +123,7 @@ fun HomeScreen(
                         statusLine = statusLine,
                         subtitle = status.version.ifBlank { "模块已就绪" },
                         charging = charging,
+                        currentUa = status.current,
                         style = theme.chargeHeroStyle,
                     )
 

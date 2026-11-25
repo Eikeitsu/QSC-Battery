@@ -60,6 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.qsc.battery.ui.theme.ChargeHeroStyle
 import kotlin.math.PI
+import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -78,6 +79,8 @@ fun ChargeHero(
     statusLine: String,
     subtitle: String,
     charging: Boolean = false,
+    /** 内核 current_now（µA）；仅充电时驱动液面浪高/快慢。 */
+    currentUa: String = "",
     style: ChargeHeroStyle = ChargeHeroStyle.Battery,
 ) {
     val p = (percent ?: 0f).coerceIn(0f, 1f)
@@ -86,6 +89,9 @@ fun ChargeHero(
         animationSpec = tween(800, easing = FastOutSlowInEasing),
         label = "hero",
     )
+    val currentEnergy = remember(currentUa, charging) {
+        chargeCurrentEnergy(currentUa, charging)
+    }
     when (style) {
         ChargeHeroStyle.Battery -> {
             ChargeHeroBattery(
@@ -94,6 +100,7 @@ fun ChargeHero(
                 subtitle,
                 charging,
                 animated,
+                currentEnergy,
             )
         }
 
@@ -117,6 +124,17 @@ fun ChargeHero(
             )
         }
     }
+}
+
+/**
+ * 充电电流强度 0..1。未充电恒为 0。
+ * 约 5A 视为满档；读不到电流时给中等默认，避免浪完全静死。
+ */
+private fun chargeCurrentEnergy(currentUa: String, charging: Boolean): Float {
+    if (!charging) return 0f
+    val ua = currentUa.toLongOrNull() ?: return 0.4f
+    val amps = kotlin.math.abs(ua) / 1_000_000f
+    return (amps / 5f).coerceIn(0f, 1f)
 }
 
 // ─── 1. 柔光脉冲 ───────────────────────────────────────────────────
@@ -409,6 +427,7 @@ private fun ChargeHeroBattery(
     subtitle: String,
     charging: Boolean,
     animated: Float,
+    currentEnergy: Float,
 ) {
     val progress = ChargeTheme.colors.accent
     val ink = ChargeTheme.colors.ink
@@ -417,8 +436,8 @@ private fun ChargeHeroBattery(
     val surfaceStrong = ChargeTheme.colors.surfaceStrong
     val motion = rememberBatteryMotion()
     val gravity = rememberGravityDown()
-    val idleBubbles = remember { randomLiquidBubbles(count = 6, speedMin = 0.22f, speedMax = 0.42f) }
-    val chargeBubbles = remember { randomLiquidBubbles(count = 16, speedMin = 0.75f, speedMax = 1.45f) }
+    val idleBubbles = remember { randomBubbleActors(charging = false) }
+    val chargeBubbles = remember { randomBubbleActors(charging = true) }
 
     Row(
         modifier = Modifier
@@ -444,6 +463,8 @@ private fun ChargeHeroBattery(
             rise = if (charging) motion.rise else 0f,
             glow = if (charging) motion.glow else 0.08f,
             wave = motion.wave,
+            clock = motion.clock,
+            currentEnergy = currentEnergy,
             boltAlpha = if (charging) motion.bolt else 0f,
             gravity = gravity,
             bubbles = if (charging) chargeBubbles else idleBubbles,
@@ -494,9 +515,11 @@ private fun VerticalBatteryGlyph(
     rise: Float,
     glow: Float,
     wave: Float,
+    clock: Float,
+    currentEnergy: Float,
     boltAlpha: Float,
     gravity: GravityDown,
-    bubbles: List<LiquidBubble>,
+    bubbles: List<BubbleActor>,
     modifier: Modifier = Modifier,
 ) {
     val track = ChargeTheme.colors.stroke
@@ -641,9 +664,20 @@ private fun VerticalBatteryGlyph(
                 ),
             )
         }
-        // 粘滞小波 + 厚顶面；重力向低侧汇聚
-        val waveAmp = (fillW * 0.038f).coerceIn(2.4f, 5.5f) * if (charging) 1.15f else 1f
-        val phase = wave * (PI.toFloat() * 2f)
+        // 充电：浪高/碎浪/相位速度随电流；未充电固定轻涟漪，不读电流
+        val energy = if (charging) currentEnergy.coerceIn(0f, 1f) else 0f
+        val waveAmp = if (charging) {
+            (fillW * (0.032f + 0.14f * energy)).coerceIn(3.2f, 18f)
+        } else {
+            (fillW * 0.026f).coerceIn(1.6f, 3.6f)
+        }
+        val splash = if (charging) 0.18f + 0.55f * energy else 0f
+        val phase = if (charging) {
+            // clock 为秒：~0.5Hz 起，大电流可到 ~2.3Hz
+            clock * (PI.toFloat() * 2f) * (0.5f + 1.8f * energy)
+        } else {
+            wave * (PI.toFloat() * 2f)
+        }
         val nx = gravity.nx
         val ny = gravity.ny.coerceAtLeast(0.22f)
         // 右侧低（nx>0）→ 右侧液面 y 更小 → 液体流向右侧低处
@@ -652,7 +686,12 @@ private fun VerticalBatteryGlyph(
             val t = ((x - fillLeft) / fillW).coerceIn(0f, 1f)
             val primary = sin(t * PI.toFloat() * 2f + phase) * waveAmp
             val secondary = sin(t * PI.toFloat() * 3.15f + phase * 1.35f) * waveAmp * 0.42f
-            return primary + secondary
+            val tertiary = if (charging) {
+                sin(t * PI.toFloat() * 5.1f + phase * 2.1f) * waveAmp * splash
+            } else {
+                0f
+            }
+            return primary + secondary + tertiary
         }
 
         fun planeSurfaceY(x: Float, intercept: Float): Float = intercept + slope * (x - fillCx) + waveAt(x)
@@ -724,12 +763,32 @@ private fun VerticalBatteryGlyph(
                 val firstWet = samples.indexOfFirst { it[2] > 0.5f }
                 val lastWet = samples.indexOfLast { it[2] > 0.5f }
                 if (firstWet >= 0 && lastWet >= firstWet) {
+                    // 弯月面：近缘鼓起、远缘下沉，形成圆柱液面透视而非厚色带
+                    val faceDepth = (fillW * 0.145f).coerceIn(9f, 15f)
+                    val bulge = faceDepth * 0.38f
+                    fun nearY(i: Int): Float {
+                        val t = ((samples[i][0] - fillLeft) / fillW).coerceIn(0f, 1f)
+                        val arch = sin(t * PI.toFloat()) * bulge
+                        return (samples[i][1] - arch).coerceIn(fillTopBound, fillBottom - 1f)
+                    }
+                    fun farY(i: Int): Float {
+                        val t = ((samples[i][0] - fillLeft) / fillW).coerceIn(0f, 1f)
+                        val insetDrop = sin(t * PI.toFloat()) * faceDepth * 0.12f
+                        return (samples[i][1] + faceDepth - insetDrop * 0.35f)
+                            .coerceAtMost(fillBottom)
+                    }
+                    fun farX(i: Int): Float {
+                        val t = ((samples[i][0] - fillLeft) / fillW).coerceIn(0f, 1f)
+                        val inset = sin(t * PI.toFloat()) * faceDepth * 0.22f
+                        return samples[i][0] + if (t < 0.5f) inset else -inset
+                    }
+
+                    // 液柱顶缘接到弯月远缘，避免与顶面叠出一条死黑带
                     val liquid = Path().apply {
                         moveTo(samples[firstWet][0], fillBottom)
                         lineTo(samples[lastWet][0], fillBottom)
                         for (i in lastWet downTo firstWet) {
-                            val sy = samples[i][1].coerceIn(fillTopBound, fillBottom)
-                            lineTo(samples[i][0], sy)
+                            lineTo(farX(i), farY(i))
                         }
                         close()
                     }
@@ -737,9 +796,9 @@ private fun VerticalBatteryGlyph(
                         path = liquid,
                         brush = Brush.verticalGradient(
                             colors = listOf(
-                                accent.copy(alpha = 0.52f),
-                                accent.copy(alpha = 0.82f),
-                                accent.copy(alpha = 0.96f),
+                                accent.copy(alpha = 0.58f),
+                                accent.copy(alpha = 0.84f),
+                                accent.copy(alpha = 0.97f),
                             ),
                             startY = fillTopBound,
                             endY = fillBottom,
@@ -749,89 +808,118 @@ private fun VerticalBatteryGlyph(
                         path = liquid,
                         brush = Brush.horizontalGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.14f),
+                                Color.White.copy(alpha = 0.16f),
                                 Color.Transparent,
-                                Color.Black.copy(alpha = 0.14f),
+                                Color.Black.copy(alpha = 0.12f),
                             ),
                             startX = fillLeft,
                             endX = fillLeft + fillW,
                         ),
                     )
 
-                    // 一整块顶面（近缘亮浅、远缘深绿），厚度足够看出深浅面
-                    val faceDepth = (fillW * 0.28f).coerceIn(16f, 28f)
                     val topFace = Path().apply {
                         for (i in firstWet..lastWet) {
                             val x = samples[i][0]
-                            val y = samples[i][1].coerceIn(fillTopBound, fillBottom - 1f)
+                            val y = nearY(i)
                             if (i == firstWet) moveTo(x, y) else lineTo(x, y)
                         }
                         for (i in lastWet downTo firstWet) {
-                            val t = ((samples[i][0] - fillLeft) / fillW).coerceIn(0f, 1f)
-                            // 远缘略向内收，做出一点透视椭圆感
-                            val inset = sin(t * PI.toFloat()) * faceDepth * 0.10f
-                            val x = samples[i][0] + if (t < 0.5f) inset else -inset
-                            val y = (samples[i][1] + faceDepth).coerceAtMost(fillBottom)
-                            lineTo(x, y)
+                            lineTo(farX(i), farY(i))
                         }
                         close()
                     }
-                    val faceTopY = samples[firstWet][1]
+                    var faceMinY = Float.POSITIVE_INFINITY
+                    var faceMaxY = Float.NEGATIVE_INFINITY
+                    var faceMidX = 0f
+                    var faceMidY = 0f
+                    var faceCount = 0
+                    for (i in firstWet..lastWet) {
+                        val ny = nearY(i)
+                        val fy = farY(i)
+                        if (ny < faceMinY) faceMinY = ny
+                        if (fy > faceMaxY) faceMaxY = fy
+                        faceMidX += (samples[i][0] + farX(i)) * 0.5f
+                        faceMidY += (ny + fy) * 0.5f
+                        faceCount++
+                    }
+                    if (faceCount > 0) {
+                        faceMidX /= faceCount
+                        faceMidY /= faceCount
+                    }
+                    // 顶面：中心高光池 + 边缘接触暗线，像透镜而不是色块
+                    drawPath(
+                        path = topFace,
+                        brush = Brush.radialGradient(
+                            0f to Color.White.copy(alpha = 0.78f),
+                            0.42f to Color(
+                                red = (accent.red * 0.55f + 0.45f).coerceAtMost(1f),
+                                green = (accent.green * 0.55f + 0.45f).coerceAtMost(1f),
+                                blue = (accent.blue * 0.55f + 0.45f).coerceAtMost(1f),
+                                alpha = 0.70f,
+                            ),
+                            0.78f to accent.copy(alpha = 0.55f),
+                            1f to Color(
+                                red = accent.red * 0.35f,
+                                green = accent.green * 0.48f,
+                                blue = accent.blue * 0.35f,
+                                alpha = 0.62f,
+                            ),
+                            center = Offset(faceMidX, faceMidY - faceDepth * 0.15f),
+                            radius = (fillW * 0.55f).coerceAtLeast(18f),
+                        ),
+                    )
                     drawPath(
                         path = topFace,
                         brush = Brush.verticalGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.55f),
-                                accent.copy(alpha = 0.72f),
-                                Color(
-                                    red = accent.red * 0.42f,
-                                    green = accent.green * 0.55f,
-                                    blue = accent.blue * 0.42f,
-                                    alpha = 0.88f,
-                                ),
-                            ),
-                            startY = faceTopY - 2f,
-                            endY = faceTopY + faceDepth,
-                        ),
-                    )
-                    // 顶面横向：波峰更浅、波谷更沉
-                    drawPath(
-                        path = topFace,
-                        brush = Brush.horizontalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.18f),
+                                Color.White.copy(alpha = 0.42f),
                                 Color.Transparent,
-                                Color.Black.copy(alpha = 0.22f),
+                                Color.Black.copy(alpha = 0.18f),
                             ),
-                            startX = fillLeft,
-                            endX = fillLeft + fillW,
+                            startY = faceMinY - 1f,
+                            endY = faceMaxY + 1f,
                         ),
                     )
                     val nearLip = Path().apply {
                         for (i in firstWet..lastWet) {
                             val x = samples[i][0]
-                            val y = samples[i][1].coerceIn(fillTopBound, fillBottom)
+                            val y = nearY(i)
                             if (i == firstWet) moveTo(x, y) else lineTo(x, y)
                         }
                     }
                     drawPath(
                         path = nearLip,
-                        color = Color.White.copy(alpha = 0.72f),
-                        style = Stroke(width = 3.2f, cap = StrokeCap.Round),
+                        color = Color.White.copy(alpha = 0.88f),
+                        style = Stroke(width = 2.6f, cap = StrokeCap.Round),
+                    )
+                    // 近缘内侧细高光弧
+                    val specular = Path().apply {
+                        val span = lastWet - firstWet
+                        if (span >= 4) {
+                            val a = firstWet + (span * 0.18f).toInt()
+                            val b = firstWet + (span * 0.62f).toInt()
+                            for (i in a..b) {
+                                val t = ((samples[i][0] - fillLeft) / fillW).coerceIn(0f, 1f)
+                                val x = samples[i][0]
+                                val y = nearY(i) + faceDepth * 0.18f * sin(t * PI.toFloat())
+                                if (i == a) moveTo(x, y) else lineTo(x, y)
+                            }
+                        }
+                    }
+                    drawPath(
+                        path = specular,
+                        color = Color.White.copy(alpha = 0.55f),
+                        style = Stroke(width = 1.8f, cap = StrokeCap.Round),
                     )
                     val farLip = Path().apply {
                         for (i in firstWet..lastWet) {
-                            val t = ((samples[i][0] - fillLeft) / fillW).coerceIn(0f, 1f)
-                            val inset = sin(t * PI.toFloat()) * faceDepth * 0.10f
-                            val x = samples[i][0] + if (t < 0.5f) inset else -inset
-                            val y = (samples[i][1] + faceDepth).coerceAtMost(fillBottom)
-                            if (i == firstWet) moveTo(x, y) else lineTo(x, y)
+                            if (i == firstWet) moveTo(farX(i), farY(i)) else lineTo(farX(i), farY(i))
                         }
                     }
                     drawPath(
                         path = farLip,
-                        color = Color.Black.copy(alpha = 0.28f),
-                        style = Stroke(width = 2.4f, cap = StrokeCap.Round),
+                        color = Color.Black.copy(alpha = 0.22f),
+                        style = Stroke(width = 1.8f, cap = StrokeCap.Round),
                     )
 
                     if (charging) {
@@ -851,30 +939,30 @@ private fun VerticalBatteryGlyph(
                         )
                     }
 
-                    // 气泡：smoothstep 淡入淡出，并入水面时连续压扁，避免闪一下
+                    // 气泡：各自时钟独立升降，仅到顶合并后消失，间隔/大小全随机
+                    val wetL = samples[firstWet][0] - 4f
+                    val wetR = samples[lastWet][0] + 4f
                     bubbles.forEach { b ->
-                        val life = ((wave * b.speed + b.phase) % 1f + 1f) % 1f
+                        val life = bubbleRiseProgress(clock, b) ?: return@forEach
                         val bx = fillLeft + fillW * b.xFrac +
-                            sin(life * PI.toFloat() * 2f + b.phase * 6f) * b.sway
-                        val wetL = samples[firstWet][0] - 4f
-                        val wetR = samples[lastWet][0] + 4f
+                            sin(life * PI.toFloat() * 2f * b.swayFreq + b.startAt) * b.sway
                         if (bx < wetL || bx > wetR) return@forEach
                         val sy = surfaceAt(bx)
                         if (sy >= fillBottom - 1f) return@forEach
-                        val travel = (fillBottom - 6f - (sy + 2f)).coerceAtLeast(8f)
+                        val travel = (fillBottom - 6f - (sy + 1.5f)).coerceAtLeast(8f)
                         val by = fillBottom - 6f - life * travel
-                        val birth = smoothstep(0f, 0.16f, life)
-                        val fade = 1f - smoothstep(0.70f, 1f, life)
-                        val visibility = birth * fade
-                        if (visibility < 0.02f) return@forEach
-                        val merge = smoothstep(0.70f, 1f, life)
-                        val cyBubble = by * (1f - merge) + (sy + 1.2f) * merge
-                        val baseR = b.size * (0.9f + 0.15f * birth)
-                        val rw = baseR * (1f + merge * 2.4f)
-                        val rh = baseR * (1f - merge * 0.72f).coerceAtLeast(0.2f)
-                        val bodyAlpha = 0.42f * visibility * (1f - merge * 0.35f)
+                        // 只在出生瞬间淡入、到顶才淡出，中途不消失
+                        val birth = smoothstep(0f, 0.08f, life)
+                        val merge = smoothstep(0.86f, 1f, life)
+                        val visibility = birth * (1f - merge * 0.95f)
+                        if (visibility < 0.015f) return@forEach
+                        val cyBubble = by * (1f - merge) + (sy + 0.8f) * merge
+                        val baseR = b.size * (0.92f + 0.12f * birth)
+                        val rw = baseR * (1f + merge * 2.6f)
+                        val rh = baseR * (1f - merge * 0.78f).coerceAtLeast(0.18f)
+                        val bodyAlpha = 0.48f * visibility * (1f - merge * 0.4f)
                         drawOval(
-                            color = Color.White.copy(alpha = bodyAlpha * 0.45f),
+                            color = Color.White.copy(alpha = bodyAlpha * 0.42f),
                             topLeft = Offset(bx - rw, cyBubble - rh),
                             size = Size(rw * 2f, rh * 2f),
                         )
@@ -885,9 +973,9 @@ private fun VerticalBatteryGlyph(
                         )
                         if (merge > 0.02f) {
                             drawOval(
-                                color = Color.White.copy(alpha = 0.30f * merge * visibility),
-                                topLeft = Offset(bx - rw * 1.15f, sy - rh * 0.35f),
-                                size = Size(rw * 2.3f, rh * 0.85f),
+                                color = Color.White.copy(alpha = 0.34f * merge * birth),
+                                topLeft = Offset(bx - rw * 1.2f, sy - rh * 0.4f),
+                                size = Size(rw * 2.4f, rh * 0.9f),
                             )
                         }
                     }
@@ -1119,33 +1207,73 @@ private data class BatteryMotion(
     val glow: Float,
     val bolt: Float,
     val wave: Float,
+    /** 单调秒表（秒），供气泡各自错峰生命周期使用。 */
+    val clock: Float,
 )
 
-private data class LiquidBubble(
+/**
+ * 独立气泡演员：各自 rise/gap/start，避免同一波次齐生齐灭。
+ * @param riseSec 从底部升到水面的时长
+ * @param gapSec 到顶消失后到下次出现的等待（可很长，制造不确定性）
+ * @param startAt 相对 clock 的首次出现偏移
+ */
+private data class BubbleActor(
     val xFrac: Float,
     val size: Float,
-    val speed: Float,
-    val phase: Float,
     val sway: Float,
+    val swayFreq: Float,
+    val riseSec: Float,
+    val gapSec: Float,
+    val startAt: Float,
+    /** 每个周期真正冒出的概率 0..1 */
+    val spawnChance: Float,
 )
 
 /** 屏内重力向下单位向量（x 右、y 下）。直立约为 (0,1)，倾斜时液体向低侧汇聚。 */
 private data class GravityDown(val nx: Float, val ny: Float)
 
-private fun randomLiquidBubbles(
-    count: Int,
-    speedMin: Float,
-    speedMax: Float,
-    seed: Int = 42,
-): List<LiquidBubble> {
+/** 上升进度 0..1；空档或本周期未抽中出现则返回 null。 */
+private fun bubbleRiseProgress(clock: Float, a: BubbleActor): Float? {
+    val t = clock - a.startAt
+    if (t < 0f) return null
+    val cycle = (a.riseSec + a.gapSec).coerceAtLeast(0.05f)
+    val cycleIndex = floor(t / cycle).toInt()
+    // 周期内确定性伪随机：到点了也不一定冒泡
+    val roll = ((cycleIndex * 1_103_515_245 + a.startAt.toRawBits()) ushr 16) and 0x7fff
+    if (roll / 32767f > a.spawnChance) return null
+    val m = t % cycle
+    if (m > a.riseSec) return null
+    return (m / a.riseSec).coerceIn(0f, 1f)
+}
+
+private fun randomBubbleActors(
+    charging: Boolean,
+    seed: Int = if (charging) 91 else 37,
+): List<BubbleActor> {
     val rnd = Random(seed)
+    val count = if (charging) rnd.nextInt(7, 16) else rnd.nextInt(2, 7)
     return List(count) {
-        LiquidBubble(
-            xFrac = 0.12f + rnd.nextFloat() * 0.76f,
-            size = 1.6f + rnd.nextFloat() * 4.2f,
-            speed = speedMin + rnd.nextFloat() * (speedMax - speedMin),
-            phase = rnd.nextFloat(),
-            sway = 2.2f + rnd.nextFloat() * 5.5f,
+        BubbleActor(
+            xFrac = 0.10f + rnd.nextFloat() * 0.80f,
+            size = if (charging) {
+                2.2f + rnd.nextFloat() * 8.8f
+            } else {
+                1.8f + rnd.nextFloat() * 6.8f
+            },
+            sway = 1.4f + rnd.nextFloat() * 7.2f,
+            swayFreq = 0.7f + rnd.nextFloat() * 2.4f,
+            riseSec = if (charging) {
+                1.05f + rnd.nextFloat() * 2.9f
+            } else {
+                2.1f + rnd.nextFloat() * 4.8f
+            },
+            gapSec = 0.25f + rnd.nextFloat() * (if (charging) 4.2f else 7.5f),
+            startAt = rnd.nextFloat() * 20f,
+            spawnChance = if (charging) {
+                0.45f + rnd.nextFloat() * 0.50f
+            } else {
+                0.30f + rnd.nextFloat() * 0.55f
+            },
         )
     }
 }
@@ -1221,7 +1349,17 @@ private fun rememberBatteryMotion(): BatteryMotion {
         ),
         label = "wave",
     )
-    return BatteryMotion(rise, glow, bolt, wave)
+    // 3600s 循环近似单调时钟，气泡用绝对时间错峰
+    val clock by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 3600f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3_600_000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "clock",
+    )
+    return BatteryMotion(rise, glow, bolt, wave, clock)
 }
 
 private data class BubbleSeed(
