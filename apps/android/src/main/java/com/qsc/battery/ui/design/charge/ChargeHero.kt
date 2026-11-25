@@ -75,27 +75,33 @@ fun ChargeHero(
         label = "hero",
     )
     when (style) {
-        ChargeHeroStyle.Pulse -> ChargeHeroPulse(
-            levelText,
-            statusLine,
-            subtitle,
-            charging,
-            animated,
-        )
-        ChargeHeroStyle.Orbit -> ChargeHeroOrbit(
-            levelText,
-            statusLine,
-            subtitle,
-            charging,
-            animated,
-        )
-        ChargeHeroStyle.Battery -> ChargeHeroBattery(
-            levelText,
-            statusLine,
-            subtitle,
-            charging,
-            animated,
-        )
+        ChargeHeroStyle.Pulse -> {
+            ChargeHeroPulse(
+                levelText,
+                statusLine,
+                subtitle,
+                charging,
+                animated,
+            )
+        }
+        ChargeHeroStyle.Orbit -> {
+            ChargeHeroOrbit(
+                levelText,
+                statusLine,
+                subtitle,
+                charging,
+                animated,
+            )
+        }
+        ChargeHeroStyle.Battery -> {
+            ChargeHeroBattery(
+                levelText,
+                statusLine,
+                subtitle,
+                charging,
+                animated,
+            )
+        }
     }
 }
 

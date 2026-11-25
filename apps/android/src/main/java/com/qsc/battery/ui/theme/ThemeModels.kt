@@ -40,9 +40,14 @@ enum class PaletteStyleName(val wire: String) {
 
 /** 首页充电 Hero 动效样式（主题外观可切换）。 */
 enum class ChargeHeroStyle(val wire: String) {
-    /** 默认：柔光外扩脉冲 + 上升粒子 */ Pulse("pulse"),
-    /** 备用：进度环上弧光流转 */ Orbit("orbit"),
-    /** 竖电池 + 右侧状态信息 */ Battery("battery"),
+    /** 默认：柔光外扩脉冲 + 上升粒子 */
+    Pulse("pulse"),
+
+    /** 备用：进度环上弧光流转 */
+    Orbit("orbit"),
+
+    /** 竖电池 + 右侧状态信息 */
+    Battery("battery"),
     ;
 
     companion object {
