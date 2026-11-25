@@ -4,7 +4,7 @@
 
 - **修复 [#6](https://github.com/Eikeitsu/QSC-Battery/issues/6)**：`.ch_curr_session_fail` 去重写入 + 体积上限（启动清异常膨胀）；服务加单实例锁，避免多守护叠跑放大写盘
 - **体验 [#3](https://github.com/Eikeitsu/QSC-Battery/issues/3)**：电流显示改为充电为正/放电为负；切回概览跳过过勤状态刷新；「动态简介 / 拔线还原 / 自动拔插」补例句说明
-- **APP 充电动效重做**：系统充电屏风格——外扩脉冲环、弧尾微光、底部上升气泡；电量数字不被覆盖
+- **APP 充电动效**：充电动画重做，新增两套充电动画，可在主题外观页面切换
 - **修复 K90U 假未插电**：MCA 充电常 `online=0`/掉 VBUS，恢复 `present+充电态` 与有条件 dumpsys 旁证；电流 mA/µA 归一，避免真在充却显示未插电
 - **修复 K90U 不能停充**：`Not charging`+负向大电流不再误判「已停住」；节点 hold 但仍在充时拉黑 MCA 改试 `xm_power`；补 `/sys/class/xm_power/.../handle_state` 探测；`mca_ineffective` 默认也跳过无效 MCA
 - **防 DeepPark 漏停充**：端口漏判「未插电」但 `|I|≥150mA` 仍在充时，禁止 lean/深睡跳过满轮（K90U 曾因此 80% 一路充到 100%）

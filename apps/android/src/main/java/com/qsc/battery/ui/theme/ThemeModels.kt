@@ -38,6 +38,21 @@ enum class PaletteStyleName(val wire: String) {
     }
 }
 
+/** 首页充电 Hero 动效样式（主题外观可切换）。 */
+enum class ChargeHeroStyle(val wire: String) {
+    /** 默认：柔光外扩脉冲 + 上升粒子 */
+    Pulse("pulse"),
+    /** 备用：进度环上弧光流转 */
+    Orbit("orbit"),
+    /** 竖电池 + 右侧状态信息 */
+    Battery("battery"),
+    ;
+
+    companion object {
+        fun fromWire(s: String?) = entries.find { it.wire.equals(s, ignoreCase = true) } ?: Pulse
+    }
+}
+
 data class ThemeSettings(
     val colorMode: ColorMode = ColorMode.SYSTEM,
     val keyColor: Int = 0xFF0B6E4F.toInt(),
@@ -49,4 +64,6 @@ data class ThemeSettings(
     val homeProfileSwitcher: Boolean = false,
     /** 最近一次应用的配置档名称（仅 UI 展示） */
     val activeConfigProfile: String = "",
+    /** 首页充电动画样式，默认柔光脉冲 */
+    val chargeHeroStyle: ChargeHeroStyle = ChargeHeroStyle.Pulse,
 )

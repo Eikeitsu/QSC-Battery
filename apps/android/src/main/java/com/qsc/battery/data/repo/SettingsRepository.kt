@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.qsc.battery.data.model.UpdateChannel
 import com.qsc.battery.icon.LauncherIconController
+import com.qsc.battery.ui.theme.ChargeHeroStyle
 import com.qsc.battery.ui.theme.ColorMode
 import com.qsc.battery.ui.theme.PaletteStyleName
 import com.qsc.battery.ui.theme.ThemeSettings
@@ -29,6 +30,7 @@ class SettingsRepository(private val context: Context) {
         val dynamicBatteryIcon = booleanPreferencesKey("dynamic_battery_icon")
         val homeProfileSwitcher = booleanPreferencesKey("home_profile_switcher")
         val activeConfigProfile = stringPreferencesKey("active_config_profile")
+        val chargeHeroStyle = stringPreferencesKey("charge_hero_style")
         val onboardingDone = booleanPreferencesKey("onboarding_done")
         val updateChannel = stringPreferencesKey("update_channel")
 
@@ -50,6 +52,7 @@ class SettingsRepository(private val context: Context) {
             dynamicBatteryIcon = prefs[Keys.dynamicBatteryIcon] ?: false,
             homeProfileSwitcher = prefs[Keys.homeProfileSwitcher] ?: false,
             activeConfigProfile = prefs[Keys.activeConfigProfile].orEmpty(),
+            chargeHeroStyle = ChargeHeroStyle.fromWire(prefs[Keys.chargeHeroStyle]),
         )
     }
 
@@ -135,6 +138,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setActiveConfigProfile(name: String) {
         context.settingsStore.edit { it[Keys.activeConfigProfile] = name }
+    }
+
+    suspend fun setChargeHeroStyle(style: ChargeHeroStyle) {
+        context.settingsStore.edit { it[Keys.chargeHeroStyle] = style.wire }
     }
 
     /** 启动时按偏好同步 alias，避免升级后图标状态丢失。 */

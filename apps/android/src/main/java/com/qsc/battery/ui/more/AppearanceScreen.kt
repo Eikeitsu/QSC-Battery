@@ -32,6 +32,7 @@ import com.qsc.battery.ui.design.charge.ChargeSection
 import com.qsc.battery.ui.design.charge.ChargeTheme
 import com.qsc.battery.ui.design.charge.ChargeToggleRow
 import com.qsc.battery.ui.design.charge.ChargeTopBar
+import com.qsc.battery.ui.theme.ChargeHeroStyle
 import com.qsc.battery.ui.theme.ColorMode
 import com.qsc.battery.ui.theme.ThemeSettings
 import kotlinx.coroutines.launch
@@ -121,6 +122,74 @@ fun AppearanceScreen(
                         }
                     }
                     if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+
+            Text(
+                text = "首页充电动画",
+                style = ChargeTheme.typography.label,
+                color = ChargeTheme.colors.accent,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "仅影响首页电量 Hero；插电充电时可见动效差异。",
+                style = ChargeTheme.typography.caption,
+                color = ChargeTheme.colors.muted,
+            )
+
+            val heroStyles = listOf(
+                ChargeHeroStyle.Pulse to ("柔光脉冲" to "默认 · 外扩柔光环与软边粒子"),
+                ChargeHeroStyle.Orbit to ("弧光流转" to "进度环弧光拖尾旋转"),
+                ChargeHeroStyle.Battery to ("竖电量卡" to "左侧竖电池，右侧状态信息"),
+            )
+            heroStyles.forEach { (style, labels) ->
+                val (title, summary) = labels
+                val selected = settings.chargeHeroStyle == style
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(ChargeTheme.dimens.radiusMd))
+                        .background(
+                            if (selected) {
+                                ChargeTheme.colors.accent.copy(alpha = 0.12f)
+                            } else {
+                                ChargeTheme.colors.surface
+                            },
+                        )
+                        .border(
+                            width = if (selected) 2.dp else 1.dp,
+                            color = if (selected) ChargeTheme.colors.accent else ChargeTheme.colors.stroke,
+                            shape = RoundedCornerShape(ChargeTheme.dimens.radiusMd),
+                        )
+                        .clickable {
+                            scope.launch { container.settingsRepository.setChargeHeroStyle(style) }
+                        }
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = title,
+                            style = ChargeTheme.typography.label,
+                            color = ChargeTheme.colors.ink,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = summary,
+                            style = ChargeTheme.typography.caption,
+                            color = ChargeTheme.colors.muted,
+                        )
+                    }
+                    if (selected) {
+                        Text(
+                            text = "使用中",
+                            style = ChargeTheme.typography.caption,
+                            color = ChargeTheme.colors.accent,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
             }
 
