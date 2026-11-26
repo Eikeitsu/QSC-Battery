@@ -30,9 +30,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import kotlin.math.min
 import com.qsc.battery.ui.design.charge.ChargeHero
 import com.qsc.battery.ui.design.charge.ChargeTheme
 import com.qsc.battery.ui.theme.BatteryFillStyle
@@ -40,6 +44,64 @@ import com.qsc.battery.ui.theme.BatteryOrientation
 import com.qsc.battery.ui.theme.ChargeAnimConfig
 import com.qsc.battery.ui.theme.ChargeAnimShape
 import com.qsc.battery.ui.theme.RingEffect
+
+/**
+ * 子内容按固有尺寸测量（忽略父级 max 约束），再等比缩小放进可用区域。
+ * 避免圆环在矮预览框里被压成椭圆或上下裁切。
+ */
+@Composable
+private fun ScaleToFitBox(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Layout(
+        content = content,
+        modifier = modifier,
+    ) { measurables, constraints ->
+        val measurable = measurables.firstOrNull()
+            ?: return@Layout layout(constraints.minWidth, constraints.minHeight) {}
+        val placeable = measurable.measure(Constraints())
+        val maxW = constraints.maxWidth
+        val maxH = constraints.maxHeight
+        val scale = when {
+            placeable.width <= 0 || placeable.height <= 0 -> 1f
+            maxW == Constraints.Infinity && maxH == Constraints.Infinity -> 1f
+            maxW == Constraints.Infinity ->
+                min(1f, maxH.toFloat() / placeable.height)
+            maxH == Constraints.Infinity ->
+                min(1f, maxW.toFloat() / placeable.width)
+            else ->
+                min(
+                    1f,
+                    min(
+                        maxW.toFloat() / placeable.width,
+                        maxH.toFloat() / placeable.height,
+                    ),
+                )
+        }
+        val outW = if (maxW == Constraints.Infinity) {
+            (placeable.width * scale).toInt()
+        } else {
+            maxW
+        }.coerceAtLeast(constraints.minWidth)
+        val outH = if (maxH == Constraints.Infinity) {
+            (placeable.height * scale).toInt()
+        } else {
+            maxH
+        }.coerceAtLeast(constraints.minHeight)
+        layout(outW, outH) {
+            placeable.placeWithLayer(
+                x = ((outW - placeable.width * scale) / 2f).toInt(),
+                y = ((outH - placeable.height * scale) / 2f).toInt(),
+            ) {
+                scaleX = scale
+                scaleY = scale
+                // place 用未缩放尺寸算偏移；图层从左上缩放，原点需在左上
+                transformOrigin = TransformOrigin(0f, 0f)
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,25 +150,29 @@ fun ChargeAnimConfigSheet(
                 color = ChargeTheme.colors.muted,
             )
 
-            // 固定预览高度：液体/圆环切换时不再改变 sheet 测量高度，杜绝顶边上爬
+            // 固定预览高度：液体/圆环切换时不再改变 sheet 测量高度，杜绝顶边上爬。
+            // 圆环本体约 220+外扩，高于预览框；若受 maxHeight 挤压会变成非正方形→椭圆。
+            // 用无约束测量 + 等比缩放到框内，保证圆环仍是圆。
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(208.dp)
+                    .height(236.dp)
                     .clip(RoundedCornerShape(ChargeTheme.dimens.radiusLg))
                     .background(ChargeTheme.colors.surfaceStrong.copy(alpha = 0.45f))
-                    .padding(vertical = 8.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                ChargeHero(
-                    levelText = "66%",
-                    percent = 0.66f,
-                    statusLine = "预览 · 充电中",
-                    subtitle = "主题设置预览",
-                    charging = true,
-                    currentUa = "2500000",
-                    anim = cfg,
-                )
+                ScaleToFitBox {
+                    ChargeHero(
+                        levelText = "66%",
+                        percent = 0.66f,
+                        statusLine = "预览 · 充电中",
+                        subtitle = "主题设置预览",
+                        charging = true,
+                        currentUa = "2500000",
+                        anim = cfg,
+                    )
+                }
             }
 
             Text(
