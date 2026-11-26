@@ -1,8 +1,8 @@
 {
-  "version": "2026.11.24",
-  "versionCode": 2026112401,
+  "version": "2026.11.26",
+  "versionCode": 2026112601,
   "qscd-c-arm": "7d1ab762e76e8a0bc34057647443fdaf1ac7575d4f81343e323d07e803f69802",
   "qscd-c-arm64": "70a359a036544a2a94652ed3e4545d1c57318ae6c9b65686b14aa52dccda678d",
-  "qscd-rust-arm": "7355b4fad79bfd0f72fe9fa63c5449b787107f75ba0f91940bd1b80b61ea221d",
-  "qscd-rust-arm64": "5cc778665d32b329f43079a38ecf61094f46ef662bcb0e0f4c43f908df8600a1"
+  "qscd-rust-arm": "900d66433dc10e656518c00f0569e7dbf5a1aa7717c73c73688bfd2b28e26007",
+  "qscd-rust-arm64": "07e6d917139b8ca4cd872ee32b5955dd5c48ee8ead49fc2c4accf20fd3dbdc8d"
 }

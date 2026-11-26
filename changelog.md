@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2026.11.26
+
 - **修复 [#6](https://github.com/Eikeitsu/QSC-Battery/issues/6)**：`.ch_curr_session_fail` 去重写入 + 体积上限（启动清异常膨胀）；服务加单实例锁，避免多守护叠跑放大写盘
 - **体验 [#3](https://github.com/Eikeitsu/QSC-Battery/issues/3)**：电流显示改为充电为正/放电为负；切回概览跳过过勤状态刷新；「动态简介 / 拔线还原 / 自动拔插」补例句说明
 - **APP 充电动效**：充电动画重做，新增两套充电动画，可在主题外观页面切换
