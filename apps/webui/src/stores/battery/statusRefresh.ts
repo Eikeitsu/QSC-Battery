@@ -77,7 +77,8 @@ export async function refreshStatusInternal(
   } else if (bundle.failed === BinaryFlag.On) {
     status.badge = majorDesc || "停充可能未生效";
     badgeType = BadgeType.Warning;
-    status.desc = "请插电后 Action 音量下测开关，或到「策略 → 测开关与缓存」清除后重启";
+    status.desc =
+      "请插电后 Action 音量下→音量下测开关，或到「策略 → 测开关与缓存」清除后重启";
   } else if (chargeStatus === "Charging" || chargeStatus === "Full") {
     status.badge = majorDesc || "充电中";
     badgeType = BadgeType.Success;

@@ -45,7 +45,7 @@
 
 1. 刷入并重启，打开模块 WebUI 或改 `config.conf`，把 **停止电量** 临时调到当前电量以下（例如当前 70% 则设 65），**恢复电量**再低几档。
 2. 插电：应停充；拔线或电量落到恢复值：应恢复充电。
-3. 仍不行：Action 音量下写诊断，或执行 `bin/diagnose.sh` / `qsc diagnose`；插电后可跑测开关。报告见 `/sdcard/qsc_diagnose.txt`。
+3. 仍不行：Action 音量下→音量上写诊断，或执行 `bin/diagnose.sh` / `qsc diagnose`；插电后 Action 音量下→音量下测开关。报告见 `/sdcard/qsc_diagnose.txt`。
 4. 也可在 WebUI「我的」使用机型节点社区预设（导入前注意勿带隐私信息）。
 
 更多排障见 [常见问题 · 停充与机型](/guide/faq#停充与机型)。

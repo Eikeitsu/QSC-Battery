@@ -72,7 +72,7 @@
 1. 打开 [Releases](https://github.com/Eikeitsu/QSC-Battery/releases)：多数人下 **`…-full.zip`**；只要脚本可用 **`…-lite.zip`**。各文件含义见 [安装与升级 · Release 说明](docs/guide/install.md#该下哪个先看这三句)
 2. 刷入模块，按音量键确认；按提示选择 WebUI / 电流控制 / 伴侣 APK / 联网下守护（lite 无 WebUI 与内嵌 APK）
 3. 更新时可选保留配置；重启后用 WebUI / APP / 配置文件调整
-4. Action：音量上刷新状态；音量下插电测开关 / 未插电写诊断
+4. Action：音量上刷新状态；音量下再选诊断或测开关
 
 旧版 `QuantitativeStopCharging*` 会被自动卸载（**不迁移配置**）。
 

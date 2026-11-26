@@ -71,7 +71,7 @@
 ### Action 按钮
 
 - **音量上**（或超时）：刷新状态
-- **音量下**：已插电 → 快速测开关；未插电 → 诊断报告 `/sdcard/qsc_diagnose.txt`
+- **音量下**：再选 — 音量上写诊断 `/sdcard/qsc_diagnose.txt`；音量下测开关（须插电）；超时默认诊断
 
 完整测开关也可：`sh .../bin/qsc.sh test-switch` 或 `bin/test_switch.sh`（须插电）。
 

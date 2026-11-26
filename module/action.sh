@@ -1,7 +1,7 @@
 #!/system/bin/sh
 # Action：开头一轮音量二选一；超时默认刷新状态。
 #   音量上 / 超时 → 短状态刷新
-#   音量下       → 已插电：测停充开关；未插电：只读诊断
+#   音量下       → 再选：音量上诊断 / 音量下测开关（须插电）
 # Magisk / 官方 KSU / APatch 通常可跑完；SukiSU 约 10s 总时长，故测开关走快速模式。
 # 改阈值 / 软开关 → WebUI。
 
@@ -25,7 +25,7 @@ fi
 . "$LIBDIR/keys.sh"
 
 echo "音量上：刷新状态"
-echo "音量下：插电测开关（未插电 → 诊断报告）"
+echo "音量下：诊断 / 测开关"
 echo "5 秒内未按键 → 自动刷新状态"
 
 qsc_volume_choice 5
@@ -210,21 +210,25 @@ qsc_action_diagnose() {
 	fi
 	chmod 0755 "$BINDIR/diagnose.sh" 2>/dev/null
 	echo "正在生成报告 → /sdcard/qsc_diagnose.txt"
+	echo "参考: status=$(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d ' \r\n') present=$(cat /sys/class/power_supply/usb/present 2>/dev/null | tr -d ' \r\n') online=$(cat /sys/class/power_supply/usb/online 2>/dev/null | tr -d ' \r\n') type=$(cat /sys/class/power_supply/usb/real_type 2>/dev/null | tr -d ' \r\n')"
 	sh "$BINDIR/diagnose.sh"
+	_diag_rc=$?
+	if [ "$_diag_rc" -eq 0 ] 2>/dev/null; then
+		echo "诊断完成: /sdcard/qsc_diagnose.txt（可发给维护者做机型适配）"
+	fi
+	return "$_diag_rc"
 }
 
 qsc_action_test_switch() {
 	echo "-------- 停充开关实测 --------"
+	if ! qsc_action_is_plugged; then
+		echo "未检测到充电器（无 online/VBUS/类型/大电流），无法测开关"
+		echo "请插电后再 Action → 音量下 → 音量下"
+		return 1
+	fi
 	if [ ! -f "$BINDIR/test_switch.sh" ]; then
 		echo "缺少 test_switch.sh"
 		return 1
-	fi
-	if ! qsc_action_is_plugged; then
-		echo "未检测到充电器（无 online/VBUS/类型/大电流），改为生成诊断报告"
-		# 便于确认 K90U 等「粘 present」误判：打印关键节点
-		echo "参考: status=$(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d ' \r\n') present=$(cat /sys/class/power_supply/usb/present 2>/dev/null | tr -d ' \r\n') online=$(cat /sys/class/power_supply/usb/online 2>/dev/null | tr -d ' \r\n') type=$(cat /sys/class/power_supply/usb/real_type 2>/dev/null | tr -d ' \r\n')"
-		qsc_action_diagnose
-		return $?
 	fi
 	chmod 0755 "$BINDIR/test_switch.sh" 2>/dev/null
 	# Action 快速模式后台跑，避免管理器超时杀进程
@@ -237,10 +241,33 @@ qsc_action_test_switch() {
 	return 0
 }
 
+# 音量下二级：上=诊断，下=测开关；超时默认诊断（只读）
+qsc_action_tools_menu() {
+	echo "-------- 诊断 / 测开关 --------"
+	echo "音量上：诊断报告（插电/未插电均可）"
+	echo "音量下：测开关（须插电）"
+	echo "5 秒内未按键 → 诊断报告"
+	qsc_volume_choice 5
+	case $? in
+		1)
+			echo "→ 测开关"
+			qsc_action_test_switch
+			;;
+		0)
+			echo "→ 诊断报告"
+			qsc_action_diagnose
+			;;
+		*)
+			echo "→ 超时，自动诊断"
+			qsc_action_diagnose
+			;;
+	esac
+}
+
 case "$_vol_rc" in
 	1)
-		echo "→ 测开关 / 诊断"
-		qsc_action_test_switch
+		echo "→ 诊断 / 测开关"
+		qsc_action_tools_menu
 		;;
 	0)
 		echo "→ 刷新状态"
