@@ -188,13 +188,14 @@ fun ChargeHero(
 
 /**
  * 充电电流强度 0..1。未充电恒为 0。
- * 约 5A 视为满档；读不到电流时给中等默认，避免浪完全静死。
+ * 约 10A 视为满档（0→1）；读不到电流时给中等默认，避免浪完全静死。
+ * 例：2.5A≈0.25、5A≈0.5、6.5A≈0.65、10A=1。
  */
 private fun chargeCurrentEnergy(currentUa: String, charging: Boolean): Float {
     if (!charging) return 0f
     val ua = currentUa.toLongOrNull() ?: return 0.4f
     val amps = abs(ua) / 1_000_000f
-    return (amps / 5f).coerceIn(0f, 1f)
+    return (amps / 10f).coerceIn(0f, 1f)
 }
 
 // ─── 1. 柔光脉冲 ───────────────────────────────────────────────────
@@ -216,8 +217,8 @@ private fun ChargeHeroPulse(
     val muted = ChargeTheme.colors.muted
     val energy = if (charging) currentEnergy.coerceIn(0f, 1f) else 0f
     val motion = if (charging) rememberPulseMotion(energy) else null
-    // 足够外扩余量，避免脉冲环顶部被裁成「缺边」
-    val canvasPad = 48.dp
+    // 上下对称余量：顶给光晕、底给粒子叠层；充电/未充电外框尺寸不变
+    val canvasPad = 64.dp
 
     Column(
         modifier = Modifier
@@ -232,12 +233,13 @@ private fun ChargeHeroPulse(
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val c = Offset(size.width / 2f, size.height / 2f)
                 val ringR = (heroSize.toPx() - heroStroke.toPx()) / 2f
+                // 外扩不得顶破画布，避免顶部被裁成平边
+                val maxR = size.minDimension * 0.49f
                 val glowA = motion?.glowAlpha ?: 0.08f
-                val expand = 0.28f + 0.42f * energy
+                val expand = 0.14f + 0.18f * energy
                 val ringAlpha = 0.12f + 0.14f * energy
 
-                // 中心柔光：无硬边；电流越大半径/亮度越高
-                val glowR = ringR * (1.35f + 0.45f * energy)
+                val glowR = min(ringR * (1.22f + 0.28f * energy), maxR)
                 drawCircle(
                     brush = Brush.radialGradient(
                         0f to progress.copy(alpha = glowA),
@@ -252,11 +254,10 @@ private fun ChargeHeroPulse(
 
                 if (motion != null) {
                     val layers = 2 + (energy * 2.5f).toInt().coerceIn(0, 2)
-                    // 软边脉冲：多层半透明填充环模拟虚化，不用硬 Stroke
                     for (i in 0..layers) {
                         val phase = (motion.pulse + i / (layers + 1f)) % 1f
                         val ease = FastOutSlowInEasing.transform(phase)
-                        val r = ringR * (1.04f + ease * expand)
+                        val r = min(ringR * (1.04f + ease * expand), maxR)
                         val a = (1f - ease) * ringAlpha
                         drawCircle(
                             brush = Brush.radialGradient(
@@ -324,27 +325,32 @@ private fun ChargeHeroPulse(
                         }
                     }
                 }
+                // 徽标进环心：不占用环外高度，充/未充外框一致
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(text = levelText, style = ChargeTheme.typography.display, color = ink)
                     Text(text = statusLine, style = ChargeTheme.typography.body, color = muted)
+                    if (charging) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        ChargingChip(progress)
+                    }
                 }
+            }
+
+            // 粒子叠在环底垫区内向上汇入，不额外撑高 Column
+            if (charging) {
+                SoftBubbleField(
+                    accent = progress,
+                    currentEnergy = energy,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 2.dp)
+                        .width(heroSize * 0.48f)
+                        .height(canvasPad - 8.dp),
+                )
             }
         }
 
-        if (charging) {
-            Spacer(modifier = Modifier.height(2.dp))
-            ChargingChip(progress)
-            Spacer(modifier = Modifier.height(6.dp))
-            SoftBubbleField(
-                accent = progress,
-                currentEnergy = energy,
-                modifier = Modifier
-                    .width(heroSize * 0.55f)
-                    .height(56.dp),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(if (charging) 4.dp else 10.dp))
+        Spacer(modifier = Modifier.height(10.dp))
         Text(
             text = subtitle,
             style = ChargeTheme.typography.caption,
@@ -752,7 +758,7 @@ private fun VerticalBatteryGlyph(
             (fillW * 0.038f).coerceIn(2.8f, 6.5f)
         }
         val swayHz = if (charging) {
-            // ≈2.3A(e≈0.46) → ~0.52Hz；满档 5A 才接近 0.9Hz
+            // ≈2.5A(e≈0.25) → ~0.40Hz；满档 10A(e=1) 才接近 0.9Hz
             (0.30f + 0.28f * energy + 0.42f * eSpeed).coerceIn(0.28f, 0.92f)
         } else {
             0.28f
@@ -1450,12 +1456,13 @@ private fun rememberPulseMotion(energy: Float): PulseMotion {
         ),
         label = "pulseClock",
     )
-    val pulseHz = 0.28f + 0.95f * e
-    val shimmerHz = 0.22f + 0.85f * e
+    // 大电流时也不要「频闪」：约 0.10~0.28Hz（一轮 3.5~10s）
+    val pulseHz = 0.10f + 0.18f * e
+    val shimmerHz = 0.08f + 0.14f * e
     val pulse = (clock * pulseHz) % 1f
     val shimmer = (clock * shimmerHz) % 1f
-    val glowBase = 0.08f + 0.14f * e
-    val glowAlpha = glowBase + 0.05f * (0.5f + 0.5f * sin(clock * PI.toFloat() * 2f * (0.4f + e)))
+    val glowBase = 0.08f + 0.12f * e
+    val glowAlpha = glowBase + 0.035f * (0.5f + 0.5f * sin(clock * PI.toFloat() * 2f * (0.12f + 0.10f * e)))
     return PulseMotion(pulse, glowAlpha, shimmer)
 }
 
