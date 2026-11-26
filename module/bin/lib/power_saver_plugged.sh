@@ -51,14 +51,50 @@ qsc_ps_vbus_live() {
 	return 1
 }
 
-# 充电口类型非 Unknown/None
+# 充电口类型非 Unknown/None（含 MCA real_type：K90U 等 usb/type 常一直 Unknown）
 qsc_ps_type_live() {
 	local p v
-	for p in "$PSDIR/usb/real_type" "$PSDIR/usb/type"; do
+	for p in "$PSDIR/usb/real_type" "$PSDIR/usb/type" \
+		/sys/devices/platform/soc/soc:mca_business_charger/real_type \
+		/sys/devices/platform/soc/soc:mca_charger/real_type \
+		/sys/class/xm_power/charger/mca_business_charger/real_type; do
 		if qsc_ps_read "$p"; then
 			v="$QSC_PS_VAL"
 			case "$v" in
 				""|Unknown|UNKNOWN|None|NONE) ;;
+				*) return 0 ;;
+			esac
+		fi
+	done
+	return 1
+}
+
+# K90U/MCA：未插电基线 real_type=Unknown、power_max=0、quick_charge_type=0；
+# 插电后即使 online=0 / 掉 VBUS，这三项也会非空/非零，作强适配器证据。
+qsc_ps_mca_adapter_live() {
+	local p v
+	for p in \
+		/sys/devices/platform/soc/soc:mca_business_charger/real_type \
+		/sys/devices/platform/soc/soc:mca_charger/real_type \
+		/sys/class/xm_power/charger/mca_business_charger/real_type; do
+		if qsc_ps_read "$p"; then
+			v="$QSC_PS_VAL"
+			case "$v" in
+				""|Unknown|UNKNOWN|None|NONE) ;;
+				*) return 0 ;;
+			esac
+		fi
+	done
+	for p in \
+		/sys/devices/platform/soc/soc:mca_business_charger/power_max \
+		/sys/devices/platform/soc/soc:mca_business_charger/quick_charge_type \
+		/sys/devices/platform/soc/soc:mca_strategy_quick_charge/power_max \
+		/sys/devices/platform/soc/soc:mca_strategy_quick_charge/quick_charge_type; do
+		if qsc_ps_read "$p"; then
+			v="$QSC_PS_VAL"
+			case "$v" in
+				""|*[!0-9]*) ;;
+				0) ;;
 				*) return 0 ;;
 			esac
 		fi
@@ -95,7 +131,17 @@ qsc_ps_current_abs_ua() {
 }
 
 # 明显在充电：|I|≥150mA。MTK/MCA 常 online=0 + Not charging 但仍大电流。
+# K90U 未插电待机也常 |I|≥150mA 且 status=Discharging（诊断约 193~357mA）——
+# 绝不能单靠绝对值判「在充」，否则 Action 假插电、DeepPark lean 永远进不去。
 qsc_ps_charging_current_live() {
+	if qsc_ps_looks_discharging; then
+		return 1
+	fi
+	if qsc_ps_read "$PSDIR/battery/status"; then
+		case "$QSC_PS_VAL" in
+			Discharging|discharging) return 1 ;;
+		esac
+	fi
 	qsc_ps_current_abs_ua || return 1
 	[ "${QSC_PS_CUR_UA:-0}" -ge 150000 ] 2>/dev/null
 }
@@ -163,6 +209,7 @@ qsc_ps_present_corroborated() {
 	fi
 	qsc_ps_vbus_live && return 0
 	qsc_ps_type_live && return 0
+	qsc_ps_mca_adapter_live && return 0
 	qsc_ps_charging_current_live && return 0
 	if qsc_ps_xp_plug_says_plugged; then
 		qsc_ps_dbg ps_xp_plug debug "XP plug 旁证 present"
@@ -170,7 +217,7 @@ qsc_ps_present_corroborated() {
 	fi
 	# MCA/xm_power：线还在但 VBUS/online 被掐时，允许 present + Charging/Full。
 	# 不把 Not charging 算进来：K90U 未插电待机也常报 Not charging + 粘 present，
-	# 会误判成已插电（Action 测开关、拔线检测都会坏）。停充维持靠 VBUS/类型/online。
+	# 会误判成已插电（Action 测开关、拔线检测都会坏）。停充维持靠 VBUS/类型/MCA 适配器信号。
 	if type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca; then
 		if qsc_ps_read "$PSDIR/battery/status"; then
 			case "$QSC_PS_VAL" in
@@ -208,13 +255,22 @@ qsc_ps_plugged_scan() {
 			return 0
 		fi
 	done
+	# K90U SM8750：UCSI 源 psy 在未插电 online=0；插电时常比 usb/online 更早变 1
+	for p in "$PSDIR"/ucsi*/online "$PSDIR"/ucsi-source-psy*/online; do
+		[ -e "$p" ] || continue
+		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
+			qsc_ps_dbg ps_online debug "判定已插电：UCSI online=1（$p）"
+			return 0
+		fi
+	done
 	# K90U / MCA：online 常为 0；present 需旁证（见 qsc_ps_present_corroborated）
+	# 注意：未插电时 wireless/voltage_now≈电池电压、current 会镜像 battery——绝不能当 VBUS。
 	for p in "$PSDIR/usb/present" "$PSDIR/qc_usb/present" \
 		"$PSDIR/wireless/present" "$PSDIR/ac/present"; do
 		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
-			# VBUS/类型优先：停充后会放电，不能先因放电否决真插电
-			if qsc_ps_vbus_live || qsc_ps_type_live; then
-				qsc_ps_dbg ps_present debug "判定已插电：${p##*/}=1（有 VBUS/类型旁证）"
+			# VBUS/类型/MCA 适配器优先：停充后会放电，不能先因放电否决真插电
+			if qsc_ps_vbus_live || qsc_ps_type_live || qsc_ps_mca_adapter_live; then
+				qsc_ps_dbg ps_present debug "判定已插电：${p##*/}=1（有 VBUS/类型/MCA 旁证）"
 				return 0
 			fi
 			# XP 近期 unplug + 放电：粘 present 直接丢掉（无 XP 不进此支）
@@ -234,19 +290,14 @@ qsc_ps_plugged_scan() {
 			return 0
 		fi
 	done
-	for p in "$PSDIR/usb/real_type" "$PSDIR/usb/type"; do
-		if qsc_ps_read "$p"; then
-			v="$QSC_PS_VAL"
-			case "$v" in
-				""|Unknown|UNKNOWN|None|NONE) ;;
-				*)
-					# 类型是强证据；停充维持中电池放电属预期，勿否决
-					qsc_ps_dbg ps_type debug "判定已插电：接口类型 $v"
-					return 0
-					;;
-			esac
-		fi
-	done
+	if qsc_ps_type_live; then
+		qsc_ps_dbg ps_type debug "判定已插电：接口/MCA 类型有效"
+		return 0
+	fi
+	if qsc_ps_mca_adapter_live; then
+		qsc_ps_dbg ps_mca debug "判定已插电：MCA real_type/power_max/quick_charge 有效"
+		return 0
+	fi
 	if qsc_ps_vbus_live; then
 		v="$QSC_PS_VAL"
 		qsc_ps_dbg ps_voltage debug "判定已插电：USB 电压有效（$v）"
@@ -254,7 +305,7 @@ qsc_ps_plugged_scan() {
 	fi
 	# Charging/Full：一加等机型未插电仍可能报 Charging——无端口证据时不得单信。
 	# Not charging：无端口证据时忽略（K90U 未插电待机也报）。
-	# 例外：|I|≥150mA 视为仍在充（K60U MTK 常见 online=0 + Not charging）。
+	# 例外：非 Discharging 且 |I|≥150mA 视为仍在充（K60U MTK 常见 online=0 + Not charging）。
 	if qsc_ps_read "$PSDIR/battery/status"; then
 		case "$QSC_PS_VAL" in
 			Charging|Full)
@@ -281,7 +332,7 @@ qsc_ps_plugged_scan() {
 				;;
 		esac
 	fi
-	qsc_ps_dbg ps_none debug "判定未插电：无 online/present/VBUS/类型/大电流证据"
+	qsc_ps_dbg ps_none debug "判定未插电：无 online/present/VBUS/类型/MCA/大电流证据"
 	return 1
 }
 

@@ -709,7 +709,11 @@ qsc_ps_next_sleep() {
 		else
 			_m="${QSC_PS_MAINTAIN:-30}"
 			if [ -f "$DATADIR/wakelock_held" ]; then
-				if type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca; then
+				# 持锁通常意味着 handle_state 兜底；xm_power 主路径一般不持锁
+				if type qsc_stop_route_is_xm_power >/dev/null 2>&1 && qsc_stop_route_is_xm_power; then
+					_m=300
+					[ "${QSC_PS_MAINTAIN:-0}" -gt 60 ] 2>/dev/null && _m="$QSC_PS_MAINTAIN"
+				elif type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca; then
 					_m=90
 					[ "${QSC_PS_MAINTAIN:-0}" -gt 45 ] 2>/dev/null && _m="$QSC_PS_MAINTAIN"
 				else

@@ -205,15 +205,21 @@ qsc_ps_maintain_secs() {
 	QSC_PS_MAINTAIN_EFF="$base"
 
 	type qsc_ps_policy_scene >/dev/null 2>&1 && qsc_ps_policy_scene
-	type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca && _mca=1
+	# xm_power 主路径：不当「勤重申 MCA」；handle_state 兜底才走短间隔
+	if type qsc_stop_route_is_xm_power >/dev/null 2>&1 && qsc_stop_route_is_xm_power; then
+		_mca=0
+	elif type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca; then
+		_mca=1
+	fi
 
 	if [ "${QSC_PS_DEEP:-0}" = "1" ] || [ "${QSC_PS_NIGHT:-0}" = "1" ]; then
 		if [ "$_mca" = "1" ]; then
-			# MCA：夜间也要重申，但 30s 一轮整夜会拖垮待机；折中 90s
+			# handle_state：夜间也要重申，但 30s 一轮整夜会拖垮待机；折中 90s
 			QSC_PS_MAINTAIN_EFF=90
 			[ "$base" -gt 90 ] 2>/dev/null && QSC_PS_MAINTAIN_EFF="$base"
 			QSC_PS_MAINTAIN_EFF="$(qsc_clamp_int "$QSC_PS_MAINTAIN_EFF" 45 180 90)"
 		else
+			# xm_power / 普通节点：夜间可更疏
 			QSC_PS_MAINTAIN_EFF=300
 			[ "$base" -gt 300 ] 2>/dev/null && QSC_PS_MAINTAIN_EFF="$base"
 			QSC_PS_MAINTAIN_EFF="$(qsc_clamp_int "$QSC_PS_MAINTAIN_EFF" 60 600 300)"

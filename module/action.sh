@@ -31,16 +31,22 @@ echo "5 秒内未按键 → 自动刷新状态"
 qsc_volume_choice 5
 _vol_rc=$?
 
-# Action「测开关」必须确认线真在：只认 online / VBUS / 类型 / 大电流。
+# Action「测开关」必须确认线真在：只认 online / UCSI / VBUS / 类型 / MCA 适配器 / 非放电大电流。
 # 不用 qsc_ps_plugged 软路径（MCA 粘 present + Not charging 会在未插电时误报已插电）。
+# K90U 未插电：usb present/online=0，但 battery |I| 仍可达 150mA+ 且 Discharging——电流项已否决放电。
 qsc_action_is_plugged() {
-	local o v
+	local o
 	for o in /sys/class/power_supply/usb/online \
 		/sys/class/power_supply/qc_usb/online \
 		/sys/class/power_supply/wireless/online \
 		/sys/class/power_supply/ac/online \
 		/sys/class/power_supply/battery/charger_online; do
-		[ -f "$o" ] || continue
+		[ -e "$o" ] || continue
+		[ "$(cat "$o" 2>/dev/null | tr -d ' \r\n')" = "1" ] && return 0
+	done
+	for o in /sys/class/power_supply/ucsi*/online \
+		/sys/class/power_supply/ucsi-source-psy*/online; do
+		[ -e "$o" ] || continue
 		[ "$(cat "$o" 2>/dev/null | tr -d ' \r\n')" = "1" ] && return 0
 	done
 	if type qsc_ps_vbus_live >/dev/null 2>&1 && qsc_ps_vbus_live; then
@@ -49,6 +55,10 @@ qsc_action_is_plugged() {
 	if type qsc_ps_type_live >/dev/null 2>&1 && qsc_ps_type_live; then
 		return 0
 	fi
+	if type qsc_ps_mca_adapter_live >/dev/null 2>&1 && qsc_ps_mca_adapter_live; then
+		return 0
+	fi
+	# 仅非 Discharging 的大电流（已在 qsc_ps_charging_current_live 内否决放电）
 	if type qsc_ps_charging_current_live >/dev/null 2>&1 && qsc_ps_charging_current_live; then
 		return 0
 	fi
@@ -211,7 +221,9 @@ qsc_action_diagnose() {
 	fi
 	chmod 0755 "$BINDIR/diagnose.sh" 2>/dev/null
 	echo "正在生成报告 → /sdcard/qsc_diagnose.txt"
-	echo "参考: status=$(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d ' \r\n') present=$(cat /sys/class/power_supply/usb/present 2>/dev/null | tr -d ' \r\n') online=$(cat /sys/class/power_supply/usb/online 2>/dev/null | tr -d ' \r\n') type=$(cat /sys/class/power_supply/usb/real_type 2>/dev/null | tr -d ' \r\n')"
+	_mca_rt=$(cat /sys/devices/platform/soc/soc:mca_business_charger/real_type 2>/dev/null | tr -d ' \r\n')
+	_mca_pm=$(cat /sys/devices/platform/soc/soc:mca_business_charger/power_max 2>/dev/null | tr -d ' \r\n')
+	echo "参考: status=$(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d ' \r\n') present=$(cat /sys/class/power_supply/usb/present 2>/dev/null | tr -d ' \r\n') online=$(cat /sys/class/power_supply/usb/online 2>/dev/null | tr -d ' \r\n') type=$(cat /sys/class/power_supply/usb/real_type 2>/dev/null | tr -d ' \r\n') mca_rt=${_mca_rt:-?} power_max=${_mca_pm:-?}"
 	sh "$BINDIR/diagnose.sh"
 	_diag_rc=$?
 	if [ "$_diag_rc" -eq 0 ] 2>/dev/null; then

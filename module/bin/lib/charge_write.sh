@@ -445,7 +445,7 @@ qsc_stop_wakelock_mode() {
 }
 
 qsc_stop_wakelock_wanted() {
-	local mode brand manufacturer
+	local mode brand manufacturer _as
 	mode="$(qsc_stop_wakelock_mode)"
 	case "$mode" in
 		1|on|true) return 0 ;;
@@ -456,15 +456,17 @@ qsc_stop_wakelock_wanted() {
 			case "$brand-$manufacturer" in
 				*meizu*|*flyme*) return 0 ;;
 			esac
-			# 有 MCA 的小米机（17/K90 等）深睡也会改回 handle_state，持锁更稳
-			if [ -f /sys/devices/platform/soc/soc:mca_business_charger/handle_state ] \
-				|| [ -f /sys/devices/platform/soc/soc:mca_charger/handle_state ] \
-				|| [ -e /sys/devices/platform/soc@0/soc:mca_charger/handle_state ] \
-				|| [ -e /sys/devices/platform/soc@0/mca_charger/handle_state ] \
-				|| [ -e /sys/class/xm_power/charger/mca_business_charger/handle_state ] \
-				|| [ -e /sys/class/xm_power/charger/mca_charger/handle_state ] \
-				|| [ "$(qsc_profile_get mca 2>/dev/null)" = "1" ]; then
-				return 0
+			# xm_power 主路径：靠投票+维持重申即可，不因本机仍有 handle_state 就挡 Doze
+			if type qsc_stop_route_is_xm_power >/dev/null 2>&1 && qsc_stop_route_is_xm_power; then
+				return 1
+			fi
+			# 仅当实际停充落到 handle_state / stop_handle_charge 时才自动持锁
+			# （深睡易被 OEM 改回；xm_power 优先成功时不会进这里）
+			if [ -f "$DATADIR/active_switch" ]; then
+				_as="$(cat "$DATADIR/active_switch" 2>/dev/null)"
+				case "$_as" in
+					*handle_state*|*stop_handle_charge*) return 0 ;;
+				esac
 			fi
 			return 1
 			;;
@@ -546,8 +548,13 @@ qsc_maintain_stop_while_plugged() {
 		return 1
 	}
 
+	# handle_state 路径才按「MCA 勤重申」；xm_power 主路径按非 handle 拉长间隔（少写、少持锁）
 	_is_mca=0
-	type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca && _is_mca=1
+	if type qsc_stop_route_is_xm_power >/dev/null 2>&1 && qsc_stop_route_is_xm_power; then
+		_is_mca=0
+	elif type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca; then
+		_is_mca=1
+	fi
 
 	# 假停充自愈：
 	# 标记已超过数秒且仍像在充 → 清标记，让主循环重新走完整停充分支。
@@ -690,17 +697,19 @@ qsc_maintain_stop_while_plugged() {
 		fi
 	fi
 
-	# MCA：系统会改回 handle_state，稳态外/到期仍须重申
-	if qsc_mca_write stop; then
-		qsc_xm_power_vote stop >/dev/null 2>&1 || true
-		[ "$_now" -gt 0 ] && printf '%s\n' "$_now" >"$DATADIR/.maintain_reaffirm_at" 2>/dev/null
-		qsc_dbg "maintain：MCA 重申成功"
-		return 0
-	fi
-	# 机型 ABI：xm_power 投票也会被改回
+	# xm_power 优先重申（与 power_stop 一致）
 	if type qsc_xm_power_vote >/dev/null 2>&1 && qsc_xm_power_vote stop; then
+		touch "$DATADIR/xm_power_stop" 2>/dev/null
 		[ "$_now" -gt 0 ] && printf '%s\n' "$_now" >"$DATADIR/.maintain_reaffirm_at" 2>/dev/null
 		qsc_dbg "maintain：xm_power 重申成功"
+		return 0
+	fi
+	# 兜底：handle_state；成功后仍补投 xm_power
+	if qsc_mca_write stop; then
+		qsc_xm_power_vote stop >/dev/null 2>&1 || true
+		rm -f "$DATADIR/xm_power_stop" 2>/dev/null
+		[ "$_now" -gt 0 ] && printf '%s\n' "$_now" >"$DATADIR/.maintain_reaffirm_at" 2>/dev/null
+		qsc_dbg "maintain：MCA handle_state 兜底重申成功"
 		return 0
 	fi
 	# preferred（测开关）或 active_switch：停充期间持续重申，防 OEM 改回
