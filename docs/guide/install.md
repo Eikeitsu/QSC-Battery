@@ -73,7 +73,8 @@
 - **音量上**（或超时）：刷新状态
 - **音量下**：再选 — 音量上写诊断 `/sdcard/qsc_diagnose.txt`；音量下测开关（须插电）；超时默认诊断
 
-完整测开关也可：`sh .../bin/qsc.sh test-switch` 或 `bin/test_switch.sh`（须插电）。
+完整测开关也可：`sh .../bin/qsc.sh test-switch` 或 `bin/test_switch.sh`（须插电）。  
+LSPosed 注入后可用 `sh .../bin/xp_bus_check.sh` 核对事实总线（可选）。
 
 ## 在线更新
 

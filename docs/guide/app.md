@@ -34,14 +34,16 @@
 2. **作用域已含 system**：`getScope()` / 一键请求
 3. **框架已注入**：`/data/system/qsc_xp_alive` 或 `runningTargets` 含 system_server
 
-- **作用**：
-  1. **前台包名总线**：`qsc_xp_fg`（+ edge）；简介 / 游戏旁路 / App 停充共用。**门禁**：三者全关时 XP 不写盘。**分级**：仅简介→管理器；游戏/停充→各自包名列表。管理器 **进出各 3s 稳定**，离开后立即写 leave（第三列为管理器包名）；列表约 **1s 进 / 30s 离**（游戏另认进程）。普通 App fg 落盘 **800ms**。无 XP、软关或策略空闲/异常时回退 dumpsys，边沿恢复后再切回
-  2. **管理器边沿队列**：`qsc_xp_viewer` 追加 enter/leave；有 XP 时主服务直接消费并刷 `module.prop`（不启简介 worker），观看中约 45–60s 一轮；无 XP 才用 dumpsys 降级 worker
-  3. **插拔边沿**：仅 qscd 不可用且已武装时写 `qsc_xp_wake`
-  4. **辅助边沿（默认关）**：`want_screen` / `want_doze` / `want_bcast` → 分别写 `qsc_xp_screen` / `qsc_xp_doze` / `qsc_xp_bcast`；息屏策略优先读 screen；武装时亦可打断 sleep。广播动作列表见 `qsc_xp_bcast_actions`（空则用内置 SCREEN/IDLE/插拔）
-- **通道**：`/data/system/`；`qsc_xp_off` 全关；`qsc_xp_no_wake` 仅关插拔唤醒；`qsc_xp_no_viewer` 关前台总线
-- **停充**始终由 Magisk 模块负责
-- 排查：开 LSP「详细日志」后 `adb logcat -s QscXp` 可见 `ok viewer enter|leave`；Magisk 默认 `log.log` **不再**记管理器进出。开「详细调试日志」可见简介刷新等内部 dbg；Rust qscd 支持 `--wake-file` 与 viewer 同 poll
+- **作用**（事实总线；**不停充**）：
+  1. **前台包名总线**：`qsc_xp_fg`（+ edge）；简介 / 游戏旁路 / App 停充共用。门禁与分级同前。包名列表以 Magisk 写出的 `qsc_xp_*_pkgs` 为准。无 XP / alive 过期 / 软关 / 异常 → dumpsys 回退
+  2. **管理器边沿队列**：`qsc_xp_viewer`；有 XP 时主服务消费并刷简介（不启 worker）；无 XP 才 dumpsys 降级 worker
+  3. **插拔事实**：始终写 `qsc_xp_plug`；参与 Magisk 插电旁证（否决粘 present）；qscd 可 `--wake-file`；仅武装时另写 `qsc_xp_wake`
+  4. **亮灭屏 / Doze 事实**：始终写；Doze idle 拉长未插电睡眠，**active 立刻复评**；面板 want_* 只控武装 wake
+  5. **广播边沿**（默认关）：开启后可 `--wake-file` 并 bump `conf_reload` 复评
+- **通道**：`/data/system/`；`qsc_xp_off` 全关；`qsc_xp_alive` 含 `v=` 且需心跳（过期回退 dumpsys）；APP 面板有总线快照
+- **停充**始终由 Magisk 模块负责；无 LSPosed 时充电控制完整可用
+- 排查：开 LSP「详细日志」后 `adb logcat -s QscXp`；现场 `sh …/bin/xp_bus_check.sh`；Rust qscd 可 poll plug / viewer / screen / doze / bcast / fg_edge
+- **验证清单（刷含 APP 的模块并重启后）**：① 面板总线快照有 alive；② 拔插看 plug；③ 亮灭屏看 screen；④ Action 音量下→上出诊断；⑤ 无 XP 机确认停充仍正常
 
 ## 安装
 

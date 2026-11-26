@@ -2,8 +2,12 @@
 
 ## Unreleased
 
+- **LSPosed 事实总线**：注入后始终写插拔/亮灭屏/Doze（`qsc_xp_plug|screen|doze`）；`plug` 参与 Magisk 插电旁证（否决粘 present）；Doze idle 拉长未插电睡眠、active 立刻 `conf_reload` 复评；广播边沿仍默认关。qscd 可多 `--wake-file`。无 XP / alive 过期完整回退 dumpsys
+- **XP 健康与面板**：alive 心跳 + `v=`；APP「总线快照」；Magisk 包名清单为权威；有 XP 时 dumpsys 更稀。现场自检：`bin/xp_bus_check.sh`
+
 ## 2026.11.26
 
+- **Action**：音量下再选——上=诊断、下=测开关（须插电）、超时默认诊断；插电也能单独交诊断报告
 - **修复 [#6](https://github.com/Eikeitsu/QSC-Battery/issues/6)**：`.ch_curr_session_fail` 去重写入 + 体积上限（启动清异常膨胀）；服务加单实例锁，避免多守护叠跑放大写盘
 - **体验 [#3](https://github.com/Eikeitsu/QSC-Battery/issues/3)**：电流显示改为充电为正/放电为负；切回概览跳过过勤状态刷新；「动态简介 / 拔线还原 / 自动拔插」补例句说明
 - **APP 充电动效**：充电动画重做，新增两套充电动画，可在主题外观页面切换

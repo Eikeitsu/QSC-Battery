@@ -20,6 +20,15 @@ qsc_ps_native_ready() {
 qsc_ps_idle_secs() {
 	QSC_PS_IDLE_EFF="${QSC_PS_IDLE:-30}"
 	QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
+	# Doze active / 广播等边沿：立刻短醒复评（无 XP 不会置位）
+	if [ "${QSC_PS_XP_FORCE_EVAL:-0}" = "1" ] ||
+		{ type qsc_ps_xp_doze_active_fresh >/dev/null 2>&1 &&
+			qsc_ps_xp_doze_active_fresh; }; then
+		QSC_PS_IDLE_EFF=5
+		QSC_PS_WAIT_FALLBACK=5
+		QSC_PS_XP_FORCE_EVAL=0
+		return 0
+	fi
 	# 正在看管理器：主服务短睡自己刷简介（有 XP 时无 worker）
 	if type qsc_desc_viewing_active >/dev/null 2>&1 &&
 		qsc_desc_viewing_active; then
@@ -39,6 +48,7 @@ qsc_ps_idle_secs() {
 	fi
 	qsc_ps_native_ready || {
 		type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
+		type qsc_ps_xp_doze_stretch >/dev/null 2>&1 && qsc_ps_xp_doze_stretch
 		[ -n "${QSC_PS_IDLE_EFF:-}" ] && QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
 		return 0
 	}
@@ -46,6 +56,8 @@ qsc_ps_idle_secs() {
 		&& QSC_PS_IDLE_EFF="$QSC_PS_IDLE_NATIVE"
 	# 档位 / 息屏 / 夜间 DeepPark 可再放大（仅未插电）
 	type qsc_ps_policy_refresh >/dev/null 2>&1 && qsc_ps_policy_refresh
+	# XP Doze idle：在策略之上再拉长（无 XP / 非 idle 则原样）
+	type qsc_ps_xp_doze_stretch >/dev/null 2>&1 && qsc_ps_xp_doze_stretch
 	QSC_PS_WAIT_FALLBACK="$QSC_PS_IDLE_EFF"
 	return 0
 }
@@ -132,20 +144,46 @@ qsc_ps_native_exec() {
 qsc_ps_native_wait() {
 	local secs="$1" floor="$2" rc error_file wake_args=""
 	error_file="$DATADIR/qscd_wait_error.$$"
-	# Rust：亮屏且非 DeepPark 时才把 viewer 边沿并进 poll；驻停勿挂 wake-file（假醒）
+	# Rust wake-file：有 XP 时挂事实总线；无 XP 文件不更新，无假醒。驻停只挂插拔。
 	_parked=0
 	case "${QSC_PS_MODE:-}" in deep|screen_off) _parked=1 ;; esac
 	[ "${QSC_PS_DESC_FORCE_STATIC:-0}" = "1" ] && _parked=1
-	if [ "$_parked" != "1" ] &&
-		type qsc_native_has >/dev/null 2>&1 && qsc_native_has wake-file &&
-		type qsc_description_enabled >/dev/null 2>&1 &&
-		qsc_description_enabled &&
-		[ "${QSC_PS_PROFILE:-balanced}" != "aggressive" ] &&
+	if type qsc_native_has >/dev/null 2>&1 && qsc_native_has wake-file &&
 		[ -d /data/system ]; then
 		if type qsc_xp_ensure_bus >/dev/null 2>&1; then
-			qsc_xp_ensure_bus /data/system/qsc_xp_viewer || true
+			qsc_xp_ensure_bus /data/system/qsc_xp_plug || true
 		fi
-		wake_args="--wake-file /data/system/qsc_xp_viewer"
+		# 插拔事实：驻停也挂，加快充电响应（与 uevent 互补；无 XP 则静默）
+		wake_args="--wake-file /data/system/qsc_xp_plug"
+		if [ "$_parked" != "1" ] &&
+			[ "${QSC_PS_PROFILE:-balanced}" != "aggressive" ]; then
+			if type qsc_description_enabled >/dev/null 2>&1 &&
+				qsc_description_enabled; then
+				type qsc_xp_ensure_bus >/dev/null 2>&1 &&
+					qsc_xp_ensure_bus /data/system/qsc_xp_viewer || true
+				wake_args="$wake_args --wake-file /data/system/qsc_xp_viewer"
+			fi
+			type qsc_xp_ensure_bus >/dev/null 2>&1 && {
+				qsc_xp_ensure_bus /data/system/qsc_xp_screen || true
+				qsc_xp_ensure_bus /data/system/qsc_xp_doze || true
+			}
+			wake_args="$wake_args --wake-file /data/system/qsc_xp_screen"
+			wake_args="$wake_args --wake-file /data/system/qsc_xp_doze"
+			# 广播边沿：仅用户开启 want_bcast 时挂接
+			if [ -f /data/system/qsc_xp_want_bcast ]; then
+				type qsc_xp_ensure_bus >/dev/null 2>&1 &&
+					qsc_xp_ensure_bus /data/system/qsc_xp_bcast || true
+				wake_args="$wake_args --wake-file /data/system/qsc_xp_bcast"
+			fi
+			# 游戏/停充：前台边沿叫醒限流评估
+			if [ -f /data/system/qsc_xp_fg_policy ] &&
+				{ grep -q '^game=1' /data/system/qsc_xp_fg_policy 2>/dev/null ||
+					grep -q '^app_stop=1' /data/system/qsc_xp_fg_policy 2>/dev/null; }; then
+				type qsc_xp_ensure_bus >/dev/null 2>&1 &&
+					qsc_xp_ensure_bus /data/system/qsc_xp_fg_edge || true
+				wake_args="$wake_args --wake-file /data/system/qsc_xp_fg_edge"
+			fi
+		fi
 	fi
 	qsc_dbg "qscd wait 进入 secs=$secs floor=$floor watch=$([ -x "$BINDIR/qscd" ] && qsc_ps_watch_supported && echo 1 || echo 0) switch=$([ -f "$DATADIR/power_switch" ] && echo 1 || echo 0)"
 	if qsc_ps_watch_supported; then
@@ -261,13 +299,116 @@ qsc_ps_xp_wake_fresh() {
 	[ "$mt" -gt 0 ] 2>/dev/null && [ "$((now - mt))" -le 20 ] 2>/dev/null
 }
 
+# 插拔事实边沿（不依赖 arm；无 XP 则文件不更新）
+qsc_ps_xp_plug_fresh() {
+	local f=/data/system/qsc_xp_plug mt now
+	[ -f /data/system/qsc_xp_off ] && return 1
+	[ -f "$f" ] || return 1
+	mt="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
+	now="$(date +%s 2>/dev/null || echo 0)"
+	case "$mt:$now" in *[!0-9:]*) return 1 ;; esac
+	[ "$mt" -gt 0 ] 2>/dev/null && [ "$((now - mt))" -le 20 ] 2>/dev/null
+}
+
+# 读 Doze 事实 → QSC_PS_XP_DOZE=idle|active，QSC_PS_XP_DOZE_AGE
+qsc_ps_xp_doze_read() {
+	local f=/data/system/qsc_xp_doze line st mt now
+	QSC_PS_XP_DOZE=""
+	QSC_PS_XP_DOZE_AGE=999999
+	[ -f /data/system/qsc_xp_off ] && return 1
+	type qsc_fg_xp_injected >/dev/null 2>&1 || return 1
+	qsc_fg_xp_injected || return 1
+	[ -f "$f" ] || return 1
+	IFS= read -r line <"$f" 2>/dev/null || return 1
+	st="$(printf '%s' "$line" | awk -F'\t' 'NF{print $NF; exit}' | tr -d ' \r\n')"
+	case "$st" in idle|active) ;; *) return 1 ;; esac
+	mt="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
+	now="$(date +%s 2>/dev/null || echo 0)"
+	case "$mt:$now" in *[!0-9:]*) return 1 ;; esac
+	QSC_PS_XP_DOZE="$st"
+	QSC_PS_XP_DOZE_AGE=$((now - mt))
+	[ "$QSC_PS_XP_DOZE_AGE" -ge 0 ] 2>/dev/null || QSC_PS_XP_DOZE_AGE=999999
+	return 0
+}
+
+# 刚出 Doze（active 且新鲜）→ 应立刻复评，勿长睡
+qsc_ps_xp_doze_active_fresh() {
+	qsc_ps_xp_doze_read || return 1
+	[ "$QSC_PS_XP_DOZE" = "active" ] || return 1
+	[ "${QSC_PS_XP_DOZE_AGE:-999999}" -le 30 ] 2>/dev/null
+}
+
+# 广播边沿新鲜（须 want_bcast；默认关）
+qsc_ps_xp_bcast_fresh() {
+	local f=/data/system/qsc_xp_bcast mt now
+	[ -f /data/system/qsc_xp_off ] && return 1
+	[ -f /data/system/qsc_xp_want_bcast ] || return 1
+	[ -f "$f" ] || return 1
+	mt="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
+	now="$(date +%s 2>/dev/null || echo 0)"
+	case "$mt:$now" in *[!0-9:]*) return 1 ;; esac
+	[ "$mt" -gt 0 ] 2>/dev/null && [ "$((now - mt))" -le 20 ] 2>/dev/null
+}
+
+# wait/边沿醒来后：bump 配置重载，强制下一轮完整评估
+qsc_ps_xp_bump_eval() {
+	local why="${1:-xp_edge}"
+	: >"$DATADIR/conf_reload_req" 2>/dev/null || true
+	QSC_PS_XP_FORCE_EVAL=1
+	type qsc_dbg >/dev/null 2>&1 && qsc_dbg "XP 边沿触发复评 ($why)"
+}
+
+# 消费 Doze active / 广播 / 插拔事实 → 短睡 + conf_reload（无 XP 无操作）
+qsc_ps_xp_consume_eval_edges() {
+	QSC_PS_XP_FORCE_EVAL=0
+	[ -f /data/system/qsc_xp_off ] && return 1
+	type qsc_fg_xp_injected >/dev/null 2>&1 || return 1
+	qsc_fg_xp_injected || return 1
+	if qsc_ps_xp_doze_active_fresh; then
+		qsc_ps_xp_bump_eval "doze_active"
+		return 0
+	fi
+	if qsc_ps_xp_bcast_fresh; then
+		qsc_ps_xp_bump_eval "bcast"
+		return 0
+	fi
+	if type qsc_ps_xp_plug_fresh >/dev/null 2>&1 && qsc_ps_xp_plug_fresh; then
+		qsc_ps_xp_bump_eval "plug"
+		return 0
+	fi
+	return 1
+}
+
+# XP Doze 为 idle 且边沿不太旧 → 拉长未插电 sleep（无 XP 原样）
+qsc_ps_xp_doze_stretch() {
+	local f=/data/system/qsc_xp_doze
+	[ -f /data/system/qsc_xp_off ] && return 0
+	[ -f "$f" ] || return 0
+	# 刚出 Doze：强制短间隔，交给 idle_secs 前面的 FORCE_EVAL
+	if qsc_ps_xp_doze_active_fresh; then
+		QSC_PS_IDLE_EFF=5
+		QSC_PS_WAIT_FALLBACK=5
+		return 0
+	fi
+	qsc_ps_xp_doze_read || return 0
+	[ "$QSC_PS_XP_DOZE" = "idle" ] || return 0
+	# 进 Doze 后文件可能很久不改；只要状态仍是 idle 就拉长（上限 6h 内写过）
+	[ "${QSC_PS_XP_DOZE_AGE:-999999}" -le 21600 ] 2>/dev/null || return 0
+	case "${QSC_PS_IDLE_EFF:-0}" in ""|*[!0-9]*) return 0 ;; esac
+	# 至少 15 分钟；已有 DeepPark 更大则不缩小
+	if [ "${QSC_PS_IDLE_EFF}" -lt 900 ] 2>/dev/null; then
+		QSC_PS_IDLE_EFF=900
+	fi
+	return 0
+}
+
 # XP 管理器边沿待消费（非空队列）→ 可打断主服务长睡
 qsc_ps_xp_viewer_pending() {
 	type qsc_manager_viewer_xp_edge_pending >/dev/null 2>&1 &&
 		qsc_manager_viewer_xp_edge_pending
 }
 
-# 可选辅助边沿（亮灭屏/Doze/广播）亦可武装打断；与 wake 同窗口
+# 事实边沿（亮灭屏/Doze）与可选广播；无 XP 时文件不新鲜 → 不打断
 qsc_ps_xp_assist_fresh() {
 	local now mt age f
 	[ -f /data/system/qsc_xp_off ] && return 1
@@ -275,9 +416,8 @@ qsc_ps_xp_assist_fresh() {
 	case "$now" in ""|*[!0-9]*) return 1 ;; esac
 	for f in /data/system/qsc_xp_screen /data/system/qsc_xp_doze /data/system/qsc_xp_bcast; do
 		[ -f "$f" ] || continue
+		# 广播仍需显式开启（噪声）；screen/doze 为事实总线
 		case "$f" in
-			*/qsc_xp_screen) [ -f /data/system/qsc_xp_want_screen ] || continue ;;
-			*/qsc_xp_doze) [ -f /data/system/qsc_xp_want_doze ] || continue ;;
 			*/qsc_xp_bcast) [ -f /data/system/qsc_xp_want_bcast ] || continue ;;
 		esac
 		mt="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
@@ -339,9 +479,10 @@ qsc_ps_wait_race_viewer() {
 	return "$rc"
 }
 
-# qscd 不可用时的睡眠：武装 XP / 简介边沿均可短片打断
+# qscd 不可用时的睡眠：武装 XP / 简介边沿 / 插拔·亮灭屏·Doze 事实均可短片打断
+# 无 XP：整段 sleep（充电仍靠 loop 间隔发现插拔）
 qsc_ps_fallback_sleep() {
-	local secs="${1:-3}" left chunk=3
+	local secs="${1:-3}" left chunk=3 _xp=0
 	case "$secs" in ""|*[!0-9]*) secs=3 ;; esac
 	if qsc_ps_xp_viewer_pending; then
 		return 0
@@ -350,6 +491,7 @@ qsc_ps_fallback_sleep() {
 		sleep "$secs"
 		return 0
 	fi
+	type qsc_fg_xp_injected >/dev/null 2>&1 && qsc_fg_xp_injected && _xp=1
 	# 简介边沿：仅 pending/观看才短片；勿因「开了动态简介」整夜高频醒
 	_desc_wake=0
 	if type qsc_ps_xp_viewer_pending >/dev/null 2>&1 &&
@@ -359,28 +501,33 @@ qsc_ps_fallback_sleep() {
 		qsc_desc_viewing_active; then
 		_desc_wake=1
 	fi
-	if [ "$_desc_wake" != "1" ] && [ ! -f /data/system/qsc_xp_arm ]; then
+	# 无 XP：不轮询事实文件
+	if [ "$_xp" != "1" ] && [ "$_desc_wake" != "1" ] &&
+		[ ! -f /data/system/qsc_xp_arm ]; then
 		sleep "$secs"
 		return 0
 	fi
-	if [ -f /data/system/qsc_xp_no_wake ] && [ "$_desc_wake" != "1" ]; then
-		sleep "$secs"
-		return 0
-	fi
-	if qsc_ps_xp_wake_fresh || qsc_ps_xp_assist_fresh || qsc_ps_xp_viewer_pending; then
+	if qsc_ps_xp_wake_fresh || qsc_ps_xp_plug_fresh ||
+		qsc_ps_xp_assist_fresh || qsc_ps_xp_viewer_pending; then
 		rm -f /data/system/qsc_xp_wake 2>/dev/null || true
+		type qsc_ps_xp_consume_eval_edges >/dev/null 2>&1 &&
+			qsc_ps_xp_consume_eval_edges || true
 		return 0
 	fi
+	# no_wake：仍允许简介与插拔事实，不写 armed wake
 	left=$secs
 	while [ "$left" -gt 0 ] 2>/dev/null; do
-		chunk=15
+		chunk=30
 		[ "$_desc_wake" = "1" ] && chunk=5
+		[ -f /data/system/qsc_xp_arm ] && [ "$chunk" -gt 15 ] 2>/dev/null && chunk=15
 		[ "$left" -lt "$chunk" ] 2>/dev/null && chunk=$left
 		sleep "$chunk"
 		left=$((left - chunk))
-		if qsc_ps_xp_wake_fresh || qsc_ps_xp_assist_fresh ||
-			qsc_ps_xp_viewer_pending; then
+		if qsc_ps_xp_wake_fresh || qsc_ps_xp_plug_fresh ||
+			qsc_ps_xp_assist_fresh || qsc_ps_xp_viewer_pending; then
 			rm -f /data/system/qsc_xp_wake 2>/dev/null || true
+			type qsc_ps_xp_consume_eval_edges >/dev/null 2>&1 &&
+				qsc_ps_xp_consume_eval_edges || true
 			return 0
 		fi
 	done
@@ -436,6 +583,11 @@ qsc_ps_wait() {
 			QSC_PS_SLEEP_COUNT=$((${QSC_PS_SLEEP_COUNT:-0} + 1))
 			;;
 	esac
+	# 睡前若已有 Doze active / 广播边沿，直接跳过长睡
+	if type qsc_ps_xp_consume_eval_edges >/dev/null 2>&1 &&
+		qsc_ps_xp_consume_eval_edges; then
+		return 0
+	fi
 	if qsc_ps_native_ready; then
 		_race=0
 		_race_rc=1
@@ -455,6 +607,8 @@ qsc_ps_wait() {
 			QSC_PS_WAIT_NEXT_RETRY=0
 			rm -f "$DATADIR/qscd_unusable" /data/system/qsc_xp_arm 2>/dev/null
 			qsc_log_once_clear qscd
+			type qsc_ps_xp_consume_eval_edges >/dev/null 2>&1 &&
+				qsc_ps_xp_consume_eval_edges || true
 			return 0
 		fi
 		# 无法竞速（无 inotify 等）：一律改走 native，勿盲 sleep 丢掉插拔与 enter
@@ -476,6 +630,8 @@ qsc_ps_wait() {
 			QSC_PS_WAIT_NEXT_RETRY=0
 			rm -f "$DATADIR/qscd_unusable" /data/system/qsc_xp_arm 2>/dev/null
 			qsc_log_once_clear qscd
+			type qsc_ps_xp_consume_eval_edges >/dev/null 2>&1 &&
+				qsc_ps_xp_consume_eval_edges || true
 			return 0
 		fi
 		QSC_PS_WAIT_HELPER_OK=0

@@ -31,6 +31,14 @@ import com.qsc.battery.ui.design.charge.ChargeTopBar
 import com.qsc.battery.ui.util.LifecycleResumeEffect
 import com.qsc.battery.xposed.XpPrefs
 
+private fun formatBusAge(sec: Long): String = when {
+    sec < 5 -> "刚刚"
+    sec < 60 -> "${sec}s 前"
+    sec < 3600 -> "${sec / 60} 分钟前"
+    sec < 86400 -> "${sec / 3600} 小时前"
+    else -> "${sec / 86400} 天前"
+}
+
 @Composable
 fun XpPanelScreen(
     container: AppContainer,
@@ -57,7 +65,7 @@ fun XpPanelScreen(
         status == null -> null
 
         status.frameworkAlive ->
-            "③ 已注入 system_server。qscd 正常时「未武装」是预期；守护不可用时才会武装边沿唤醒。" to BannerTone.Ok
+            "③ 已注入。前台/亮灭屏/Doze/插拔事实会写给 Magisk；无 XP 时模块仍完整走 dumpsys 回退。qscd 正常时「未武装」是预期。" to BannerTone.Ok
 
         status.scopeHintWrong ->
             "仅勾了 android 不够。请勾选「系统框架」包名 system（注入 system_server），再重启。" to BannerTone.Warn
@@ -75,7 +83,7 @@ fun XpPanelScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         ChargeTopBar(
             title = "LSPosed / XP",
-            subtitle = "边沿唤醒 · 不停充",
+            subtitle = "系统事实总线 · 不停充",
             onBack = onBack,
         )
         Column(
@@ -172,9 +180,9 @@ fun XpPanelScreen(
 
             ChargeSection(title = "开关") {
                 ChargeToggleRow(
-                    title = "允许插拔边沿唤醒",
+                    title = "允许插拔武装唤醒",
                     checked = toggles.wakeEnabled && !toggles.xpOff,
-                    summary = "仅 qscd 不可用且已武装时写 qsc_xp_wake；不影响管理器简介边沿",
+                    summary = "插拔事实始终写入；本开关仅控制 qscd 降级时写 qsc_xp_wake 打断 sleep",
                     enabled = !busy,
                     onCheckedChange = { vm.setWakeEnabled(it) },
                 )
@@ -196,19 +204,19 @@ fun XpPanelScreen(
                 )
             }
 
-            ChargeSection(title = "辅助边沿（默认关）") {
+            ChargeSection(title = "武装唤醒（可选）") {
                 ChargeToggleRow(
-                    title = "亮灭屏边沿",
+                    title = "亮灭屏武装唤醒",
                     checked = toggles.screenEdge && !toggles.xpOff,
-                    summary = "写 qsc_xp_screen；息屏策略优先读此文件；武装时兼可打断 sleep",
+                    summary = "亮灭屏事实默认已写给 Magisk；开启后武装时还可写 wake 打断 sleep",
                     enabled = !busy && !toggles.xpOff,
                     onCheckedChange = { vm.setScreenEdge(it) },
                 )
                 ChargeDivider()
                 ChargeToggleRow(
-                    title = "Doze 边沿",
+                    title = "Doze 武装唤醒",
                     checked = toggles.dozeEdge && !toggles.xpOff,
-                    summary = "写 qsc_xp_doze（idle/active）；武装时可打断 sleep",
+                    summary = "Doze 事实默认已写（idle 可拉长未插电睡眠）；开启后武装时兼可打断 sleep",
                     enabled = !busy && !toggles.xpOff,
                     onCheckedChange = { vm.setDozeEdge(it) },
                 )
@@ -216,10 +224,43 @@ fun XpPanelScreen(
                 ChargeToggleRow(
                     title = "白名单广播边沿",
                     checked = toggles.bcastEdge && !toggles.xpOff,
-                    summary = "写 qsc_xp_bcast；默认含 SCREEN/IDLE/插拔；可改 qsc_xp_bcast_actions",
+                    summary = "仍默认关（较吵）；写 qsc_xp_bcast，可改 qsc_xp_bcast_actions",
                     enabled = !busy && !toggles.xpOff,
                     onCheckedChange = { vm.setBcastEdge(it) },
                 )
+            }
+
+            ChargeSection(title = "总线快照") {
+                val snaps = status?.busSnapshot.orEmpty()
+                if (snaps.isEmpty()) {
+                    ChargeListRow(
+                        title = "暂无数据",
+                        summary = status?.aliveBusVer?.let { "alive v=$it" }
+                            ?: "需 Root；注入后可见 plug/screen/doze/fg 等",
+                    )
+                } else {
+                    snaps.forEachIndexed { index, snap ->
+                        if (index > 0) ChargeDivider()
+                        val age = snap.ageSec?.let { formatBusAge(it) } ?: "—"
+                        ChargeListRow(
+                            title = snap.label,
+                            summary = if (snap.present) {
+                                listOfNotNull(
+                                    age,
+                                    snap.preview.takeIf { it.isNotBlank() },
+                                ).joinToString(" · ")
+                            } else {
+                                "缺失"
+                            },
+                            value = when {
+                                !snap.present -> null
+                                snap.label == "alive" && status?.aliveBusVer != null ->
+                                    "v${status.aliveBusVer}"
+                                else -> "有"
+                            },
+                        )
+                    }
+                }
             }
 
             ChargeSection(title = "其它") {

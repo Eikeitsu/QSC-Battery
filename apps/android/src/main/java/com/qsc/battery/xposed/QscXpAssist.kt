@@ -10,10 +10,10 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * 可选辅助边沿（默认关；touch want_* 才启用）：
- * - 亮灭屏 → [XpPrefs.SCREEN_PATH]，武装时兼写 wake
- * - Doze 进出 → [XpPrefs.DOZE_PATH]
- * - 白名单广播 → [XpPrefs.BCAST_PATH]
+ * 系统事实总线（注入后）：
+ * - 亮灭屏 → 始终写 [XpPrefs.SCREEN_PATH]；[WANT_SCREEN] + 武装才写 wake
+ * - Doze → 始终写 [XpPrefs.DOZE_PATH]；[WANT_DOZE] + 武装才写 wake
+ * - 白名单广播 → 仍需 [WANT_BCAST]（噪声大，默认关）
  */
 internal object QscXpAssist {
     private val hookedScreen = AtomicBoolean(false)
@@ -103,15 +103,18 @@ internal object QscXpAssist {
 
     private fun onScreenChange(on: Boolean, log: (Int, String) -> Unit) {
         refreshWants()
-        // 先落 screen 边沿，再回调 interactive→viewer enter，避免 Magisk 仍读到旧 off
-        if (wantScreen.get() && !xpOff()) {
+        if (!xpOff()) {
             val prev = lastScreenOn.getAndSet(on)
             if (prev == null || prev != on) {
+                // 事实总线始终落盘；Magisk 可无 want_screen 也能读息屏态
                 writeEdge(XpPrefs.SCREEN_PATH, if (on) "on" else "off", log, "screen")
-                maybeWake(if (on) "screen_on" else "screen_off", log)
+                // 武装唤醒仍需用户开 want_screen，避免无谓打断
+                if (wantScreen.get()) {
+                    maybeWake(if (on) "screen_on" else "screen_off", log)
+                }
             }
         }
-        // 始终回调亮灭屏（不依赖 want_screen）：管理器前台息屏后再亮时需重发 viewer enter
+        // 始终回调亮灭屏：管理器前台息屏后再亮时需重发 viewer enter
         val prevNotify = lastInteractiveNotify.getAndSet(on)
         if (prevNotify == null || prevNotify != on) {
             runCatching { interactiveListener.get()?.invoke(on) }
@@ -121,11 +124,13 @@ internal object QscXpAssist {
 
     private fun onDozeChange(idle: Boolean, log: (Int, String) -> Unit) {
         refreshWants()
-        if (!wantDoze.get() || xpOff()) return
+        if (xpOff()) return
         val prev = lastDozeIdle.getAndSet(idle)
         if (prev != null && prev == idle) return
         writeEdge(XpPrefs.DOZE_PATH, if (idle) "idle" else "active", log, "doze")
-        maybeWake(if (idle) "doze_idle" else "doze_active", log)
+        if (wantDoze.get()) {
+            maybeWake(if (idle) "doze_idle" else "doze_active", log)
+        }
     }
 
     private fun hookScreen(mod: XposedModule, loader: ClassLoader, log: (Int, String) -> Unit) {

@@ -357,7 +357,9 @@ qsc_xp_bootstrap_logs() {
 			qsc_xp_ensure_bus /data/system/qsc_xp_fg
 			qsc_xp_ensure_bus /data/system/qsc_xp_fg_edge
 			qsc_xp_ensure_bus /data/system/qsc_xp_wake
+			qsc_xp_ensure_bus /data/system/qsc_xp_plug
 			qsc_xp_ensure_bus /data/system/qsc_xp_screen
+			qsc_xp_ensure_bus /data/system/qsc_xp_doze
 		}
 		# 纠正历史 0644 残留，并允许 XP 从 write_disabled 恢复
 		rm -f /data/system/qsc_xp_write_disabled 2>/dev/null || true

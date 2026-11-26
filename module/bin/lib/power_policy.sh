@@ -70,17 +70,18 @@ qsc_ps_screen_is_off() {
 		[ "${QSC_PS_SCREEN_CACHE_VAL:-0}" = "1" ]
 		return $?
 	fi
-	# XP 亮灭屏：want_screen 且边沿文件新鲜时跳过 sysfs 缓存窗口
-	if [ -f /data/system/qsc_xp_want_screen ] &&
-		[ ! -f /data/system/qsc_xp_off ] &&
-		[ -f /data/system/qsc_xp_screen ]; then
+	# XP 亮灭屏事实：注入后始终写 screen；新鲜则优先于 sysfs（无 XP / 过期回退）
+	if [ ! -f /data/system/qsc_xp_off ] &&
+		[ -f /data/system/qsc_xp_screen ] &&
+		{ ! type qsc_fg_xp_injected >/dev/null 2>&1 || qsc_fg_xp_injected; }; then
 		f=/data/system/qsc_xp_screen
 		mt="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
 		case "$mt:$now" in *[!0-9:]*) ;;
 		*)
 			age=$((now - mt))
+			# 息屏可稍久信；亮屏边沿后 30s 内仍优先 XP，避免 sysfs 滞后误杀 enter
 			if [ "$mt" -gt 0 ] 2>/dev/null && [ "$age" -ge 0 ] 2>/dev/null &&
-				[ "$age" -le 15 ] 2>/dev/null; then
+				[ "$age" -le 30 ] 2>/dev/null; then
 				IFS= read -r line <"$f" 2>/dev/null || line=
 				state="$(printf '%s' "$line" | awk -F'\t' 'NF{print $NF; exit}' | tr -d ' \r\n')"
 				case "$state" in

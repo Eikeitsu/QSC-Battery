@@ -25,6 +25,9 @@ object ModulePaths {
     const val XP_LOG_TMP = "/data/local/tmp/qsc_xp.log"
     const val XP_LOG_CACHE = "/cache/qsc_xp.log"
 
+    /** XP 插拔事实总线（始终写；武装时另有 wake） */
+    const val XP_PLUG = "/data/system/qsc_xp_plug"
+
     /** Magisk 侧镜像 / 边沿事件（模块 data，Root 必可读） */
     const val XP_LOG_MODULE = "$DATADIR/xp.log"
     val XP_LOG_CANDIDATES: List<String> = listOf(XP_LOG, XP_LOG_TMP, XP_LOG_CACHE, XP_LOG_MODULE)

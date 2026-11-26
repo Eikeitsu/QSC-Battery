@@ -21,20 +21,29 @@ object XpPrefs {
     const val WAKE_PATH = "/data/system/qsc_xp_wake"
     const val ALIVE_PATH = "/data/system/qsc_xp_alive"
 
-    /** 亮灭屏边沿开关（touch=开，默认关） */
+    /**
+     * 插拔事实总线（始终写，不依赖 arm）：timestamp\\tplug|unplug。
+     * 武装时另写 [WAKE_PATH] 打断 fallback sleep；qscd 可 --wake-file 本路径。
+     */
+    const val PLUG_PATH = "/data/system/qsc_xp_plug"
+
+    /** 亮灭屏「武装唤醒」开关（touch=开）；事实文件 [SCREEN_PATH] 注入后始终写 */
     const val WANT_SCREEN_PATH = "/data/system/qsc_xp_want_screen"
 
-    /** Doze 进出边沿开关（touch=开，默认关） */
+    /** Doze「武装唤醒」开关（touch=开）；事实文件 [DOZE_PATH] 注入后始终写 */
     const val WANT_DOZE_PATH = "/data/system/qsc_xp_want_doze"
 
     /** 广播边沿开关（touch=开，默认关；动作列表见 BCAST_ACTIONS_PATH） */
     const val WANT_BCAST_PATH = "/data/system/qsc_xp_want_bcast"
 
-    /** 亮灭屏：timestamp\\ton|off */
+    /** 亮灭屏事实：timestamp\\ton|off（注入后始终更新；want_screen 仅控武装 wake） */
     const val SCREEN_PATH = "/data/system/qsc_xp_screen"
 
-    /** Doze：timestamp\\tidle|active */
+    /** Doze 事实：timestamp\\tidle|active（注入后始终更新；want_doze 仅控武装 wake） */
     const val DOZE_PATH = "/data/system/qsc_xp_doze"
+
+    /** alive 协议版本（Magisk 解析；过旧/过期则回退 dumpsys） */
+    const val ALIVE_BUS_VER = 2
 
     /** 广播：timestamp\\taction */
     const val BCAST_PATH = "/data/system/qsc_xp_bcast"

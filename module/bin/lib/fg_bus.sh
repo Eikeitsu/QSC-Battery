@@ -1,16 +1,20 @@
 #!/system/bin/sh
 # 统一前台包名总线：LSPosed 写 /data/system/qsc_xp_fg；无 XP / XP 异常时 dumpsys 降级。
 # 供简介（管理器列表）、游戏旁路、App 停充等复用。
+# 充电控制本身不依赖 XP；有 XP 时走事件，无 XP 完整回退。
 
 QSC_FG_XP_PATH="${QSC_FG_XP_PATH:-/data/system/qsc_xp_fg}"
 QSC_FG_XP_EDGE_PATH="${QSC_FG_XP_EDGE_PATH:-/data/system/qsc_xp_fg_edge}"
 QSC_FG_UNRELIABLE="${DATADIR:-/data/adb/modules/QSC_Battery/data}/xp_fg_unreliable"
 QSC_FG_CACHE_AT=0
 QSC_FG_CACHE_PKG=""
+# 无 XP / 健康核对时用；有 XP 信任文件时几乎不走 dumpsys
 QSC_FG_CACHE_SEC=12
 QSC_FG_PKG=""
 QSC_FG_SOURCE=""
 QSC_FG_XP_MISMATCH="${QSC_FG_XP_MISMATCH:-0}"
+# alive 首列毫秒时间戳；超过此秒数视为注入失效 → dumpsys 回退
+QSC_XP_ALIVE_MAX_AGE_SEC="${QSC_XP_ALIVE_MAX_AGE_SEC:-172800}"
 
 qsc_fg_xp_disabled() {
 	[ -f /data/system/qsc_xp_off ] || [ -f /data/system/qsc_xp_no_viewer ] ||
@@ -23,13 +27,35 @@ qsc_fg_xp_policy_idle() {
 	grep -q '^idle=1' /data/system/qsc_xp_fg_policy 2>/dev/null
 }
 
+# alive 文件是否新鲜（内容含 alive；mtime 在窗口内）。心跳会续写；过期 → dumpsys 回退
+# 可选解析 v=（QSC_XP_ALIVE_VER）；旧文件无 v= 仍认。
+qsc_xp_alive_file_ok() {
+	local f="$1" mt now age_sec max_sec line ver
+	[ -s "$f" ] || return 1
+	grep -q alive "$f" 2>/dev/null || return 1
+	max_sec="${QSC_XP_ALIVE_MAX_AGE_SEC:-172800}"
+	case "$max_sec" in ""|*[!0-9]*) max_sec=172800 ;; esac
+	IFS= read -r line <"$f" 2>/dev/null || line=
+	ver="$(printf '%s' "$line" | sed -n 's/.*v=\([0-9][0-9]*\).*/\1/p' | head -n1)"
+	case "$ver" in
+		""|*[!0-9]*) ;;
+		*) QSC_XP_ALIVE_VER="$ver" ;;
+	esac
+	mt="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
+	now="$(date +%s 2>/dev/null || echo 0)"
+	case "$mt:$now" in *[!0-9:]*) return 0 ;; esac
+	age_sec=$((now - mt))
+	[ "$mt" -gt 0 ] 2>/dev/null && [ "$age_sec" -ge -60 ] 2>/dev/null &&
+		[ "$age_sec" -le "$max_sec" ] 2>/dev/null
+}
+
 # 仅表示：已注入且未软关（不一定可信）
 qsc_fg_xp_injected() {
 	qsc_fg_xp_disabled && return 1
-	[ -f /data/system/qsc_xp_alive ] && return 0
-	[ -f /data/local/tmp/qsc_xp_alive ] && return 0
-	[ -f /cache/qsc_xp_alive ] && return 0
-	[ -f "${DATADIR:-}/xp_alive" ] && return 0
+	qsc_xp_alive_file_ok /data/system/qsc_xp_alive && return 0
+	qsc_xp_alive_file_ok /data/local/tmp/qsc_xp_alive && return 0
+	qsc_xp_alive_file_ok /cache/qsc_xp_alive && return 0
+	qsc_xp_alive_file_ok "${DATADIR:-}/xp_alive" && return 0
 	return 1
 }
 
@@ -66,17 +92,22 @@ qsc_fg_clear_unreliable() {
 }
 
 # dumpsys 取前台包（贵）；结果缓存 — 提前定义供 health_check 使用
+# 有 XP 注入时拉长缓存，仅作稀有对账/回退
 qsc_fg_dumpsys_read() {
-	local now focus pkg
+	local now focus pkg cache_sec
 	QSC_FG_PKG=""
 	now="${QSC_PS_NOW:-0}"
 	if [ "$now" -le 0 ] 2>/dev/null; then
 		now="$(date +%s 2>/dev/null)"
 		case "$now" in ""|*[!0-9]*) now=0 ;; esac
 	fi
+	cache_sec="${QSC_FG_CACHE_SEC:-12}"
+	if type qsc_fg_xp_injected >/dev/null 2>&1 && qsc_fg_xp_injected; then
+		cache_sec=60
+	fi
 	if [ "$now" -gt 0 ] 2>/dev/null &&
 		[ "${QSC_FG_CACHE_AT:-0}" -gt 0 ] 2>/dev/null &&
-		[ "$((now - QSC_FG_CACHE_AT))" -lt "${QSC_FG_CACHE_SEC:-12}" ] 2>/dev/null &&
+		[ "$((now - QSC_FG_CACHE_AT))" -lt "$cache_sec" ] 2>/dev/null &&
 		[ -n "${QSC_FG_CACHE_PKG:-}" ]; then
 		QSC_FG_PKG="$QSC_FG_CACHE_PKG"
 		QSC_FG_SOURCE=dumpsys_cache
@@ -160,7 +191,8 @@ qsc_fg_xp_health_check() {
 		return 0
 	fi
 	QSC_FG_XP_MISMATCH=$((${QSC_FG_XP_MISMATCH:-0} + 1))
-	if [ "${QSC_FG_XP_MISMATCH}" -ge 2 ] 2>/dev/null; then
+	# 连续 3 次不一致才回退，减少短暂焦点抖动误杀 XP 路径
+	if [ "${QSC_FG_XP_MISMATCH}" -ge 3 ] 2>/dev/null; then
 		qsc_fg_mark_unreliable "mismatch:${xp_pkg}!=${ds_pkg}"
 		return 1
 	fi
@@ -404,5 +436,13 @@ qsc_xp_sync_fg_policy() {
 			chmod 0644 /data/system/qsc_xp_fg_idle 2>/dev/null || true
 	else
 		rm -f /data/system/qsc_xp_fg_idle 2>/dev/null
+	fi
+
+	# 预建事实总线占位（0666）；无 XP 时文件不更新，挂 wake-file 也无假醒
+	if [ -d /data/system ] && type qsc_xp_ensure_bus >/dev/null 2>&1; then
+		qsc_xp_ensure_bus /data/system/qsc_xp_plug
+		qsc_xp_ensure_bus /data/system/qsc_xp_screen
+		qsc_xp_ensure_bus /data/system/qsc_xp_doze
+		qsc_xp_ensure_bus /data/system/qsc_xp_fg_edge
 	fi
 }

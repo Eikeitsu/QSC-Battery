@@ -16,15 +16,11 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * LSPosed：仅系统框架。
- * 1) qscd 不可用时插拔边沿写 [XpPrefs.WAKE_PATH]（需 arm）
- * 2) 前台包名总线 [XpPrefs.FG_PATH] + 管理器进出 [XpPrefs.VIEWER_PATH]
- *    Magisk 写 [XpPrefs.FG_POLICY_PATH] 门禁：无简介/游戏/停充则 idle，XP 不写盘。
- *    分级：仅简介→管理器；游戏/停充→各自列表；离开关注包仍写一次。
- *    管理器会话：进出各经 3s 稳定；离开稳定后立即写 leave（包名为管理器）。
- *    边沿文件追加队列，避免 enter 被 leave 覆盖。切回管理器会补发 enter。
- * 3) 可选辅助边沿（默认关）：亮灭屏 / Doze / 白名单广播 → [QscXpAssist]
- * 不写充电节点。
+ * LSPosed：仅系统框架；事实总线，不写充电节点。
+ * 1) 插拔事实 [XpPrefs.PLUG_PATH] 始终写；qscd 不可用且武装时另写 [WAKE_PATH]
+ * 2) 前台包名 [FG_PATH] + 管理器进出 [VIEWER_PATH]（Magisk 策略门禁）
+ * 3) 亮灭屏 / Doze 事实由 [QscXpAssist] 始终写；want_* 仅控武装 wake；广播仍默认关
+ * Magisk 无 XP 时完整回退 dumpsys / sysfs / 简介 worker。
  */
 class QscXposedModule : XposedModule() {
     private val hookedBattery = AtomicBoolean(false)
@@ -33,6 +29,7 @@ class QscXposedModule : XposedModule() {
     private val failStreak = AtomicInteger(0)
     private val armCacheAt = AtomicLong(0L)
     private val armCached = AtomicBoolean(false)
+    private val lastAliveAt = AtomicLong(0L)
     private var lastPlugged: Boolean? = null
     private val fgBusFirstOk = AtomicBoolean(false)
     private val lastViewerLogAt = AtomicLong(0L)
@@ -118,6 +115,7 @@ class QscXposedModule : XposedModule() {
                     .intercept { chain ->
                         val result = chain.proceed()
                         val host = runCatching { chain.thisObject }.getOrNull()
+                        maybeRefreshAlive()
                         onBatteryProcessed(host)
                         result
                     }
@@ -668,28 +666,46 @@ class QscXposedModule : XposedModule() {
     }
 
     private fun isManagerPackage(pkg: String): Boolean {
-        if (BUILTIN_MANAGER_PKGS.contains(pkg)) return true
-        return loadPkgSet(
+        // Magisk 写出的清单为权威；文件非空时不再用内置表，避免双表漂移
+        val fromMagisk = loadPkgSet(
             XpPrefs.VIEWER_PKGS_PATH,
             viewerPkgsCacheAt,
             viewerPkgsCached,
             viewerPkgsMtime,
-        ).contains(pkg)
+        )
+        if (fromMagisk.isNotEmpty()) return pkgInList(pkg, fromMagisk)
+        return BUILTIN_MANAGER_PKGS.contains(pkg)
     }
 
-    private fun isGamePackage(pkg: String): Boolean = loadPkgSet(
-        XpPrefs.GAME_PKGS_PATH,
-        gamePkgsCacheAt,
-        gamePkgsCached,
-        gamePkgsMtime,
-    ).contains(pkg)
+    private fun isGamePackage(pkg: String): Boolean = pkgInList(
+        pkg,
+        loadPkgSet(
+            XpPrefs.GAME_PKGS_PATH,
+            gamePkgsCacheAt,
+            gamePkgsCached,
+            gamePkgsMtime,
+        ),
+    )
 
-    private fun isStopPackage(pkg: String): Boolean = loadPkgSet(
-        XpPrefs.STOP_PKGS_PATH,
-        stopPkgsCacheAt,
-        stopPkgsCached,
-        stopPkgsMtime,
-    ).contains(pkg)
+    private fun isStopPackage(pkg: String): Boolean = pkgInList(
+        pkg,
+        loadPkgSet(
+            XpPrefs.STOP_PKGS_PATH,
+            stopPkgsCacheAt,
+            stopPkgsCached,
+            stopPkgsMtime,
+        ),
+    )
+
+    /** 与 Magisk `qsc_fg_pkg_in_list` 对齐：精确匹配，或列表项为 pkg / pkg:进程 */
+    private fun pkgInList(pkg: String, set: Set<String>): Boolean {
+        if (set.isEmpty()) return false
+        if (set.contains(pkg)) return true
+        for (entry in set) {
+            if (pkg == entry || pkg.startsWith("$entry:")) return true
+        }
+        return false
+    }
 
     private fun loadPkgSet(
         path: String,
@@ -710,11 +726,18 @@ class QscXposedModule : XposedModule() {
         runCatching {
             if (!f.isFile) return@runCatching
             f.readLines().forEach { line ->
-                val p = line.trim()
-                if (p.isNotEmpty() && !p.startsWith("#") &&
-                    p.all { it.isLetterOrDigit() || it == '.' || it == '_' }
-                ) {
+                // Magisk 权威清单：允许 pkg 或 pkg:process；冒号前为包名
+                val raw = line.trim()
+                if (raw.isEmpty() || raw.startsWith("#")) return@forEach
+                val p = raw.substringBefore(':').trim()
+                if (p.isNotEmpty() && p.all { it.isLetterOrDigit() || it == '.' || it == '_' }) {
                     set.add(p)
+                    if (raw.contains(':') && raw.all {
+                            it.isLetterOrDigit() || it == '.' || it == '_' || it == ':'
+                        }
+                    ) {
+                        set.add(raw)
+                    }
                 }
             }
         }
@@ -781,15 +804,25 @@ class QscXposedModule : XposedModule() {
     private fun onBatteryProcessed(service: Any?) {
         if (!writesAllowed()) return
         if (File(XpPrefs.OFF_PATH).isFile) return
-        if (File(XpPrefs.NO_WAKE_PATH).isFile) return
-        if (!isArmedCached()) return
 
         val plugged = readPluggedFromService(service) ?: readPluggedSysfs()
         val prev = lastPlugged
         lastPlugged = plugged
         if (prev == null || prev == plugged) return
 
-        writeWake(if (plugged) "plug" else "unplug")
+        val reason = if (plugged) "plug" else "unplug"
+        // 事实总线始终写（供 Magisk / qscd wake-file）；不依赖 arm
+        writePlugFact(reason)
+        // 武装 wake 仅在 qscd 降级路径打断 sleep；尊重 no_wake
+        if (!File(XpPrefs.NO_WAKE_PATH).isFile && isArmedCached()) {
+            writeWake(reason)
+        }
+    }
+
+    private fun maybeRefreshAlive() {
+        val now = System.currentTimeMillis()
+        if (now - lastAliveAt.get() < ALIVE_HEARTBEAT_MS) return
+        writeAliveOnce()
     }
 
     private fun isArmedCached(): Boolean {
@@ -851,21 +884,38 @@ class QscXposedModule : XposedModule() {
 
     private fun writeAliveOnce() {
         if (!writesAllowed()) return
-        val content = "${System.currentTimeMillis()}\talive\n"
+        val now = System.currentTimeMillis()
+        // Magisk：首列 ms 时间戳；含 v= 供协议协商；过期则回退 dumpsys
+        val content = "$now\talive\tv=${XpPrefs.ALIVE_BUS_VER}\n"
         var ok = false
         for (path in ALIVE_PATHS) {
             if (writeText(path, content, append = false)) {
                 ok = true
-                xpLog(Log.INFO, "ok alive → $path")
+                if (lastAliveAt.get() == 0L) {
+                    xpLog(Log.INFO, "ok alive → $path")
+                }
             }
         }
         if (ok) {
+            lastAliveAt.set(now)
             failStreak.set(0)
             writeDisabled.set(false)
             runCatching { File(XpPrefs.WRITE_DISABLED_PATH).delete() }
         } else {
             onWriteFailed("alive")
             xpLog(Log.WARN, "alive write failed all paths")
+        }
+    }
+
+    private fun writePlugFact(reason: String) {
+        if (!writesAllowed()) return
+        val ok = writeText(XpPrefs.PLUG_PATH, "${System.currentTimeMillis()}\t$reason\n", append = false)
+        if (ok) {
+            failStreak.set(0)
+            xpLog(Log.DEBUG, "plug fact $reason")
+        } else {
+            onWriteFailed("plug:$reason")
+            if (isVerbose()) xpLog(Log.WARN, "plug fact write failed ($reason)")
         }
     }
 
@@ -952,6 +1002,8 @@ class QscXposedModule : XposedModule() {
     companion object {
         private const val TAG = "QscXp"
         private const val ARM_RECHECK_MS = 60_000L
+        /** 随 BatteryService 周期性续命；Magisk 以 ~48h 新鲜度判定注入 */
+        private const val ALIVE_HEARTBEAT_MS = 6L * 60L * 60L * 1000L
         private const val PKG_LIST_CACHE_MS = 8_000L
         private const val POLICY_CACHE_MS = 15_000L
         private const val VERBOSE_CACHE_MS = 5_000L

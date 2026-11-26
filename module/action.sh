@@ -196,6 +196,7 @@ qsc_action_refresh() {
 	echo "-------- 说明 --------"
 	echo "日志: $LOG_FILE"
 	echo "诊断: sh $BINDIR/diagnose.sh"
+	[ -f "$BINDIR/xp_bus_check.sh" ] && echo "XP 总线自检: sh $BINDIR/xp_bus_check.sh"
 	[ -f "$BINDIR/test_switch.sh" ] && echo "完整测开关: sh $BINDIR/test_switch.sh"
 	[ -f "$BINDIR/detect_device.sh" ] && echo "重新探测: sh $BINDIR/detect_device.sh"
 	echo "升级后闪充/无效：可删 data/list_switch 与 device.profile 后重启"

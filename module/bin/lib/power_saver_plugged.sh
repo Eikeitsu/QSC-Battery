@@ -111,15 +111,63 @@ qsc_ps_status_charge_like() {
 	return 1
 }
 
+# XP 插拔事实（仅注入且文件可读时）。无 XP → 返回 1，调用方当没这路。
+# 成功时：QSC_PS_XP_PLUG=plug|unplug，QSC_PS_XP_PLUG_AGE=秒。
+qsc_ps_xp_plug_read() {
+	local f=/data/system/qsc_xp_plug line st mt now
+	QSC_PS_XP_PLUG=""
+	QSC_PS_XP_PLUG_AGE=999999
+	[ -f /data/system/qsc_xp_off ] && return 1
+	type qsc_fg_xp_injected >/dev/null 2>&1 || return 1
+	qsc_fg_xp_injected || return 1
+	[ -f "$f" ] || return 1
+	IFS= read -r line <"$f" 2>/dev/null || return 1
+	st="$(printf '%s' "$line" | awk -F'\t' 'NF{print $NF; exit}' | tr -d ' \r\n')"
+	case "$st" in
+		plug|unplug) ;;
+		*) return 1 ;;
+	esac
+	mt="$(stat -c %Y "$f" 2>/dev/null || echo 0)"
+	now="$(date +%s 2>/dev/null || echo 0)"
+	case "$mt:$now" in *[!0-9:]*) return 1 ;; esac
+	QSC_PS_XP_PLUG="$st"
+	QSC_PS_XP_PLUG_AGE=$((now - mt))
+	[ "$QSC_PS_XP_PLUG_AGE" -ge 0 ] 2>/dev/null || QSC_PS_XP_PLUG_AGE=999999
+	return 0
+}
+
+# 近窗内 XP 报 unplug（否决粘 present）
+qsc_ps_xp_plug_recent_unplug() {
+	qsc_ps_xp_plug_read || return 1
+	[ "$QSC_PS_XP_PLUG" = "unplug" ] || return 1
+	[ "${QSC_PS_XP_PLUG_AGE:-999999}" -le "${QSC_XP_UNPLUG_HINT_SEC:-120}" ] 2>/dev/null
+}
+
+# XP 认为仍插着（边沿为 plug；年龄不限，直到下一次 unplug）
+qsc_ps_xp_plug_says_plugged() {
+	qsc_ps_xp_plug_read || return 1
+	[ "$QSC_PS_XP_PLUG" = "plug" ]
+}
+
 # present=1 旁证：优先 VBUS / 类型 / 大电流；
 # MCA 充电时常掉 VBUS 且 online=0，允许「present + 充电态」；
+# 有 XP 时：近期 unplug 否决孤立 present；plug 可作为旁证。
 # 停充标记冷却期内允许单信 present；
 # 过期后孤立 present（且放电）视为未插电，避免粘 present + 残留 power_switch。
 qsc_ps_present_corroborated() {
 	local now last
+	# XP 刚报拔线：不要用孤立 present 撑住「已插电」（K90U 粘 present）
+	if qsc_ps_xp_plug_recent_unplug; then
+		qsc_ps_dbg ps_xp_plug debug "XP 近期 unplug，否决孤立 present 旁证"
+		return 1
+	fi
 	qsc_ps_vbus_live && return 0
 	qsc_ps_type_live && return 0
 	qsc_ps_charging_current_live && return 0
+	if qsc_ps_xp_plug_says_plugged; then
+		qsc_ps_dbg ps_xp_plug debug "XP plug 旁证 present"
+		return 0
+	fi
 	# MCA/xm_power：线还在但 VBUS/online 被掐时，允许 present + Charging/Full。
 	# 不把 Not charging 算进来：K90U 未插电待机也常报 Not charging + 粘 present，
 	# 会误判成已插电（Action 测开关、拔线检测都会坏）。停充维持靠 VBUS/类型/online。
@@ -169,12 +217,17 @@ qsc_ps_plugged_scan() {
 				qsc_ps_dbg ps_present debug "判定已插电：${p##*/}=1（有 VBUS/类型旁证）"
 				return 0
 			fi
+			# XP 近期 unplug + 放电：粘 present 直接丢掉（无 XP 不进此支）
+			if qsc_ps_xp_plug_recent_unplug && qsc_ps_looks_discharging; then
+				qsc_ps_dbg ps_xp_plug debug "忽略粘 ${p##*/}=1：XP unplug + 放电"
+				continue
+			fi
 			if qsc_ps_looks_discharging; then
 				qsc_ps_dbg ps_present debug "忽略孤立 ${p##*/}=1：伴随明显放电且无旁证"
 				continue
 			fi
 			if ! qsc_ps_present_corroborated; then
-				qsc_ps_dbg ps_present debug "忽略孤立 ${p##*/}=1（无 VBUS/类型/电流/MCA充电态旁证）"
+				qsc_ps_dbg ps_present debug "忽略孤立 ${p##*/}=1（无 VBUS/类型/电流/MCA/XP 旁证）"
 				continue
 			fi
 			qsc_ps_dbg ps_present debug "判定已插电：${p##*/}=1（online 可能为 0）"

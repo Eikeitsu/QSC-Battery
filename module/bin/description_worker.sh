@@ -399,7 +399,8 @@ while worker_parent_alive; do
 					type qsc_desc_viewing_set >/dev/null 2>&1 &&
 						qsc_desc_viewing_set
 					worker_do_refresh 0
-					if [ "$((_view_ticks % 8))" -eq 0 ] 2>/dev/null; then
+					# 有 XP 时极少对账 dumpsys（约每 24 轮观看间隔一次）
+					if [ "$((_view_ticks % 24))" -eq 0 ] 2>/dev/null; then
 						type qsc_fg_xp_health_check >/dev/null 2>&1 &&
 							qsc_fg_xp_health_check >/dev/null 2>&1 || true
 					fi

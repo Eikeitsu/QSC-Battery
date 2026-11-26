@@ -32,7 +32,8 @@ object XpRuntime {
     )
 
     private const val DB = "/data/adb/lspd/config/modules_config.db"
-    private const val ALIVE_MAX_AGE_MS = 7L * 24 * 60 * 60 * 1000
+    /** 与 Magisk QSC_XP_ALIVE_MAX_AGE_SEC（48h）对齐；面板用此判「新鲜」 */
+    private const val ALIVE_MAX_AGE_MS = 48L * 60 * 60 * 1000
 
     enum class Level {
         None,
@@ -41,6 +42,14 @@ object XpRuntime {
         Enabled,
         Active,
     }
+
+    data class BusFileSnap(
+        val label: String,
+        val path: String,
+        val present: Boolean,
+        val ageSec: Long?,
+        val preview: String,
+    )
 
     data class Status(
         val level: Level,
@@ -63,6 +72,9 @@ object XpRuntime {
         val armed: Boolean,
         val xpOffFile: Boolean,
         val detail: String,
+        /** alive 行内 v=；旧文件可能为 null */
+        val aliveBusVer: Int? = null,
+        val busSnapshot: List<BusFileSnap> = emptyList(),
     ) {
         val activated: Boolean get() = level == Level.Enabled || level == Level.Active
     }
@@ -120,24 +132,40 @@ object XpRuntime {
         }
 
         var alive = false
+        var aliveBusVer: Int? = null
         if (hasRoot) {
             for (path in XpPrefs.ALIVE_CANDIDATES) {
                 if (!root.exists(path)) continue
                 val raw = root.readFile(path) ?: continue
                 if (!raw.contains("alive")) continue
-                val ts = raw.lineSequence().firstOrNull()?.substringBefore('\t')?.toLongOrNull()
+                val first = raw.lineSequence().firstOrNull().orEmpty()
+                val ts = first.substringBefore('\t').toLongOrNull()
+                val ver = Regex("""v=(\d+)""").find(first)?.groupValues?.getOrNull(1)?.toIntOrNull()
                 alive = if (ts != null) {
                     val age = System.currentTimeMillis() - ts
                     age in 0..ALIVE_MAX_AGE_MS
                 } else {
+                    // 无毫秒戳：交给总线快照 mtime；此处先认存在
                     true
                 }
-                if (alive) break
+                if (alive) {
+                    aliveBusVer = ver
+                    break
+                }
             }
         }
         // 文件写失败时仍可凭日志判定已注入（loaded / hooked / alive 行）
         if (!alive && hasRoot) {
             alive = probeAliveFromXpLog(root)
+        }
+        val busSnapshot = if (hasRoot) probeBusSnapshot(root) else emptyList()
+        // mtime 过期时纠正 alive（与 Magisk 48h 一致）
+        if (alive && aliveBusVer == null) {
+            val aliveSnap = busSnapshot.firstOrNull { it.label == "alive" }
+            val age = aliveSnap?.ageSec
+            if (age != null && age > ALIVE_MAX_AGE_MS / 1000) {
+                alive = false
+            }
         }
         val targetInjected = running.any {
             val n = it.lowercase()
@@ -167,8 +195,9 @@ object XpRuntime {
 
         val fwHint = listOfNotNull(fwName, fwVer).joinToString(" ").takeIf { it.isNotBlank() }
             ?.let { "（$it）" }.orEmpty()
+        val verHint = aliveBusVer?.let { " · 总线 v=$it" }.orEmpty()
         val detail = when (level) {
-            Level.Active -> "③ 框架已注入$fwHint"
+            Level.Active -> "③ 框架已注入$fwHint$verHint"
 
             Level.Enabled -> when {
                 wrongScope ->
@@ -220,7 +249,54 @@ object XpRuntime {
             armed = armed,
             xpOffFile = xpOff,
             detail = detail,
+            aliveBusVer = aliveBusVer,
+            busSnapshot = busSnapshot,
         )
+    }
+
+    private suspend fun probeBusSnapshot(root: RootBridge): List<BusFileSnap> {
+        val specs = listOf(
+            "alive" to XpPrefs.ALIVE_PATH,
+            "plug" to XpPrefs.PLUG_PATH,
+            "screen" to XpPrefs.SCREEN_PATH,
+            "doze" to XpPrefs.DOZE_PATH,
+            "fg" to XpPrefs.FG_PATH,
+            "viewer" to XpPrefs.VIEWER_PATH,
+            "wake" to XpPrefs.WAKE_PATH,
+            "bcast" to XpPrefs.BCAST_PATH,
+        )
+        // label|path 列表，一行扫完，避免多次 fork
+        val list = specs.joinToString("\n") { "${it.first}|${it.second}" }
+        val script =
+            """
+            now=$(date +%s 2>/dev/null || echo 0)
+            while IFS='|' read -r label f; do
+              [ -n "${'$'}label" ] || continue
+              if [ -f "${'$'}f" ]; then
+                mt=$(stat -c %Y "${'$'}f" 2>/dev/null || echo 0)
+                age=$((now - mt))
+                prev=$(tr -d '\r' <"${'$'}f" 2>/dev/null | head -n1 | cut -c1-48)
+                printf '1|%s|%s|%s|%s\n' "${'$'}label" "${'$'}age" "${'$'}prev" "${'$'}f"
+              else
+                printf '0|%s|||\n' "${'$'}label"
+              fi
+            done <<'QSC_BUS'
+            $list
+            QSC_BUS
+            """.trimIndent()
+        val r = root.exec(script)
+        if (r.out.isBlank()) return emptyList()
+        return r.out.lineSequence().mapNotNull { line ->
+            val p = line.split('|', limit = 5)
+            if (p.size < 2) return@mapNotNull null
+            val present = p[0] == "1"
+            val label = p.getOrNull(1).orEmpty()
+            if (label.isEmpty()) return@mapNotNull null
+            val age = p.getOrNull(2)?.toLongOrNull()?.takeIf { it >= 0 }
+            val preview = p.getOrNull(3).orEmpty()
+            val path = p.getOrNull(4) ?: specs.find { it.first == label }?.second.orEmpty()
+            BusFileSnap(label = label, path = path, present = present, ageSec = age, preview = preview)
+        }.toList()
     }
 
     private data class LsposedCfg(
