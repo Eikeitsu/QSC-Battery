@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **小米红米新机型停充优化**：停充改 xm_power 优先、handle_state 兜底，主路径成功则不自动停充持锁、维持间隔按非 handle 拉长；仅落到 `handle_state` 时才 auto 持锁。仍保留投票重申，过夜若回充可强制 `stop_hold_wakelock=1`
+- **修复拔线事件漏记**：`UNPLUG` 不再要求已停充；插电→未插电边沿即记；lean 跳过 `qsc_switch` 时由管家补记。K90U 拔线确认认 MCA/UCSI；`unplug_restore` 开且有停充标记时禁止 lean，避免节点卡死
 - **LSPosed 事实总线**：注入后始终写插拔/亮灭屏/Doze（`qsc_xp_plug|screen|doze`）；`plug` 参与 Magisk 插电旁证（否决粘 present）；Doze idle 拉长未插电睡眠、active 立刻 `conf_reload` 复评；广播边沿仍默认关。qscd 可多 `--wake-file`。无 XP / alive 过期完整回退 dumpsys
 - **XP 健康与面板**：alive 心跳 + `v=`；APP「总线快照」；Magisk 包名清单为权威；有 XP 时 dumpsys 更稀。现场自检：`bin/xp_bus_check.sh`
 

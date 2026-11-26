@@ -1,7 +1,7 @@
 #!/system/bin/sh
 # power_saver: skip / description
 qsc_ps_can_skip_round() {
-	local now last gap
+	local now last gap _ur
 	[ "${QSC_PS_ENABLE:-1}" = "1" ] || return 1
 	# 真正插电才必须满轮；仅残留 power_switch（拔线保留迟滞 / 粘标记）时未插电可 lean，
 	# 否则 MCA 会整夜按 maintain 间隔满轮，DeepPark 进不去。
@@ -14,6 +14,22 @@ qsc_ps_can_skip_round() {
 		qsc_ps_charging_current_live; then
 		qsc_ps_dbg ps_skip debug "禁止 lean：未判插电但 |I|≥150mA，强制满轮"
 		return 1
+	fi
+	# 曾插电标记还在：先满轮记 UNPLUG / 清 power_on（lean 会漏事件）
+	if [ -f "$DATADIR/power_on" ]; then
+		qsc_ps_dbg ps_skip debug "禁止 lean：power_on 仍在，需满轮记拔线"
+		return 1
+	fi
+	# 默认拔线还原：有停充标记时必须跑 switch_eval，否则节点会卡在停充
+	if [ -f "$DATADIR/power_switch" ]; then
+		_ur="${QSCV_unplug_restore:-}"
+		[ -z "$_ur" ] && _ur="$(sed -n 's/^unplug_restore=//p' "$CONF" 2>/dev/null | head -n1 | tr -d ' \r')"
+		case "$_ur" in 0|off|false) ;;
+			*)
+				qsc_ps_dbg ps_skip debug "禁止 lean：power_switch + unplug_restore，需满轮还原"
+				return 1
+				;;
+		esac
 	fi
 	# 未插电：不再用 FULL_MAX_GAP 强行满轮（简介已由 worker/XP；停充逻辑无事可做）
 	# 仅当显式要求（QSC_PS_FORCE_FULL=1）才走满轮。

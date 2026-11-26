@@ -1,21 +1,58 @@
 #!/system/bin/sh
 # charge: unplug detect / orphan stop
+
+# 插电→未插电边沿：记 UNPLUG（不依赖是否已停充）。
+# lean 跳过 qsc_switch 时也会调这里，避免 charge_events 漏拔线。
+# 返回 0=本轮新记了边沿；1=本已是未插电态。
+qsc_note_unplug_edge() {
+	local detail="${1:-充电器拔出}"
+	[ "${module_off:-0}" = "1" ] && return 1
+	# 从未认为插过电：不记假拔线
+	[ -f "$DATADIR/power_on" ] || [ -f "$DATADIR/.plug_seen" ] || return 1
+	rm -f "$DATADIR/power_on" "$DATADIR/now_c" 2>/dev/null
+	touch "$DATADIR/power_off" 2>/dev/null
+	if [ -f "$DATADIR/.unplug_noted" ]; then
+		return 1
+	fi
+	touch "$DATADIR/.unplug_noted" 2>/dev/null
+	type qsc_event_unplug >/dev/null 2>&1 &&
+		qsc_event_unplug "$detail"
+	qsc_log info "已拔出充电器"
+	return 0
+}
+
 qsc_charger_really_gone() {
 	local p v now last _has_side
+	# K90U：MCA 适配器信号仍有效 = 线还在（online 常为 0）
+	if type qsc_ps_mca_adapter_live >/dev/null 2>&1 && qsc_ps_mca_adapter_live; then
+		qsc_log_once unplug_sig debug "MCA real_type/power_max 有效，判定充电器仍在"
+		return 1
+	fi
+	# UCSI online=1 也算线在
+	for p in "$PSDIR"/ucsi*/online "$PSDIR"/ucsi-source-psy*/online; do
+		[ -e "$p" ] || continue
+		v="$(cat "$p" 2>/dev/null | tr -d ' \r\n')"
+		if [ "$v" = "1" ]; then
+			qsc_log_once unplug_sig debug "$p=1，判定充电器仍在"
+			return 1
+		fi
+	done
 	for p in "$PSDIR/usb/present" "$PSDIR/qc_usb/present" \
 		"$PSDIR/wireless/present" "$PSDIR/ac/present"; do
 		[ -f "$p" ] || continue
 		v="$(cat "$p" 2>/dev/null | tr -d ' \r\n')"
 		if [ "$v" = "1" ]; then
-			# 先看 VBUS/类型：停充后电池常报 Discharging，不能用「放电」否决真插电。
+			# 先看 VBUS/类型/MCA：停充后电池常报 Discharging，不能用「放电」否决真插电。
 			_has_side=0
 			if type qsc_ps_vbus_live >/dev/null 2>&1 && qsc_ps_vbus_live; then
 				_has_side=1
 			elif type qsc_ps_type_live >/dev/null 2>&1 && qsc_ps_type_live; then
 				_has_side=1
+			elif type qsc_ps_mca_adapter_live >/dev/null 2>&1 && qsc_ps_mca_adapter_live; then
+				_has_side=1
 			fi
 			if [ "$_has_side" = "1" ]; then
-				qsc_log_once unplug_sig debug "$p=1 且有 VBUS/类型旁证，判定充电器仍在"
+				qsc_log_once unplug_sig debug "$p=1 且有 VBUS/类型/MCA 旁证，判定充电器仍在"
 				return 1
 			fi
 			# 孤立 present：放电时不可信（粘 present）；冷却期内允许暂留。
@@ -36,8 +73,11 @@ qsc_charger_really_gone() {
 			qsc_log_once unplug_sig debug "忽略孤立 $p=1（无旁证/已过冷却）"
 		fi
 	done
-	# 充电口类型：插着线时报 USB_PD / USB_SDP 等，拔了报 Unknown。
-	# 停充维持中电池会放电，类型仍可信，勿用放电否决。
+	# 充电口 / MCA 类型：插着线非 Unknown；拔了报 Unknown（K90U 未插电诊断即此）
+	if type qsc_ps_type_live >/dev/null 2>&1 && qsc_ps_type_live; then
+		qsc_log_once unplug_sig debug "接口/MCA 类型有效，判定充电器仍在"
+		return 1
+	fi
 	for p in "$PSDIR/usb/real_type" "$PSDIR/usb/type"; do
 		[ -f "$p" ] || continue
 		v="$(cat "$p" 2>/dev/null | tr -d ' \r\n')"
@@ -50,6 +90,7 @@ qsc_charger_really_gone() {
 		esac
 	done
 	# VBUS 还有电压说明线在（input_suspend 也不掉 VBUS）
+	# 注意：K90U 未插电时 wireless/voltage_now 会镜像电池电压，绝不能当 VBUS。
 	v="$(cat "$PSDIR/usb/voltage_now" 2>/dev/null | tr -d ' \r\n-')"
 	case "$v" in
 		""|*[!0-9]*) ;;

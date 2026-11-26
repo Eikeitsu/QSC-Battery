@@ -186,6 +186,11 @@ qsc_service_unplug_housekeep() {
 	if type qsc_ps_plugged >/dev/null 2>&1 && ! qsc_ps_plugged; then
 		type qsc_stop_wakelock_release >/dev/null 2>&1 &&
 			qsc_stop_wakelock_release
+		# lean 路径可能跳过 qsc_switch：在此补记拔线边沿，避免 charge_events 漏 UNPLUG
+		if [ -f "$DATADIR/power_on" ] || [ -f "$DATADIR/.plug_seen" ]; then
+			type qsc_note_unplug_edge >/dev/null 2>&1 &&
+				qsc_note_unplug_edge "充电器拔出"
+		fi
 	fi
 	if type qsc_xp_sync_fg_policy >/dev/null 2>&1; then
 		_xp_plugged=0
