@@ -163,7 +163,7 @@ fun ChargeAnimConfigSheet(
                         statusLine = "预览 · 充电中",
                         subtitle = "主题设置预览",
                         charging = true,
-                        currentUa = "2500000",
+                        currentUa = "5000000",
                         anim = cfg,
                     )
                 }

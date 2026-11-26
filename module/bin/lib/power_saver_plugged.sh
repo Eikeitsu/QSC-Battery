@@ -241,18 +241,15 @@ qsc_ps_present_corroborated() {
 	return 1
 }
 
-# online=1 不可单信：K90U 日志曾 status=Discharging/Not charging 仍误 PLUG。
-# 可信条件：正在充 / 大电流，或停充插着时的 VBUS/MCA 旁证。
+# online=1：Charging/Full/Not charging 可直接信（MCA 停充后常报 Not charging）。
+# 仅 Discharging 时不可单信（K90U 假 PLUG 日志为 status=3 放电）——需 VBUS/MCA。
 qsc_ps_online_corroborated() {
-	if qsc_ps_read "$PSDIR/battery/status"; then
-		case "$QSC_PS_VAL" in
-			Charging|charging|Full|full) return 0 ;;
-		esac
+	if qsc_ps_looks_discharging; then
+		qsc_ps_vbus_live && return 0
+		qsc_ps_mca_adapter_live && return 0
+		return 1
 	fi
-	qsc_ps_charging_current_live && return 0
-	qsc_ps_vbus_live && return 0
-	qsc_ps_mca_adapter_live && return 0
-	return 1
+	return 0
 }
 
 qsc_ps_any_port_present() {
@@ -299,7 +296,7 @@ qsc_ps_plugged_scan() {
 		"$PSDIR/battery/charger_online"; do
 		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
 			if ! qsc_ps_online_corroborated; then
-				qsc_ps_dbg ps_online debug "忽略 $p=1：无 Charging/电流/VBUS/MCA 旁证"
+				qsc_ps_dbg ps_online debug "忽略 $p=1：放电中且无 VBUS/MCA 旁证"
 				continue
 			fi
 			qsc_ps_dbg ps_online debug "判定已插电：$p=1"
