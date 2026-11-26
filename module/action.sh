@@ -31,21 +31,27 @@ echo "5 秒内未按键 → 自动刷新状态"
 qsc_volume_choice 5
 _vol_rc=$?
 
+# Action「测开关」必须确认线真在：只认 online / VBUS / 类型 / 大电流。
+# 不用 qsc_ps_plugged 软路径（MCA 粘 present + Not charging 会在未插电时误报已插电）。
 qsc_action_is_plugged() {
-	if type qsc_ps_plugged >/dev/null 2>&1; then
-		qsc_ps_plugged
-		return $?
-	fi
-	local s o
-	s="$(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d ' \r\n')"
-	case "$s" in
-		Charging|Full) return 0 ;;
-	esac
+	local o v
 	for o in /sys/class/power_supply/usb/online \
 		/sys/class/power_supply/qc_usb/online \
-		/sys/class/power_supply/wireless/online; do
-		[ -f "$o" ] && [ "$(cat "$o" 2>/dev/null | tr -d ' \r\n')" = "1" ] && return 0
+		/sys/class/power_supply/wireless/online \
+		/sys/class/power_supply/ac/online \
+		/sys/class/power_supply/battery/charger_online; do
+		[ -f "$o" ] || continue
+		[ "$(cat "$o" 2>/dev/null | tr -d ' \r\n')" = "1" ] && return 0
 	done
+	if type qsc_ps_vbus_live >/dev/null 2>&1 && qsc_ps_vbus_live; then
+		return 0
+	fi
+	if type qsc_ps_type_live >/dev/null 2>&1 && qsc_ps_type_live; then
+		return 0
+	fi
+	if type qsc_ps_charging_current_live >/dev/null 2>&1 && qsc_ps_charging_current_live; then
+		return 0
+	fi
 	return 1
 }
 
@@ -214,7 +220,9 @@ qsc_action_test_switch() {
 		return 1
 	fi
 	if ! qsc_action_is_plugged; then
-		echo "未检测到充电器，改为生成诊断报告"
+		echo "未检测到充电器（无 online/VBUS/类型/大电流），改为生成诊断报告"
+		# 便于确认 K90U 等「粘 present」误判：打印关键节点
+		echo "参考: status=$(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d ' \r\n') present=$(cat /sys/class/power_supply/usb/present 2>/dev/null | tr -d ' \r\n') online=$(cat /sys/class/power_supply/usb/online 2>/dev/null | tr -d ' \r\n') type=$(cat /sys/class/power_supply/usb/real_type 2>/dev/null | tr -d ' \r\n')"
 		qsc_action_diagnose
 		return $?
 	fi

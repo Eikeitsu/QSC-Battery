@@ -120,10 +120,18 @@ qsc_ps_present_corroborated() {
 	qsc_ps_vbus_live && return 0
 	qsc_ps_type_live && return 0
 	qsc_ps_charging_current_live && return 0
-	# MCA/xm_power：线还在但 VBUS 被掐时，present + Charging/Not charging/Full 仍算插电
+	# MCA/xm_power：线还在但 VBUS/online 被掐时，允许 present + Charging/Full。
+	# 不把 Not charging 算进来：K90U 未插电待机也常报 Not charging + 粘 present，
+	# 会误判成已插电（Action 测开关、拔线检测都会坏）。停充维持靠 VBUS/类型/online。
 	if type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca; then
-		if qsc_ps_status_charge_like && ! qsc_ps_looks_discharging; then
-			return 0
+		if qsc_ps_read "$PSDIR/battery/status"; then
+			case "$QSC_PS_VAL" in
+				Charging|charging|Full|full)
+					if ! qsc_ps_looks_discharging; then
+						return 0
+					fi
+					;;
+			esac
 		fi
 	fi
 	if [ -f "$DATADIR/power_switch" ]; then
