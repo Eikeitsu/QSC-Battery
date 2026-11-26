@@ -284,7 +284,7 @@ fun ChargeAnimConfigSheet(
                     fontWeight = FontWeight.SemiBold,
                 )
                 val effects = listOf(
-                    RingEffect.SoftPulse to ("柔光脉冲" to "外扩柔光环 + 正中一束上升粘团"),
+                    RingEffect.SoftPulse to ("柔光脉冲" to "外扩柔光环与上升粒子"),
                     RingEffect.ArcOrbit to ("弧光流转" to "进度环弧光拖尾旋转"),
                     RingEffect.NeonMinimal to ("极简霓虹" to "细环进度 + 中心闪电"),
                     RingEffect.LiquidRise to ("液体上涌" to "环内液面，底部粘团汇入"),

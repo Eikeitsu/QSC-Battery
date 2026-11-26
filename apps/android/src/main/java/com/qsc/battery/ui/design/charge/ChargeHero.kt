@@ -332,16 +332,16 @@ private fun ChargeHeroPulse(
         }
 
         if (charging) {
-            // 环下正中一束：宽度跟圆环对齐，避免拉成底部平铺
+            Spacer(modifier = Modifier.height(2.dp))
+            ChargingChip(progress)
+            Spacer(modifier = Modifier.height(6.dp))
             SoftBubbleField(
                 accent = progress,
                 currentEnergy = energy,
                 modifier = Modifier
-                    .width(heroSize)
-                    .height(88.dp),
+                    .width(heroSize * 0.55f)
+                    .height(56.dp),
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            ChargingChip(progress)
         }
 
         Spacer(modifier = Modifier.height(if (charging) 4.dp else 10.dp))
@@ -1339,10 +1339,7 @@ internal fun ChargingChip(accent: Color, boltAlpha: Float = 1f) {
     }
 }
 
-/**
- * 系统充电屏风格：底部正中液池 + 中央一束粘团上升汇入环底。
- * 深色软边圆重叠近似 metaball；密度/速度随电流。
- */
+/** 柔光脉冲上升粒子：环下正中软边圆点 + 底缘淡雾；密度/速度随电流。 */
 @Composable
 private fun SoftBubbleField(
     accent: Color,
@@ -1360,33 +1357,26 @@ private fun SoftBubbleField(
         ),
         label = "bubbleClock",
     )
-    // 窄束：全部挤在水平中轴附近，不再横向平铺
     val seeds = remember {
-        List(12) { i ->
-            val lane = ((i % 5) - 2) / 2f // -1..1
+        List(14) { i ->
+            val lane = ((i % 7) - 3) / 3f // ≈ -1..1
             BubbleSeed(
-                xFrac = 0.50f + lane * 0.055f,
-                size = 7.5f + (i % 4) * 3.2f,
-                speed = 0.32f + (i % 5) * 0.09f,
-                phase = (i * 0.13f) % 1f,
-                sway = 3.5f + (i % 3) * 2.2f,
+                xFrac = 0.50f + lane * 0.16f,
+                size = 2.8f + (i % 5) * 1.15f,
+                speed = 0.42f + (i % 5) * 0.12f,
+                phase = (i * 0.17f) % 1f,
+                sway = 4f + (i % 4) * 3.5f,
             )
         }
     }
-    val activeCount = (6 + (energy * 6f).toInt()).coerceIn(6, 12)
-    val speedBoost = 0.50f + 1.15f * energy
-    val sizeBoost = 0.95f + 0.55f * energy
-    // 深色粒子：压暗主题色，贴近系统充电屏「浓墨」粘团
-    val deep = Color(
-        red = accent.red * 0.28f,
-        green = accent.green * 0.38f,
-        blue = accent.blue * 0.32f,
-        alpha = 1f,
-    )
-    val mid = Color(
-        red = accent.red * 0.48f,
-        green = accent.green * 0.58f,
-        blue = accent.blue * 0.52f,
+    val activeCount = (7 + (energy * 7f).toInt()).coerceIn(7, 14)
+    val speedBoost = 0.55f + 1.35f * energy
+    val sizeBoost = 0.85f + 0.75f * energy
+    val fogA = 0.07f + 0.10f * energy
+    val particle = Color(
+        red = accent.red * 0.42f,
+        green = accent.green * 0.52f,
+        blue = accent.blue * 0.45f,
         alpha = 1f,
     )
 
@@ -1395,61 +1385,48 @@ private fun SoftBubbleField(
         val h = size.height
         val cx = w * 0.5f
 
-        // 底池：正中鼓包，左右迅速收束
-        val poolA = 0.42f + 0.28f * energy
-        val poolRx = w * (0.22f + 0.06f * energy)
-        val poolRy = h * (0.22f + 0.05f * energy)
-        val poolCy = h * 0.92f
-        drawOval(
+        drawRect(
             brush = Brush.radialGradient(
-                0f to deep.copy(alpha = poolA),
-                0.55f to mid.copy(alpha = poolA * 0.55f),
+                0f to particle.copy(alpha = fogA),
+                0.55f to particle.copy(alpha = fogA * 0.35f),
                 1f to Color.Transparent,
-                center = Offset(cx, poolCy),
-                radius = maxOf(poolRx, poolRy),
+                center = Offset(cx, h * 0.92f),
+                radius = w * 0.55f,
             ),
-            topLeft = Offset(cx - poolRx, poolCy - poolRy),
-            size = Size(poolRx * 2f, poolRy * 2f),
-        )
-        // 池上微光，让粘团从底池「长出来」
-        drawCircle(
-            brush = Brush.radialGradient(
-                0f to mid.copy(alpha = 0.22f + 0.18f * energy),
-                1f to Color.Transparent,
-                center = Offset(cx, h * 0.78f),
-                radius = w * 0.16f,
-            ),
-            radius = w * 0.16f,
-            center = Offset(cx, h * 0.78f),
         )
 
         seeds.take(activeCount).forEach { b ->
-            val life = ((clock * b.speed * speedBoost * 0.18f) + b.phase) % 1f
-            // 从底池冒出 → 升向环底；越往上略收束
-            val y = h * (0.95f - life * 0.98f)
-            val taper = 1f - life * 0.55f
-            val x = cx + (w * (b.xFrac - 0.5f) + sin(life * PI.toFloat() * 2.2f + b.phase * 4f) * b.sway) * taper
-            val lifeA = when {
-                life < 0.08f -> life / 0.08f
-                life > 0.78f -> ((1f - life) / 0.22f).coerceIn(0f, 1f)
+            val life = ((clock * b.speed * speedBoost * 0.22f) + b.phase) % 1f
+            val y = h * (1.06f - life * 1.18f)
+            val taper = 1f - life * 0.35f
+            val x = cx + (w * (b.xFrac - 0.5f) + sin(life * PI.toFloat() * 2f + b.phase * 5f) * b.sway) * taper
+            val edgeX = when {
+                x < w * 0.18f -> (x / (w * 0.18f)).coerceIn(0f, 1f)
+                x > w * 0.82f -> ((w - x) / (w * 0.18f)).coerceIn(0f, 1f)
                 else -> 1f
             }
-            // 顶端汇入环：略拉长、略透明
-            val stretch = if (life > 0.65f) 1f + (life - 0.65f) * 1.6f else 1f
-            val alpha = lifeA * (0.55f + 0.30f * energy)
-            val r = b.size * sizeBoost * (1.05f + life * 0.35f) * (0.85f + 0.15f * taper)
-            val ry = r * stretch
-            drawOval(
+            val edgeY = when {
+                y < h * 0.12f -> (y / (h * 0.12f)).coerceIn(0f, 1f)
+                y > h * 0.92f -> ((h - y) / (h * 0.08f)).coerceIn(0f, 1f)
+                else -> 1f
+            }
+            val lifeA = when {
+                life < 0.1f -> life / 0.1f
+                life > 0.72f -> ((1f - life) / 0.28f).coerceIn(0f, 1f)
+                else -> 1f
+            }
+            val alpha = lifeA * edgeX * edgeY * (0.40f + 0.28f * energy)
+            val r = b.size * sizeBoost * (0.75f + life * 0.55f)
+            drawCircle(
                 brush = Brush.radialGradient(
-                    0f to deep.copy(alpha = alpha),
-                    0.45f to mid.copy(alpha = alpha * 0.65f),
-                    0.82f to accent.copy(alpha = alpha * 0.18f),
+                    0f to particle.copy(alpha = alpha),
+                    0.55f to particle.copy(alpha = alpha * 0.45f),
                     1f to Color.Transparent,
                     center = Offset(x, y),
-                    radius = maxOf(r, ry),
+                    radius = r,
                 ),
-                topLeft = Offset(x - r, y - ry),
-                size = Size(r * 2f, ry * 2f),
+                radius = r,
+                center = Offset(x, y),
             )
         }
     }

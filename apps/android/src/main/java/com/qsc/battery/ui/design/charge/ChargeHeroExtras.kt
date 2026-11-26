@@ -635,7 +635,8 @@ internal fun ChargeHeroRingNeon(
     level: Float,
     currentEnergy: Float,
 ) {
-    RingHeroScaffold(subtitle, charging, currentEnergy) { accent, ink, muted, energy ->
+    // 中心已有闪电：徽标放环内状态行下，避免环外再挂一枚
+    RingHeroScaffold(subtitle, charging, currentEnergy, chipBelowRing = false) { accent, ink, muted, energy ->
         val infinite = rememberInfiniteTransition(label = "neon")
         val breath by infinite.animateFloat(
             initialValue = 0.55f,
@@ -697,6 +698,10 @@ internal fun ChargeHeroRingNeon(
                     )
                 }
                 Text(text = statusLine, style = ChargeTheme.typography.body, color = muted)
+                if (charging) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    ChargingChip(accent, boltAlpha = breath)
+                }
             }
         }
     }
@@ -711,7 +716,8 @@ internal fun ChargeHeroRingLiquidRise(
     level: Float,
     currentEnergy: Float,
 ) {
-    RingHeroScaffold(subtitle, charging, currentEnergy) { accent, ink, muted, energy ->
+    // 环内已是液面/粘团：徽标放环心文字下，不挡底部上涌
+    RingHeroScaffold(subtitle, charging, currentEnergy, chipBelowRing = false) { accent, ink, muted, energy ->
         val infinite = rememberInfiniteTransition(label = "liqRise")
         val clock by infinite.animateFloat(
             initialValue = 0f,
@@ -869,6 +875,10 @@ internal fun ChargeHeroRingLiquidRise(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(text = levelText, style = ChargeTheme.typography.display, color = ink)
                 Text(text = statusLine, style = ChargeTheme.typography.body, color = muted)
+                if (charging) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    ChargingChip(accent, boltAlpha = 0.65f + 0.35f * energy)
+                }
             }
         }
     }
@@ -956,7 +966,8 @@ internal fun ChargeHeroRingPlasma(
     level: Float,
     currentEnergy: Float,
 ) {
-    RingHeroScaffold(subtitle, charging, currentEnergy) { accent, ink, muted, energy ->
+    // 环缘/底缘粒子较多：徽标放环心，避免和轨道粒子抢底边
+    RingHeroScaffold(subtitle, charging, currentEnergy, chipBelowRing = false) { accent, ink, muted, energy ->
         val infinite = rememberInfiniteTransition(label = "plasma")
         val clock by infinite.animateFloat(
             initialValue = 0f,
@@ -1073,16 +1084,24 @@ internal fun ChargeHeroRingPlasma(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(text = levelText, style = ChargeTheme.typography.display, color = ink)
                 Text(text = statusLine, style = ChargeTheme.typography.body, color = muted)
+                if (charging) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    ChargingChip(accent, boltAlpha = 0.6f + 0.4f * energy)
+                }
             }
         }
     }
 }
 
+/**
+ * @param chipBelowRing 是否在环外下方放「充电中」徽标；部分效果会改在环内自放。
+ */
 @Composable
 private fun RingHeroScaffold(
     subtitle: String,
     charging: Boolean,
     currentEnergy: Float,
+    chipBelowRing: Boolean = true,
     content: @Composable (accent: Color, ink: Color, muted: Color, energy: Float) -> Unit,
 ) {
     val accent = ChargeTheme.colors.accent
@@ -1096,7 +1115,7 @@ private fun RingHeroScaffold(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         content(accent, ink, muted, energy)
-        if (charging) {
+        if (charging && chipBelowRing) {
             Spacer(modifier = Modifier.height(8.dp))
             ChargingChip(accent, boltAlpha = 0.6f + 0.4f * energy)
         }
