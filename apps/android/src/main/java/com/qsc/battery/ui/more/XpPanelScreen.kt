@@ -254,8 +254,10 @@ fun XpPanelScreen(
                             },
                             value = when {
                                 !snap.present -> null
+
                                 snap.label == "alive" && status?.aliveBusVer != null ->
                                     "v${status.aliveBusVer}"
+
                                 else -> "有"
                             },
                         )

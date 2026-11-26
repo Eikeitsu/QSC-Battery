@@ -1002,6 +1002,7 @@ class QscXposedModule : XposedModule() {
     companion object {
         private const val TAG = "QscXp"
         private const val ARM_RECHECK_MS = 60_000L
+
         /** 随 BatteryService 周期性续命；Magisk 以 ~48h 新鲜度判定注入 */
         private const val ALIVE_HEARTBEAT_MS = 6L * 60L * 60L * 1000L
         private const val PKG_LIST_CACHE_MS = 8_000L

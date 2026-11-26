@@ -32,6 +32,7 @@ object XpRuntime {
     )
 
     private const val DB = "/data/adb/lspd/config/modules_config.db"
+
     /** 与 Magisk QSC_XP_ALIVE_MAX_AGE_SEC（48h）对齐；面板用此判「新鲜」 */
     private const val ALIVE_MAX_AGE_MS = 48L * 60 * 60 * 1000
 
@@ -158,7 +159,11 @@ object XpRuntime {
         if (!alive && hasRoot) {
             alive = probeAliveFromXpLog(root)
         }
-        val busSnapshot = if (hasRoot) probeBusSnapshot(root) else emptyList()
+        val busSnapshot = if (hasRoot) {
+            runCatching { probeBusSnapshot(root) }.getOrDefault(emptyList())
+        } else {
+            emptyList()
+        }
         // mtime 过期时纠正 alive（与 Magisk 48h 一致）
         if (alive && aliveBusVer == null) {
             val aliveSnap = busSnapshot.firstOrNull { it.label == "alive" }
@@ -265,26 +270,25 @@ object XpRuntime {
             "wake" to XpPrefs.WAKE_PATH,
             "bcast" to XpPrefs.BCAST_PATH,
         )
-        // label|path 列表，一行扫完，避免多次 fork
-        val list = specs.joinToString("\n") { "${it.first}|${it.second}" }
+        // 禁止 heredoc：部分 Magisk/toybox 共享 shell 会卡住，导致全 APP Root 调用挂死、首页一直加载
+        val cases = specs.joinToString(" ") { "\"${it.first}|${it.second}\"" }
         val script =
             """
             now=$(date +%s 2>/dev/null || echo 0)
-            while IFS='|' read -r label f; do
-              [ -n "${'$'}label" ] || continue
+            for pair in $cases; do
+              label=${'$'}{pair%%|*}
+              f=${'$'}{pair#*|}
               if [ -f "${'$'}f" ]; then
                 mt=$(stat -c %Y "${'$'}f" 2>/dev/null || echo 0)
                 age=$((now - mt))
-                prev=$(tr -d '\r' <"${'$'}f" 2>/dev/null | head -n1 | cut -c1-48)
+                prev=$(head -c 64 "${'$'}f" 2>/dev/null | tr -d '\r\n' | cut -c1-48)
                 printf '1|%s|%s|%s|%s\n' "${'$'}label" "${'$'}age" "${'$'}prev" "${'$'}f"
               else
                 printf '0|%s|||\n' "${'$'}label"
               fi
-            done <<'QSC_BUS'
-            $list
-            QSC_BUS
+            done
             """.trimIndent()
-        val r = root.exec(script)
+        val r = runCatching { root.exec(script) }.getOrNull() ?: return emptyList()
         if (r.out.isBlank()) return emptyList()
         return r.out.lineSequence().mapNotNull { line ->
             val p = line.split('|', limit = 5)

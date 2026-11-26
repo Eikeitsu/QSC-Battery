@@ -32,6 +32,7 @@ class PermissionChecker(private val context: Context) {
         rootBridge: RootBridge = RootBridge(),
     ): PermissionSnapshot = withContext(Dispatchers.IO) {
         val rootOk = runCatching { Shell.getShell().isRoot }.getOrDefault(false)
+        // probe 含总线快照；失败/超时不得拖垮「我的」权限条与其它页
         val xp = if (rootOk) {
             runCatching { XpRuntime.probe(context, rootBridge) }.getOrNull()
         } else {

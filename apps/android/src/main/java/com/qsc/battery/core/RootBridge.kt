@@ -3,6 +3,7 @@ package com.qsc.battery.core
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 
@@ -16,11 +17,19 @@ data class ExecResult(
 
 class RootBridge {
     suspend fun isRootAvailable(): Boolean = withContext(Dispatchers.IO) {
-        Shell.getShell().isRoot
+        // 授权弹窗/僵死 shell 时避免首页永久骨架屏
+        withTimeoutOrNull(8_000L) {
+            Shell.getShell().isRoot
+        } ?: false
     }
 
     suspend fun exec(cmd: String): ExecResult = withContext(Dispatchers.IO) {
-        val result = Shell.cmd(cmd).exec()
+        val result = withTimeoutOrNull(15_000L) {
+            Shell.cmd(cmd).exec()
+        }
+        if (result == null) {
+            return@withContext ExecResult(code = -1, out = "", err = "timeout")
+        }
         ExecResult(
             code = result.code,
             out = result.out.joinToString("\n"),

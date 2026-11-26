@@ -36,7 +36,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
-import kotlin.math.min
 import com.qsc.battery.ui.design.charge.ChargeHero
 import com.qsc.battery.ui.design.charge.ChargeTheme
 import com.qsc.battery.ui.theme.BatteryFillStyle
@@ -44,10 +43,11 @@ import com.qsc.battery.ui.theme.BatteryOrientation
 import com.qsc.battery.ui.theme.ChargeAnimConfig
 import com.qsc.battery.ui.theme.ChargeAnimShape
 import com.qsc.battery.ui.theme.RingEffect
+import kotlin.math.min
 
 /**
- * 子内容按固有尺寸测量（忽略父级 max 约束），再等比缩小放进可用区域。
- * 避免圆环在矮预览框里被压成椭圆或上下裁切。
+ * 宽度吃满父级、高度不限，再按高度等比缩小。
+ * （ChargeHero 含 fillMaxWidth，不能用完全无约束测量，否则宽度无穷、缩放失效。）
  */
 @Composable
 private fun ScaleToFitBox(
@@ -60,34 +60,28 @@ private fun ScaleToFitBox(
     ) { measurables, constraints ->
         val measurable = measurables.firstOrNull()
             ?: return@Layout layout(constraints.minWidth, constraints.minHeight) {}
-        val placeable = measurable.measure(Constraints())
         val maxW = constraints.maxWidth
         val maxH = constraints.maxHeight
+        // 限宽、不限高：圆环 Box(size=方) 保持正方形，不会被压成椭圆
+        val childConstraints = Constraints(
+            minWidth = 0,
+            maxWidth = if (maxW == Constraints.Infinity) Constraints.Infinity else maxW,
+            minHeight = 0,
+            maxHeight = Constraints.Infinity,
+        )
+        val placeable = measurable.measure(childConstraints)
         val scale = when {
             placeable.width <= 0 || placeable.height <= 0 -> 1f
-            maxW == Constraints.Infinity && maxH == Constraints.Infinity -> 1f
-            maxW == Constraints.Infinity ->
-                min(1f, maxH.toFloat() / placeable.height)
-            maxH == Constraints.Infinity ->
-                min(1f, maxW.toFloat() / placeable.width)
-            else ->
-                min(
-                    1f,
-                    min(
-                        maxW.toFloat() / placeable.width,
-                        maxH.toFloat() / placeable.height,
-                    ),
-                )
+            maxH == Constraints.Infinity -> 1f
+            else -> min(1f, maxH.toFloat() / placeable.height.toFloat())
         }
-        val outW = if (maxW == Constraints.Infinity) {
-            (placeable.width * scale).toInt()
-        } else {
-            maxW
+        val outW = when {
+            maxW == Constraints.Infinity -> (placeable.width * scale).toInt()
+            else -> maxW
         }.coerceAtLeast(constraints.minWidth)
-        val outH = if (maxH == Constraints.Infinity) {
-            (placeable.height * scale).toInt()
-        } else {
-            maxH
+        val outH = when {
+            maxH == Constraints.Infinity -> (placeable.height * scale).toInt()
+            else -> maxH
         }.coerceAtLeast(constraints.minHeight)
         layout(outW, outH) {
             placeable.placeWithLayer(
@@ -96,7 +90,6 @@ private fun ScaleToFitBox(
             ) {
                 scaleX = scale
                 scaleY = scale
-                // place 用未缩放尺寸算偏移；图层从左上缩放，原点需在左上
                 transformOrigin = TransformOrigin(0f, 0f)
             }
         }
@@ -151,18 +144,19 @@ fun ChargeAnimConfigSheet(
             )
 
             // 固定预览高度：液体/圆环切换时不再改变 sheet 测量高度，杜绝顶边上爬。
-            // 圆环本体约 220+外扩，高于预览框；若受 maxHeight 挤压会变成非正方形→椭圆。
-            // 用无约束测量 + 等比缩放到框内，保证圆环仍是圆。
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(236.dp)
+                    .height(248.dp)
                     .clip(RoundedCornerShape(ChargeTheme.dimens.radiusLg))
                     .background(ChargeTheme.colors.surfaceStrong.copy(alpha = 0.45f))
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                ScaleToFitBox {
+                // 电池形态本身较矮，直接铺完整 ChargeHero（电量/状态文字在右侧）。
+                // 圆环+气泡带高于预览框：限宽测量后按高度等比缩小，避免压成椭圆或裁掉气泡。
+                // （切勿 Constraints() 无约束测量：fillMaxWidth + weight 会让右侧文字宽变 0，只剩电池壳。）
+                val preview = @Composable {
                     ChargeHero(
                         levelText = "66%",
                         percent = 0.66f,
@@ -172,6 +166,11 @@ fun ChargeAnimConfigSheet(
                         currentUa = "2500000",
                         anim = cfg,
                     )
+                }
+                if (cfg.shape == ChargeAnimShape.Ring) {
+                    ScaleToFitBox(modifier = Modifier.fillMaxWidth(), content = preview)
+                } else {
+                    preview()
                 }
             }
 
