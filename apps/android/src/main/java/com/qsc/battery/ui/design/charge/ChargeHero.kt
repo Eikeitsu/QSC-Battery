@@ -743,27 +743,38 @@ private fun VerticalBatteryGlyph(
             )
         }
         // 双层波浪：同一套谐波，后浪相位滞后；仅共享小幅缓变（不独立乱漂）
+        // 浪高 / 浪速拆开：中档电流要「浪大一点、滚慢一点」，避免小浪高频像沸腾
         val energy = if (charging) currentEnergy.coerceIn(0f, 1f) else 0f
+        val eAmp = if (charging) sqrt(energy) else 0f
+        val eSpeed = if (charging) energy * energy else 0f
         val waveAmp = if (charging) {
-            (fillW * (0.045f + 0.10f * energy)).coerceIn(4f, 14f)
+            (fillW * (0.058f + 0.13f * eAmp)).coerceIn(5.5f, 16f)
         } else {
             (fillW * 0.038f).coerceIn(2.8f, 6.5f)
         }
-        val swayHz = if (charging) 0.38f + 1.2f * energy else 0.28f
-        // 合理缓变区间：幅 ±8%、速 ±10%、相位微抖；前后浪共用同一 mood
-        val moodAmp = 0.92f + 0.08f * sin(clock * 0.23f)
-        val moodSpeed = 1f + 0.10f * sin(clock * 0.17f + 1.1f)
-        val moodJitter = 0.12f * sin(clock * 0.41f) * sin(clock * 0.13f + 0.7f)
+        val swayHz = if (charging) {
+            // ≈2.3A(e≈0.46) → ~0.52Hz；满档 5A 才接近 0.9Hz
+            (0.30f + 0.28f * energy + 0.42f * eSpeed).coerceIn(0.28f, 0.92f)
+        } else {
+            0.28f
+        }
+        // 缓变：幅 ±7%、速 ±8%；充电时减弱相位微抖，少「炸锅」感
+        val moodAmp = 0.93f + 0.07f * sin(clock * 0.21f)
+        val moodSpeed = 1f + 0.08f * sin(clock * 0.15f + 1.1f)
+        val moodJitter = (if (charging) 0.05f else 0.12f) *
+            sin(clock * 0.31f) * sin(clock * 0.11f + 0.7f)
         val phase = clock * (PI.toFloat() * 2f) * swayHz * moodSpeed + moodJitter
         val nx = gravity.nx
         val ny = gravity.ny.coerceAtLeast(0.22f)
         val slope = (nx / ny).coerceIn(-2.4f, 2.4f)
         val layerGap = (fillW * 0.055f).coerceIn(4f, 10f)
+        // 充电时压低高频谐波，主浪更像起伏而不是碎波
+        val hiW = if (charging) 0.05f + 0.05f * energy else 0.12f
 
         fun waveDelta(t: Float, ph: Float, ampScale: Float): Float {
-            val primary = sin(t * PI.toFloat() * 2f + ph) * 0.62f
-            val secondary = sin(t * PI.toFloat() * 3.35f + ph * 1.28f) * 0.28f
-            val tertiary = sin(t * PI.toFloat() * 5.1f - ph * 0.7f) * 0.12f
+            val primary = sin(t * PI.toFloat() * 2f + ph) * 0.68f
+            val secondary = sin(t * PI.toFloat() * 3.1f + ph * 1.22f) * 0.27f
+            val tertiary = sin(t * PI.toFloat() * 4.6f - ph * 0.65f) * hiW
             return (primary + secondary + tertiary) * waveAmp * moodAmp * ampScale
         }
 
