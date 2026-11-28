@@ -44,7 +44,7 @@ _qsc_status_print_snapshot() {
 					""|*[!0-9]*) ;;
 					*)
 						if [ "$_uv" -gt 3000000 ] 2>/dev/null ||
-							{ [ "$_uv" -gt 3000 ] 2>/dev/null && [ "$_uv" -lt 100000 ] 2>/dev/null; }; then
+							{ [ "$_uv" -ge 3000 ] 2>/dev/null && [ "$_uv" -le 20000 ] 2>/dev/null; }; then
 							_pl=1
 						fi
 						;;

@@ -179,9 +179,36 @@ for node in \
   "/sys/class/xm_power/charger/charge_interface/input_suspend" \
   "/sys/kernel/debug/google_charger/chg_suspend" \
   "/sys/kernel/debug/google_charger/chg_mode" \
+  "/sys/kernel/debug/google_charger/input_suspend" \
+  "/sys/devices/platform/soc/soc:google,charger/charge_disable" \
+  "/sys/devices/platform/google,charger/charge_disable" \
+  "/sys/devices/platform/google,charger/charge_stop_level" \
+  "/sys/devices/platform/google,charger/charge_start_level" \
   "/proc/driver/charger_limit_enable" \
 ; do
   qsc_diag_line "$node" >> "$OUT" || true
+done
+# Pixel / Tensor：罗列 google,charger 与 debugfs（若存在）
+echo "" >> "$OUT"
+echo "[7b] Pixel/Google charger 目录:" >> "$OUT"
+for _gdir in \
+  /sys/devices/platform/google,charger \
+  /sys/devices/platform/soc/soc:google,charger \
+  /sys/kernel/debug/google_charger
+do
+  if [ -d "$_gdir" ]; then
+    echo "  --- $_gdir ---" >> "$OUT"
+    ls -la "$_gdir" 2>/dev/null | while IFS= read -r _gl; do
+      echo "    $_gl" >> "$OUT"
+    done
+    for _gf in "$_gdir"/*; do
+      [ -e "$_gf" ] || continue
+      [ -f "$_gf" ] || continue
+      qsc_diag_line "$_gf" >> "$OUT" || true
+    done
+  else
+    echo "  （无 $_gdir）" >> "$OUT"
+  fi
 done
 
 # 8. 模块运行态摘要（首选开关 / 兼容模式 / 电流节点）
@@ -220,8 +247,14 @@ echo "  充电状态判定:" >> "$OUT"
 echo "    battery/status = $(cat /sys/class/power_supply/battery/status 2>/dev/null | tr -d '\r\n')" >> "$OUT"
 for node in /sys/class/power_supply/usb/online /sys/class/power_supply/qc_usb/online \
   /sys/class/power_supply/ac/online /sys/class/power_supply/dc/online \
-  /sys/class/power_supply/wireless/online; do
+  /sys/class/power_supply/wireless/online \
+  /sys/class/power_supply/main-charger/online; do
   [ -f "$node" ] || continue
+  echo "    $node = $(cat "$node" 2>/dev/null | tr -d ' \r\n')" >> "$OUT"
+done
+for node in /sys/class/power_supply/tcpm-source-psy-*/online \
+  /sys/class/power_supply/ucsi-source-psy-*/online; do
+  [ -e "$node" ] || continue
   echo "    $node = $(cat "$node" 2>/dev/null | tr -d ' \r\n')" >> "$OUT"
 done
 if [ -n "$DATADIR" ]; then

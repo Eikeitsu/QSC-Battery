@@ -86,7 +86,7 @@ qsc_battery_snapshot_read() {
 				""|*[!0-9]*) ;;
 				*)
 					if [ "$_snap_uv" -gt 3000000 ] 2>/dev/null ||
-						{ [ "$_snap_uv" -gt 3000 ] 2>/dev/null && [ "$_snap_uv" -lt 100000 ] 2>/dev/null; }; then
+						{ [ "$_snap_uv" -ge 3000 ] 2>/dev/null && [ "$_snap_uv" -le 20000 ] 2>/dev/null; }; then
 						QSC_BATTERY_POWERED="powered: true"
 					fi
 					;;

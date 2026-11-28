@@ -116,6 +116,16 @@ find /sys/kernel/debug/google_charger/ -maxdepth 1 -type f \( \
 	\) 2>/dev/null | sed -n 's/$/,start=0,stop=1/g;p' >>"$LIST_SWITCH"
 find /sys/kernel/debug/google_charger/ -maxdepth 1 -type f -iname "chg_mode" 2>/dev/null \
 	| sed -n 's/$/,start=1,stop=0/g;p' >>"$LIST_SWITCH"
+# Pixel / Tensor：platform/google,charger（非 soc:google,charger）
+find /sys/devices/platform/google,charger/ -maxdepth 1 -type f -iname "charge_disable" 2>/dev/null \
+	| sed -n 's/$/,start=0,stop=1/g;p' >>"$LIST_SWITCH"
+find /sys/devices/platform/google,charger/ -maxdepth 1 -type f -iname "charge_stop_level" 2>/dev/null \
+	| sed -n 's/$/,start=100,stop=1/g;p' >>"$LIST_SWITCH"
+find /sys/devices/platform/ -maxdepth 3 -type d -name 'google,charger' 2>/dev/null \
+	| while IFS= read -r _gcd; do
+		[ -f "$_gcd/charge_disable" ] && echo "$_gcd/charge_disable,start=0,stop=1"
+		[ -f "$_gcd/charge_stop_level" ] && echo "$_gcd/charge_stop_level,start=100,stop=1"
+	done >>"$LIST_SWITCH" 2>/dev/null
 
 # MCA / 骁龙商务充（小米17: mca_business_charger；K90: mca_charger）
 find /sys/devices/platform/soc/ -maxdepth 5 -type f -name "handle_state" -path "*mca_business*" 2>/dev/null \
@@ -192,6 +202,8 @@ cat >>"$LIST_SWITCH" << 'EOF'
 /sys/devices/platform/mt-battery/disable_charger,start=0,stop=1
 /sys/devices/platform/battery/ChargerEnable,start=1,stop=0
 /sys/devices/platform/soc/soc:google,charger/charge_disable,start=0,stop=1
+/sys/devices/platform/google,charger/charge_disable,start=0,stop=1
+/sys/devices/platform/google,charger/charge_stop_level,start=100,stop=1
 /sys/devices/platform/charger/bypass_charger,start=0,stop=1
 /sys/devices/platform/soc/soc:qcom,pmic_glink/soc:qcom,pmic_glink:qcom,battery_charger/force_charger_suspend,start=0,stop=1
 /sys/class/power_supply/battery/charge_behaviour,start=auto,stop=inhibit-charge

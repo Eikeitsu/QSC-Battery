@@ -123,6 +123,56 @@ export const cases = [
   },
 
   {
+    // Pixel 7a 未插电：usb/type 恒 USB，voltage_now≈25000 噪声；旧 mV 上限 100000 会假插电
+    name: "Pixel 未插电噪声 VBUS=25000 + sticky type=USB → 不停充",
+    sysfs: {
+      "battery/capacity": "95",
+      "battery/status": "Discharging",
+      "battery/temp": COOL,
+      "battery/current_now": "-800000",
+      "usb/online": "0",
+      "usb/present": "0",
+      "usb/voltage_now": "25000",
+      "usb/type": "USB",
+      "usb/usb_type": "[Unknown] SDP CDP DCP",
+      "main-charger/online": "0",
+      "main-charger/present": "0",
+    },
+    config: { ...FAST, power_stop: "80", power_start: "75", temperature_switch: "0" },
+    node: { initial: "0", stop: "1", start: "0" },
+    expect: {
+      node: "0",
+      files: { power_switch: false },
+      descIncludes: "未充电",
+    },
+  },
+
+  {
+    // Pixel 7a 插电：usb + main-charger + tcpm 同步 online；dumpsys 常报 AC powered
+    name: "Pixel 插电 main-charger/online=1 → 应停充",
+    sysfs: {
+      "battery/capacity": "85",
+      "battery/status": "Charging",
+      "battery/temp": COOL,
+      "battery/current_now": "600000",
+      "usb/online": "1",
+      "usb/present": "1",
+      "usb/voltage_now": "4600000",
+      "usb/type": "USB",
+      "usb/usb_type": "Unknown SDP CDP [DCP]",
+      "main-charger/online": "1",
+      "main-charger/present": "1",
+    },
+    config: { ...FAST, power_stop: "80", power_start: "75", temperature_switch: "0" },
+    node: { initial: "0", stop: "1", start: "0" },
+    expect: {
+      node: "1",
+      files: { power_switch: true },
+      descIncludes: "已停充",
+    },
+  },
+
+  {
     name: "电量低于阈值 → 不停充",
     sysfs: {
       "battery/capacity": "70",

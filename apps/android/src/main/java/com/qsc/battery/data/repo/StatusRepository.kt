@@ -76,7 +76,7 @@ class StatusRepository(private val root: RootBridge) {
         append("case \"\$_uo\$_uc\" in *1*) _pl=1 ;; esac; ")
         append("if [ \"\$_pl\" != 1 ] && [ \"\$_up\" = 1 ]; then ")
         append("case \"\$_uv\" in \"\"|*[!0-9]*) ;; *) ")
-        append("[ \"\$_uv\" -gt 3000000 ] 2>/dev/null || { [ \"\$_uv\" -gt 3000 ] 2>/dev/null && [ \"\$_uv\" -lt 100000 ] 2>/dev/null; } && _pl=1 ;; esac; ")
+        append("[ \"\$_uv\" -gt 3000000 ] 2>/dev/null || { [ \"\$_uv\" -ge 3000 ] 2>/dev/null && [ \"\$_uv\" -le 20000 ] 2>/dev/null; } && _pl=1 ;; esac; ")
         append("fi; fi; ")
         append("echo plugged=\$_pl; ")
         append("fi; ")

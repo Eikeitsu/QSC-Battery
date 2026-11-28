@@ -37,6 +37,8 @@ qsc_ps_looks_discharging() {
 }
 
 # USB VBUS 约 >3V（µV 或 mV）
+# µV：>3_000_000；mV：3_000..20_000（3V..20V）。
+# Pixel 7a 未插电 usb/voltage_now≈25000（噪声 µV）——旧阈值 <100000 会当成 25V 假插电。
 qsc_ps_vbus_live() {
 	local v
 	qsc_ps_read "$PSDIR/usb/voltage_now" || return 1
@@ -45,15 +47,24 @@ qsc_ps_vbus_live() {
 		""|*[!0-9]*) return 1 ;;
 	esac
 	if [ "$v" -gt 3000000 ] 2>/dev/null || \
-		{ [ "$v" -gt 3000 ] 2>/dev/null && [ "$v" -lt 100000 ] 2>/dev/null; }; then
+		{ [ "$v" -ge 3000 ] 2>/dev/null && [ "$v" -le 20000 ] 2>/dev/null; }; then
 		return 0
 	fi
 	return 1
 }
 
 # 充电口类型非 Unknown/None（含 MCA real_type：K90U 等 usb/type 常一直 Unknown）
+# Pixel：usb/type 恒为 USB（插拔不变）——不当证据；看 usb_type 方括号选型。
 qsc_ps_type_live() {
 	local p v
+	# usb_type："Unknown SDP [DCP]" / "[Unknown] SDP…" —— 方括号内为当前选型
+	if qsc_ps_read "$PSDIR/usb/usb_type"; then
+		v="$QSC_PS_VAL"
+		case "$v" in
+			*"[Unknown]"*|*"[UNKNOWN]"*|*"[None]"*|*"[NONE]"*) ;;
+			*"["*"]"*) return 0 ;;
+		esac
+	fi
 	for p in "$PSDIR/usb/real_type" "$PSDIR/usb/type" \
 		/sys/devices/platform/soc/soc:mca_business_charger/real_type \
 		/sys/devices/platform/soc/soc:mca_charger/real_type \
@@ -61,7 +72,7 @@ qsc_ps_type_live() {
 		if qsc_ps_read "$p"; then
 			v="$QSC_PS_VAL"
 			case "$v" in
-				""|Unknown|UNKNOWN|None|NONE) ;;
+				""|Unknown|UNKNOWN|None|NONE|USB) ;;
 				*) return 0 ;;
 			esac
 		fi
@@ -255,7 +266,8 @@ qsc_ps_online_corroborated() {
 qsc_ps_any_port_present() {
 	local p
 	for p in "$PSDIR/usb/present" "$PSDIR/qc_usb/present" \
-		"$PSDIR/wireless/present" "$PSDIR/ac/present"; do
+		"$PSDIR/wireless/present" "$PSDIR/ac/present" \
+		"$PSDIR/main-charger/present"; do
 		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
 			return 0
 		fi
@@ -271,12 +283,14 @@ qsc_ps_any_port_online() {
 		"$PSDIR/dc/online" \
 		"$PSDIR/wireless/online" \
 		"$PSDIR/charger/online" \
+		"$PSDIR/main-charger/online" \
 		"$PSDIR/battery/charger_online"; do
 		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
 			return 0
 		fi
 	done
-	for p in "$PSDIR"/ucsi*/online "$PSDIR"/ucsi-source-psy*/online; do
+	for p in "$PSDIR"/ucsi*/online "$PSDIR"/ucsi-source-psy*/online \
+		"$PSDIR"/tcpm-source-psy*/online "$PSDIR"/tcpm*/online; do
 		[ -e "$p" ] || continue
 		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
 			return 0
@@ -293,6 +307,7 @@ qsc_ps_plugged_scan() {
 		"$PSDIR/dc/online" \
 		"$PSDIR/wireless/online" \
 		"$PSDIR/charger/online" \
+		"$PSDIR/main-charger/online" \
 		"$PSDIR/battery/charger_online"; do
 		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
 			if ! qsc_ps_online_corroborated; then
@@ -303,22 +318,24 @@ qsc_ps_plugged_scan() {
 			return 0
 		fi
 	done
-	# K90U SM8750：UCSI 源 psy 在未插电 online=0；插电时常比 usb/online 更早变 1
-	for p in "$PSDIR"/ucsi*/online "$PSDIR"/ucsi-source-psy*/online; do
+	# K90U：UCSI；Pixel Tensor：tcpm-source-psy-*（插电常与 usb/online 同步）
+	for p in "$PSDIR"/ucsi*/online "$PSDIR"/ucsi-source-psy*/online \
+		"$PSDIR"/tcpm-source-psy*/online "$PSDIR"/tcpm*/online; do
 		[ -e "$p" ] || continue
 		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
 			if ! qsc_ps_online_corroborated; then
-				qsc_ps_dbg ps_online debug "忽略 UCSI online=1：无旁证（$p）"
+				qsc_ps_dbg ps_online debug "忽略 UCSI/TCPM online=1：无旁证（$p）"
 				continue
 			fi
-			qsc_ps_dbg ps_online debug "判定已插电：UCSI online=1（$p）"
+			qsc_ps_dbg ps_online debug "判定已插电：UCSI/TCPM online=1（$p）"
 			return 0
 		fi
 	done
 	# K90U / MCA：online 常为 0；present 需旁证（见 qsc_ps_present_corroborated）
-	# 注意：未插电时 wireless/voltage_now≈电池电压、current 会镜像 battery——绝不能当 VBUS。
+	# 注意：未插电时 wireless/main-charger 的 voltage_now≈电池电压——绝不能当 VBUS。
 	for p in "$PSDIR/usb/present" "$PSDIR/qc_usb/present" \
-		"$PSDIR/wireless/present" "$PSDIR/ac/present"; do
+		"$PSDIR/wireless/present" "$PSDIR/ac/present" \
+		"$PSDIR/main-charger/present"; do
 		if qsc_ps_read "$p" && [ "$QSC_PS_VAL" = "1" ]; then
 			# VBUS/类型/MCA 适配器优先：停充后会放电，不能先因放电否决真插电
 			if qsc_ps_vbus_live || qsc_ps_type_live || qsc_ps_mca_adapter_live; then

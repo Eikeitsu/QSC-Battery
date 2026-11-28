@@ -28,8 +28,9 @@ qsc_charger_really_gone() {
 		qsc_log_once unplug_sig debug "MCA real_type/power_max 有效，判定充电器仍在"
 		return 1
 	fi
-	# UCSI online=1 也算线在
-	for p in "$PSDIR"/ucsi*/online "$PSDIR"/ucsi-source-psy*/online; do
+	# UCSI / Pixel TCPM online=1 也算线在
+	for p in "$PSDIR"/ucsi*/online "$PSDIR"/ucsi-source-psy*/online \
+		"$PSDIR"/tcpm-source-psy*/online "$PSDIR"/tcpm*/online; do
 		[ -e "$p" ] || continue
 		v="$(cat "$p" 2>/dev/null | tr -d ' \r\n')"
 		if [ "$v" = "1" ]; then
@@ -38,7 +39,8 @@ qsc_charger_really_gone() {
 		fi
 	done
 	for p in "$PSDIR/usb/present" "$PSDIR/qc_usb/present" \
-		"$PSDIR/wireless/present" "$PSDIR/ac/present"; do
+		"$PSDIR/wireless/present" "$PSDIR/ac/present" \
+		"$PSDIR/main-charger/present"; do
 		[ -f "$p" ] || continue
 		v="$(cat "$p" 2>/dev/null | tr -d ' \r\n')"
 		if [ "$v" = "1" ]; then
@@ -95,9 +97,9 @@ qsc_charger_really_gone() {
 	case "$v" in
 		""|*[!0-9]*) ;;
 		*)
-			# 单位可能是 µV 或 mV，取 3V 作门槛
+			# µV>3V，或 mV 3..20V；Pixel 未插电噪声≈25000 不得当 25V
 			if [ "$v" -gt 3000000 ] 2>/dev/null || \
-				{ [ "$v" -gt 3000 ] 2>/dev/null && [ "$v" -lt 100000 ] 2>/dev/null; }; then
+				{ [ "$v" -ge 3000 ] 2>/dev/null && [ "$v" -le 20000 ] 2>/dev/null; }; then
 				qsc_log_once unplug_sig debug "usb/voltage_now=$v，判定充电器仍在"
 				return 1
 			fi
