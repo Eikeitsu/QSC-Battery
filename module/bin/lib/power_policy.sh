@@ -379,7 +379,7 @@ qsc_ps_park_session_end() {
 # 在 policy_refresh 末尾调用：边沿日志 + 驻停段总结 + 简介 worker 门禁
 qsc_ps_policy_edge_log() {
 	local prev="${QSC_PS_MODE_WAS:-}" cur="${QSC_PS_MODE:-}"
-	local tier new_park=0 zh
+	local tier new_park=0 zh _mr
 
 	tier="$(qsc_ps_park_tier)"
 	[ -n "$tier" ] && new_park=1
@@ -403,6 +403,16 @@ qsc_ps_policy_edge_log() {
 				esac
 				;;
 		esac
+		# 进入停充维持：标明投票 / handle_state / 其它，便于 MCA 对照非 MCA
+		if [ "$cur" = "maintain" ] && [ "$prev" != "maintain" ]; then
+			_mr="节点重申"
+			if type qsc_stop_route_is_xm_power >/dev/null 2>&1 && qsc_stop_route_is_xm_power; then
+				_mr="xm_power 投票重申（Rust maintain-stable lean，少持锁）"
+			elif type qsc_device_is_mca >/dev/null 2>&1 && qsc_device_is_mca; then
+				_mr="MCA handle_state 重申（Rust maintain-stable lean）"
+			fi
+			qsc_log info "停充维持方案：$_mr"
+		fi
 	fi
 
 	if [ "$new_park" = "1" ]; then

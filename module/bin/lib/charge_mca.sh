@@ -211,8 +211,11 @@ qsc_power_stop() {
 	if qsc_xm_power_vote stop; then
 		stop_ok=1
 		stop_nodes="${stop_nodes} xm_power"
+		# 与 mca_write/pref 对齐：否则 first_stop 不记 CHARGE_STOP / INFO「停止充电」
+		log_log=1
 		touch "$DATADIR/xm_power_stop" 2>/dev/null
 		qsc_save_active_switch "${QSC_XM_POWER_EN},start=qsc_all_1,stop=qsc_all_0" 2>/dev/null || true
+		qsc_log info "停充路径：xm_power 投票（未用 handle_state）[$stop_nodes]"
 		qsc_dbg "power_stop：xm_power 优先成功 [$stop_nodes]"
 		return
 	fi
@@ -220,10 +223,12 @@ qsc_power_stop() {
 	if qsc_mca_write stop; then
 		qsc_xm_power_vote stop >/dev/null 2>&1 || true
 		rm -f "$DATADIR/xm_power_stop" 2>/dev/null
+		qsc_log info "停充路径：MCA handle_state 兜底 [$stop_nodes]"
 		qsc_dbg "power_stop：MCA handle_state 兜底成功 [$stop_nodes]"
 		return
 	fi
 	if qsc_pref_write stop; then
+		qsc_log info "停充路径：preferred [$stop_nodes]"
 		qsc_dbg "power_stop：preferred 成功 [$stop_nodes]"
 		return
 	fi

@@ -701,6 +701,7 @@ qsc_maintain_stop_while_plugged() {
 	if type qsc_xm_power_vote >/dev/null 2>&1 && qsc_xm_power_vote stop; then
 		touch "$DATADIR/xm_power_stop" 2>/dev/null
 		[ "$_now" -gt 0 ] && printf '%s\n' "$_now" >"$DATADIR/.maintain_reaffirm_at" 2>/dev/null
+		qsc_log_once maintain_reaffirm debug "维持重申：xm_power 投票"
 		qsc_dbg "maintain：xm_power 重申成功"
 		return 0
 	fi
@@ -709,6 +710,7 @@ qsc_maintain_stop_while_plugged() {
 		qsc_xm_power_vote stop >/dev/null 2>&1 || true
 		rm -f "$DATADIR/xm_power_stop" 2>/dev/null
 		[ "$_now" -gt 0 ] && printf '%s\n' "$_now" >"$DATADIR/.maintain_reaffirm_at" 2>/dev/null
+		qsc_log_once maintain_reaffirm debug "维持重申：MCA handle_state 兜底"
 		qsc_dbg "maintain：MCA handle_state 兜底重申成功"
 		return 0
 	fi

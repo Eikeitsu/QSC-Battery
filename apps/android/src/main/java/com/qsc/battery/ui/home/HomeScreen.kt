@@ -66,7 +66,8 @@ fun HomeScreen(
         append(if (status.snapshot.powered) "已插电" else "未插电")
         append(" · ")
         append(chargeLabel)
-        if (status.chargingStopped) append(" · 停充中")
+        // 真拔线后 power_switch 可能仍短暂残留；未插电时不追加「停充中」，避免像还插着
+        if (status.chargingStopped && status.snapshot.powered) append(" · 停充中")
     }
     val charging = isActivelyCharging(
         status.snapshot.status,

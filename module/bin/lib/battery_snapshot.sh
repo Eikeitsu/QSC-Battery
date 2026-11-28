@@ -73,6 +73,25 @@ qsc_battery_snapshot_read() {
 		else
 			QSC_BATTERY_POWERED=""
 		fi
+	else
+		# 轻量调用方（旧 qsc_status）未加载 plugged：用 usb/ucsi + VBUS 兜底，
+		# 避免 MCA 停充 Discharging 时首页假「未插电」。
+		_snap_uv="$(cat "$PSDIR/usb/voltage_now" 2>/dev/null | tr -d ' \r\n-')"
+		_snap_up="$(cat "$PSDIR/usb/present" 2>/dev/null | tr -d ' \r\n')"
+		_snap_uo="$(cat "$PSDIR/usb/online" 2>/dev/null | tr -d ' \r\n')"
+		_snap_uc="$(cat "$PSDIR"/ucsi-source-psy*/online 2>/dev/null | head -n1 | tr -d ' \r\n')"
+		case "$_snap_uo$_snap_uc" in *1*) QSC_BATTERY_POWERED="powered: true" ;; esac
+		if [ -z "$QSC_BATTERY_POWERED" ] && [ "$_snap_up" = "1" ]; then
+			case "$_snap_uv" in
+				""|*[!0-9]*) ;;
+				*)
+					if [ "$_snap_uv" -gt 3000000 ] 2>/dev/null ||
+						{ [ "$_snap_uv" -gt 3000 ] 2>/dev/null && [ "$_snap_uv" -lt 100000 ] 2>/dev/null; }; then
+						QSC_BATTERY_POWERED="powered: true"
+					fi
+					;;
+			esac
+		fi
 	fi
 
 	if [ -z "$QSC_BATTERY_POWERED" ] && command -v dumpsys >/dev/null 2>&1; then
